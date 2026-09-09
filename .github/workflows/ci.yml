@@ -27,6 +27,7 @@ jobs:
           scripts/test-application-documents.sh
           scripts/test-document-adoption.sh
           scripts/test-application-document-closing.sh
+          scripts/test-application-session-checkpoints.sh
           scripts/test-session-capacity.sh
           scripts/test-session-import-claims.sh
           scripts/test-checkpoint-pause.sh

@@ -1,0 +1,11 @@
+# Managed session publisher verification
+
+ApplicationSessionCheckpoints retains one scheduler and actual paired recovery/session writer. Its explicit managed mode requires complete registry adoption/projection, owns a startup activation pause, permits separately owned startup intake pauses, and admits final publication only after quit drain and native-freeze acknowledgement. The existing AppDelegate initializer remains a legacy adapter; managed native activation is still outstanding.
+
+Root independently ran `scripts/test-application-session-checkpoints.sh`: 18 XCTest cases passed in 0.044 seconds (`.local/managed-publisher-root.log`). Actual registry, SessionCoordinator, scheduler, RecoveryCoordinator and temporary stores provide the receipts. Tests cover startup holds, corrupt metadata with valid recovered scratch content, exact live/authority coverage, zero documents, close/cleanup interactions, pause ownership, final-ready admission and legacy compatibility. Corrupt metadata permits managed readiness but continues to block publication and preserves original file bytes.
+
+Independent final review found no material issue. Earlier review exposed two real API defects—managed pause/resume stranded publication, and activation failure offered an ineffective checkpoint retry. Both were reproduced and fixed. Startup preservation and separate intake-pause regressions were also captured before their fixes. Raw iterative logs distinguish fixture/compiler failures from behavioral failures; the final frozen manifest is `.local/application-session-checkpoints-tests/run.DdTiHZjz/sources.json`.
+
+The frozen actual native app built in 7.82 seconds without warnings, including unchanged AppDelegate and the extracted legacy initializer. Its manifest/exclusions are in `.local/managed-publisher/native-frozen`: only the two concurrent intake stub files were excluded. Updated checkpoint benchmark instrumentation prepared and compiled successfully against this build, preserving capture/commit entry-to-defer timing and exact replacement guards. The probe was not executed, so no new performance result is claimed.
+
+Platform: ARM64 macOS 26.6.2, Swift 6.3.3 in Swift 5 mode. No GUI, packaged workflow, force termination or native managed ownership activation was exercised by this component suite.

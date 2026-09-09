@@ -15,9 +15,9 @@ def replace(file,old,new):
  if text.count(old)!=1:raise SystemExit('Instrumentation anchor changed; inspect before adapting: '+file.name)
  file.write_text(text.replace(old,new,1))
 bridge=out/'Sources/ApplicationSessionCheckpoints.swift'
-replace(bridge,'        guard let self else { throw CancellationError() }\n        try EditorWindowController.assertNoPendingCloses()',
- '        guard let self else { throw CancellationError() }\n        CheckpointTrace.captureStarted(generation)\n        defer { CheckpointTrace.captureFinished(generation) }\n        try EditorWindowController.assertNoPendingCloses()')
-replace(bridge,'      commit: { capture in','      commit: { capture in\n        CheckpointTrace.publicationStarted(capture)\n        defer { CheckpointTrace.publicationFinished(capture.generation) }')
+replace(bridge,'  private func capture(_ generation: UInt64) throws -> SessionCheckpointCapture {',
+ '  private func capture(_ generation: UInt64) throws -> SessionCheckpointCapture {\n    CheckpointTrace.captureStarted(generation)\n    defer { CheckpointTrace.captureFinished(generation) }')
+replace(bridge,'      commit: { value in','      commit: { value in\n        CheckpointTrace.publicationStarted(value)\n        defer { CheckpointTrace.publicationFinished(value.generation) }')
 replace(bridge,'  private func renderStatus() {','  private func renderStatus() {\n    CheckpointTrace.recordError(scheduler.lastError)\n    CheckpointTrace.acknowledgement(scheduler.lastAcknowledgedGeneration)')
 recovery=out/'Sources/RecoveryCoordinator.swift'
 replace(recovery,'      try $0.save($1)','      DiskTrace.shared.emit("recoveryWriteStart")\n      defer { DiskTrace.shared.emit("recoveryWriteEnd") }\n      try $0.save($1)')
