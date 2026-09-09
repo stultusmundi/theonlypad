@@ -40,6 +40,11 @@ import PadCore
       Finding text
       Find and Replace supports literal, escaped-text and ICU regular-expression modes. Replacement templates accept numbered capture references such as $1. Search bounds and cancellation can stop expensive queries. The ICU dialect differs from Notepad++ Boost regex.
 
+      Split views
+      View > Split Side by Side or Split Top and Bottom shows two views of the current document. They share text, undo and one save/recovery identity, with independent carets and scrolling. Focus Other Pane switches the active view; Close Other Pane keeps the focused view and shared undo history. Finish text composition before changing panes.
+
+      Adding a split is currently limited to 2 million UTF-16 units. Each tab remembers its arrangement while the app is running; restarting restores one view per tab. Moving documents between pane groups or windows and linked scrolling are not implemented.
+
       Encodings
       Open with Encoding interprets original bytes. Encoding and Line Endings separates conversion of future saves from reopening bytes. Invalid or lossy conversions report an error.
 

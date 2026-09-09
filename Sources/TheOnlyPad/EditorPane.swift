@@ -49,6 +49,7 @@ import AppKit
     scroll.hasVerticalRuler = true
     scroll.rulersVisible = true
     editor.setAccessibilityLabel("Document text")
+    editor.setAccessibilityIdentifier("editor.text.\(id.uuidString)")
   }
   func attach() {
     guard !isAttached else { return }

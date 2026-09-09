@@ -52,6 +52,25 @@ import PadCore
     )
     wrap.0.performActionForItem(at: wrap.1)
     precondition(!nativeEditor.isHorizontallyResizable)
+    let split = item("view.splitVertical")
+    let closeSplit = item("view.closeSplit")
+    let otherPane = item("view.focusOtherPane")
+    precondition(delegate.validateMenuItem(split.0.items[split.1]))
+    precondition(!delegate.validateMenuItem(closeSplit.0.items[closeSplit.1]))
+    split.0.performActionForItem(at: split.1)
+    func visibleEditors() -> [NSTextView] {
+      app.windows.compactMap(\.contentView).flatMap(descendants).compactMap { $0 as? NSTextView }
+        .filter { $0.accessibilityLabel() == "Document text" }
+    }
+    precondition(visibleEditors().count == 2, "The registered split menu must create two views")
+    precondition(delegate.validateMenuItem(closeSplit.0.items[closeSplit.1]))
+    let editorWindow = nativeEditor.window!
+    let beforeFocus = editorWindow.firstResponder
+    otherPane.0.performActionForItem(at: otherPane.1)
+    precondition(editorWindow.firstResponder !== beforeFocus)
+    closeSplit.0.performActionForItem(at: closeSplit.1)
+    precondition(visibleEditors().count == 1)
+    precondition(!delegate.validateMenuItem(closeSplit.0.items[closeSplit.1]))
     let first = directory.appendingPathComponent("unicode space é #?.txt")
     let second = directory.appendingPathComponent("second.txt")
     let firstText = "a👩🏽‍💻e\u{301}\r\nאב\r終\n"

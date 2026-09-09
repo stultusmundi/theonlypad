@@ -22,7 +22,7 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   -o .local/native-integration/checkpoint-scheduler-test
 .local/native-integration/checkpoint-scheduler-test
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
-  -I "$build_path/Modules" Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/DocumentTextView.swift Sources/TheOnlyPad/EditorDocument.swift Sources/TheOnlyPad/EditorPane.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
+  -I "$build_path/Modules" Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/DocumentTextView.swift Sources/TheOnlyPad/EditorDocument.swift Sources/TheOnlyPad/EditorPane.swift Sources/TheOnlyPad/EditorPaneHost.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
   Sources/TheOnlyPad/DocumentPrinting.swift Sources/TheOnlyPad/RecoveryCoordinator.swift Sources/TheOnlyPad/NativeSyntaxHighlighter.swift Sources/TheOnlyPad/LineNumberRuler.swift Sources/TheOnlyPad/DocumentTabBar.swift Sources/TheOnlyPad/WorkspaceSidebar.swift Sources/TheOnlyPad/EncodingPanelController.swift Sources/TheOnlyPad/MacroCancellation.swift Sources/TheOnlyPad/SearchPanelController.swift Tests/NativeIntegration/NativeUIHarness.swift \
   "$build_path"/PadCore.build/*.o -o .local/native-integration/ui-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/ui" .local/native-integration/ui-test
@@ -111,6 +111,12 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   "$build_path"/PadCore.build/*.o -o .local/native-integration/shared-pane-commands-test
 for mode in default close-composition late-close late-json late-encoding stale-selection stale-edit stale-detach stale-tab positive orphan-callback save-freeze find-reactivate outline-reactivate noninteractive-navigation; do
   THEONLYPAD_STATE_DIRECTORY="$fixtures/routing-$mode" .local/native-integration/shared-pane-commands-test "$mode"
+done
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${native_sources[@]}" Tests/NativeIntegration/VisiblePaneHarness.swift \
+  "$build_path"/PadCore.build/*.o -o .local/native-integration/visible-pane-test
+for mode in default cache-settings refusals noninteractive-navigation; do
+  THEONLYPAD_STATE_DIRECTORY="$fixtures/visible-$mode" .local/native-integration/visible-pane-test "$mode"
 done
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" "${native_sources[@]}" \

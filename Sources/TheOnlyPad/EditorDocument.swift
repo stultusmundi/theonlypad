@@ -16,6 +16,7 @@ final class EditorDocument {
   private(set) var editRevision: UInt64 = 0
   var composingPaneID: UUID?
   var preferredPaneID: UUID?
+  var splitAxis: PaneAxis = .sideBySide
   // Transitional single-pane accessors; focus routing is a subsequent integration step.
   var editor: DocumentTextView { panePool[0].editor }
   var scroll: NSScrollView { panePool[0].scroll }

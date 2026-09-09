@@ -28,7 +28,7 @@ manifest = {
             "properties": [
                 {"name": "distribution", "value": "Local development build; not notarized or published"},
                 {"name": "minimum-macos", "value": info["LSMinimumSystemVersion"]},
-                {"name": "platform-frameworks", "value": "AppKit, Foundation, CryptoKit, Darwin; provided by macOS"},
+                {"name": "platform-frameworks", "value": "AppKit, Foundation, CryptoKit, Darwin, UniformTypeIdentifiers; provided by macOS"},
                 {"name": "external-package-count", "value": "0"},
             ],
         }

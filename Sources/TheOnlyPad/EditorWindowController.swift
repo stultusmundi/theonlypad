@@ -54,7 +54,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let tabBar = DocumentTabBar()
   private var closedDocuments: [EditorDocument] = []
   private let languagePicker = NSPopUpButton(frame: .zero, pullsDown: false)
-  private let host = NSView()
+  private let host = EditorPaneHost(frame: .zero)
   private let workspaceSplit = NSSplitView()
   private lazy var workspace = WorkspaceSidebar { [weak self] url in self?.open(url) }
   private let status = NSTextField(labelWithString: "")
@@ -118,6 +118,97 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.preferredPaneID = pane.id
     updateStatus()
   }
+  private func admitPaneChange() throws -> (EditorDocument, EditorPane) {
+    guard !windowClosed, !preparingToQuit, let document = current, let pane = focusedPane,
+      !document.saving, pane.isAttached
+    else { throw PaneRoutingError.stale }
+    guard document.composingPaneID == nil else { throw PaneRoutingError.composition }
+    return (document, pane)
+  }
+
+  func splitCurrent(_ axis: PaneAxis) throws {
+    let (document, source) = try admitPaneChange()
+    let attached = document.panePool.filter(\.isAttached)
+    guard attached.count == 2 || document.storage.length <= 2_000_000 else {
+      throw NSError(
+        domain: "TheOnlyPad", code: 24,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "Split views currently support documents up to 2 million UTF-16 units. Use one pane or copy a smaller excerpt to a new tab."
+        ])
+    }
+    let selection = source.editor.selectedRange()
+    let wrap = !source.editor.isHorizontallyResizable
+    // Constructing another NSTextView can change attributes in its already-shared storage.
+    let font = source.editor.font
+    let paragraph = source.editor.defaultParagraphStyle
+    let typingAttributes = source.editor.typingAttributes
+    source.editor.breakUndoCoalescing()
+    if attached.count == 1 {
+      let additional = try document.makePane()
+      additional.attach()
+      installCallbacks(for: additional)
+      additional.editor.font = font
+      additional.editor.defaultParagraphStyle = paragraph
+      additional.editor.typingAttributes = typingAttributes
+      additional.editor.setSelectedRange(selection)
+      document.highlighter.applyCachedTokens(to: additional.layoutManager)
+    }
+    document.splitAxis = axis
+    document.preferredPaneID = source.id
+    try presentPanes(document, wrap: wrap)
+    try focusPane(id: source.id)
+    source.editor.setSelectedRange(selection)
+    refresh()
+  }
+
+  func collapseToFocusedPane() throws {
+    let (document, source) = try admitPaneChange()
+    guard document.panePool.filter(\.isAttached).count == 2 else { throw PaneRoutingError.stale }
+    let selection = source.editor.selectedRange()
+    let wrap = !source.editor.isHorizontallyResizable
+    for pane in document.panePool where pane !== source && pane.isAttached {
+      pane.editor.breakUndoCoalescing()
+      pane.detach()
+    }
+    document.preferredPaneID = source.id
+    try presentPanes(document, wrap: wrap)
+    try focusPane(id: source.id)
+    source.editor.setSelectedRange(selection)
+    refresh()
+  }
+
+  private func focusOtherPane() throws {
+    let (document, source) = try admitPaneChange()
+    guard let other = document.panePool.first(where: { $0.isAttached && $0 !== source })
+    else { throw PaneRoutingError.stale }
+    try focusPane(id: other.id)
+  }
+
+  private func presentPanes(_ document: EditorDocument, wrap: Bool) throws {
+    let panes = document.panePool.filter(\.isAttached)
+    try host.present(panes: panes, axis: document.splitAxis)
+    window?.contentView?.layoutSubtreeIfNeeded()
+    if let window {
+      var minimum = NSSize(width: 540, height: 360)
+      if panes.count == 2 {
+        if document.splitAxis == .sideBySide {
+          minimum.width = max(minimum.width, ceil(window.frame.width - host.bounds.width + 321))
+        } else {
+          minimum.height = max(minimum.height, ceil(window.frame.height - host.bounds.height + 321))
+        }
+      }
+      window.minSize = minimum
+      var frame = window.frame
+      frame.size.width = max(frame.width, minimum.width)
+      frame.size.height = max(frame.height, minimum.height)
+      if frame != window.frame { window.setFrame(frame, display: false) }
+      window.contentView?.layoutSubtreeIfNeeded()
+    }
+    configureWrap(document, enabled: wrap)
+    refreshInteractivity(document)
+  }
+
   private func activateSource(_ pane: EditorPane, snapshot: String, range: NSRange) throws {
     guard !windowClosed, !preparingToQuit,
       documents.contains(where: { $0 === pane.document }), pane.isAttached,
@@ -740,6 +831,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       folderSearch = panel
       panel.showWindow(nil)
+    case "view.splitVertical":
+      do { try splitCurrent(.sideBySide) } catch { present(error) }
+    case "view.splitHorizontal":
+      do { try splitCurrent(.stacked) } catch { present(error) }
+    case "view.closeSplit":
+      do { try collapseToFocusedPane() } catch { present(error) }
+    case "view.focusOtherPane":
+      do { try focusOtherPane() } catch { present(error) }
     case "view.wrap": toggleWrap()
     case "edit.find":
       showSearch()
@@ -762,6 +861,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     if id.hasPrefix("bookmark.") { return current != nil && current?.saving == false }
     switch id {
+    case "view.splitVertical", "view.splitHorizontal":
+      guard let document = current, !document.saving else { return false }
+      return visiblePanes.count == 2 || document.storage.length <= 2_000_000
+    case "view.closeSplit", "view.focusOtherPane":
+      return current?.saving == false && visiblePanes.count == 2
     case "macro.start":
       return current != nil && current?.saving == false && recordingDocumentID == nil
         && !macroSaving && recordedCommands.isEmpty
@@ -1657,15 +1761,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     document.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
     selectedID = document.id
-    for subview in host.subviews { subview.removeFromSuperview() }
-    for pane in document.panePool where pane.isAttached {
-      installCallbacks(for: pane)
-      host.addSubview(pane.scroll)
-      pane.scroll.frame = host.bounds
-      pane.scroll.autoresizingMask = [.width, .height]
-    }
+    for pane in document.panePool where pane.isAttached { installCallbacks(for: pane) }
     if !document.settingsApplied { configureSettings(document) }
-    refreshInteractivity(document)
+    let wrap = !preferredPane(in: document).editor.isHorizontallyResizable
+    do { try presentPanes(document, wrap: wrap) } catch {
+      present(error)
+      return
+    }
     window?.makeFirstResponder(preferredPane(in: document).editor)
     updateLanguage(document)
     refresh()
@@ -2121,8 +2223,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       location = "UTF-16 offset \(caret)"
     }
     let selection = preferredPane(in: document).editor.selectedRange().length
+    let splitNotice =
+      text.length > 2_000_000 && document.panePool.filter(\.isAttached).count == 1
+      ? "Split unavailable: over 2 million UTF-16 units  |  " : ""
     status.stringValue =
-      "\(document.language.rawValue)  |  \(location)  |  Selected \(selection) UTF-16 units  |  \(document.encoding.rawValue)\(document.hasBOM ? " BOM" : "")  |  \(preferredPane(in: document).editor.isHorizontallyResizable ? "No Wrap" : "Wrap")"
+      splitNotice
+      + "\(document.language.rawValue)  |  \(location)  |  Selected \(selection) UTF-16 units  |  \(document.encoding.rawValue)\(document.hasBOM ? " BOM" : "")  |  \(preferredPane(in: document).editor.isHorizontallyResizable ? "No Wrap" : "Wrap")"
       + (text.length > 2_000_000 ? "  |  Highlighting disabled: large document" : "")
       + (loadingCount > 0 ? "  |  Loading…" : "")
       + (document.saving ? "  |  Working…" : "")

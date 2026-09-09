@@ -258,3 +258,17 @@ Lifetime finding correction: the initial weak assertion ran before AppKit deferr
 Task1 focused verification: ownership harness passed at macOS14 deployment target; hidden WindowCheckpoint passed; strict source formatting and diff checks passed. DirtyState initially failed to find the encoding sheet in the tool sandbox on both current and0b92dfe sources. Diagnostics showed AppKit service connection failure; the unchanged retained harness passed with authorized unsandboxed native execution. No product/test patch was needed. Independent frozen-source review found no material issue. The full native extraction run remains pending.
 
 Task1 full core/native50290 passed:199 core tests in8.567seconds, all native integration harnesses including shared ownership/highlighting and both process-kill recovery cases. Independent review is clear. First-pane compatibility accessors are intentionally temporary; no visible split/routing feature is claimed.
+
+## Current execution state
+
+The checklists above preserve the original acceptance work; this table records subsequent implementation and evidence separately.
+
+| Task | Implemented | Verification | Outstanding |
+| --- | --- | --- | --- |
+| 1. Shared ownership | Committed5f8121c | Full core/native50290; later integrated suites retained coverage | Physical IME and full performance acceptance |
+| 2. Pane routing | Committeda947be9 | Full native6143; later narrow launch-focus refinement passed two-pane and actual launch workflows68373;15 retained routing modes | Packaged pane input acceptance |
+| 3. Visible splits | Host, registry, guards, per-tab in-process axis and collapse integrated | Core204, complete native32534 with real menu actions, and desktop compile-only21390 passed | Packaged execution and performance acceptance |
+| 4. Highlighting/metadata | Shared parser/cache and visible attachment/settings fan-out integrated | Full native32534, cache/stale-result tests, settings font regression and unchanged language-only reattach passed | Full language/pane and physical input acceptance |
+| 5. Acceptance | Desktop tests registered and compiled; reviewed benchmark source prepared | Build-only desktop target succeeded; no benchmark run yet | Desktop authentication, physical IME/VoiceOver, performance matrix and complete acceptance |
+
+No applicable feature is closed solely by this table. F-01 remains partial until its outstanding acceptance is resolved; split session persistence, transfers and linked scrolling remain separately outstanding requirements.
