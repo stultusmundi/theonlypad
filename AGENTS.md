@@ -83,3 +83,5 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 `scripts/test-document-factory.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 115 hidden factory checks plus the shared-pane ownership control. Use a verified core build; native intake routes remain unmodified.
 
 `scripts/test-application-session-checkpoints.sh` passed 18 real-store publisher tests. The extracted legacy AppDelegate initializer builds; native managed activation remains outstanding.
+
+`scripts/test-application-document-intake.sh` passed 16 process-owner tests, including actual startup publisher integration and a paired receipt/reload. Native controller routing remains separate.

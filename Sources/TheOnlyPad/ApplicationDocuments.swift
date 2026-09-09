@@ -404,6 +404,8 @@ struct DocumentAdoptionState: Equatable {
     return repaired
   }
 
+  /// Includes live, group, window and retired/history identities; never grants admission.
+  func containsReservedID(_ id: UUID) -> Bool { allIDs.contains(id) }
   func handle(id: UUID) -> (any WorkspaceDocumentHandle)? { records[id]?.handle }
   func assignment(of documentID: UUID) -> DocumentAssignment? { records[documentID]?.assignment }
   func metadata(id: UUID) -> WorkspaceDocumentMetadata? { records[id]?.metadata }

@@ -1,0 +1,9 @@
+# Process document intake verification
+
+ApplicationDocumentIntake owns one payload/model transaction through publisher drain, pending registry registration, actual recovery adoption, typed session provenance reconciliation and native projection. Rejected installation retains the actor receipt for retry; a projection retry does not create/adopt another model. All callback-capable stages retain ownership and disallow unsafe cancellation. A read-only registry reservation query refuses historical/live ID collisions before factory invocation.
+
+`scripts/test-application-document-intake.sh` passed 16 XCTest cases in 0.016 seconds (`.local/document-intake-publisher-final.log`). The initial eight-test compiled seam had seven workflow failures; its invalid-scalar control passed. Expanded coverage verifies real ordinary/recovery claim transfer, corrupt metadata preservation, 128 reserved records refusing new creation, factory callback invalidation, exact claim renewal, missing-source retention, waiter cancellation, installation/projection retry and exact pause release. Independent owner review found no material issue.
+
+The final combined case uses actual ApplicationSessionCheckpoints: startup intake owns an inner pause while the outer activation prevents early acknowledgement; after adoption and activation, a real final paired receipt names the exact authority/ID. Fresh SessionStore and RecoveryStore readers reload exact UTF-16 text, encoding and BOM. No injected callback supplies a durability receipt. An initial version of this added fixture used a nonexistent SessionTab argument and failed compilation; it was corrected before the passing run.
+
+Foundation native handles/callbacks remain synthetic. Reload is in the same process. No native controller routing, GUI, force termination, package workflow or endpoint recreation is claimed. Full F02 remains outstanding. Platform: ARM64 macOS 26.6.2/Swift 6.3.3, Swift 5 mode.
