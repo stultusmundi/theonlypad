@@ -1,43 +1,45 @@
 # Continuation checkpoint
 
-TheOnlyPad is incomplete. The full BUILD_PROMPT remains scope. Continue autonomous implementation; no remote push/merge/release, credentials, or system security changes. Never claim notarization, Intel/minimum-OS runtime, physical IME/VoiceOver or clean-machine acceptance.
+TheOnlyPad is incomplete. Continue the full BUILD_PROMPT autonomously. Local work and commits are authorized; remote pushes, merges, releases, credentials and security changes are not.
 
-## Current work and exact next action
+## Current state and next action
 
-- Latest committed core scheduler: `43769ae` (earlier service `6a81de6`, reader `7226874`, guard `cb60ee0`). Native monitoring, status/conflict UI and checked Reload/Copy are committed as `b59bfab`. Root owns production controller/AppDelegate/model. Preserve all files; no temporary lifecycle/confirmation stubs remain.
-- Latest committed components: `4e22b6b` shortcut core/profile/store; `1afb1d1` bounded transfer/native recorder; `593b5e5` application owner. Native editor/wiring and presentation-refresh fixes are committed and packaged as `b25a07a`.
-- Fresh final evidence: actual native build/core368 tests passed14.580s `.local/shortcut-final-integration.log`; production application12tests passed0.473s/build11.39s `.local/shortcut-application-tests/run.ZVGPxM6y`; editor39checks `.local/shortcut-editor-native/run.SW7q5Ws4`; recorder47checks `run.Ewxxj0CI`; owner18tests `run.sRzW59jh`. Hidden monitor lifecycle passed `run._9gs7uny`. Full strictformat/public/diff checks passed. All source reviews clear within documented scope.
-- Presentation refresh variants are integrated: RecentFiles/SessionRestoration new refreshPresentation methods preserve same-target work; AppDelegate3presentationcallers use them, quit retains explicit update cancellation.26hidden scenarios/163assertions passed `.local/presentation-refresh-tests/run.XW0PSbtU` (empty compiler log). Real removal confirmation injected only in private fixture; existing visible Recent/Session harnesses remain unrun while locked.
-- Root exact next: record package verification, review the pane-persistence proposal when ready, then execute reviewed F01 work. Package65473 and independent checks passed. Do not execute GUI; the full brief is not complete. Agent document_core now owns ignored `.local/pane-persistence-design` reviewed design proposal for F01 persisted split presentation (actual SessionStore v1→newversion; v0 remains unsupported and preserved; F02transfer separate). Other agents completed review/testing and are available. No production schema/pane edits yet.
-- Desktop Locate and shortcut recording/persistence/reset sources compile (`.local/desktop-locate-compile/status-selector-build.log`), with macOS14 target/header-map alignment; no execution. New status is NSTextView with shortcuts.status identifier and success wording 'Shortcut settings saved.' Locate assertions prove no adoption write and post-relaunch save binding; shortcut old-key checks use inverted waits to avoid false attribution. Physical selectors/input/GUI remain unverified.
-- Locate is committed in `eaf5145`: coordinator31 assertions; bridge111+20+26; final combined hidden lifecycle run.r0rwjt2e all phases/no warnings including one session/MRU notification on actual URL adoption and zero on refusal. Full core13575 passed328 tests in14.613s. Independent review clear.
-- Real desktop Reload/Copy, Locate chooser/dirty undo/save/relaunch, and shortcut recording/persistence/reset sources now exist. They remain unexecuted while locked. Locate review tightened immediate no-write and post-relaunch binding assertions; shortcut review tightened delayed old-key false-pass checks.
-- Latest multiselection spike `.local/multiselection-spike/run.nxkGzSBp` shows native typing only replaces first nonempty range, deletion all ranges, empty carets collapse;11cases exact shared undo/redo. Hidden semantic evidence only; current engine remains provisional. Prior Scintilla/CodeMirror evidence must be considered before a production selection-layer decision.
-- After this checkpoint: continue other BUILD_PROMPT requirements with reviewed plans and actual evidence. Full desktop and visible benchmarks remain blocked; package verification alone cannot establish product completeness.
+Branch `build/native-editor`. Local commits: `5ad963d` pane metadata and bounded selection validation; `cd2d679` document registry; `ab79268` session restoration flow and capacity; `e331f3b` synchronous native pane restoration; `11d2a25` registry close leases and correlated repair. Native transfer and registry/recovery close integration remain unimplemented.
 
-## Fresh evidence
+Final integrated hidden native verification passed against current sources: all 24 pane scenarios (199 assertions) in `.local/pane-session/run.LFh2hY7D` and the real-save harness (26 assertions) in `.local/pane-save/run.Kd90NmLF`. Current application build passed in 3.45 seconds. Frozen candidate full core suite passed 392 tests in 16.113 seconds, with source provenance retained in `.local/pane-candidate.2o9eg75i`; only the then-independent registry close addition differed. That addition subsequently passed 30 tests in 0.010 seconds. Session flow passed 9 tests and capacity passed 7. Monitor/Reload/Copy/Locate/quit compatibility passed. Desktop pane tests compile only. See verification records for limits and historical failures.
 
-- `scripts/swift.sh test --scratch-path .build/native-monitor-integration`: session91188, native build2.38s and328 tests/0 failures in14.538s. Strict repository swift-format, public-source patterns and diff checks passed.
-- Final actual hidden lifecycle/action harness `.local/native-monitor-lifecycle-retained/run.lvkfdn7z`: compile/runtime0, no warnings, all phases passed. Includes real open/save/split/tab binding continuity, equal-byte acknowledgements, quit-veto deferred adoption, close/reopen fencing, status-only no checkpoint, Check/KeepBuffer/captured SaveAs, exact UTF16BE+BOM Reload/Copy, preserved unrelated focus, both-pane postreload typing/undo/redo, dirty Cancel, second disk change, stale panel and close during confirmation.
-- Real directory-sync injected uncertain save fixture confirms disk equals attempted bytes while saved baseline remains old. Cancel and confirmation-time change preserve exact pending.id/bytes, dirty buffer and undo. Generic-warning red `run.kqdlp8t7` preceded dedicated wording. Native Cancel-first ordering source-reviewed; actual modal/default-key behavior untested.
-- `.local/disk-action-coordinator/run.yEWHlxz5`:57 assertions passed. Independent review fixed terminal predicate reentry, including replacement that finishes before predicate returns. Bounded off-main selection preparation retains global permit until actual canceled job completion. Explicit coordinator cancellation before destruction required.
-- `.local/file-state-bridge/run.SILVC6Wl`:105 semantic+18 real-service+26 application checks passed. `.local/file-state-owner-tests/run.khoeUOtB`:20 model+36 actual-controller checks passed. These precede final action wiring; expanded lifecycle above covers it.
-- Fresh final compatibility `.local/monitor-compat/run.5setnkt3`: SaveFailureHarness, WindowCheckpointHarness and ApplicationCheckpointHarness all passed against current frozen sources. Earlier run.4ru_iv6f remains retained.
-- Independent final lifecycle/script review found no material issues. All seven legacy operations use exact UUID ownership; baseline adoption precedes finish; AppDelegate quit/veto and close cancellation source-reviewed. Status rendering does not write checkpoints or files.
-- These tests instantiate actual native controllers but never show/activate windows or native dialogs. Full native suite includes visible harnesses and has not been rerun while locked.
+Exact next actions:
 
-## Environment and proven commands
+1. Commit updated records/CI after public and formatting checks; package the committed source with `scripts/package.sh --ad-hoc-sign`, verify bundle/archive/SBOM and signature, record actual artifact hash. Do not launch while GUI access is blocked.
+2. Continue recovery-safe native close integration. Reviewed approach A in `.local/recovery-close-lease-review.md` extends the existing single paired checkpoint publisher with in-memory close leases, capture-time writer epochs, checked deletion and fresh atomic repair. No separate durable journal or arbitrary lifetime close limit. The existing contract permits a closed tab to reappear after a crash before the post-close checkpoint; do not claim a stronger guarantee.
+3. document_core owns core RecoveryCoordinator/RecoveryStore authority, deletion and repair implementation/tests plus new public design/plan. engine_spike owns a design-only native writer/close/quit audit in `.local/native-recovery-close-integration.md`; no native edits yet. requirements remains available for independent review. Root owns packaging/integration and must review exact APIs before native changes.
+4. Continue F02 ownership integration, moves between windows, independent groups and streaming handles. The tested registry alone does not complete F02. Then continue every outstanding requirement in the matrix.
 
-Branch `build/native-editor`; repository-local privacy-preserving commit identity. AppKit/TextKit1 plus Foundation/CryptoKit/Darwin PadCore; no external runtime packages. macOS14 minimum, Swift6.3.3 in Swift5 mode. Runtime evidence is ARM64 M4 Pro/48GiB/macOS26.6.2 only. Engine choice remains provisional pending complete performance/IME/accessibility acceptance.
+## Architecture and invariants
 
-Stable shortcut link products: `.build/shortcut-store-integration/arm64-apple-macosx/debug` (361 tests); requirements may be building `.build/shortcut-transfer-integration`. Stable monitor link products: `.build/native-monitor-integration/arm64-apple-macosx/debug`. Older `.build/external-action-service`, `.build/external-action-reader`, `.build/external-file-integration` are retained for isolated agents. Coordinate before rebuilding shared scratch directories. All raw fixtures/logs live in ignored `.local`; no public real documents or machine paths. Native toolchain and synthetic atomic file writes may need approved escalation; one spike compiler-mode change was rejected by automatic review, then resolved with evidence: Package.swift explicitly declares Swift5 language mode. The spike accidentally introduced Swift6; retry explicitly matching Swift5 was approved without source/test weakening. Preserve its initial setup failure and do not modify observer code to satisfy that mismatched spike configuration.
+AppKit/TextKit1, Foundation/CryptoKit/Darwin PadCore; no external runtime dependencies. macOS 14 minimum; Swift 6.3.3 in explicit Swift 5 mode. Runtime evidence: ARM64 M4 Pro, 48 GiB, macOS 26.6.2 only. Engine remains provisional pending full multicursor, performance, IME and accessibility acceptance.
+
+- One shared text storage and undo manager per document; at most two editor views, stable identities and retained detached undo targets. Composition excludes competing edits. Above 2,000,000 UTF-16 units, saved split restoration is explicitly deferred.
+- Session v2 persists ordered pane ranges, point scroll origins, axis and focused slot once per logical document. Exact canonical v1 migration is read-only. Native range clamp is synchronous and bounded using existing NSString; full startup/bookmark validation stays off-main. No asynchronous native restore worker or full glyph-layout flush remains. Scroll placement is best effort across font/wrap/geometry changes.
+- Registry owns exclusive document/group/window metadata, but native controllers have not migrated. Live limits are 32 windows/128 handles; capacity snapshot also counts unresolved records. Aggregate admission and transfers still require wiring. Close-state tests use synthetic receipts and do not prove durable recovery repair.
+- Current legacy RecoveryCoordinator.close permanently tombstones an ID before deletion. Never map its thrown error to unchanged/write-enabled recovery. New managed captures must carry their original epoch; no late getter may upgrade stale work. Preserve model ownership on uncertainty and require fresh confirmed atomic repair before reopening admission.
+- Exact dirty comparison retains its conservative fallback and pending-storage poison. No digest-only or unconditional dirty substitute.
+- Atomic publication uncertainty retains opaque evidence and attempted bytes; readback is not acknowledgement. Fresh successful save only. Keep Buffer never authorizes overwrite.
+- Paired recovery/session checkpoints use 750 ms debounce/15 s maximum, one worker plus pending capture, bounded retry and quit drain/final receipt. Preserve this single publication authority.
+- Monitoring uses bounded registration/work queues, exact-byte reconciliation and explicit action ownership. Reload/Copy/Locate maintain final authority checks; monitoring never automatically overwrites files or reloads edits.
+- Shortcut settings use one validated atomic catalog, preserve native protected commands and fence composition/extension revisions. Physical keyboard layout behavior is unverified.
+
+## Commands
 
 ```sh
-scripts/swift.sh test --scratch-path .build/native-monitor-integration
-scripts/test-file-state-bridge.sh .build/native-monitor-integration/arm64-apple-macosx/debug
-scripts/test-disk-action-coordinator.sh .build/native-monitor-integration/arm64-apple-macosx/debug
-scripts/test-file-state-owner.sh --build-path .build/native-monitor-integration/arm64-apple-macosx/debug
-scripts/test-native-monitor-lifecycle.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/swift.sh build --scratch-path .build/pane-native-integration
+scripts/swift.sh test --scratch-path .build/pane-native-integration
+scripts/test-session-presentation-flow.sh
+scripts/test-session-capacity.sh
+scripts/test-application-documents.sh
+scripts/test-pane-session.sh .build/pane-native-integration/arm64-apple-macosx/debug
+scripts/test-pane-save.sh .build/pane-native-integration/arm64-apple-macosx/debug
+scripts/test-native-monitor-lifecycle.sh .build/pane-native-integration/arm64-apple-macosx/debug
 xcrun swift-format lint --strict --recursive Sources Tests Package.swift
 python3 scripts/check-public.py
 git diff --check
@@ -45,23 +47,14 @@ scripts/package.sh --ad-hoc-sign
 python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json
 ```
 
-## GUI access and package
+Coordinate shared scratch builds. Raw logs and synthetic fixtures stay ignored in `.local`; no real user documents, machine-specific paths or credentials belong in public records. Repository-local commit identity is configured.
 
-Read-only session probe reported console screen locked. User was asked to unlock and approve Enable UI Automation if prompted; no response yet. Do not retry visible benchmarks, open the app, or rerun XCUITest until access is confirmed. Three earlier XCUITest attempts failed before tests enabling automation; no credentials/settings were changed. The current lock does not retrospectively explain earlier visibility failures.
+## GUI access and artifacts
 
-Current `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json` are source `b25a07a`, including native shortcuts and presentation-refresh fixes alongside monitored Reload/Copy/Locate. Executable SHA256 `93111f08c1cd8ba884aedefa24ed01c2944919217c04815c0560087fb7be8284`. Package65473 release21.82s; ad-hoc signature, all6bundle/ZIP byte matches, SBOM hash, safe archive and specified ASCII path markers passed, including independent post-promotion check. No DeveloperID/notarization/publication/current desktop acceptance. Earlier eaf5145 package370926fd… is historical.
+An approved read-only console probe on 2026-09-10 confirmed the screen remains locked. The user was asked to unlock and approve UI Automation if prompted; no response yet. Do not run visible apps, benchmarks, posted input or XCUITest until access is confirmed. Hidden AppKit tests and build-for-testing are allowed. Never change credentials/security settings. Earlier UI automation failures do not establish their cause from today's lock state.
 
-Historical earlier executable0324726… passed6 real packaged desktop tests in298.439s, `.local/desktop-ui/run.WdUWEz/results.xcresult`; not current runtime evidence. See `docs/verification/xcuitest-feasibility.md`.
+Current package before the next packaging step is still source `b25a07a`: `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json`. Executable SHA256 `93111f08c1cd8ba884aedefa24ed01c2944919217c04815c0560087fb7be8284`. Ad-hoc signature and archive/SBOM checks passed, but it predates pane persistence. No Developer ID, notarization, publication or current packaged desktop acceptance. Historical six-test packaged GUI evidence belongs to an older executable and is not current acceptance.
 
-## Invariants and limitations to preserve
+## Remaining acceptance
 
-- Shared NSTextStorage/UndoManager; max2panes, stable pane identities, retained detached undo targets. Composition owner excludes other pane mutations. Visible split cap2M UTF16; axis only in process; persistence/window transfer/synchronized scrolling outstanding.
-- Exact aligned/suffix dirty proof has conservative fallback and pending-storage poison. Native40k edits/43,226 dirty/70,936 proof checks passed historically. No digest or unconditional dirty substitute.
-- AtomicFileStore publicationUncertain retains opaque evidence and exact attempted bytes. Readback is not acknowledgement; fresh successful save only. SaveAs create-only and uncertainty preserves oldURL/baseline. Keep Buffer never authorizes overwrite.
-- Paired immutable recovery/session checkpoints:750ms debounce/15smax, one worker+pending, bounded retry, quit drain/final receipt. Historical actual SIGKILL recovery passed. Full fault matrix remains outstanding.
-- Monitor:128regs,2workers,16shared manual/action admissions through actual callback drain,256watch reservations+6transient/worker=268owned max.250msdebounce/2smax/30sexact-byte reconciliation. No metadata cache. Guard prevents dataless materialization on calling worker thread; no cloud-provider E2E claim. Cancellation is cooperative between syscalls.
-- Native process action lease and exact context/operation/generation protect asynchronous reads; copy creates URL-less scratch. Reload confirmation precedes final revalidation and coherent adoption; no automatic reload or original-file writes from monitoring.
-- Historical dirty100MB6fresh children108ops met under50ms for measured dirty edit scope, RSS~533MB. One checkpoint-interaction smoke measured8edits26.61ms median27.29max during5writes, RSS1.261GB, exact100MBrestore. Not repeated acceptance; later visibility-gated writers failed before measured edits.
-- Glyph warnings reproduced unchanged baseline and candidate; root cause/rendering still unresolved. Corrected visible harness bootstrap source has not been run while locked. Do not weaken visibility gates.
-
-Broader outstanding scope includes optional autosave/save races/metadata; split/workspace persistence and document transfer; multicursor/rectangular/overwrite/guides; folder replacement preview/backups; folding/completion/snippets/custom languages/formatters; shortcut customization/localization/full accessibility/IME; complete100MB/1GB/long-line/cold-launch benchmarks; security/supply-chain/parity/fault review; clean packaged desktop and external signing/release steps. Keep matrix statuses honest.
+Every outstanding matrix item remains scope: autosave and remaining save faults; advanced editing/multicursor/rectangle/overwrite; folder replacement previews/backups; folding/completion/snippets/custom languages/formatters; workspace/group/window transfer; complete macro bindings/localization/accessibility/IME; repeated cold-launch/100 MB/1 GB/pathological-line performance; security/supply-chain/parity and failure review; clean packaged desktop testing. Historical dirty-edit and checkpoint interaction measurements cover only their recorded operations, not full performance acceptance. Glyph warnings reproduced on baseline and candidate remain unresolved. Intel/minimum-OS runtime and physical IME/VoiceOver are untested. Signing and release require separate external steps.

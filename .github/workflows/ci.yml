@@ -23,10 +23,15 @@ jobs:
         run: |
           scripts/test-application-shortcuts.sh
           scripts/test-shortcut-application.sh
+          scripts/test-session-presentation-flow.sh
+          scripts/test-application-documents.sh
+          scripts/test-session-capacity.sh
           build_path=$(scripts/swift.sh build --show-bin-path)
           scripts/test-shortcut-recorder.sh "$build_path"
           scripts/test-shortcut-editor.sh "$build_path"
           scripts/test-native-presentation-refresh.sh "$build_path"
+          scripts/test-pane-session.sh "$build_path"
+          scripts/test-pane-save.sh "$build_path"
       - name: Package promotion rollback tests
         run: python3 scripts/test-package-promotion.py
       - name: Local package
