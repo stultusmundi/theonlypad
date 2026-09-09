@@ -129,10 +129,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
           do {
             try editor.restoreSessionTab(
               tab.metadata, decoded: tab.decoded, originalBytes: tab.originalBytes, url: tab.url,
-              viewState: tab.viewState)
+              viewState: tab.viewState, resolvedPresentation: tab.resolvedPresentation,
+              activate: false)
           } catch { failures[tab.metadata.id] = error.localizedDescription }
         }
-        editor.selectSessionTab(prepared.selectedTabID)
+        let restored = editor.sessionMetadata.tabs
+        editor.selectSessionTab(
+          restored.contains { $0.id == prepared.selectedTabID }
+            ? prepared.selectedTabID : restored.first?.id)
         if editor.sessionMetadata.tabs.isEmpty { editor.close() }
         return failures
       }
@@ -172,7 +176,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return try await self.session.locate(entry, url: url)
       },
       onResolved: { [weak self] entry, file in
-        guard let self, !self.preparingQuit, let state = file.resolvedViewState else {
+        guard let self, !self.preparingQuit, let state = file.resolvedViewState,
+          file.resolvedPresentation != nil
+            || entry.metadata.presentation == .single(selection: entry.metadata.selection)
+        else {
           throw CancellationError()
         }
         if let target = self.repairTargets[entry.metadata.id],
@@ -193,15 +200,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         try editor.restoreSessionTab(
           entry.metadata, decoded: file.decoded, originalBytes: file.originalBytes, url: file.url,
           viewState: state,
-          insertionIndex: self.session.insertionIndex(for: entry, in: editor.sessionMetadata))
-        if self.session.shouldSelect(entry) { editor.selectSessionTab(entry.metadata.id) }
+          insertionIndex: self.session.insertionIndex(for: entry, in: editor.sessionMetadata),
+          resolvedPresentation: file.resolvedPresentation, activate: false)
+        if self.session.shouldSelect(entry) || editor.sessionMetadata.selectedTabID == nil {
+          editor.selectSessionTab(entry.metadata.id)
+        }
         self.session.resolved(entry)
         self.repairTargets[entry.metadata.id] = nil
-        if state.selectionAdjusted || !state.invalidBookmarks.isEmpty {
+        if state.selectionAdjusted || !state.invalidBookmarks.isEmpty
+          || file.resolvedPresentation?.adjustedPaneIndices.isEmpty == false
+        {
           let alert = NSAlert()
           alert.messageText = "Saved positions adjusted"
           alert.informativeText =
-            "The loaded file differs from its saved positions. Selection was clamped and invalid bookmarks were omitted."
+            "The loaded file differs from its saved positions. Pane selections were clamped where needed and invalid bookmarks were omitted."
           alert.runModal()
         }
       },

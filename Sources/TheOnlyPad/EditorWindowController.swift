@@ -58,6 +58,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let workspaceSplit = NSSplitView()
   private lazy var workspace = WorkspaceSidebar { [weak self] url in self?.open(url) }
   private let status = NSTextField(labelWithString: "")
+  private let panePresentationStatus = NSTextField(wrappingLabelWithString: "")
+  private let panePresentationRow = NSStackView()
+  private let restorePanePresentationButton = NSButton(
+    title: "Restore Saved Split", target: nil, action: nil)
+  private let discardPanePresentationButton = NSButton(
+    title: "Use One Pane", target: nil, action: nil)
   private let checkpointStatus = NSTextField(wrappingLabelWithString: "")
   private let checkpointRetry = NSButton(title: "Retry", target: nil, action: nil)
   private let checkpointStatusRow = NSStackView()
@@ -96,6 +102,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func mayMutate(_ pane: EditorPane) -> Bool {
     let document = pane.document
     return !windowClosed && !preparingToQuit && !document.saving && pane.isAttached
+      && document.panePresentation.installing == nil
       && documents.contains(where: { $0 === document })
       && (document.composingPaneID == nil || document.composingPaneID == pane.id)
   }
@@ -105,7 +112,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   func focusPane(id: UUID) throws {
     guard !windowClosed, !preparingToQuit,
-      let document = current,
+      let document = current, document.panePresentation.installing == nil,
       let pane = document.panePool.first(where: { $0.id == id && $0.isAttached })
     else { throw PaneRoutingError.stale }
     guard document.composingPaneID == nil || document.composingPaneID == id
@@ -117,11 +124,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     guard window?.makeFirstResponder(pane.editor) == true else { throw PaneRoutingError.stale }
     document.preferredPaneID = pane.id
+    presentationInteraction(document)
     updateStatus()
   }
   private func admitPaneChange() throws -> (EditorDocument, EditorPane) {
     guard !windowClosed, !preparingToQuit, let document = current, let pane = focusedPane,
-      !document.saving, pane.isAttached
+      !document.saving, document.panePresentation.installing == nil, pane.isAttached
     else { throw PaneRoutingError.stale }
     guard document.composingPaneID == nil else { throw PaneRoutingError.composition }
     return (document, pane)
@@ -138,6 +146,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             "Split views currently support documents up to 2 million UTF-16 units. Use one pane or copy a smaller excerpt to a new tab."
         ])
     }
+    guard document.panePresentation.pending == nil else {
+      throw NSError(
+        domain: "TheOnlyPad", code: 25,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "Restore Saved Split or choose Use One Pane before changing this saved layout."
+        ])
+    }
+    presentationInteraction(document)
     let selection = source.editor.selectedRange()
     let wrap = !source.editor.isHorizontallyResizable
     // Constructing another NSTextView can change attributes in its already-shared storage.
@@ -160,12 +177,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     try presentPanes(document, wrap: wrap)
     try focusPane(id: source.id)
     source.editor.setSelectedRange(selection)
+    document.panePresentation.warning = nil
     refresh()
   }
 
   func collapseToFocusedPane() throws {
     let (document, source) = try admitPaneChange()
     guard document.panePool.filter(\.isAttached).count == 2 else { throw PaneRoutingError.stale }
+    presentationInteraction(document)
+    document.panePresentation.pending = nil
     let selection = source.editor.selectedRange()
     let wrap = !source.editor.isHorizontallyResizable
     for pane in document.panePool where pane !== source && pane.isAttached {
@@ -176,6 +196,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     try presentPanes(document, wrap: wrap)
     try focusPane(id: source.id)
     source.editor.setSelectedRange(selection)
+    document.panePresentation.warning = nil
     refresh()
   }
 
@@ -764,8 +785,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     checkpointStatusRow.addArrangedSubview(checkpointRetry)
     checkpointStatusRow.spacing = 8
     checkpointStatusRow.isHidden = true
+    panePresentationStatus.setAccessibilityIdentifier("session.panes.status")
+    restorePanePresentationButton.setAccessibilityIdentifier("session.panes.restore")
+    discardPanePresentationButton.setAccessibilityIdentifier("session.panes.discard")
+    restorePanePresentationButton.target = self
+    restorePanePresentationButton.action = #selector(restoreSavedPanePresentation)
+    discardPanePresentationButton.target = self
+    discardPanePresentationButton.action = #selector(discardSavedPanePresentation)
+    panePresentationRow.orientation = .vertical
+    panePresentationRow.alignment = .leading
+    panePresentationRow.addArrangedSubview(panePresentationStatus)
+    panePresentationStatus.widthAnchor.constraint(equalTo: panePresentationRow.widthAnchor)
+      .isActive = true
+    panePresentationRow.addArrangedSubview(
+      NSStackView(views: [restorePanePresentationButton, discardPanePresentationButton]))
+    panePresentationRow.isHidden = true
     let stack = NSStackView(views: [
       tabBar, tabs, languagePicker, diskStatusRow, workspaceSplit, status, checkpointStatusRow,
+      panePresentationRow,
     ])
     stack.orientation = .vertical
     stack.alignment = .leading
@@ -808,8 +845,274 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   @objc private func retrySessionCheckpoint() { checkpointRetryAction?() }
 
+  private func capturePresentation(_ document: EditorDocument) -> SessionPresentation {
+    document.panePresentation.capture(
+      panes: document.panePool.filter(\.isAttached),
+      preferred: preferredPane(in: document), axis: document.splitAxis)
+  }
+
+  private func presentationInteraction(_ document: EditorDocument) {
+    guard !windowClosed, !preparingToQuit else { return }
+    document.panePresentation.invalidate()
+  }
+
+  private func renderPanePresentationStatus() {
+    guard let document = current else {
+      panePresentationRow.isHidden = true
+      return
+    }
+    let state = document.panePresentation
+    let deferred = state.pending?.presentation.panes.count == 2
+    panePresentationRow.isHidden = !deferred && state.warning == nil
+    let deferredMessage =
+      deferred
+      ? "Saved split is deferred. Restore it when this document is at most 2 million UTF-16 units, or keep one pane."
+      : nil
+    panePresentationStatus.stringValue = [deferredMessage, state.warning].compactMap { $0 }.joined(
+      separator: "\n")
+    restorePanePresentationButton.isHidden = !deferred
+    discardPanePresentationButton.isHidden = !deferred
+    let eligible =
+      !windowClosed && !preparingToQuit && !document.saving
+      && document.composingPaneID == nil && document.operationID == nil && state.installing == nil
+      && !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
+    restorePanePresentationButton.isEnabled = eligible && document.storage.length <= 2_000_000
+    discardPanePresentationButton.isEnabled = eligible
+  }
+
+  @objc private func discardSavedPanePresentation() {
+    guard let document = current, !windowClosed, !preparingToQuit, !document.saving,
+      document.composingPaneID == nil, document.operationID == nil,
+      document.panePresentation.installing == nil,
+      !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
+    else { return }
+    document.panePresentation.invalidate(force: true)
+    document.panePresentation.pending = nil
+    document.panePresentation.warning = nil
+    renderPanePresentationStatus()
+    notifySessionChange()
+  }
+
+  @objc private func restoreSavedPanePresentation() {
+    guard let document = current else { return }
+    restorePendingPresentation(document)
+  }
+
+  private func restorePendingPresentation(_ document: EditorDocument) {
+    let state = document.panePresentation
+    guard canInstallPresentation(document), state.installing == nil, state.pending != nil,
+      state.pending?.presentation.panes.count == 1 || document.storage.length <= 2_000_000
+    else { return }
+    do {
+      let value = capturePresentation(document)
+      try value.validate()
+      // Two endpoint ranges only. No text copy, bookmark scan, worker or delayed replay.
+      let source = document.storage.mutableString
+      let panes = try value.panes.map {
+        SessionPaneState(
+          selection: try RestoredSelection.resolve($0.selection, inUTF16: source),
+          scrollOrigin: $0.scrollOrigin)
+      }
+      let resolved = SessionPresentation(
+        axis: value.axis, panes: panes,
+        focusedPaneIndex: value.focusedPaneIndex)
+      try installResolvedPanes(resolved, on: document)
+      if panes.map(\.selection) != value.panes.map(\.selection) {
+        state.warning = "Saved pane selections were adjusted to the current document."
+      }
+    } catch {
+      if !windowClosed, !preparingToQuit, documents.contains(where: { $0 === document }) {
+        state.warning =
+          state.pending?.presentation.panes.count == 2
+          ? "The document or view changed. Its saved layout was retained; use Restore Saved Split again."
+          : "The document or view changed. The current single-pane view was preserved."
+      }
+    }
+    if !windowClosed { renderPanePresentationStatus() }
+    notifySessionChange()
+  }
+
+  private func canInstallPresentation(_ document: EditorDocument) -> Bool {
+    !windowClosed && !preparingToQuit && current === document
+      && documents.contains(where: { $0 === document })
+      && !document.saving && document.operationID == nil && document.composingPaneID == nil
+      && !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
+  }
+
+  /// No suspension. AppKit callbacks can still reenter, so every native mutation is fenced.
+  private func installResolvedPanes(
+    _ presentation: SessionPresentation, on document: EditorDocument
+  ) throws {
+    try presentation.validate()
+    let state = document.panePresentation
+    guard canInstallPresentation(document), state.installing == nil else {
+      throw PaneRoutingError.stale
+    }
+    let token = UUID()
+    let interaction = state.interaction
+    let revision = document.editRevision
+    let original = document.panePool.filter(\.isAttached)
+    guard original.count == 1 else { throw PaneRoutingError.stale }
+    let live = preferredPane(in: document)
+    let oldAxis = document.splitAxis
+    let oldPreferred = document.preferredPaneID
+    let oldSelection = live.editor.selectedRange()
+    var expectedSelection = oldSelection
+    var expectedPanes = original
+    var expectedRanges = [live.id: oldSelection]
+    var expectedPreferred = oldPreferred
+    var expectedAxis = oldAxis
+    var additional: EditorPane?
+    var committed = false
+    state.installing = token
+    state.suppression += 1
+    let wrap = !live.editor.isHorizontallyResizable
+    defer {
+      if !committed {
+        // The pool retains native undo targets, but a refused transaction must not leave a
+        // newly attached layout. Do not overwrite selection changed by a reentrant owner.
+        additional?.detach()
+        if document.preferredPaneID == expectedPreferred { document.preferredPaneID = oldPreferred }
+        if document.splitAxis == expectedAxis { document.splitAxis = oldAxis }
+        if original.allSatisfy(\.isAttached),
+          document.panePool.filter(\.isAttached).count == original.count
+        {
+          document.orderAttachedPanes(original)
+        }
+        if !windowClosed, current === document, documents.contains(where: { $0 === document }) {
+          if document.editRevision == revision, document.composingPaneID == nil,
+            !live.editor.hasMarkedText(), live.editor.selectedRange() == expectedSelection,
+            let restored = try? RestoredSelection.resolve(
+              oldSelection, inUTF16: document.storage.mutableString)
+          {
+            live.editor.setSelectedRange(restored)
+          }
+          if !windowClosed, !preparingToQuit, current === document,
+            documents.contains(where: { $0 === document })
+          {
+            do { try presentPanes(document, wrap: wrap) } catch {
+              state.warning =
+                "The saved layout was retained, but its current view could not be restored. Try restoring the saved layout again."
+            }
+          }
+        }
+      }
+      state.suppression -= 1
+      if state.installing == token { state.installing = nil }
+      if !windowClosed, documents.contains(where: { $0 === document }) {
+        refreshInteractivity(document)
+      }
+    }
+    func validateAuthority() throws {
+      guard state.installing == token, canInstallPresentation(document),
+        document.editRevision == revision, state.interaction == interaction,
+        document.preferredPaneID == expectedPreferred, document.splitAxis == expectedAxis,
+        document.panePool.filter(\.isAttached).map(\.id) == expectedPanes.map(\.id),
+        expectedPanes.allSatisfy({ $0.editor.selectedRange() == expectedRanges[$0.id] }),
+        live.isAttached, live.editor.selectedRange() == expectedSelection
+      else { throw PaneRoutingError.stale }
+    }
+    let slot = state.pending?.liveSlot ?? 0
+    let font = live.editor.font
+    let paragraph = live.editor.defaultParagraphStyle
+    let attributes = live.editor.typingAttributes
+    var panes = [live]
+    if presentation.panes.count == 2 {
+      guard document.storage.length <= 2_000_000 else { throw EditorPaneError.limit }
+      let second = try document.makePane()
+      additional = second
+      expectedPanes = document.panePool.filter { $0.isAttached || $0 === second }
+      expectedRanges[second.id] = second.editor.selectedRange()
+      // A reused pane is detached until attach(), while a newly created pane starts attached.
+      guard canInstallPresentation(document), state.interaction == interaction,
+        document.editRevision == revision
+      else { throw PaneRoutingError.stale }
+      second.attach()
+      try validateAuthority()
+      installCallbacks(for: second)
+      second.editor.font = font
+      try validateAuthority()
+      second.editor.defaultParagraphStyle = paragraph
+      second.editor.typingAttributes = attributes
+      document.highlighter.applyCachedTokens(to: second.layoutManager)
+      try validateAuthority()
+      panes = slot == 0 ? [live, second] : [second, live]
+    }
+    document.orderAttachedPanes(panes)
+    expectedPanes = panes
+    for (index, pane) in panes.enumerated() {
+      if pane === live { expectedSelection = presentation.panes[index].selection }
+      expectedRanges[pane.id] = presentation.panes[index].selection
+      pane.editor.setSelectedRange(presentation.panes[index].selection)
+      try validateAuthority()
+      guard pane.editor.selectedRange() == presentation.panes[index].selection else {
+        throw PaneRoutingError.stale
+      }
+    }
+    expectedAxis = presentation.axis == .stacked ? .stacked : .sideBySide
+    document.splitAxis = expectedAxis
+    expectedPreferred = panes[presentation.focusedPaneIndex].id
+    document.preferredPaneID = expectedPreferred
+    try presentPanes(document, wrap: wrap)
+    try validateAuthority()
+    window?.makeFirstResponder(panes[presentation.focusedPaneIndex].editor)
+    try validateAuthority()
+    state.warning = nil
+    for (index, pane) in panes.enumerated() {
+      if !DocumentPanePresentation.applyOrigin(presentation.panes[index].scrollOrigin, to: pane) {
+        state.warning = "Saved scroll position could not be restored with the available layout."
+      }
+      try validateAuthority()
+    }
+    state.pending = nil
+    committed = true
+  }
+
+  private func installPendingPresentationIfPossible(_ document: EditorDocument) {
+    let state = document.panePresentation
+    guard var pending = state.pending else { return }
+    if pending.presented { return }
+    let mayInstall = pending.presentation.panes.count == 1 || document.storage.length <= 2_000_000
+    if mayInstall && pending.resolvedAtRevision == document.editRevision {
+      // The live slot is now visible even when split installation is refused.
+      // Retain dormant metadata, but never freeze subsequent live caret/scroll capture.
+      pending.presented = true
+      state.pending = pending
+      do { try installResolvedPanes(pending.presentation, on: document) } catch {
+        state.warning = error.localizedDescription
+      }
+      renderPanePresentationStatus()
+      return
+    }
+    // A deferred live pane consumes its own scroll attempt now, with no later replay.
+    state.suppression += 1
+    let live = preferredPane(in: document)
+    if !DocumentPanePresentation.applyOrigin(
+      pending.presentation.panes[pending.liveSlot].scrollOrigin, to: live)
+    {
+      state.warning = "Saved scroll position could not be restored with the available layout."
+    }
+    pending.presented = true
+    state.pending = pending
+    state.suppression -= 1
+    guard mayInstall else {
+      renderPanePresentationStatus()
+      return
+    }
+    guard pending.resolvedAtRevision == document.editRevision else {
+      restorePendingPresentation(document)
+      return
+    }
+    do { try installResolvedPanes(pending.presentation, on: document) } catch {
+      state.warning = error.localizedDescription
+    }
+    renderPanePresentationStatus()
+  }
+
   private func notifySessionChange() {
-    guard !preparingToQuit, !windowClosed else { return }
+    guard !preparingToQuit, !windowClosed,
+      !documents.contains(where: { $0.panePresentation.suppression > 0 })
+    else { return }
     onSessionChange?()
   }
 
@@ -833,7 +1136,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           encoding: document.savedEncoding,
           manualLanguage: document.manualLanguage ? document.language : nil,
           selection: preferredPane(in: document).editor.selectedRange(),
-          bookmarks: document.bookmarks.offsets)
+          bookmarks: document.bookmarks.offsets, presentation: capturePresentation(document))
       }, selectedTabID: selectedID)
   }
 
@@ -855,9 +1158,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   /// Recovery content passes nil URL/bytes and remains scratch regardless of historical metadata.
   func restoreSessionTab(
     _ metadata: SessionTab, decoded: DecodedDocument, originalBytes: Data?, url: URL?,
-    viewState: RestoredViewState, insertionIndex: Int? = nil
+    viewState: RestoredViewState, insertionIndex: Int? = nil,
+    resolvedPresentation: RestoredPresentationState? = nil, activate: Bool = true
   ) throws {
     guard !windowClosed, !preparingToQuit else { throw CancellationError() }
+    guard
+      metadata.presentation == .single(selection: metadata.selection) || resolvedPresentation != nil
+    else {
+      throw SessionStoreError.invalidMetadata
+    }
     guard !documents.contains(where: { $0.id == metadata.id }) else {
       throw SessionRestorationError.duplicateID
     }
@@ -872,7 +1181,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.encoding = decoded.encoding
     document.hasBOM = decoded.hasBOM
     document.pinned = metadata.pinned
-    document.bookmarks = viewState.bookmarks
+    document.bookmarks = resolvedPresentation?.bookmarks ?? viewState.bookmarks
     document.language =
       metadata.manualLanguage
       ?? LanguageService.detect(filename: url?.lastPathComponent ?? "", text: decoded.text)
@@ -890,10 +1199,25 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         + (metadata.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
     }
     for pane in document.panePool { self.installCallbacks(for: pane) }
+    document.onCharactersChanged = { [weak self, weak document] in
+      if let document { self?.presentationInteraction(document) }
+      self?.notifySessionChange()
+    }
+    if let resolvedPresentation {
+      try resolvedPresentation.presentation.validate()
+      let value = resolvedPresentation.presentation
+      let live = document.panePool[0]
+      live.editor.setSelectedRange(value.panes[value.focusedPaneIndex].selection)
+      document.preferredPaneID = live.id
+      document.panePresentation.pending = .init(
+        presentation: value, livePaneID: live.id,
+        liveSlot: value.focusedPaneIndex, resolvedAtRevision: document.editRevision)
+    } else {
+      document.panePool[0].editor.setSelectedRange(viewState.selection)
+    }
     documents.insert(document, at: index)
     adoptFileState(document)
-    display(document)
-    document.panePool[0].editor.setSelectedRange(viewState.selection)
+    if activate { display(document) }
     refresh()
   }
 
@@ -1088,7 +1412,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func execute(_ id: String) {
-    guard !preparingToQuit, !windowClosed else { return }
+    guard !preparingToQuit, !windowClosed,
+      !documents.contains(where: { $0.panePresentation.installing != nil })
+    else { return }
     guard current?.composingPaneID == nil else {
       present(PaneRoutingError.composition)
       return
@@ -2227,6 +2553,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       guard let self, let document, let pane else { return false }
       return withExtendedLifetime(document) { self.mayMutate(pane) }
     }
+    pane.onBoundsChanged = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane, pane.isAttached,
+        self.documents.contains(where: { $0 === document }),
+        document.panePresentation.suppression == 0
+      else { return }
+      self.presentationInteraction(document)
+      self.notifySessionChange()
+    }
     editor.onFocus = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane, self.current === document else { return }
       if self.focusedPane !== pane {
@@ -2234,11 +2568,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         pane.editor.breakUndoCoalescing()
       }
       document.preferredPaneID = pane.id
+      self.presentationInteraction(document)
       self.updateStatus()
     }
     editor.onTypingRunEnded = { [weak document] in document?.typingBookmarkNextLocation = nil }
     editor.onCompositionBegan = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane else { return }
+      self.presentationInteraction(document)
       document.composingPaneID = pane.id
       pane.editor.breakUndoCoalescing()
       document.compositionBookmarks = document.bookmarks
@@ -2259,6 +2595,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             before.offsets)
         }
       }
+      self.presentationInteraction(document)
       document.composingPaneID = nil
       document.compositionBookmarks = nil
       document.compositionOriginalText = nil
@@ -2293,7 +2630,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       present(PaneRoutingError.composition)
       return
     }
-    document.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
+    document.onCharactersChanged = { [weak self, weak document] in
+      if let document { self?.presentationInteraction(document) }
+      self?.notifySessionChange()
+    }
+    if let previous = current, previous !== document { presentationInteraction(previous) }
     selectedID = document.id
     for pane in document.panePool where pane.isAttached { installCallbacks(for: pane) }
     if !document.settingsApplied { configureSettings(document) }
@@ -2303,6 +2644,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     window?.makeFirstResponder(preferredPane(in: document).editor)
+    installPendingPresentationIfPossible(document)
     updateLanguage(document)
     refresh()
     renderDiskStatus()
@@ -2314,7 +2656,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func closeDocuments(ids: Set<UUID>) {
-    guard !preparingToQuit, !windowClosed else { return }
+    guard !preparingToQuit, !windowClosed,
+      !documents.contains(where: { $0.panePresentation.installing != nil })
+    else { return }
     let closing = documents.filter { ids.contains($0.id) }
     guard current?.composingPaneID == nil, !closing.contains(where: { $0.composingPaneID != nil })
     else {
@@ -2411,6 +2755,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func windowShouldClose(_ sender: NSWindow) -> Bool { canClose() }
 
   func canClose() -> Bool {
+    guard !documents.contains(where: { $0.panePresentation.installing != nil }) else {
+      return false
+    }
     guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     guard allowLeavingUnsavedRecording() else { return false }
     guard !documents.contains(where: { $0.composingPaneID != nil }) else {
@@ -2433,7 +2780,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     locateActions?.cancel()
     diskConflict?.close()
     diskConflict = nil
-    for document in documents { invalidateFileState(document) }
+    for document in documents {
+      document.panePresentation.invalidate(force: true)
+      invalidateFileState(document)
+    }
     markdownPreview?.close()
     backupManager?.close()
     outline?.close()
@@ -2725,11 +3075,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard let editor = notification.object as? NSTextView, let pane = pane(for: editor),
       pane.isAttached, current === pane.document
     else { return }
+    presentationInteraction(pane.document)
     if window?.firstResponder === editor { pane.document.preferredPaneID = pane.id }
     updateStatus()
   }
 
   private func refresh() {
+    renderPanePresentationStatus()
     tabBar.update(
       items: documents.map {
         TabItem(id: $0.id, title: $0.name, dirty: $0.dirty, pinned: $0.pinned)
@@ -2934,6 +3286,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func prepareToQuit(persistRecovery: Bool = true) async -> Bool {
+    guard !documents.contains(where: { $0.panePresentation.installing != nil }) else {
+      return false
+    }
     guard allowLeavingUnsavedRecording() else { return false }
     guard !documents.contains(where: { $0.composingPaneID != nil }) else {
       present(PaneRoutingError.composition)
@@ -2945,6 +3300,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       alert.informativeText = "Wait for loading or saving to finish, then quit again."
       alert.runModal()
       return false
+    }
+    for document in documents {
+      document.panePresentation.frozenCapture = capturePresentation(document)
+      document.panePresentation.invalidate(force: true)
     }
     preparingToQuit = true
     for document in documents {
@@ -2970,6 +3329,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func cancelPreparedQuit() {
     preparingToQuit = false
     for document in documents {
+      document.panePresentation.frozenCapture = nil
+      document.panePresentation.invalidate(force: true)
       for pane in document.panePool {
         let selectable = pane.selectableBeforeQuit ?? pane.editor.isSelectable
         pane.editor.isEditable = mayMutate(pane)

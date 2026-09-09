@@ -148,7 +148,7 @@ final class SharedPanesTests: XCTestCase {
     let wire = try JSONDecoder().decode(
       SessionWire.self,
       from: Data(contentsOf: state.appendingPathComponent("Session/Session.json")))
-    XCTAssertEqual(wire.version, 1)
+    XCTAssertEqual(wire.version, 2)
     XCTAssertEqual(wire.windows.count, 1)
     let window = try XCTUnwrap(wire.windows.first)
     XCTAssertEqual(window.tabs.count, 1)

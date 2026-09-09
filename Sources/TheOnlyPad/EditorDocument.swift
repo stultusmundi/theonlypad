@@ -32,6 +32,7 @@ final class EditorDocument {
   }
   /// Independent of compatibility `saving`; controllers must migrate all callbacks together.
   func beginFileOperation() -> UUID {
+    panePresentation.invalidate(force: true)
     let id = UUID()
     operationID = id
     return id
@@ -49,6 +50,7 @@ final class EditorDocument {
   var composingPaneID: UUID?
   var preferredPaneID: UUID?
   var splitAxis: PaneAxis = .sideBySide
+  let panePresentation = DocumentPanePresentation()
   // Compatibility accessors; interactive controller commands resolve their originating pane.
   var editor: DocumentTextView { panePool[0].editor }
   var scroll: NSScrollView { panePool[0].scroll }
@@ -58,6 +60,12 @@ final class EditorDocument {
     let pane = EditorPane(document: self)
     panePool.append(pane)
     return pane
+  }
+  /// Restored saved slots determine visual order; existing view/history objects are retained.
+  func orderAttachedPanes(_ panes: [EditorPane]) {
+    precondition(panes.count == panePool.filter(\.isAttached).count)
+    precondition(Set(panes.map(\.id)) == Set(panePool.filter(\.isAttached).map(\.id)))
+    panePool = panes + panePool.filter { !$0.isAttached }
   }
   var url: URL?
   var originalBytes: Data?

@@ -58,7 +58,7 @@ import PadCore
       File > Print opens the system print panel, which includes PDF export. Printing is limited to 2 million UTF-16 units.
 
       Keyboard shortcuts
-      TheOnlyPad > Keyboard Shortcuts (also linked from Settings) edits command assignments as a draft. Record a Command-key combination, resolve conflicts and Apply to save. Standard native editing and Close bindings remain protected. Import changes only the draft; Export requires a new filename. Restore Defaults also requires Apply.
+      \(AppIdentity.name) > Keyboard Shortcuts (also linked from Settings) edits command assignments as a draft. Record a Command-key combination, resolve conflicts and Apply to save. Standard native editing and Close bindings remain protected. Import changes only the draft; Export requires a new filename. Restore Defaults also requires Apply.
 
       If stored shortcuts cannot be applied, the shortcut editor explains why and retains them. Recover Stored Settings offers explicit reload or a checked retry of an unconfirmed save. The app waits for you to resolve an unconfirmed settings save before quitting.
 

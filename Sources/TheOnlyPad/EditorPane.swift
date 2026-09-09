@@ -9,6 +9,8 @@ import AppKit
   let scroll: NSScrollView
   private(set) var isAttached = true
   var selectableBeforeQuit: Bool?
+  var onBoundsChanged: (() -> Void)?
+  private var boundsObserver: NSObjectProtocol?
 
   init(document: EditorDocument) {
     self.document = document
@@ -48,8 +50,17 @@ import AppKit
     scroll.verticalRulerView = LineNumberRuler(scrollView: scroll, textView: editor)
     scroll.hasVerticalRuler = true
     scroll.rulersVisible = true
+    scroll.contentView.postsBoundsChangedNotifications = true
+    boundsObserver = NotificationCenter.default.addObserver(
+      forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.onBoundsChanged?() }
+    }
     editor.setAccessibilityLabel("Document text")
     editor.setAccessibilityIdentifier("editor.text.\(id.uuidString)")
+  }
+  deinit {
+    if let boundsObserver { NotificationCenter.default.removeObserver(boundsObserver) }
   }
   func attach() {
     guard !isAttached else { return }

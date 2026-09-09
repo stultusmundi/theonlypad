@@ -47,6 +47,7 @@
 			<array>
 				<string>000000000000000000000003</string>
 				<string>00000000000000000000000E</string>
+				<string>000000000000000000000010</string>
 			</array>
 			<key>isa</key>
 			<string>PBXSourcesBuildPhase</string>
@@ -71,6 +72,7 @@
 				<string>000000000000000000000001</string>
 				<string>000000000000000000000002</string>
 				<string>00000000000000000000000D</string>
+				<string>00000000000000000000000F</string>
 			</array>
 			<key>isa</key>
 			<string>PBXGroup</string>
@@ -212,6 +214,24 @@
 		<dict>
 			<key>fileRef</key>
 			<string>00000000000000000000000D</string>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+		</dict>
+		<key>00000000000000000000000F</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>PaneSessionTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>000000000000000000000010</key>
+		<dict>
+			<key>fileRef</key>
+			<string>00000000000000000000000F</string>
 			<key>isa</key>
 			<string>PBXBuildFile</string>
 		</dict>
