@@ -1,6 +1,29 @@
 import AppKit
 import PadCore
 
+@MainActor final class GuardedDocumentUndoManager: UndoManager {
+  var admission: (() -> Bool)?
+  private var checkingAdmission = false
+  private func admitted() -> Bool {
+    guard !checkingAdmission else { return false }
+    checkingAdmission = true
+    defer { checkingAdmission = false }
+    return admission?() ?? true
+  }
+  override func undo() {
+    guard admitted() else { return }
+    super.undo()
+  }
+  override func redo() {
+    guard admitted() else { return }
+    super.redo()
+  }
+  override func undoNestedGroup() {
+    guard admitted() else { return }
+    super.undoNestedGroup()
+  }
+}
+
 enum EditorPaneError: Error { case limit }
 enum DocumentRecoveryCaptureError: Error { case revisionExhausted }
 
@@ -112,7 +135,8 @@ final class EditorDocument {
     return true
   }
   let storage = NSTextStorage()
-  let undoManager = UndoManager()
+  var canUndoRedo: (() -> Bool)?
+  let undoManager = GuardedDocumentUndoManager()
   private(set) var panePool: [EditorPane] = []
   private(set) var editRevision: UInt64 = 0
   var composingPaneID: UUID? { didSet { if composingPaneID != oldValue { noteCloseMutation() } } }
@@ -285,6 +309,7 @@ final class EditorDocument {
 
   init(id: UUID = UUID()) {
     self.id = id
+    undoManager.admission = { [weak self] in self?.canUndoRedo?() ?? (self != nil) }
     panePool.append(EditorPane(document: self))
     storageObserver = NotificationCenter.default.addObserver(
       forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil

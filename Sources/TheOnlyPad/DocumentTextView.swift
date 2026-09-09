@@ -1,5 +1,7 @@
 import AppKit
 
+enum SelectionInstallationError: Error { case nested, unauthorized }
+
 @MainActor
 final class DocumentTextView: NSTextView {
   let documentUndo: UndoManager
@@ -11,6 +13,25 @@ final class DocumentTextView: NSTextView {
   var onFocus: (() -> Void)?
   var canFocus: (() -> Bool)?
   var canMutate: (() -> Bool)?
+  var canChangeSelection: (() -> Bool)?
+  private var selectionInstallation: (() -> Bool)?
+  private var checkingSelectionAdmission = false
+  func withSelectionInstallation<T>(
+    authorizedBy: @escaping () -> Bool, _ body: () throws -> T
+  ) throws -> T {
+    guard selectionInstallation == nil else { throw SelectionInstallationError.nested }
+    selectionInstallation = authorizedBy
+    defer { selectionInstallation = nil }
+    guard allowsSelection() else { throw SelectionInstallationError.unauthorized }
+    return try body()
+  }
+  private func allowsSelection() -> Bool {
+    guard !checkingSelectionAdmission else { return false }
+    checkingSelectionAdmission = true
+    defer { checkingSelectionAdmission = false }
+    if let selectionInstallation { return selectionInstallation() }
+    return canChangeSelection?() ?? true
+  }
   override func becomeFirstResponder() -> Bool {
     guard canFocus?() ?? true else { return false }
     let accepted = super.becomeFirstResponder()
@@ -59,19 +80,25 @@ final class DocumentTextView: NSTextView {
     super.breakUndoCoalescing()
   }
   override func setSelectedRange(_ charRange: NSRange) {
+    guard allowsSelection() else { return }
     if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    guard allowsSelection() else { return }
     super.setSelectedRange(charRange)
   }
   override func setSelectedRange(
     _ charRange: NSRange, affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool
   ) {
+    guard allowsSelection() else { return }
     if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    guard allowsSelection() else { return }
     super.setSelectedRange(charRange, affinity: affinity, stillSelecting: stillSelectingFlag)
   }
   override func setSelectedRanges(
     _ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool
   ) {
+    guard allowsSelection() else { return }
     if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    guard allowsSelection() else { return }
     super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelectingFlag)
   }
   private func finishComposition() {
