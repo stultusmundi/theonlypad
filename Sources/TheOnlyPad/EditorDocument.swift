@@ -2,6 +2,7 @@ import AppKit
 import PadCore
 
 enum EditorPaneError: Error { case limit }
+enum DocumentRecoveryCaptureError: Error { case revisionExhausted }
 
 struct PendingDocumentPublication: Sendable {
   let id: UUID
@@ -16,6 +17,44 @@ struct PendingDocumentPublication: Sendable {
 @MainActor
 final class EditorDocument {
   let id: UUID
+  private(set) var ownershipGeneration = UUID()
+  private(set) var recoveryAuthority: RecoveryWriteAuthority?
+  private var nextManagedRecoveryRevision: UInt64?
+  /// Managed epoch fence; unrelated to the legacy recoveryRevision counter.
+  private(set) var highestIssuedRecoveryRevision: UInt64 = 0
+  func advanceOwnershipGeneration() { ownershipGeneration = UUID() }
+  /// Called only by the trusted process owner after legacy work has drained and capture is frozen.
+  /// This model adapter does not itself adopt the document into a live registry or scheduler.
+  func installRecoveryAdoption(
+    _ receipt: RecoveryAdoptionReceipt, expectedOwnershipGeneration: UUID
+  ) throws {
+    guard recoveryAuthority == nil else { throw RecoveryAuthorityError.alreadyManaged }
+    guard ownershipGeneration == expectedOwnershipGeneration,
+      receipt.authority.documentID == id, receipt.nextRevision > 0
+    else {
+      throw RecoveryAuthorityError.invalidAuthority
+    }
+    recoveryAuthority = receipt.authority
+    nextManagedRecoveryRevision = receipt.nextRevision
+    highestIssuedRecoveryRevision = receipt.nextRevision - 1
+  }
+  /// Capture authority at the same synchronous boundary as the bytes; never upgrade it in a writer.
+  /// Issuance is not publication acknowledgement. The process owner supplies admission/quota checks.
+  func captureAuthorizedRecovery() throws -> AuthorizedRecoveryItem {
+    guard let authority = recoveryAuthority else { throw RecoveryAuthorityError.authorityRequired }
+    guard let revision = nextManagedRecoveryRevision else {
+      throw DocumentRecoveryCaptureError.revisionExhausted
+    }
+    // Reserve before constructing any snapshot. The final integer is valid once, never wrapped.
+    highestIssuedRecoveryRevision = revision
+    nextManagedRecoveryRevision = revision == .max ? nil : revision + 1
+    let snapshot =
+      url == nil || dirty
+      ? RecoverySnapshot(
+        id: id, text: storage.string, encoding: encoding, hasBOM: hasBOM,
+        originalPath: url?.path) : nil
+    return AuthorizedRecoveryItem(authority: authority, revision: revision, snapshot: snapshot)
+  }
   var fileState: DocumentFileStateController?
   private(set) var fileBindingID = UUID()
   private(set) var baselineRevision: UInt64 = 0
