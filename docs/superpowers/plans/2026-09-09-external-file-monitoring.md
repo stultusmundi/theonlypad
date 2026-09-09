@@ -198,3 +198,8 @@ All five independent design findings are addressed in the spec and Tasks 3/5: BO
 ## Integration notes after component review
 
 Full-token dismissal supersedes the original sequence-only proposal; stale epoch/baseline regressions passed after the correction. The service must expose a bounded thread-safe live latest-issued token snapshot (including cancellation), because result admission must not compare a captured token to itself. Issue a sequence when a probe starts; queued coalescing alone need not invalidate the current issued result. Metadata-only observation reuse is currently disabled after a false-clean regression; any later cache needs reviewed immutable baseline provenance and explicit tests.
+
+
+### Decoder component checkpoint
+
+The standalone `ExternalDocumentDecoder` portion of Task 5 is implemented and independently reviewed. Genuine forwarding-seam red preceded implementation; five new tests cover supported-BOM precedence, exact round trips, saved BOM-less fallback, unsupported/ambiguous UTF-32 prefixes, malformed marked Unicode and unchanged explicit codec interpretation. Full production core session 48984 passed 263 tests. Native reload/disk-copy wiring and associated lifecycle/desktop tests remain unchecked above. See the native integration map and external-file-monitoring verification record.

@@ -34,3 +34,10 @@ scripts/swift.sh test --filter ExternalFileStateTests
 ```
 
 These are component tests, not proactive monitoring acceptance. The local distribution still predates this component integration. Desktop automation continues to require macOS user authentication; no security settings or credentials were changed.
+
+
+## External reload decoder (component verified; UI integration pending)
+
+`ExternalDocumentDecoder` is a separate BOM-first interpretation policy for forthcoming reload and disk-copy actions. Supported UTF-8/UTF-16 BOMs override the saved encoding; BOM-less bytes use the saved encoding. Four-byte UTF-32 signatures are refused before shorter UTF-16 detection, including ambiguous UTF-16 BOM plus initial NUL prefixes. Explicit Reopen with Encoding still uses the unchanged `DocumentCodec` policy.
+
+The isolated forwarding seam produced five tests with 28 expected assertion failures. The implementation then passed all five tests, including exact LE/BE and legacy-to-UTF-8 BOM round trips, BOM-less fallback, malformed marked Unicode refusal and unchanged explicit interpretation. A private-helper access compile error was corrected without exposing or changing the existing codec API. Independent review found no material issue and requested clearer ambiguous-prefix wording plus specific error assertions; those refinements and the source/tests are integrated. Full production core session 48984 passed 263 tests with zero failures in 9.062 seconds. Repository formatting and public-source checks passed; formatter sandbox access initially failed before native execution succeeded. The native reload/disk-copy call sites are not wired yet. Raw evidence remains in `.local/external-decoder`.
