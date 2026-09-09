@@ -9,6 +9,14 @@ struct SessionImportClaim: Sendable {
   var windowID: UUID { entry.windowID }
 }
 
+/// Recovery-only startup provenance. Never permits session publication or a file-backed import.
+struct SessionRecoveryImportClaim: Sendable {
+  fileprivate let base: SessionImportClaim
+  let snapshot: RecoverySnapshot
+  var documentID: UUID { base.documentID }
+  var windowID: UUID { base.windowID }
+}
+
 enum SessionImportError: Error, LocalizedError {
   case invalidClaim, cleanupPending
   var errorDescription: String? {
@@ -88,6 +96,38 @@ struct SessionStartupBudget {
     recoveryByID[claim.documentID] = nil
     recoveryIDs.remove(claim.documentID)
     unresolved.removeAll { $0.metadata.id == claim.documentID }
+  }
+  func claimRecoveryImport(_ entry: UnresolvedSessionEntry) throws -> SessionRecoveryImportClaim {
+    try requireRecoveryImportAdmission()
+    guard entry.hasRecovery,
+      let current = unresolved.first(where: { Self.sameImportEntry($0, entry) }),
+      let snapshot = recoveryByID[entry.metadata.id], snapshot.id == entry.metadata.id
+    else { throw SessionImportError.invalidClaim }
+    return SessionRecoveryImportClaim(
+      base: SessionImportClaim(owner: importOwner, revision: capacityRevision, entry: current),
+      snapshot: snapshot)
+  }
+  func validateRecoveryImport(_ claim: SessionRecoveryImportClaim) throws {
+    try requireRecoveryImportAdmission()
+    let base = claim.base
+    guard base.owner == importOwner, base.revision == capacityRevision, base.entry.hasRecovery,
+      unresolved.contains(where: { Self.sameImportEntry($0, base.entry) }),
+      recoveryByID[base.documentID] != nil, claim.snapshot.id == base.documentID
+    else { throw SessionImportError.invalidClaim }
+    // Retained snapshots are immutable after restoration; any membership change rotates revision.
+    // No full-text comparison or disk access is needed at this MainActor provenance boundary.
+  }
+  func resolveRecoveryImport(_ claim: SessionRecoveryImportClaim) throws {
+    try validateRecoveryImport(claim)
+    recoveryByID[claim.documentID] = nil
+    recoveryIDs.remove(claim.documentID)
+    unresolved.removeAll { $0.metadata.id == claim.documentID }
+  }
+  private func requireRecoveryImportAdmission() throws {
+    guard restorationComplete else { throw SessionImportError.invalidClaim }
+    guard removals.isEmpty else { throw SessionImportError.cleanupPending }
+    // Validated recovery may be exposed as scratch content despite corrupt session metadata.
+    // preservationError is deliberately retained: captureSession/persist still refuse all writes.
   }
   private func requireImportAdmission() throws {
     try requireRestoredSession()

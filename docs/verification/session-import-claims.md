@@ -7,3 +7,7 @@ The retained runner `scripts/test-session-import-claims.sh` passed nine XCTest c
 Compatibility: `scripts/test-session-capacity.sh` passed seven tests and `scripts/test-session-presentation-flow.sh` passed nine tests. Scoped formatting and shell syntax checks passed. Independent review found no blocking issue.
 
 This is provenance, not a reservation. Native import code must revalidate after callbacks and retain a model if subsequent reconciliation is required. The existing native restoration callback has not migrated to this API. No native ownership or packaged desktop acceptance is claimed here.
+
+## Recovery-only extension
+
+The expanded runner passed 11 tests in 0.011 seconds (`.local/recovery-import-green.log`). Its compiled red had three failures across 11 tests; earlier sandbox I/O and callback fixture compilation failures are retained separately. Added tests use actual corrupt session bytes and a recovery store to prove exact Unicode/encoding/BOM transfer, continued refusal of session capture/persist, retained recovery disk data, and foreign/stale/missing/pending-cleanup refusal. Independent review found no material issue. Native URL-less scratch binding remains an integration obligation, not a claim made by these tests.

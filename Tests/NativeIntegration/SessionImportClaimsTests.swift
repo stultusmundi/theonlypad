@@ -174,6 +174,7 @@ import XCTest
     }
     let entry = try XCTUnwrap(coordinator.unresolved.first)
     let claim = try coordinator.claimImport(entry)
+    let recoveryClaim = try coordinator.claimRecoveryImport(entry)
     let task = Task { try await coordinator.remove(entry) }
     for _ in 0..<1000 {
       if release != nil { break }
@@ -185,8 +186,85 @@ import XCTest
       XCTFail("Pending cleanup must explain why import is unavailable")
     } catch SessionImportError.cleanupPending {}
     XCTAssertThrowsError(try coordinator.validateImport(claim))
+    XCTAssertThrowsError(try coordinator.claimRecoveryImport(entry))
+    XCTAssertThrowsError(try coordinator.validateRecoveryImport(recoveryClaim))
     pending.resume()
     try await task.value
     XCTAssertThrowsError(try coordinator.resolveImport(claim))
   }
+  func testRecoveryOnlyClaimPreservesCorruptSessionAndExactSnapshot() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sessionFile = directory.appendingPathComponent("Session.json")
+    let corrupt = Data("synthetic corrupt session".utf8)
+    try corrupt.write(to: sessionFile)
+    let store = try RecoveryStore(directory: directory.appendingPathComponent("recovery"))
+    let snapshot = RecoverySnapshot(
+      id: UUID(), text: "👩🏽‍💻e\u{301}\r\n", encoding: .utf16BE, hasBOM: true)
+    try store.save(snapshot)
+    var deletes = 0
+    let coordinator = SessionCoordinator(
+      loadSession: { try SessionStore(directory: directory).load() },
+      claimRecovery: { .init(snapshots: try store.loadReport().snapshots, quarantinedCount: 0) },
+      saveSession: { _ in XCTFail("Preservation must block publication") },
+      removeRecovery: { _ in deletes += 1 })
+    await coordinator.restore { window in
+      Dictionary(uniqueKeysWithValues: window.tabs.map { ($0.metadata.id, "Pending import") })
+    }
+    let entry = try XCTUnwrap(coordinator.unresolved.first)
+    XCTAssertThrowsError(try coordinator.claimImport(entry))
+    let claim = try coordinator.claimRecoveryImport(entry)
+    XCTAssertEqual(claim.snapshot, snapshot)
+    XCTAssertEqual(Array(claim.snapshot.text.utf16), Array(snapshot.text.utf16))
+    XCTAssertEqual(claim.documentID, entry.metadata.id)
+    XCTAssertEqual(claim.windowID, entry.windowID)
+    try coordinator.validateRecoveryImport(claim)
+    var callbacks = 0
+    coordinator.onSessionChange = {
+      callbacks += 1
+      do {
+        try coordinator.validateRecoveryImport(claim)
+        XCTFail("Resolved recovery claim must be stale before callbacks")
+      } catch {}
+    }
+    try coordinator.resolveRecoveryImport(claim)
+    XCTAssertEqual(callbacks, 1)
+    XCTAssertThrowsError(try coordinator.resolveRecoveryImport(claim))
+    XCTAssertThrowsError(try coordinator.captureSession(windows: []))
+    do {
+      try await coordinator.persist(windows: [])
+      XCTFail("Must not publish")
+    } catch {}
+    try await coordinator.remove(entry)
+    XCTAssertEqual(deletes, 0)
+    XCTAssertEqual(try store.loadReport().snapshots, [snapshot])
+    XCTAssertEqual(try Data(contentsOf: sessionFile), corrupt)
+  }
+
+  func testRecoveryOnlyClaimRefusesMissingForeignAndStaleSources() async throws {
+    let missing = await fixture()
+    XCTAssertThrowsError(try missing.claimRecoveryImport(XCTUnwrap(missing.unresolved.first)))
+    let snapshots = (0..<2).map { _ in
+      RecoverySnapshot(id: UUID(), text: "synthetic", encoding: .utf8, hasBOM: false)
+    }
+    let coordinator = SessionCoordinator(
+      loadSession: { nil },
+      claimRecovery: { .init(snapshots: snapshots, quarantinedCount: 0) })
+    await coordinator.restore { window in
+      Dictionary(uniqueKeysWithValues: window.tabs.map { ($0.metadata.id, "Pending import") })
+    }
+    let entries = coordinator.unresolved
+    let claim = try coordinator.claimRecoveryImport(entries[0])
+    XCTAssertThrowsError(try missing.validateRecoveryImport(claim))
+    XCTAssertThrowsError(try missing.resolveRecoveryImport(claim))
+    let unstarted = SessionCoordinator()
+    XCTAssertThrowsError(try unstarted.claimRecoveryImport(entries[0]))
+    coordinator.resolved(entries[1])
+    XCTAssertThrowsError(try coordinator.validateRecoveryImport(claim))
+    let fresh = try coordinator.claimRecoveryImport(entries[0])
+    try coordinator.resolveRecoveryImport(fresh)
+    XCTAssertTrue(coordinator.unresolved.isEmpty)
+  }
+
 }
