@@ -13,6 +13,7 @@ import PadCore
     var token: (any DiskActionCancellation)?
     var snapshot: ExternalFileActionSnapshot?
     var preparationPermit: UUID?
+    var copySeed: NativeDocumentSeed?
     var selections: [UUID: NSRange] = [:]
     init(generation: UUID, input: DocumentDiskActionInput, callbacks: DocumentDiskActionCallbacks) {
       self.generation = generation
@@ -42,7 +43,7 @@ import PadCore
     else { return false }
     let transaction = Transaction(
       generation: application.deliveryGeneration, input: input, callbacks: callbacks)
-    if !input.selections.isEmpty {
+    if input.action == .copy || !input.selections.isEmpty {
       guard let permit = preparer.reserve() else { return false }
       transaction.preparationPermit = permit
     }
@@ -146,8 +147,13 @@ import PadCore
     let requestID = UUID()
     transaction.request = requestID
     let transactionID = transaction.id
-    preparer.prepare(permit, text: snapshot.document.text, selections: transaction.input.selections)
-    { [weak self] result in
+    let preparation: DiskPreparation =
+      transaction.input.action == .copy
+      ? .copy(
+        sourceName: transaction.input.copySourceName ?? transaction.input.url.lastPathComponent)
+      : .selections(transaction.input.selections)
+    preparer.prepare(permit, document: snapshot.document, preparation: preparation) {
+      [weak self] result in
       Task { @MainActor [weak self] in
         guard let self, let current = self.active, current.id == transactionID,
           current.request == requestID
@@ -160,8 +166,16 @@ import PadCore
         }
         switch result {
         case .failure(let error): self.finish(current, error: error)
-        case .success(let selections):
-          current.selections = selections
+        case .success(let prepared):
+          switch prepared {
+          case .selections(let selections) where current.input.action == .reload:
+            current.selections = selections
+          case .copySeed(let seed) where current.input.action == .copy:
+            current.copySeed = seed
+          default:
+            self.finish(current, error: FileActionError.invalidRequest)
+            return
+          }
           self.prepared(current)
         }
       }
@@ -210,7 +224,17 @@ import PadCore
       return
     }
     do {
-      try transaction.callbacks.apply(snapshot, transaction.selections, operation)
+      let result: PreparedDiskAction
+      if transaction.input.action == .copy {
+        guard let seed = transaction.copySeed else {
+          finish(transaction, error: FileActionError.invalidRequest)
+          return
+        }
+        result = .copy(snapshot: snapshot, seed: seed)
+      } else {
+        result = .reload(snapshot: snapshot, selections: transaction.selections)
+      }
+      try transaction.callbacks.apply(result, operation)
       finish(transaction)
     } catch { finish(transaction, error: error) }
   }
@@ -221,6 +245,7 @@ import PadCore
     guard active === transaction else { return }
     active = nil
     transaction.snapshot = nil
+    transaction.copySeed = nil
     transaction.request = nil
     let token = transaction.token
     transaction.token = nil

@@ -1,0 +1,11 @@
+# Native controller routing verification
+
+Root independently ran `scripts/test-editor-application-routing.sh`: eight tests passed in 0.645 seconds (`.local/native-routing-root.log`). The formatted agent snapshot also passed eight in 0.683 seconds (`.local/editor-application-routing-tests/run.O2q7DLp2`). ARM64 macOS 26.6.2, Swift 6.3.3 in Swift 5 mode, macOS 14 target. No windows were shown or activated.
+
+Tests use actual EditorWindowController, EditorDocumentFactory, registry, process intake, RecoveryCoordinator, SessionStore and paired publisher. They cover scratch publication, open completion/MRU after held adoption, backup/duplicate, existing missing-file buffer selection, no-op caret/undo/storage/observer preservation, stale endpoint/revision/inactive projection refusal, exact prepared restoration, and an actual monitored external change through the hidden conflict button to a worker-prepared disk copy. Copy preserves the dirty source and uses the actual checked read service.
+
+Initial forwarding-seam behavioral red: two tests/eight failures. Subsequent source insertion and fixture enum compile failures are retained separately. An invalid bookmark fixture expectation was corrected to real line-start anchors, preserving resolver behavior. Root and independent source reviews found no material issue within this bounded slice. Runtime evidence and source manifests remain ignored under `.local`.
+
+AppDelegate continues using the legacy initializer. Close/reopen callbacks in the fixture throw when unsupported; those workflows are not claimed tested. Complete admission guards, endpoint recreation, monitor rebinding, group movement, native quit integration, physical input, performance and packaged desktop acceptance remain outstanding. Updating the GUI-bearing runner source list does not constitute running it.
+
+Legacy compatibility also passed the hidden monitor lifecycle harness in `.local/native-monitor-lifecycle-retained/run.24ldpg7j`. Coverage includes suspended open/save, checked conflict actions, Reload/Copy/Locate, uncertain publication preservation, retained close/reopen and quit-veto behavior. This verifies the unchanged legacy mode against the routing additions; it does not verify managed close/quit.

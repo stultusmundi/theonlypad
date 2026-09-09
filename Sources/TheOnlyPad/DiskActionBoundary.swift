@@ -2,6 +2,10 @@ import Foundation
 import PadCore
 
 enum DocumentDiskAction { case reload, copy }
+enum PreparedDiskAction {
+  case reload(snapshot: ExternalFileActionSnapshot, selections: [UUID: NSRange])
+  case copy(snapshot: ExternalFileActionSnapshot, seed: NativeDocumentSeed)
+}
 struct DocumentDiskActionInput {
   let documentID: UUID
   let url: URL
@@ -10,9 +14,11 @@ struct DocumentDiskActionInput {
   let action: DocumentDiskAction
   let requiresDiscard: Bool
   let selections: [UUID: NSRange]
+  let copySourceName: String?
   init(
     documentID: UUID, url: URL, observation: DiskObservation, savedEncoding: DocumentEncoding,
-    action: DocumentDiskAction, requiresDiscard: Bool, selections: [UUID: NSRange] = [:]
+    action: DocumentDiskAction, requiresDiscard: Bool, selections: [UUID: NSRange] = [:],
+    copySourceName: String? = nil
   ) {
     self.documentID = documentID
     self.url = url
@@ -21,13 +27,14 @@ struct DocumentDiskActionInput {
     self.action = action
     self.requiresDiscard = requiresDiscard
     self.selections = selections
+    self.copySourceName = copySourceName
   }
 }
 @MainActor struct DocumentDiskActionCallbacks {
   let beginOperation: () -> UUID?
   let isCurrent: (UUID) -> Bool
   let confirmDiscard: (ExternalFileActionSnapshot) -> Bool
-  let apply: (ExternalFileActionSnapshot, [UUID: NSRange], UUID) throws -> Void
+  let apply: (PreparedDiskAction, UUID) throws -> Void
   let finish: (UUID) -> Void
   let reportError: (Error) -> Void
 }

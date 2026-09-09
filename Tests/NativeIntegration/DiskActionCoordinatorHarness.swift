@@ -33,7 +33,7 @@ private struct Cancellation: DiskActionCancellation {
 @MainActor final class ControlledPreparer: DiskSelectionPreparer {
   var reservation: UUID?
   var running = false
-  var completion: (@MainActor (Result<[UUID: NSRange], Error>) -> Void)?
+  var completion: (@MainActor (Result<DiskPreparationResult, Error>) -> Void)?
   func reserve() -> UUID? {
     guard reservation == nil else { return nil }
     let id = UUID()
@@ -42,14 +42,14 @@ private struct Cancellation: DiskActionCancellation {
   }
   func release(_ id: UUID) { if reservation == id && !running { reservation = nil } }
   func prepare(
-    _ id: UUID, text: String, selections: [UUID: NSRange],
-    receive: @escaping @MainActor (Result<[UUID: NSRange], Error>) -> Void
+    _ id: UUID, document: DecodedDocument, preparation: DiskPreparation,
+    receive: @escaping @MainActor (Result<DiskPreparationResult, Error>) -> Void
   ) {
     guard reservation == id else { preconditionFailure("Unowned preparation") }
     running = true
     completion = receive
   }
-  func complete(_ result: Result<[UUID: NSRange], Error>) {
+  func complete(_ result: Result<DiskPreparationResult, Error>) {
     running = false
     reservation = nil
     let callback = completion
@@ -65,6 +65,7 @@ private struct Cancellation: DiskActionCancellation {
   var finishes: [UUID] = []
   var errors = 0
   var applications: [DecodedDocument] = []
+  var copySeeds: [NativeDocumentSeed] = []
   var appliedSelections: [[UUID: NSRange]] = []
   var confirmations = 0
   var confirmation: () -> Bool = { true }
@@ -91,9 +92,16 @@ private struct Cancellation: DiskActionCancellation {
         confirmations += 1
         return confirmation()
       },
-      apply: { [self] snapshot, selections, _ in
-        applications.append(snapshot.document)
-        appliedSelections.append(selections)
+      apply: { [self] prepared, _ in
+        switch prepared {
+        case .reload(let snapshot, let selections):
+          applications.append(snapshot.document)
+          appliedSelections.append(selections)
+        case .copy(let snapshot, let seed):
+          applications.append(snapshot.document)
+          appliedSelections.append([:])
+          copySeeds.append(seed)
+        }
         afterApply()
       },
       finish: { [self] id in
@@ -130,7 +138,7 @@ private struct Cancellation: DiskActionCancellation {
     {
       DocumentDiskActionInput(
         documentID: id, url: file, observation: observation, savedEncoding: .utf8, action: action,
-        requiresDiscard: discard)
+        requiresDiscard: discard, copySourceName: "captured.py")
     }
     var checks = 0
     func check(_ value: Bool, _ description: String) {
@@ -143,6 +151,33 @@ private struct Cancellation: DiskActionCancellation {
     let application = ApplicationFileMonitoring()
     defer { application.stop() }
     let client = ControlledClient()
+    let copyPreparation = ControlledPreparer()
+    let copyPreparationOwner = Owner()
+    let copyPreparationCoordinator = DocumentDiskActionCoordinator(
+      application: application, client: client, preparer: copyPreparation)
+    check(
+      copyPreparationCoordinator.start(input(.copy), callbacks: copyPreparationOwner.callbacks),
+      "empty-selection copy admitted for bounded worker preparation")
+    let copyPreparationRead = client.latestRead!
+    client.reads[copyPreparationRead]?(copyPreparationRead, .success(snapshot))
+    await settle()
+    check(
+      copyPreparation.running && copyPreparationOwner.applications.isEmpty,
+      "empty-selection copy must prepare seed before synchronous apply")
+    copyPreparationCoordinator.cancel()
+    let blockedCopy = DocumentDiskActionCoordinator(
+      application: application, client: client, preparer: copyPreparation)
+    let blockedCopyOwner = Owner()
+    check(
+      !blockedCopy.start(input(.copy), callbacks: blockedCopyOwner.callbacks)
+        && blockedCopyOwner.operation == nil,
+      "canceled copy worker retains CPU permit until completion")
+    copyPreparation.complete(
+      .success(.copySeed(try .diskCopy(sourceName: "synthetic.txt", decoded: snapshot.document))))
+    await settle()
+    check(
+      copyPreparationOwner.applications.isEmpty && copyPreparation.reservation == nil,
+      "canceled copy never applies and eventual completion frees permit")
     let owner = Owner()
     let coordinator = DocumentDiskActionCoordinator(application: application, client: client)
     check(coordinator.start(input(), callbacks: owner.callbacks), "first captured action admitted")
@@ -390,7 +425,8 @@ private struct Cancellation: DiskActionCancellation {
       nextPreparedOwner.operation == nil && preparingOwner.finishes.count == 1,
       "prep capacity refusal does not begin newer operation")
     preparer.complete(
-      .success([pane: NSRange(location: snapshot.document.text.utf16.count, length: 0)]))
+      .success(
+        .selections([pane: NSRange(location: snapshot.document.text.utf16.count, length: 0)])))
     await settle()
     check(
       preparingOwner.applications.isEmpty && preparer.reservation == nil,
@@ -402,7 +438,7 @@ private struct Cancellation: DiskActionCancellation {
     client.reads[nextRead]?(nextRead, .success(snapshot))
     await settle()
     let preparedRange = NSRange(location: snapshot.document.text.utf16.count, length: 0)
-    preparer.complete(.success([pane: preparedRange]))
+    preparer.complete(.success(.selections([pane: preparedRange])))
     await settle()
     let preparedValidation = client.latestValidation!
     client.validations[preparedValidation]?(preparedValidation, .success(()))
@@ -473,6 +509,20 @@ private struct Cancellation: DiskActionCancellation {
     check(
       realOwner.applications.first?.text.utf16.elementsEqual(snapshot.document.text.utf16) == true
         && realOwner.errors == 0, "real queued copy applies exact snapshot")
+    check(realOwner.copySeeds.count == 1, "real copy delivers exactly one worker-prepared seed")
+    let preparedSeed = realOwner.copySeeds[0]
+    check(
+      preparedSeed.text.utf16.elementsEqual(snapshot.document.text.utf16)
+        && preparedSeed.encoding == snapshot.document.encoding
+        && preparedSeed.hasBOM == snapshot.document.hasBOM,
+      "copy seed reuses exact decoded snapshot")
+    check(
+      preparedSeed.name == "Disk Copy — captured.py" && preparedSeed.language == .python,
+      "copy worker uses captured display name rather than disk URL")
+    check(
+      preparedSeed.url == nil && preparedSeed.originalBytes == nil
+        && preparedSeed.textUTF16Count == snapshot.document.text.utf16.count,
+      "copy seed supplies prepared count without saved-file authority")
     let emoji = (snapshot.document.text as NSString).range(of: "😀")
     let eofPane = UUID()
     let clampingInput = DocumentDiskActionInput(

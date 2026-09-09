@@ -44,6 +44,10 @@ private enum EditorSaveFailure: Error {
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
   let sessionID: UUID
+  private let applicationRouting: EditorApplicationRouting?
+  private var projectionToken: UUID?
+  private var projectionValid = false
+  private var applicationPreparation: UUID?
   var onClose: (() -> Void)?
   var onOpenLargeFile: ((URL) -> Void)?
   var onOpenedURL: ((URL) -> Void)?
@@ -101,7 +105,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   private func mayMutate(_ pane: EditorPane) -> Bool {
     let document = pane.document
-    return !windowClosed && !preparingToQuit && !document.saving && pane.isAttached
+    return applicationAllows(.edit, document: document)
+      && !windowClosed && !preparingToQuit && !document.saving && pane.isAttached
       && document.panePresentation.installing == nil
       && documents.contains(where: { $0 === document })
       && (document.composingPaneID == nil || document.composingPaneID == pane.id)
@@ -562,7 +567,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       documentID: document.id, url: url, observation: observation,
       savedEncoding: document.savedEncoding, action: reload ? .reload : .copy,
       requiresDiscard: document.dirty || document.pendingPublication != nil,
-      selections: reload ? ranges : [:])
+      selections: reload ? ranges : [:], copySourceName: reload ? nil : document.name)
     let admitted = coordinator.start(
       input,
       callbacks: DocumentDiskActionCallbacks(
@@ -588,14 +593,28 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           guard let self, let document else { return false }
           return self.confirmDiskReload?(document) ?? self.confirmCheckedDiskReload(document)
         },
-        apply: { [weak self, weak document] snapshot, selections, operation in
-          guard let self, let document, document.operationID == operation else {
-            throw CancellationError()
-          }
-          if reload {
+        apply: { [weak self, weak document] prepared, operation in
+          guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+            self.documents.contains(where: { $0 === document }), document.operationID == operation,
+            bridge.isCurrent(context, owningOperation: operation)
+          else { throw CancellationError() }
+          switch prepared {
+          case .reload(let snapshot, let selections):
+            guard reload else { throw CancellationError() }
             self.applyCheckedDiskReload(document, snapshot: snapshot, selections: selections)
-          } else {
-            self.openCheckedDiskCopy(document, snapshot: snapshot)
+          case .copy(_, let seed):
+            guard !reload, seed.kind == .diskCopy else { throw CancellationError() }
+            if self.applicationRouting != nil {
+              // Source authority is consumed now. Intake owns the immutable seed before the
+              // disk coordinator finishes this operation; later destination checks exclude it.
+              let id = try self.submitApplicationSeed(
+                seed, provenance: .fresh,
+                selection: .selectIfStillSelected(
+                  documentID: document.id, ownershipGeneration: document.ownershipGeneration))
+              self.observeApplicationIntake(id)
+            } else {
+              try self.openCheckedDiskCopy(document, seed: seed)
+            }
           }
         },
         finish: { [weak self, weak document] operation in
@@ -638,14 +657,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     refresh()
     scheduleRecovery()
   }
-  private func openCheckedDiskCopy(
-    _ source: EditorDocument, snapshot: ExternalFileActionSnapshot
-  ) {
-    let copy = EditorDocument()
-    copy.storage.mutableString.setString(snapshot.document.text)
-    copy.encoding = snapshot.document.encoding
-    copy.hasBOM = snapshot.document.hasBOM
-    copy.recoveredName = "Disk Copy — " + source.name
+  private func openCheckedDiskCopy(_ source: EditorDocument, seed: NativeDocumentSeed) throws {
+    let copy = try EditorDocumentFactory.make(seed)
     copy.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
     for pane in copy.panePool { installCallbacks(for: pane) }
     documents.append(copy)
@@ -735,13 +748,42 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let chooseSaveDestination: ((URL?, String) -> URL?)?
   private let errorHandler: ((Error) -> Void)?
 
-  init(
+  convenience init(
     id: UUID = UUID(), restoreStartup: Bool = true,
     saveServices: EditorSaveServices = EditorSaveServices(),
     chooseSaveDestination: ((URL?, String) -> URL?)? = nil,
     onError: ((Error) -> Void)? = nil,
     onSessionChange: (() -> Void)? = nil
   ) {
+    self.init(
+      id: id, restoreStartup: restoreStartup, saveServices: saveServices,
+      chooseSaveDestination: chooseSaveDestination, onError: onError,
+      onSessionChange: onSessionChange, applicationRouting: nil)
+  }
+
+  convenience init(
+    id: UUID, application: EditorApplicationRouting,
+    saveServices: EditorSaveServices = EditorSaveServices(),
+    chooseSaveDestination: ((URL?, String) -> URL?)? = nil,
+    onError: ((Error) -> Void)? = nil
+  ) throws {
+    try application.requireEndpointCurrent()
+    guard id == application.assignment.windowID,
+      let window = application.registry.window(id: id), window.groups.count == 1,
+      window.groups[0].id == application.assignment.groupID
+    else { throw EditorApplicationRoutingError.staleEndpoint }
+    self.init(
+      id: id, restoreStartup: false, saveServices: saveServices,
+      chooseSaveDestination: chooseSaveDestination, onError: onError,
+      onSessionChange: nil, applicationRouting: application)
+  }
+
+  private init(
+    id: UUID, restoreStartup: Bool, saveServices: EditorSaveServices,
+    chooseSaveDestination: ((URL?, String) -> URL?)?, onError: ((Error) -> Void)?,
+    onSessionChange: (() -> Void)?, applicationRouting: EditorApplicationRouting?
+  ) {
+    self.applicationRouting = applicationRouting
     self.onSessionChange = onSessionChange
     self.saveServices = saveServices
     self.chooseSaveDestination = chooseSaveDestination
@@ -822,7 +864,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       newDocument()
       restoreRecovery()
     }
-    if onSessionChange == nil {
+    if applicationRouting == nil && onSessionChange == nil {
       recoveryPeriodic = Task { [weak self] in
         while !Task.isCancelled {
           do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
@@ -1110,13 +1152,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func notifySessionChange() {
-    guard !preparingToQuit, !windowClosed,
+    guard !preparingToQuit, !windowClosed, projectionToken == nil,
       !documents.contains(where: { $0.panePresentation.suppression > 0 })
     else { return }
-    onSessionChange?()
+    if let applicationRouting { applicationRouting.requestCheckpoint() } else { onSessionChange?() }
   }
 
   func captureSessionCheckpoint() throws -> SessionWindowCheckpointCapture {
+    guard applicationRouting == nil, documents.allSatisfy({ $0.recoveryAuthority == nil }) else {
+      throw EditorApplicationRoutingError.applicationOwned
+    }
     try Self.assertNoPendingCloses()
     guard !windowClosed else { throw CancellationError() }
     // No suspension between recovery text/disposition and the paired metadata/view state.
@@ -1161,6 +1206,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     viewState: RestoredViewState, insertionIndex: Int? = nil,
     resolvedPresentation: RestoredPresentationState? = nil, activate: Bool = true
   ) throws {
+    guard applicationRouting == nil else {
+      throw EditorApplicationRoutingError.preparedSeedRequired
+    }
     guard !windowClosed, !preparingToQuit else { throw CancellationError() }
     guard
       metadata.presentation == .single(selection: metadata.selection) || resolvedPresentation != nil
@@ -1228,6 +1276,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func newDocument() {
     guard !preparingToQuit else { return }
+    if applicationRouting != nil {
+      do {
+        let id = try submitApplicationSeed(.scratch(), provenance: .fresh, selection: .select)
+        observeApplicationIntake(id)
+      } catch { present(error) }
+      return
+    }
     let document = EditorDocument()
     for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.append(document)
@@ -1236,6 +1291,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func restoreBackup(_ record: BackupRecord, data: Data) async throws {
     guard !preparingToQuit, !windowClosed else { throw CancellationError() }
+    if let routing = applicationRouting {
+      let request = try beginApplicationPreparation()
+      defer { if applicationPreparation == request { applicationPreparation = nil } }
+      let seed = try await Task.detached {
+        try NativeDocumentSeed.backup(
+          originalPath: record.originalPath, data: data, encoding: record.encoding)
+      }.value
+      try requireApplicationPreparation(request)
+      let id = try submitApplicationSeed(seed, provenance: .fresh, selection: .select)
+      let result = try await routing.wait(id)
+      try validateApplicationResult(result)
+      return
+    }
     let decoded = try await Task.detached {
       try DocumentCodec.decode(data, encoding: record.encoding)
     }.value
@@ -1280,6 +1348,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       $0.url?.standardizedFileURL == url.standardizedFileURL
     }) {
       display(existing)
+      guard applicationRouting == nil || current === existing else {
+        finish(EditorApplicationRoutingError.invalidProjection, false)
+        return
+      }
       if let encoding {
         reload(
           encoding: encoding, shouldAccept: shouldAccept,
@@ -1291,6 +1363,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       } else {
         finish(nil, false)
       }
+      return
+    }
+    if applicationRouting != nil {
+      openApplicationDocument(
+        url, encoding: encoding, shouldAccept: shouldAccept, allowLargeViewer: onFailure == nil,
+        hasPositionCompletion: onOpened != nil, finish: finish)
       return
     }
     loadingCount += 1
@@ -1391,6 +1469,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   nonisolated private static func read(_ url: URL, encoding: DocumentEncoding? = nil) throws -> (
     Data, DecodedDocument
   ) {
+    let bytes = try readBytes(url)
+    return (bytes, try DocumentCodec.decode(bytes, encoding: encoding))
+  }
+  nonisolated private static func readBytes(_ url: URL) throws -> Data {
     let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
     guard values.isRegularFile == true else { throw FileStoreError.unsafeTarget }
     let maximum = 100_000_000
@@ -1399,7 +1481,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     defer { try? handle.close() }
     let bytes = try handle.read(upToCount: maximum + 1) ?? Data()
     guard bytes.count <= maximum else { throw largeFileError() }
-    return (bytes, try DocumentCodec.decode(bytes, encoding: encoding))
+    return bytes
   }
 
   nonisolated private static func largeFileError() -> NSError {
@@ -1504,6 +1586,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "file.reload", "file.revert": reload()
     case "file.duplicate":
       if let source = current {
+        if applicationRouting != nil {
+          duplicateApplicationDocument(source)
+          return
+        }
         let document = EditorDocument()
         document.storage.mutableString.setString(source.storage.string)
         document.encoding = source.encoding
@@ -2545,7 +2631,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     editor.delegate = self
     editor.canFocus = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane else { return false }
-      return !self.windowClosed && !self.preparingToQuit && pane.isAttached
+      return self.applicationAllows(.select, document: document)
+        && !self.windowClosed && !self.preparingToQuit && pane.isAttached
         && (document.composingPaneID == nil || document.composingPaneID == pane.id)
         && (self.current?.composingPaneID == nil || self.current === document)
     }
@@ -2626,6 +2713,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func display(_ document: EditorDocument) {
     guard !windowClosed, !preparingToQuit else { return }
+    if let routing = applicationRouting {
+      do {
+        try routing.requireEndpointCurrent()
+        guard projectionToken == nil, routing.registry.handle(id: document.id) === document,
+          routing.registry.assignment(of: document.id) == routing.assignment,
+          routing.registry.allows(.select, documentID: document.id),
+          current?.composingPaneID == nil || current === document
+        else { throw EditorApplicationRoutingError.invalidProjection }
+        try routing.registry.selectDocument(
+          document.id, in: routing.assignment, expectedRevision: routing.registry.workspaceRevision)
+        try projectCurrentRegistry()
+      } catch { present(error) }
+      return
+    }
     guard current?.composingPaneID == nil || current === document else {
       present(PaneRoutingError.composition)
       return
@@ -2656,6 +2757,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func closeDocuments(ids: Set<UUID>) {
+    if let routing = applicationRouting {
+      do {
+        try routing.requireEndpointCurrent()
+        _ = try routing.requestClose(ids)
+      } catch { present(error) }
+      return
+    }
     guard !preparingToQuit, !windowClosed,
       !documents.contains(where: { $0.panePresentation.installing != nil })
     else { return }
@@ -2685,6 +2793,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func reopenClosed() {
+    if let routing = applicationRouting {
+      do {
+        try routing.requireEndpointCurrent()
+        observeApplicationIntake(try routing.requestReopen())
+      } catch { present(error) }
+      return
+    }
     guard let old = closedDocuments.popLast() else { return }
     let document = EditorDocument()
     document.url = old.url
@@ -2725,6 +2840,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       guard let self, !self.preparingToQuit, !self.windowClosed,
         let document = self.documents.first(where: { $0.id == id })
       else { return }
+      if let routing = self.applicationRouting {
+        do {
+          try routing.requireEndpointCurrent()
+          try routing.registry.setPinned(
+            !document.pinned, documentID: id, expectedRevision: routing.registry.workspaceRevision)
+          try self.projectCurrentRegistry()
+        } catch { self.present(error) }
+        return
+      }
       document.pinned.toggle()
       self.documents = self.documents.filter(\.pinned) + self.documents.filter { !$0.pinned }
       self.refresh()
@@ -2732,6 +2856,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     tabBar.onMove = { [weak self] id, index in
       guard let self, !self.preparingToQuit, !self.windowClosed else { return }
       do {
+        if let routing = self.applicationRouting {
+          try routing.requireEndpointCurrent()
+          try routing.registry.reorderDocument(
+            id, to: index, expectedRevision: routing.registry.workspaceRevision)
+          try self.projectCurrentRegistry()
+          return
+        }
         let ids = try TabOrder.reordered(items: self.documents.map(\.id), moving: id, to: index)
         let lookup = Dictionary(uniqueKeysWithValues: self.documents.map { ($0.id, $0) })
         let ordered = ids.compactMap { lookup[$0] }
@@ -2752,7 +2883,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
   }
 
-  func windowShouldClose(_ sender: NSWindow) -> Bool { canClose() }
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    if let routing = applicationRouting {
+      do {
+        try routing.requireEndpointCurrent()
+        _ = try routing.requestClose(Set(documents.map(\.id)))
+      } catch { present(error) }
+      return false
+    }
+    return canClose()
+  }
 
   func canClose() -> Bool {
     guard !documents.contains(where: { $0.panePresentation.installing != nil }) else {
@@ -2795,7 +2935,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     encodingPanel = nil
     textUtilities?.close()
     folderSearch?.close()
-    if !preparingToQuit { for document in documents { discardRecovery(document.id) } }
+    if applicationRouting == nil, !preparingToQuit {
+      for document in documents { discardRecovery(document.id) }
+    }
+    applicationRouting?.endpointClosed(applicationRouting!.endpointID)
     recoveryDebounce?.cancel()
     recoveryPeriodic?.cancel()
     onClose?()
@@ -3146,6 +3289,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func restoreRecovery() {
+    guard applicationRouting == nil else {
+      present(EditorApplicationRoutingError.applicationOwned)
+      return
+    }
     loadingCount += 1
     Task { [weak self, recovery] in
       do {
@@ -3186,6 +3333,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func scheduleRecovery() {
+    if applicationRouting != nil {
+      notifySessionChange()
+      return
+    }
     guard !preparingToQuit, !windowClosed else { return }
     if onSessionChange != nil {
       notifySessionChange()
@@ -3213,6 +3364,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func enqueueRecovery() {
+    if applicationRouting != nil {
+      notifySessionChange()
+      return
+    }
+    guard documents.allSatisfy({ $0.recoveryAuthority == nil }) else {
+      present(EditorApplicationRoutingError.applicationOwned)
+      return
+    }
     guard !preparingToQuit, !windowClosed else { return }
     if onSessionChange != nil {
       notifySessionChange()
@@ -3229,6 +3388,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func discardRecovery(_ id: UUID) {
+    guard applicationRouting == nil,
+      documents.first(where: { $0.id == id })?.recoveryAuthority == nil
+    else {
+      present(EditorApplicationRoutingError.applicationOwned)
+      return
+    }
     let previous = recoveryWork
     let cleanup = Task<Error?, Never> { [recovery] in
       await previous?.value
@@ -3282,10 +3447,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   static func persistPreparedRecovery(_ editors: [EditorWindowController]) async throws {
+    guard
+      editors.allSatisfy({
+        $0.applicationRouting == nil && $0.documents.allSatisfy({ $0.recoveryAuthority == nil })
+      })
+    else {
+      throw EditorApplicationRoutingError.applicationOwned
+    }
     try await RecoveryCoordinator.shared.persistBatch(editors.flatMap { $0.recoveryBatch() })
   }
 
   func prepareToQuit(persistRecovery: Bool = true) async -> Bool {
+    if persistRecovery,
+      applicationRouting != nil || documents.contains(where: { $0.recoveryAuthority != nil })
+    {
+      present(EditorApplicationRoutingError.applicationOwned)
+      return false
+    }
     guard !documents.contains(where: { $0.panePresentation.installing != nil }) else {
       return false
     }
@@ -3356,5 +3534,337 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func present(_ error: Error) {
     guard !windowClosed, !preparingToQuit else { return }
     if let errorHandler { errorHandler(error) } else { NSAlert(error: error).runModal() }
+  }
+}
+
+// Application mode: one process owns models; this window only projects their registry placement.
+extension EditorWindowController {
+  private func requireApplicationEndpoint() throws -> EditorApplicationRouting {
+    guard let routing = applicationRouting, !windowClosed, !preparingToQuit else {
+      throw EditorApplicationRoutingError.staleEndpoint
+    }
+    try routing.requireEndpointCurrent()
+    guard !windowClosed, !preparingToQuit, routing.assignment.windowID == sessionID else {
+      throw EditorApplicationRoutingError.staleEndpoint
+    }
+    return routing
+  }
+  private func applicationAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool {
+    guard let routing = applicationRouting else { return true }
+    guard (try? routing.requireEndpointCurrent()) != nil,
+      routing.registry.handle(id: document.id) === document,
+      routing.registry.assignment(of: document.id) == routing.assignment
+    else { return false }
+    return routing.registry.allows(action, documentID: document.id)
+  }
+  private func beginApplicationPreparation() throws -> UUID {
+    _ = try requireApplicationEndpoint()
+    guard applicationPreparation == nil else { throw DocumentIntakeError.busy }
+    let id = UUID()
+    applicationPreparation = id
+    return id
+  }
+  private func requireApplicationPreparation(_ id: UUID) throws {
+    _ = try requireApplicationEndpoint()
+    guard applicationPreparation == id else { throw EditorApplicationRoutingError.staleEndpoint }
+  }
+  private func submitApplicationSeed(
+    _ seed: NativeDocumentSeed, provenance: DocumentIntakeProvenance,
+    selection: EditorIntakeSelection, additionalAdmission: (() -> Bool)? = nil
+  ) throws -> DocumentIntakeID {
+    let routing = try requireApplicationEndpoint()
+    guard projectionToken == nil, additionalAdmission?() != false else { throw CancellationError() }
+    let endpoint = routing.endpointID
+    return try routing.submit(
+      .init(
+        endpointID: endpoint, assignment: routing.assignment,
+        seed: seed, provenance: provenance, selection: selection,
+        requireDestinationCurrent: { [weak self] in
+          guard let self else { throw CancellationError() }
+          let current = try self.requireApplicationEndpoint()
+          guard current.endpointID == endpoint, additionalAdmission?() != false else {
+            throw EditorApplicationRoutingError.staleEndpoint
+          }
+        }))
+  }
+  func acceptPreparedSessionSeed(
+    _ seed: NativeDocumentSeed, provenance: DocumentIntakeProvenance,
+    selection: EditorIntakeSelection
+  ) throws -> DocumentIntakeID {
+    guard seed.kind == .restored else { throw EditorApplicationRoutingError.unsupportedSeed }
+    switch provenance {
+    case .session(let claim):
+      guard claim.documentID == seed.id else { throw EditorApplicationRoutingError.unsupportedSeed }
+    case .recovery(let claim):
+      guard claim.documentID == seed.id, seed.url == nil, seed.originalBytes == nil else {
+        throw EditorApplicationRoutingError.unsupportedSeed
+      }
+    case .fresh, .history: throw EditorApplicationRoutingError.unsupportedSeed
+    }
+    return try submitApplicationSeed(seed, provenance: provenance, selection: selection)
+  }
+  private func validateApplicationResult(_ result: DocumentIntakeResult) throws {
+    let routing = try requireApplicationEndpoint()
+    switch result {
+    case .imported(let id):
+      guard let model = routing.registry.handle(id: id) as? EditorDocument,
+        documents.contains(where: { $0 === model }),
+        let expected = routing.registry.window(id: sessionID)
+      else { throw EditorApplicationRoutingError.invalidProjection }
+      try validateRegistryProjection(
+        expected, revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
+    case .refused(let error), .retained(_, let error): throw error
+    }
+  }
+  private func observeApplicationIntake(_ id: DocumentIntakeID) {
+    guard let routing = applicationRouting else { return }
+    Task { [weak self] in
+      do {
+        let result = try await routing.wait(id)
+        guard let self else { return }
+        try self.validateApplicationResult(result)
+      } catch {
+        guard let self, !self.windowClosed, !self.preparingToQuit else { return }
+        self.present(error)
+      }
+    }
+  }
+  private func openApplicationDocument(
+    _ url: URL, encoding: DocumentEncoding?, shouldAccept: (() -> Bool)?,
+    allowLargeViewer: Bool, hasPositionCompletion: Bool,
+    finish: @escaping (Error?, Bool) -> Void
+  ) {
+    let request: UUID
+    do { request = try beginApplicationPreparation() } catch {
+      finish(error, true)
+      return
+    }
+    loadingCount += 1
+    refresh()
+    Task { [weak self] in
+      let result = await Task.detached(priority: .userInitiated) {
+        Result<NativeDocumentSeed?, Error> {
+          let values = try url.resourceValues(forKeys: [.fileSizeKey])
+          if (values.fileSize ?? 0) > 100_000_000 { return nil }
+          return try NativeDocumentSeed.opened(
+            url: url, bytes: Self.readBytes(url), encoding: encoding)
+        }
+      }.value
+      guard let self else {
+        finish(CancellationError(), false)
+        return
+      }
+      self.loadingCount -= 1
+      defer {
+        if self.applicationPreparation == request { self.applicationPreparation = nil }
+        if !self.windowClosed { self.refresh() }
+      }
+      do {
+        try self.requireApplicationPreparation(request)
+        guard shouldAccept?() != false else { throw CancellationError() }
+        guard let seed = try result.get() else {
+          if allowLargeViewer, let viewer = self.onOpenLargeFile {
+            viewer(url)
+            finish(Self.largeFileError(), hasPositionCompletion)
+          } else {
+            finish(Self.largeFileError(), true)
+          }
+          return
+        }
+        if let existing = self.documents.first(where: {
+          $0.url?.standardizedFileURL == url.standardizedFileURL
+        }) {
+          self.display(existing)
+          guard self.current === existing else {
+            throw EditorApplicationRoutingError.invalidProjection
+          }
+          if let encoding {
+            self.reload(
+              encoding: encoding, shouldAccept: shouldAccept,
+              onFailure: { finish($0, true) }, onReload: { finish(nil, false) })
+          } else {
+            finish(nil, false)
+          }
+          return
+        }
+        let id = try self.submitApplicationSeed(
+          seed, provenance: .fresh, selection: .select, additionalAdmission: shouldAccept)
+        let outcome = try await self.applicationRouting!.wait(id)
+        try self.requireApplicationPreparation(request)
+        guard shouldAccept?() != false else { throw CancellationError() }
+        try self.validateApplicationResult(outcome)
+        finish(nil, false)
+      } catch { finish(error, !self.windowClosed && !self.preparingToQuit) }
+    }
+  }
+  private func duplicateApplicationDocument(_ source: EditorDocument) {
+    let request: UUID
+    do {
+      guard applicationAllows(.select, document: source), source.storage.length <= 100_000_000
+      else {
+        throw EditorApplicationRoutingError.applicationOwned
+      }
+      request = try beginApplicationPreparation()
+    } catch {
+      present(error)
+      return
+    }
+    let text = source.storage.string
+    let revision = source.editRevision
+    let ownership = source.ownershipGeneration
+    let encoding = source.encoding
+    let bom = source.hasBOM
+    let language = source.language
+    let manual = source.manualLanguage
+    Task { [weak self, weak source] in
+      let result = await Task.detached {
+        Result {
+          try NativeDocumentSeed.duplicate(
+            text: text, encoding: encoding, hasBOM: bom, language: language, manualLanguage: manual)
+        }
+      }.value
+      guard let self else { return }
+      defer { if self.applicationPreparation == request { self.applicationPreparation = nil } }
+      do {
+        try self.requireApplicationPreparation(request)
+        guard let source, self.documents.contains(where: { $0 === source }),
+          source.editRevision == revision, source.ownershipGeneration == ownership,
+          self.applicationAllows(.select, document: source)
+        else { throw PaneRoutingError.stale }
+        let id = try self.submitApplicationSeed(
+          result.get(), provenance: .fresh, selection: .select)
+        self.observeApplicationIntake(id)
+      } catch { if !self.windowClosed { self.present(error) } }
+    }
+  }
+
+  private func registryModels(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws -> [EditorDocument] {
+    guard let routing = applicationRouting, !windowClosed,
+      endpointID == routing.endpointID, expected.id == sessionID,
+      routing.assignment.windowID == sessionID
+    else { throw EditorApplicationRoutingError.staleEndpoint }
+    try routing.requireEndpointCurrent()
+    guard !windowClosed, routing.registry.workspaceRevision == revision,
+      routing.registry.window(id: sessionID) == expected,
+      expected.groups.count == 1, expected.groups[0].id == routing.assignment.groupID,
+      expected.focusedGroupID == expected.groups[0].id
+    else { throw EditorApplicationRoutingError.invalidProjection }
+    let group = expected.groups[0]
+    guard Set(group.documentIDs).count == group.documentIDs.count,
+      group.selectedDocumentID.map({ group.documentIDs.contains($0) }) ?? group.documentIDs.isEmpty
+    else { throw EditorApplicationRoutingError.invalidProjection }
+    return try group.documentIDs.map { id in
+      guard let model = routing.registry.handle(id: id) as? EditorDocument,
+        model.id == id, routing.registry.assignment(of: id) == routing.assignment,
+        routing.registry.adoptionStatus(documentID: id) == .active,
+        routing.registry.metadata(id: id) != nil
+      else { throw EditorApplicationRoutingError.invalidProjection }
+      return model
+    }
+  }
+  private func projectCurrentRegistry() throws {
+    let routing = try requireApplicationEndpoint()
+    guard let expected = routing.registry.window(id: sessionID) else {
+      throw EditorApplicationRoutingError.invalidProjection
+    }
+    try applyRegistryProjection(
+      expected, revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
+  }
+  func applyRegistryProjection(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws {
+    guard projectionToken == nil, !preparingToQuit else {
+      throw EditorApplicationRoutingError.invalidProjection
+    }
+    let token = UUID()
+    projectionToken = token
+    defer { if projectionToken == token { projectionToken = nil } }
+    let next = try registryModels(expected, revision: revision, endpointID: endpointID)
+    let oldCurrent = current
+    let selection = expected.groups[0].selectedDocumentID
+    let selected = next.first { $0.id == selection }
+    guard oldCurrent?.composingPaneID == nil || oldCurrent === selected else {
+      throw PaneRoutingError.composition
+    }
+    let old = documents
+    projectionValid = false
+    documents = next
+    selectedID = selection
+    for document in next {
+      if let pin = applicationRouting?.registry.metadata(id: document.id)?.pinned,
+        document.pinned != pin
+      {
+        document.pinned = pin
+      }
+      if !old.contains(where: { $0 === document }) {
+        for pane in document.panePool { installCallbacks(for: pane) }
+        if document.fileState == nil { adoptFileState(document) }
+      }
+    }
+    if let selected {
+      if oldCurrent !== selected
+        || host.displayedIDs != selected.panePool.filter(\.isAttached).map(\.id)
+      {
+        if let oldCurrent, oldCurrent !== selected { presentationInteraction(oldCurrent) }
+        for pane in selected.panePool where pane.isAttached { installCallbacks(for: pane) }
+        if !selected.settingsApplied { configureSettings(selected) }
+        let wrap = !preferredPane(in: selected).editor.isHorizontallyResizable
+        try presentPanes(selected, wrap: wrap)
+        _ = window?.makeFirstResponder(preferredPane(in: selected).editor)
+        installPendingPresentationIfPossible(selected)
+        selected.highlighter.update(language: selected.language)
+      }
+    } else {
+      try host.present(panes: [], axis: .sideBySide)
+    }
+    let verified = try registryModels(expected, revision: revision, endpointID: endpointID)
+    guard projectionToken == token, verified.count == documents.count,
+      zip(verified, documents).allSatisfy({ $0 === $1 }), selectedID == selection
+    else { throw EditorApplicationRoutingError.invalidProjection }
+    refresh()
+    renderDiskStatus()
+    // AppKit notifications may reenter registry operations during rendering.
+    try validateRegistryProjection(
+      expected, revision: revision, endpointID: endpointID, allowing: token)
+    projectionValid = true
+  }
+  func validateRegistryProjection(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws {
+    try validateRegistryProjection(
+      expected, revision: revision, endpointID: endpointID, allowing: nil)
+  }
+  private func validateRegistryProjection(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID, allowing token: UUID?
+  ) throws {
+    guard projectionToken == token, token != nil || projectionValid else {
+      throw EditorApplicationRoutingError.invalidProjection
+    }
+    let models = try registryModels(expected, revision: revision, endpointID: endpointID)
+    guard models.count == documents.count, zip(models, documents).allSatisfy({ $0 === $1 }),
+      selectedID == expected.groups[0].selectedDocumentID,
+      host.displayedIDs == (current?.panePool.filter(\.isAttached).map(\.id) ?? []),
+      models.allSatisfy({ applicationRouting?.registry.metadata(id: $0.id)?.pinned == $0.pinned })
+    else { throw EditorApplicationRoutingError.invalidProjection }
+  }
+  func captureManagedSessionCheckpoint(expected: DocumentWindowSnapshot) throws
+    -> ManagedWindowCheckpointCapture
+  {
+    guard let routing = applicationRouting else {
+      throw EditorApplicationRoutingError.applicationOwned
+    }
+    let revision = routing.registry.workspaceRevision
+    try validateRegistryProjection(expected, revision: revision, endpointID: routing.endpointID)
+    let items = try documents.map { document -> RecoveryCheckpointItem in
+      let item = try document.captureAuthorizedRecovery()
+      return .init(
+        id: document.id, revision: item.revision, snapshot: item.snapshot, authority: item.authority
+      )
+    }
+    let metadata = sessionMetadata
+    try validateRegistryProjection(expected, revision: revision, endpointID: routing.endpointID)
+    return .init(window: metadata, liveTabIDs: Set(documents.map(\.id)), recovery: items)
   }
 }

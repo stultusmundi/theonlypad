@@ -1,0 +1,8 @@
+# Prepared disk-copy integration plan
+
+1. Implement and verify seed language parity and single-decode restored overload. Completed: factory 122 assertions and unchanged shared ownership harness passed; prior behavioral red had seven failures. The first fixture compile error is retained separately.
+2. Extend the existing one-slot CPU preparer and typed action result. Completed source; empty-selection copy behavioral red retained in `.local/disk-action-coordinator/run.kPK8wIyo`. Existing reload/cancel/revalidation assertions remain. Initial updated execution reached the retained synthetic file replacement and was denied by the sandbox; authorized execution then passed 59 assertions.
+3. Retain expanded real-service checks for exact copy seed text/encoding/BOM, captured display name/language, precomputed count, absent original authority, and canceled-work permit retention. Completed: root independently passed all 65 assertions in `.local/disk-action-coordinator/run.sE3pP6mS`; independent review clear. Tests use synthetic files and no GUI.
+4. Controller owner migrates apply to the typed result and forwards prepared seeds to the separately reviewed process intake handoff. Pending integration and full native compatibility verification; no desktop acceptance claim.
+
+Run `scripts/test-disk-action-coordinator.sh <existing-debug-build-path>` and `scripts/test-document-factory.sh <existing-debug-build-path>`. The former includes real synthetic file replacement and requires an execution environment permitting it. Both preserve unique private evidence directories. No shipping instrumentation, second decoding pass on the copy path, or extra CPU worker is introduced.

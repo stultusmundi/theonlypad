@@ -15,7 +15,7 @@ else
   scripts/swift.sh build --scratch-path .build/disk-action-coordinator -c debug > "$run/build.log" 2>&1
   build_path=$(scripts/swift.sh build --scratch-path .build/disk-action-coordinator -c debug --show-bin-path)
 fi
-sources=(Sources/TheOnlyPad/ApplicationFileMonitoring.swift Sources/TheOnlyPad/FileMonitorClient.swift Sources/TheOnlyPad/NativeFileMonitorClient.swift Sources/TheOnlyPad/DiskActionBoundary.swift Sources/TheOnlyPad/DiskSelectionPreparer.swift Sources/TheOnlyPad/DocumentDiskActionCoordinator.swift)
+sources=(Sources/TheOnlyPad/NativeDocumentSeed.swift Sources/TheOnlyPad/ApplicationFileMonitoring.swift Sources/TheOnlyPad/FileMonitorClient.swift Sources/TheOnlyPad/NativeFileMonitorClient.swift Sources/TheOnlyPad/DiskActionBoundary.swift Sources/TheOnlyPad/DiskSelectionPreparer.swift Sources/TheOnlyPad/DocumentDiskActionCoordinator.swift)
 swiftc -target "$(uname -m)-apple-macosx14.0" -swift-version 6 \
   -module-cache-path .local/disk-action-coordinator/module-cache -parse-as-library \
   -I "$build_path/Modules" "${sources[@]}" Tests/NativeIntegration/DiskActionCoordinatorHarness.swift \
