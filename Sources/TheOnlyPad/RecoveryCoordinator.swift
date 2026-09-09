@@ -87,7 +87,7 @@ actor RecoveryCoordinator {
     self.readCheckpointSession = readCheckpointSession
   }
 
-  private let coordinatorID = UUID()
+  nonisolated let coordinatorID = UUID()
   private enum ManagedPhase {
     case open
     case prepared(RecoveryCloseLease)

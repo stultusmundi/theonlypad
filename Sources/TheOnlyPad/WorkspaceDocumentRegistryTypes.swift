@@ -32,6 +32,7 @@ enum DocumentRegistryError: Error, Equatable {
   case busy, staleRevision, duplicateID, unknownWindow, unknownGroup, unknownDocument
   case invalidSelection, invalidIndex, notEmpty, lastGroup, capacity
   case closeUnavailable, closeBlocked, staleClose, invalidDisposition, invalidRecoveryReceipt
+  case adoptionUnavailable, adoptionBlocked, staleAdoption, invalidAdoptionReceipt
 }
 
 @MainActor struct DocumentCloseServices {

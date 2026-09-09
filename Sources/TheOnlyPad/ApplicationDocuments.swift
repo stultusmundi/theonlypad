@@ -1,4 +1,48 @@
 import Foundation
+import PadCore
+
+struct DocumentAdoptionLease: Equatable {
+  let registryID: UUID
+  let requestID: UUID
+  let attemptID: UUID
+  let documentID: UUID
+  let assignment: DocumentAssignment
+  let ownershipGeneration: UUID
+  fileprivate init(
+    registryID: UUID, requestID: UUID, attemptID: UUID, documentID: UUID,
+    assignment: DocumentAssignment, ownershipGeneration: UUID
+  ) {
+    self.registryID = registryID
+    self.requestID = requestID
+    self.attemptID = attemptID
+    self.documentID = documentID
+    self.assignment = assignment
+    self.ownershipGeneration = ownershipGeneration
+  }
+}
+
+enum DocumentAdoptionStatus: Equatable {
+  case unmanaged
+  case pending(DocumentAdoptionLease)
+  case failed(DocumentAdoptionLease)
+  case active
+  var blocksAdmission: Bool {
+    switch self {
+    case .pending, .failed: return true
+    case .unmanaged, .active: return false
+    }
+  }
+}
+struct DocumentAdoptionState: Equatable {
+  let documentID: UUID
+  let ownershipGeneration: UUID
+  let authority: RecoveryWriteAuthority?
+  let highestIssuedRevision: UInt64
+}
+@MainActor struct DocumentAdoptionServices {
+  let coordinatorID: UUID
+  let readState: (any WorkspaceDocumentHandle) throws -> DocumentAdoptionState
+}
 
 /// View-free ownership and group metadata. Close leases are view-free; transfer and native adapters are later stages.
 @MainActor final class ApplicationDocuments {
@@ -6,6 +50,7 @@ import Foundation
     let handle: any WorkspaceDocumentHandle
     let assignment: DocumentAssignment
     var metadata: WorkspaceDocumentMetadata
+    var adoption: DocumentAdoptionStatus = .unmanaged
   }
   private var records: [UUID: Record] = [:]
   private var windows: [UUID: DocumentWindowSnapshot] = [:]
@@ -24,10 +69,151 @@ import Foundation
   private var leases: [UUID: CloseLease] = [:]
   private var admissionGenerations: [UUID: UUID] = [:]
   private var history: [UUID: [Record]] = [:]
-  init(closeServices: DocumentCloseServices? = nil) { self.closeServices = closeServices }
+  private let registryID = UUID()
+  private var adoptionRequests = Set<UUID>()
+  private let adoptionServices: DocumentAdoptionServices?
+  init(
+    closeServices: DocumentCloseServices? = nil, adoptionServices: DocumentAdoptionServices? = nil
+  ) {
+    self.closeServices = closeServices
+    self.adoptionServices = adoptionServices
+  }
+
+  func registerPending(
+    _ handle: any WorkspaceDocumentHandle, requestID: UUID, expectedRevision: UUID,
+    metadata: WorkspaceDocumentMetadata, in assignment: DocumentAssignment, at index: Int,
+    select: Bool
+  ) throws -> DocumentAdoptionLease {
+    guard let adoptionServices else { throw DocumentRegistryError.adoptionUnavailable }
+    var result: DocumentAdoptionLease!
+    try mutate(expected: expectedRevision) {
+      let (window, groupIndex) = try group(assignment)
+      let target = window.groups[groupIndex]
+      try ensureGroupOpen(target)
+      guard index >= 0, index <= target.documentIDs.count else {
+        throw DocumentRegistryError.invalidIndex
+      }
+      guard records.count < 128 else { throw DocumentRegistryError.capacity }
+      let identity = ObjectIdentifier(handle)
+      guard !handleIdentities.contains(identity), !adoptionRequests.contains(requestID) else {
+        throw DocumentRegistryError.duplicateID
+      }
+      let id = handle.id
+      let generation = handle.ownershipGeneration
+      guard !allIDs.contains(id) else { throw DocumentRegistryError.duplicateID }
+      guard handle.workspaceKind == .editable else {
+        throw DocumentRegistryError.adoptionUnavailable
+      }
+      let state = try adoptionServices.readState(handle)
+      guard state.documentID == id, state.ownershipGeneration == generation,
+        state.authority == nil, state.highestIssuedRevision == 0,
+        handle.id == id, handle.ownershipGeneration == generation,
+        handle.workspaceKind == .editable
+      else { throw DocumentRegistryError.staleAdoption }
+      result = DocumentAdoptionLease(
+        registryID: registryID, requestID: requestID, attemptID: UUID(), documentID: id,
+        assignment: assignment, ownershipGeneration: generation)
+      var ids = target.documentIDs
+      ids.insert(id, at: index)
+      records[id] = Record(
+        handle: handle, assignment: assignment, metadata: metadata,
+        adoption: .pending(result))
+      allIDs.insert(id)
+      handleIdentities.insert(identity)
+      adoptionRequests.insert(requestID)
+      admissionGenerations[id] = UUID()
+      windows[window.id] = replacingAndInvalidatingGroup(
+        window, groupAt: groupIndex,
+        with: DocumentGroupSnapshot(
+          id: target.id, documentIDs: pinnedFirst(ids),
+          selectedDocumentID: select ? id : target.selectedDocumentID ?? id))
+      return true
+    }
+    return result
+  }
+
+  func adoptionStatus(documentID: UUID) -> DocumentAdoptionStatus? { records[documentID]?.adoption }
+
+  private func adoptionRecord(_ lease: DocumentAdoptionLease, failed: Bool = false) throws -> Record
+  {
+    guard lease.registryID == registryID, let record = records[lease.documentID],
+      record.assignment == lease.assignment,
+      record.adoption == (failed ? .failed(lease) : .pending(lease)),
+      record.handle.id == lease.documentID,
+      record.handle.ownershipGeneration == lease.ownershipGeneration
+    else { throw DocumentRegistryError.staleAdoption }
+    return record
+  }
+
+  func failAdoption(_ lease: DocumentAdoptionLease) throws {
+    try mutate {
+      var record = try adoptionRecord(lease)
+      record.adoption = .failed(lease)
+      records[lease.documentID] = record
+      admissionGenerations[lease.documentID] = UUID()
+      return true
+    }
+  }
+
+  func retryAdoption(_ lease: DocumentAdoptionLease) throws -> DocumentAdoptionLease {
+    var result: DocumentAdoptionLease!
+    try mutate {
+      var record = try adoptionRecord(lease, failed: true)
+      result = DocumentAdoptionLease(
+        registryID: registryID, requestID: lease.requestID, attemptID: UUID(),
+        documentID: lease.documentID, assignment: lease.assignment,
+        ownershipGeneration: lease.ownershipGeneration)
+      record.adoption = .pending(result)
+      records[lease.documentID] = record
+      admissionGenerations[lease.documentID] = UUID()
+      return true
+    }
+    return result
+  }
+
+  func activateAdoption(_ lease: DocumentAdoptionLease, receipt: RecoveryAdoptionReceipt) throws {
+    guard let adoptionServices else { throw DocumentRegistryError.adoptionUnavailable }
+    try mutate {
+      var record = try adoptionRecord(lease)
+      guard receipt.authority.coordinatorID == adoptionServices.coordinatorID,
+        receipt.authority.documentID == lease.documentID, receipt.nextRevision > 0
+      else { throw DocumentRegistryError.invalidAdoptionReceipt }
+      let state = try adoptionServices.readState(record.handle)
+      guard state.documentID == lease.documentID,
+        state.ownershipGeneration == lease.ownershipGeneration,
+        state.authority == receipt.authority,
+        state.highestIssuedRevision == receipt.nextRevision - 1,
+        record.handle.workspaceKind == .editable
+      else { throw DocumentRegistryError.invalidAdoptionReceipt }
+      // Service/protocol callbacks may reenter or mutate their own model. Registry
+      // mutation remains fenced; revalidate owner identity after the callbacks.
+      _ = try adoptionRecord(lease)
+      record.adoption = .active
+      records[lease.documentID] = record
+      admissionGenerations[lease.documentID] = UUID()
+      return true
+    }
+  }
+
+  func captureReadyWindows() throws -> [DocumentWindowSnapshot] {
+    guard !mutating else { throw DocumentRegistryError.busy }
+    guard !records.values.contains(where: { $0.adoption.blocksAdmission }) else {
+      throw DocumentRegistryError.adoptionBlocked
+    }
+    guard leases.isEmpty else { throw DocumentRegistryError.closeBlocked }
+    return try captureWindows()
+  }
 
   func allows(_ action: DocumentAdmission, documentID: UUID) -> Bool {
-    !mutating && records[documentID] != nil && leases[documentID] == nil
+    guard !mutating, let record = records[documentID], leases[documentID] == nil,
+      !record.adoption.blocksAdmission
+    else { return false }
+    if action == .select {
+      guard let (window, index) = try? group(record.assignment),
+        (try? ensureGroupOpen(window.groups[index])) != nil
+      else { return false }
+    }
+    return true
   }
   func closeStatus(documentID: UUID) -> DocumentCloseStatus? {
     guard records[documentID] != nil else { return nil }
@@ -41,6 +227,9 @@ import Foundation
   }
   func closedHistoryCount(windowID: UUID) -> Int { history[windowID]?.count ?? 0 }
   private func ensureGroupOpen(_ group: DocumentGroupSnapshot) throws {
+    guard group.documentIDs.allSatisfy({ records[$0]?.adoption.blocksAdmission == false }) else {
+      throw DocumentRegistryError.adoptionBlocked
+    }
     guard group.documentIDs.allSatisfy({ leases[$0] == nil }) else {
       throw DocumentRegistryError.closeBlocked
     }
@@ -67,6 +256,7 @@ import Foundation
     var result: DocumentCloseRequest!
     try mutate {
       guard let record = records[documentID] else { throw DocumentRegistryError.unknownDocument }
+      guard !record.adoption.blocksAdmission else { throw DocumentRegistryError.adoptionBlocked }
       guard leases[documentID] == nil else { throw DocumentRegistryError.closeBlocked }
       let state = try state(of: record, id: documentID)
       try requireSafeClose(state)
@@ -84,7 +274,8 @@ import Foundation
     guard closeServices != nil else { throw DocumentRegistryError.closeUnavailable }
     var result: DocumentCloseTicket!
     try mutate {
-      guard let record = records[request.documentID], leases[request.documentID] == nil,
+      guard let record = records[request.documentID], !record.adoption.blocksAdmission,
+        leases[request.documentID] == nil,
         admissionGenerations[request.documentID] == request.admissionGeneration,
         record.assignment == request.assignment, record.metadata == request.metadata
       else { throw DocumentRegistryError.staleClose }
