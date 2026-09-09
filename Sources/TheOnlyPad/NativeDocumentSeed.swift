@@ -89,6 +89,15 @@ struct NativeDocumentSeed: Sendable {
       limits: limits)
   }
   static func restored(
+    _ metadata: SessionTab, url: URL, originalBytes: Data, limits: Limits = .standard
+  ) throws -> Self {
+    guard originalBytes.count <= limits.bytes else { throw NativeDocumentSeedError.limit }
+    let decoded = try DocumentCodec.decode(originalBytes, encoding: metadata.encoding)
+    return try validatedRestored(
+      metadata, decoded: decoded, originalBytes: originalBytes,
+      url: url, limits: limits)
+  }
+  static func restored(
     _ metadata: SessionTab, decoded: DecodedDocument, originalBytes: Data?,
     url: URL?, limits: Limits = .standard
   ) throws -> Self {
@@ -102,18 +111,29 @@ struct NativeDocumentSeed: Sendable {
         throw NativeDocumentSeedError.invalidPair
       }
     }
+    return try validatedRestored(
+      metadata, decoded: decoded, originalBytes: originalBytes,
+      url: url, limits: limits)
+  }
+  private static func validatedRestored(
+    _ metadata: SessionTab, decoded: DecodedDocument, originalBytes: Data?, url: URL?,
+    limits: Limits
+  ) throws -> Self {
+    let name =
+      url == nil
+      ? "Recovered "
+        + (metadata.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
+      : nil
     let resolved = try RestoredPresentationState.resolve(
       metadata.presentation, bookmarks: metadata.bookmarks, in: decoded.text)
     return try .init(
       id: metadata.id, kind: .restored, decoded: decoded, url: url, bytes: originalBytes,
       saved: url == nil ? nil : decoded,
-      name: url == nil
-        ? "Recovered "
-          + (metadata.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
-        : nil,
+      name: name,
       pinned: metadata.pinned,
       language: metadata.manualLanguage
-        ?? LanguageService.detect(filename: url?.lastPathComponent ?? "", text: decoded.text),
+        ?? LanguageService.detect(
+          filename: url?.lastPathComponent ?? name ?? "Untitled", text: decoded.text),
       manual: metadata.manualLanguage != nil, bookmarks: resolved.bookmarks, presentation: resolved,
       limits: limits)
   }
@@ -122,16 +142,20 @@ struct NativeDocumentSeed: Sendable {
     encoding: DocumentEncoding, limits: Limits = .standard
   ) throws -> Self {
     guard data.count <= limits.bytes else { throw NativeDocumentSeedError.limit }
+    let decoded = try DocumentCodec.decode(data, encoding: encoding)
+    let name = "Backup — " + URL(fileURLWithPath: originalPath).lastPathComponent
     return try .init(
-      id: id, kind: .backup, decoded: DocumentCodec.decode(data, encoding: encoding),
-      name: "Backup — " + URL(fileURLWithPath: originalPath).lastPathComponent, limits: limits)
+      id: id, kind: .backup, decoded: decoded, name: name,
+      language: LanguageService.detect(filename: name, text: decoded.text), limits: limits)
   }
   static func diskCopy(
     id: UUID = UUID(), sourceName: String, decoded: DecodedDocument,
     limits: Limits = .standard
   ) throws -> Self {
-    try .init(
-      id: id, kind: .diskCopy, decoded: decoded, name: "Disk Copy — " + sourceName, limits: limits)
+    let name = "Disk Copy — " + sourceName
+    return try .init(
+      id: id, kind: .diskCopy, decoded: decoded, name: name,
+      language: LanguageService.detect(filename: name, text: decoded.text), limits: limits)
   }
   static func duplicate(
     id: UUID = UUID(), text: String, encoding: DocumentEncoding, hasBOM: Bool,
@@ -171,11 +195,13 @@ struct NativeDocumentSeed: Sendable {
   static func legacyRecovery(_ snapshot: RecoverySnapshot, limits: Limits = .standard) throws
     -> Self
   {
-    try .init(
+    let name =
+      "Recovered "
+      + (snapshot.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
+    return try .init(
       id: snapshot.id, kind: .legacyRecovery,
       decoded: .init(text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM),
-      name: "Recovered "
-        + (snapshot.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled"),
+      name: name, language: LanguageService.detect(filename: name, text: snapshot.text),
       limits: limits)
   }
 }

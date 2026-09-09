@@ -147,6 +147,38 @@ import PadCore
           && recovered.recoveredName == "Recovered original.txt",
         "legacy recovery retains ID but never original URL")
     }
+    let automatic = SessionTab(originalPath: "/synthetic/source.py", encoding: .utf16LE)
+    let recoveredAutomatic = try NativeDocumentSeed.restored(
+      automatic, decoded: decoded, originalBytes: nil, url: nil)
+    check(
+      recoveredAutomatic.language == .python, "recovery detects final informational display name")
+    let backupLanguage = try NativeDocumentSeed.backup(
+      originalPath: "/synthetic/source.py", data: bytes, encoding: .utf16LE)
+    check(backupLanguage.language == .python, "backup detects final display name")
+    let copyLanguage = try NativeDocumentSeed.diskCopy(sourceName: "source.py", decoded: decoded)
+    check(copyLanguage.language == .python, "disk copy detects captured display name")
+    let legacyLanguage = try NativeDocumentSeed.legacyRecovery(
+      .init(
+        id: UUID(), text: text, encoding: .utf16LE, hasBOM: true,
+        originalPath: "/synthetic/source.py"))
+    check(legacyLanguage.language == .python, "legacy recovery detects final display name")
+    let shebang = DecodedDocument(text: "#!/usr/bin/python\nprint(1)")
+    check(
+      try NativeDocumentSeed.diskCopy(sourceName: "script", decoded: shebang).language == .python,
+      "extensionless copy detects shebang")
+    check(
+      try NativeDocumentSeed.diskCopy(sourceName: "script.json", decoded: shebang).language
+        == .json,
+      "filename extension keeps priority over shebang")
+    do {
+      let encoded = try NativeDocumentSeed.restored(metadata, url: url, originalBytes: bytes)
+      check(
+        encoded.text.utf16.elementsEqual(decoded.text.utf16) && encoded.encoding == .utf16LE
+          && encoded.hasBOM && encoded.originalBytes == bytes
+          && encoded.presentation == restoredSeed.presentation
+          && encoded.language == .swift,
+        "encoded restoration preserves exact decoded baseline and metadata")
+    } catch { check(false, "encoded restoration valid input must succeed") }
     let small = try NativeDocumentSeed.Limits(utf16: 2, bytes: 4)
     rejects("text limit refuses oversize before model") {
       _ = try NativeDocumentSeed.duplicate(

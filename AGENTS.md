@@ -80,7 +80,7 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 
 `scripts/test-document-adoption.sh` passed 41 registry tests (11 adoption plus the original 30); `scripts/test-application-document-closing.sh` passed 19 process-owner tests including real paired publication and fresh same-process readers. These are Foundation integration tests, not native window-close acceptance.
 
-`scripts/test-document-factory.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 115 hidden factory checks plus the shared-pane ownership control. Use a verified core build; native intake routes remain unmodified.
+`scripts/test-document-factory.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 122 hidden factory checks plus the shared-pane ownership control. Use a verified core build; native intake routes remain unmodified.
 
 `scripts/test-application-session-checkpoints.sh` passed 18 real-store publisher tests. The extracted legacy AppDelegate initializer builds; native managed activation remains outstanding.
 
