@@ -1,0 +1,88 @@
+#!/bin/sh
+set -eu
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec python3 - "$script_directory/.." "$@" <<'PY'
+import os
+import pathlib
+import plistlib
+import re
+import subprocess
+import sys
+import urllib.parse
+
+
+def fail(message):
+    print("theonlypad: " + message, file=sys.stderr)
+    raise SystemExit(2)
+
+
+repo = pathlib.Path(sys.argv[1]).resolve()
+arguments = sys.argv[2:]
+if arguments == ["--help"]:
+    print("Usage: scripts/theonlypad [--line N] [--column N] [--] [FILE ...]\n"
+          "Positions are 1-based and apply to every file. Set THEONLYPAD_APP to an explicit .app path if needed.")
+    raise SystemExit(0)
+if len(arguments) > 256 or sum(len(value.encode("utf-8")) for value in arguments) > 1048576:
+    fail("Too many arguments or more than 1 MB of argument text.")
+line = column = 1
+files = []
+seen = set()
+options = True
+index = 0
+while index < len(arguments):
+    value = arguments[index]
+    if options and value == "--":
+        options = False
+        index += 1
+        continue
+    if options and value in ("--line", "--column"):
+        if value in seen or index + 1 >= len(arguments):
+            fail("Specify each navigation option once followed by its value.")
+        seen.add(value)
+        raw = arguments[index + 1]
+        normalized = raw.lstrip("0") or "0"
+        if not re.fullmatch(r"[0-9]+", raw) or len(normalized) > 19:
+            fail("Line and column must be positive decimal integers.")
+        number = int(normalized)
+        if not 1 <= number <= sys.maxsize:
+            fail("Line or column is zero or outside the platform's integer range.")
+        if value == "--line":
+            line = number
+        else:
+            column = number
+        index += 2
+        continue
+    if not value or (options and value.startswith("-")) or "\0" in value:
+        fail("Unknown option or empty filename. Use -- before filenames beginning with a dash.")
+    files.append(pathlib.Path(os.path.abspath(value)))
+    if len(files) > 128:
+        fail("Open at most 128 files per invocation.")
+    index += 1
+if arguments and not files:
+    fail("Navigation options require at least one file.")
+configured = os.environ.get("THEONLYPAD_APP")
+if configured:
+    app = pathlib.Path(os.path.abspath(configured))
+else:
+    candidates = sorted((repo / "dist").glob("*.app"))
+    if len(candidates) != 1:
+        fail("Build one local app with scripts/package.sh, or set THEONLYPAD_APP to its .app path.")
+    app = candidates[0]
+try:
+    with (app / "Contents" / "Info.plist").open("rb") as handle:
+        metadata = plistlib.load(handle)
+    scheme = metadata["CFBundleURLTypes"][0]["CFBundleURLSchemes"][0]
+    if not isinstance(scheme, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*", scheme):
+        raise ValueError("invalid scheme")
+except (OSError, ValueError, KeyError, IndexError, TypeError):
+    fail("The app has no supported open-link protocol. Rebuild it with scripts/package.sh.")
+urls = [scheme + "://open?" + urllib.parse.urlencode({"file": path.as_uri(), "line": line, "column": column}) for path in files]
+if sum(len(value.encode("utf-8")) + 1 for value in [str(app), *urls]) > 131072:
+    fail("Encoded open requests exceed 128 KB. Open fewer files per invocation.")
+# All values are separate argv elements. No shell, --args, or new app instance.
+try:
+    result = subprocess.run(["/usr/bin/open", "-a", str(app), *urls], check=False)
+except OSError as error:
+    fail("Could not contact LaunchServices: " + (error.strerror or "system error"))
+raise SystemExit(result.returncode)
+PY

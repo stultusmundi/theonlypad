@@ -1,0 +1,12 @@
+{
+  "apiVersion": 1,
+  "id": "org.theonlypad.examples.cleanup",
+  "name": "Cleanup Examples",
+  "version": "1.0.0",
+  "capabilities": ["text.transform"],
+  "commands": [
+    {"id": "trim", "title": "Trim trailing whitespace", "transform": "trimTrailingWhitespace"},
+    {"id": "sort", "title": "Sort lines", "transform": "sorted"},
+    {"id": "deduplicate", "title": "Remove duplicate lines", "transform": "deduplicated"}
+  ]
+}
