@@ -96,7 +96,7 @@ public struct RecoveryStore: Sendable {
       throw RecoveryError.unsafeDirectory
     }
   }
-  public func save(_ snapshot: RecoverySnapshot) throws {
+  public func save(_ snapshot: RecoverySnapshot, fault: SaveFault? = nil) throws {
     try validateDirectory()
     try validate(snapshot)
     let file = url(snapshot.id)
@@ -105,7 +105,21 @@ public struct RecoveryStore: Sendable {
     let encoded = try encoder().encode(envelope)
     guard encoded.count <= limits.maximumEnvelopeBytes else { throw RecoveryError.resourceLimit }
     try validateSaveCapacity(id: snapshot.id, encodedBytes: encoded.count)
-    try AtomicFileStore().save(encoded, to: file, expected: previous)
+    try AtomicFileStore().save(encoded, to: file, expected: previous, fault: fault)
+  }
+  /// Validate this exact attempted envelope without acknowledging a successful save.
+  public func validatePublication(_ evidence: FilePublicationEvidence, snapshot: RecoverySnapshot)
+    throws
+  {
+    try validateDirectory()
+    try validate(snapshot)
+    guard evidence.destination.standardizedFileURL == url(snapshot.id).standardizedFileURL else {
+      throw RecoveryError.invalidSnapshot
+    }
+    let envelope = Envelope(version: 1, snapshot: snapshot, checksum: try checksum(snapshot))
+    let encoded = try encoder().encode(envelope)
+    guard encoded.count <= limits.maximumEnvelopeBytes else { throw RecoveryError.resourceLimit }
+    try AtomicFileStore().validatePublication(evidence, expected: encoded)
   }
   public func loadAll() throws -> [RecoverySnapshot] { try loadReport().snapshots }
   public func loadReport() throws -> RecoveryLoadReport {

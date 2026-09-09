@@ -13,15 +13,23 @@ actor RecoveryCoordinator {
   private var store: RecoveryStore?
   private var startupClaimed = false
   private let limits: RecoveryLimits
+  private let saveRecovery: @Sendable (RecoveryStore, RecoverySnapshot) throws -> Void
+  private var uncertainPublication: (snapshot: RecoverySnapshot, evidence: FilePublicationEvidence)?
   private var capacityKnown = false
   private var startupReport: RecoveryLoadReport?
   private var snapshotUnits: [UUID: Int] = [:]
   private var revisions: [UUID: UInt64] = [:]
   private var closed: Set<UUID> = []
 
-  init(directory: URL, limits: RecoveryLimits = RecoveryLimits()) {
+  init(
+    directory: URL, limits: RecoveryLimits = RecoveryLimits(),
+    saveRecovery: @escaping @Sendable (RecoveryStore, RecoverySnapshot) throws -> Void = {
+      try $0.save($1)
+    }
+  ) {
     self.directory = directory
     self.limits = limits
+    self.saveRecovery = saveRecovery
   }
 
   nonisolated private static func defaultDirectory() -> URL {
@@ -63,7 +71,17 @@ actor RecoveryCoordinator {
     else {
       throw RecoveryError.resourceLimit
     }
-    try storage().save(snapshot)
+    do {
+      try saveRecovery(storage(), snapshot)
+    } catch FileStoreError.publicationUncertain(let evidence) {
+      // Publication may already contain this newer revision. Reserve admission order without
+      // calling the write successful; no later write may trust the old capacity cache.
+      revisions[snapshot.id] = max(revision, revisions[snapshot.id, default: 0])
+      uncertainPublication = (snapshot, evidence)
+      capacityKnown = false
+      startupReport = nil
+      throw FileStoreError.publicationUncertain(evidence)
+    }
     snapshotUnits[snapshot.id] = count
     if !startupClaimed, let report = startupReport {
       startupReport = RecoveryLoadReport(
@@ -146,13 +164,23 @@ actor RecoveryCoordinator {
   }
   private func initializeCapacity() throws {
     guard !capacityKnown else { return }
+    if let pending = uncertainPublication {
+      try storage().validatePublication(pending.evidence, snapshot: pending.snapshot)
+    }
     let report = try storage().loadReport()
     snapshotUnits = Dictionary(
       uniqueKeysWithValues: report.snapshots.map { ($0.id, $0.text.utf16.count) })
-    startupReport = report
+    startupReport = startupClaimed ? nil : report
     capacityKnown = true
+    uncertainPublication = nil
   }
   private func removedFromCapacity(_ id: UUID) {
+    // Called only after successful removal. Failed cleanup must retain the admission block.
+    if uncertainPublication?.snapshot.id == id {
+      uncertainPublication = nil
+      capacityKnown = false
+      startupReport = nil
+    }
     snapshotUnits.removeValue(forKey: id)
     if !startupClaimed, let report = startupReport {
       startupReport = RecoveryLoadReport(

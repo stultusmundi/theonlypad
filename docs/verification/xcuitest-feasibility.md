@@ -1,5 +1,13 @@
 # Actual macOS XCUITest feasibility
 
+## Current save-fix package: authentication blocked
+
+The ad-hoc package `a2d3e80e2bef8ac9bba9402191a31ef8b2486128fbb01539e754d686a4834a9f` passed release build/signature/inventory checks,199 core tests and full native integration before packaging. Three XCUITest launches then failed before any test started: original runner, fresh app copy and clean DerivedData (`run.ACcFbH`, `run.djaOOv`, `run.625FfD`, ignored). Each reported a timeout enabling automation mode. No product assertion ran; this is not a six-test pass.
+
+Read-only `automationmodetool` reports Automation Mode disabled and user authentication required. Its installed man page confirms no-argument invocation is status-only. Console/login flags were true; no leftover owned test process was found between attempts. No security preference was changed and no credential was used. The user was asked to approve the native Enable UI Automation authentication prompt. Current packaged desktop verification waits on that access; the preceding six-test success below remains evidence for its own binary only.
+
+An [Apple Developer Forums report](https://developer.apple.com/forums/thread/693850) describes the same timeout with repeated authentication prompts on older macOS. That is contextual evidence, not proof of this host’s precise cause; the local status output is the basis for requesting authentication. Advice there to change automation security preferences was not executed.
+
 ## Latest package: six workflows passed
 
 Executable SHA-256 `0324726fcc89fbb0b54670efe713f7246ba23572ef4ae7e48c1a0f2e77a73526` first completed six tests with four passes and two failures (`.local/desktop-ui/run.5qsntP/results.xcresult`, ignored). Multiwindow restoration, scratch recovery, quit failure/veto, and undo/tab/appearance passed. Recent Files queried a Window despite the real accessibility Dialog role; the query was corrected without changing assertions. Open/edit/save wrote33bytes instead of the expected16, consistent with insertion without full selection. A bounded source review found no demonstrated selection-reset race; its cause remains unresolved.

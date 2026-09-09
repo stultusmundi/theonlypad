@@ -23,3 +23,7 @@ A later development package was generated with additional verified source change
 ## Subsequent package inventory
 
 The later package with executable SHA-256 `0324726fcc89fbb0b54670efe713f7246ba23572ef4ae7e48c1a0f2e77a73526` was independently checked: the same six bundle files and eleven archive entries, no absolute/traversal archive paths, matching archive executable and SBOM hashes, and zero home/volume markers in the narrow binary strings check. Ad-hoc signing remains the only signing performed. Its first expanded desktop run passed four of six tests; desktop findings and reruns are tracked separately. Inventory success does not imply application acceptance.
+
+## Save-publication package inventory
+
+The rebuilt save-publication package has executable SHA-256 `a2d3e80e2bef8ac9bba9402191a31ef8b2486128fbb01539e754d686a4834a9f`. Its six bundle files and eleven archive entries were checked again: no unsafe archive paths; executable/ZIP/SBOM hashes match; narrow binary marker scan found zero home/volume markers. Local release build, plist validation and ad-hoc signature verification passed. Desktop tests of this exact binary are running; no Developer ID or notarization claim is made.

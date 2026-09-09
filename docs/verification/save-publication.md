@@ -1,0 +1,33 @@
+# Save publication and retry verification
+
+Date: 2026-09-09. This record covers deterministic filesystem faults and synthetic native editor operations. It does not claim real disk exhaustion, power-loss testing, network-volume certification or elimination of races with noncooperating writers.
+
+## Implemented behavior
+
+AtomicFileStore distinguishes errors before replacement from uncertainty after replacement. It checks directory synchronization and validates the requested parent directory before/after publication. Uncertain results carry opaque parent and published-file identity from the owned temporary descriptor. A bounded exact readback checks both identities and bytes; readback alone does not acknowledge durability. Explicit retry must complete a fresh successful save.
+
+The native editor retains the attempted bytes and publication evidence separately from its saved baseline. Uncertainty keeps the document dirty and eligible for recovery even if text returns to the old saved contents. Save retries only the validated pending destination; changed bytes or identity refuse the retry. Save As can choose a new path, and an uncertain Save As does not adopt its URL. A successful retry adopts its captured snapshot and preserves the original backup. Pending uncertainty is also retained when reopening a closed tab; an explicit successful reload clears it after discard confirmation.
+
+The error directs the user to keep the buffer and retry Save or choose Save As. The status bar shows unconfirmed save state. A closed/frozen dialog target cannot admit a new save, and late failures do not show UI or schedule recovery for a closed owner.
+
+## Observed focused checks
+
+- Core missing-API reds preceded implementation. All15 DocumentFileStoreTests passed after the new fault/race tests. Existing original-byte and temporary-file cleanup assertions were preserved.
+- New core cases exercise partial payload write plus ENOSPC, temporary sync failure, post-rename directory sync uncertainty, new/existing files, moved/replaced parents, retargeted parent symlinks, exact/inode/symlink readback, and errors thrown after rename. A review correction moved the raced-in create test after the final check; it now proves exclusive rename preserves that competing file.
+- The native harness initially failed compilation for missing save-service/state APIs. It then passed real editor/file/backup/recovery assertions for pre-publication failure, uncertainty, dirty state, native undo, normal and initially untitled Save As, retained prior URL, exact retry, edits after uncertainty, external changes refusing retry, and backup refusal before writes.
+- Recovery was loaded from the real private store after preparing quit. Both the uncertain edited contents and a subsequent return to the old saved text remained represented by snapshots. No original file or backup assertion was replaced with a mock result.
+- Independent review found two lifetime gaps. Added tests separately failed for a late error alert after close and a destination chooser admitting a save after close. After guards were added, the complete focused native harness passed with a warning-free compile. Raw red/green diagnostics remain ignored under `.local/native-integration`.
+
+The first complete integration run passed199 core tests and the full native suite. A subsequent caller review required the recovery/preferences fixes below; the final state passed199 core tests (8.577seconds) and the complete native suite (session78405), including the new preferences/recovery checks and force-termination restoration. A regenerated ad-hoc package with SHA256 `a2d3e80e2bef8ac9bba9402191a31ef8b2486128fbb01539e754d686a4834a9f` passed local build, signature and inventory checks; its first desktop runner attempt timed out enabling automation before any test (`.local/desktop-ui/run.ACcFbH`). No leftover owned test process was found. Fresh-copy and clean-DerivedData retries failed before tests too. Read-only `automationmodetool` reported disabled automation and required user authentication. The user was asked to approve the native prompt; credentials/security preferences were not changed. Desktop acceptance of this binary remains blocked pending that access. The previous six-test package recorded in `xcuitest-feasibility.md` predates this save fix.
+
+## Remaining limits
+
+Readback and pathname validation are checks, not a cross-process atomic compare-and-swap. A noncooperating external writer can still race the final validation/rename. Successful fsync is the platform acknowledgement, not proof against all hardware or filesystem failure. Abrupt-process save barriers, physical full-disk behavior, ACL/xattr/Finder-tag preservation and hard-link policy remain outstanding. No Developer ID signing, notarization, or remote publication occurred.
+
+## Propagation review and corrections
+
+Other AtomicFileStore callers were reviewed after the first green full suite. Macro and extension managers propagate errors and reload stored state; no material false-success/deletion issue was established in this bounded review.
+
+RecoveryCoordinator previously updated revision/size caches only on returned success. An uncertain publication could therefore leave newer/larger bytes on disk with an old revision/quota cache. Real-store runtime regressions demonstrated an older revision overwriting those bytes and a negative control admitting80+50 UTF-16 units with a100-unit recovery limit. The fix reserves the attempted revision without acknowledging success, invalidates capacity, and requires exact canonical-envelope readback plus bounded reinventory before more writes. Readback mismatch and failed cleanup retain the block. Successful explicit removal or validated shrink allows safe progress. Expanded RecoveryHarness passed; file-store15 and recovery-bounds5 focused tests passed. Independent final source review found no remaining material flaw in the reviewed recovery changes.
+
+Preferences previously restored old controls and said nothing changed after an uncertain publication. A native regression observed new disk values with old controls before the fix. Valid readback now updates controls/applied appearance with an explicit unconfirmed-save message; a fresh later save can acknowledge success. Failed readback disables ordinary controls while retaining explicit Import/Reset. The harness passed disk/control/application-state, fresh retry, prepublication unchanged-state, and corrupt-readback cases. Independent review found no remaining material issue in these branches. This reconciles observed state without claiming that readback proves durability.

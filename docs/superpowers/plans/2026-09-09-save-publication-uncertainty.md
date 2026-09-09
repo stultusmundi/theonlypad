@@ -1,6 +1,6 @@
 # Save publication uncertainty and destination identity plan
 
-Status: planned after bounded source/test review; no production implementation, new test execution, actual disk exhaustion, or crash test is claimed. Preserve concurrent editor/checkpoint work and obtain the root source handoff before changes.
+Status: core/native implementation and focused failure tests completed, including independent review corrections. The first full integration run passed; fresh full verification after recovery/preferences propagation fixes is running. Packaged acceptance for these changes, actual disk exhaustion and abrupt-process save testing remain outstanding. See `../../verification/save-publication.md`.
 
 ## Confirmed behavior and scope
 
@@ -53,3 +53,7 @@ Retain backups before the original replacement. Retry need not create unlimited 
 Inject a save-service result into an isolated native harness rather than forcing real machine disk failure. Test normal save, pre-publication error, post-publication uncertainty, checked successful retry, externally changed retry, Save As uncertainty, edits after uncertain publication, backup refusal, and quit/recovery behavior. Assert exact bytes, saved URL, dirty/pending status, native undo availability, and retained recovery disposition independently.
 
 Source review must check that all result branches restore controls, no late save result applies to a different/closed document, and a retry cannot authorize overwrite of unrelated bytes. Run targeted core/native checks first, then the coordinated complete suites. Update verification docs with exact executed results. Physical disk-full, APFS/network-volume behavior, sudden power loss, metadata preservation and elimination of noncooperating-writer races remain unclaimed until separately tested or implemented.
+
+## Implementation review resolution
+
+The core and native steps above are implemented. Native lifetime review added post-dialog target validation and suppression of late error UI for closed owners; both had observed regression failures before fixes. Propagation review additionally required recovery revision/quota invalidation after uncertain writes and truthful preferences readback/status. Those focused harnesses passed and independent review found no remaining material issue in the reviewed branches. Full final suites and regenerated desktop package remain the next acceptance gates. Persistent evidence paths and exact counts are maintained in the verification report.

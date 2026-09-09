@@ -1,6 +1,28 @@
 import AppKit
 import PadCore
 
+/// Injectable I/O boundary; production work runs in the detached save task.
+struct EditorSaveServices: Sendable {
+  var write: @Sendable (Data, URL, Data?) throws -> Void = {
+    try AtomicFileStore().save($0, to: $1, expected: $2)
+  }
+  var backup: @Sendable (Data, URL, DocumentEncoding) throws -> Void = {
+    _ = try BackupStore(directory: BackupStore.defaultDirectory).capture(
+      data: $0, originalURL: $1, encoding: $2)
+  }
+  var validate: @Sendable (FilePublicationEvidence, Data) throws -> Void = {
+    try AtomicFileStore().validatePublication($0, expected: $1)
+  }
+}
+
+private struct PendingDocumentPublication: Sendable {
+  let evidence: FilePublicationEvidence
+  let bytes: Data
+}
+private enum EditorSaveFailure: Error {
+  case uncertain(PendingDocumentPublication)
+}
+
 @MainActor
 private final class DocumentTextView: NSTextView {
   let documentUndo = UndoManager()
@@ -74,6 +96,7 @@ private final class EditorDocument {
   let scroll: NSScrollView
   var url: URL?
   var originalBytes: Data?
+  var pendingPublication: PendingDocumentPublication?
   var savedText = "" {
     didSet {
       savedUTF16Length = (savedText as NSString).length
@@ -97,6 +120,7 @@ private final class EditorDocument {
   var typingBookmarkNextLocation: Int?
   var pendingBookmarksHaveUndo = false
   var dirty: Bool {
+    if pendingPublication != nil { return true }
     guard encoding == savedEncoding, hasBOM == savedHasBOM else { return true }
     let storage = editor.textStorage!
     // Queries inside an unfinished editing batch must not reuse the previous result.
@@ -216,8 +240,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var replayCancellation: MacroCancellation?
   var isRecordingMacro: Bool { recordingDocumentID != nil }
   var currentDocumentIsDirty: Bool { current?.dirty ?? false }
+  var currentSaveIsUncertain: Bool { current?.pendingPublication != nil }
+  private let saveServices: EditorSaveServices
+  private let chooseSaveDestination: ((URL?, String) -> URL?)?
+  private let errorHandler: ((Error) -> Void)?
 
-  init(id: UUID = UUID(), restoreStartup: Bool = true) {
+  init(
+    id: UUID = UUID(), restoreStartup: Bool = true,
+    saveServices: EditorSaveServices = EditorSaveServices(),
+    chooseSaveDestination: ((URL?, String) -> URL?)? = nil,
+    onError: ((Error) -> Void)? = nil
+  ) {
+    self.saveServices = saveServices
+    self.chooseSaveDestination = chooseSaveDestination
+    self.errorHandler = onError
     sessionID = id
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
@@ -769,19 +805,30 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func save(_ document: EditorDocument, saveAs: Bool) {
-    guard !document.saving else { return }
-    var destination = document.url
+    guard !document.saving, !windowClosed, !preparingToQuit else { return }
+    let retry = saveAs ? nil : document.pendingPublication
+    var destination = retry?.evidence.destination ?? document.url
     if saveAs || destination == nil {
-      let panel = NSSavePanel()
-      panel.nameFieldStringValue = document.name == "Untitled" ? "Untitled.txt" : document.name
-      panel.directoryURL = document.url?.deletingLastPathComponent()
-      guard panel.runModal() == .OK, let url = panel.url else { return }
-      destination = url
+      let suggestedName = document.name == "Untitled" ? "Untitled.txt" : document.name
+      if let chooseSaveDestination {
+        destination = chooseSaveDestination(
+          document.url?.deletingLastPathComponent(), suggestedName)
+      } else {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedName
+        panel.directoryURL = document.url?.deletingLastPathComponent()
+        guard panel.runModal() == .OK else { return }
+        destination = panel.url
+      }
     }
-    guard let destination else { return }
+    // Native dialogs run a nested event loop; the target may have closed or frozen meanwhile.
+    guard let destination, !windowClosed, !preparingToQuit, !document.saving,
+      documents.contains(where: { $0 === document })
+    else { return }
     let sameDestination = destination.standardizedFileURL == document.url?.standardizedFileURL
     let original = document.originalBytes
     let originalEncoding = document.savedEncoding
+    let services = saveServices
     let snapshot = DecodedDocument(
       text: document.editor.string, encoding: document.encoding, hasBOM: document.hasBOM)
     document.saving = true
@@ -791,16 +838,25 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       do {
         let bytes = try await Task.detached(priority: .userInitiated) {
           let bytes = try DocumentCodec.encode(snapshot)
-          // Save As is create-only until an overwrite confirmation can be
-          // bound to a captured version. A later-created file must not be overwritten.
-          let expected = sameDestination ? original : nil
-          if let expected, expected != bytes {
-            _ = try BackupStore(directory: BackupStore.defaultDirectory).capture(
-              data: expected, originalURL: destination, encoding: originalEncoding)
+          let expected: Data?
+          if let retry {
+            // Only this exact previously attempted publication can authorize a retry.
+            // Readback is not a durability receipt; a fresh save must still succeed.
+            try services.validate(retry.evidence, retry.bytes)
+            expected = retry.bytes
+          } else {
+            // Save As remains create-only, never implicit overwrite permission.
+            expected = sameDestination ? original : nil
+            if let expected, expected != bytes {
+              try services.backup(expected, destination, originalEncoding)
+            }
           }
           do {
-            try AtomicFileStore().save(bytes, to: destination, expected: expected)
-          } catch FileStoreError.externalChange where !sameDestination {
+            try services.write(bytes, destination, expected)
+          } catch FileStoreError.publicationUncertain(let evidence) {
+            throw EditorSaveFailure.uncertain(
+              PendingDocumentPublication(evidence: evidence, bytes: bytes))
+          } catch FileStoreError.externalChange where !sameDestination && retry == nil {
             throw NSError(
               domain: "TheOnlyPad", code: 2,
               userInfo: [
@@ -810,21 +866,45 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           }
           return bytes
         }.value
+        document.saving = false
+        guard let self, !self.windowClosed,
+          self.documents.contains(where: { $0 === document })
+        else { return }
         document.url = destination
         document.originalBytes = bytes
         document.savedText = snapshot.text
         document.savedEncoding = snapshot.encoding
         document.savedHasBOM = snapshot.hasBOM
-        document.saving = false
+        document.pendingPublication = nil
         document.editor.isEditable = true
-        self?.refresh()
-        self?.updateLanguage(document)
-        self?.scheduleRecovery()
+        self.refresh()
+        self.updateLanguage(document)
+        self.scheduleRecovery()
       } catch {
         document.saving = false
+        if case EditorSaveFailure.uncertain(let pending) = error {
+          document.pendingPublication = pending
+        }
+        guard let self, !self.windowClosed,
+          self.documents.contains(where: { $0 === document })
+        else {
+          document.editor.isEditable = false
+          return
+        }
         document.editor.isEditable = true
-        self?.refresh()
-        self?.present(error)
+        if case EditorSaveFailure.uncertain = error { self.scheduleRecovery() }
+        self.refresh()
+        if case EditorSaveFailure.uncertain = error {
+          self.present(
+            NSError(
+              domain: "TheOnlyPad", code: 21,
+              userInfo: [
+                NSLocalizedDescriptionKey:
+                  "The new file may already exist, but its save could not be confirmed. Your edits remain in the buffer. Use Save to verify and retry that destination, or Save As to choose a new path."
+              ]))
+        } else {
+          self.present(error)
+        }
       }
     }
   }
@@ -896,6 +976,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.pendingBookmarks = nil
         (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
         document.savedText = loaded.1.text
+        document.pendingPublication = nil
         document.originalBytes = loaded.0
         document.encoding = loaded.1.encoding
         document.hasBOM = loaded.1.hasBOM
@@ -1538,6 +1619,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let document = EditorDocument()
     document.url = old.url
     document.originalBytes = old.originalBytes
+    document.pendingPublication = old.pendingPublication
     document.savedText = old.savedText
     document.encoding = old.encoding
     document.hasBOM = old.hasBOM
@@ -1926,6 +2008,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       + (text.length > 2_000_000 ? "  |  Highlighting disabled: large document" : "")
       + (loadingCount > 0 ? "  |  Loading…" : "")
       + (document.saving ? "  |  Working…" : "")
+      + (document.pendingPublication != nil
+        ? "  |  Save not confirmed — retry Save or Save As" : "")
       + (recordingDocumentID != nil ? "  |  Recording macro" : "")
   }
 
@@ -2077,5 +2161,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     alert.runModal()
   }
 
-  private func present(_ error: Error) { NSAlert(error: error).runModal() }
+  private func present(_ error: Error) {
+    if let errorHandler { errorHandler(error) } else { NSAlert(error: error).runModal() }
+  }
 }

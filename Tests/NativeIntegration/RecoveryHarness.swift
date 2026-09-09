@@ -123,6 +123,90 @@ import PadCore
     let finalRetry = try RecoveryStore(directory: retryDirectory, limits: retryLimits).loadAll()
     precondition(finalRetry.first { $0.id == plain.id }?.text == plain.text)
     precondition(finalRetry.first { $0.id == escaped.id }?.text == escaped.text)
+    let uncertainDirectory = directory.appendingPathComponent("uncertain")
+    let uncertainLimits = RecoveryLimits(
+      maximumSnapshotUTF16: 100, maximumEnvelopeBytes: 4096,
+      maximumSnapshots: 4, maximumDirectoryEntries: 16, maximumRestoredUTF16: 100)
+    let uncertainOwner = RecoveryCoordinator(
+      directory: uncertainDirectory, limits: uncertainLimits,
+      saveRecovery: { store, snapshot in
+        try store.save(snapshot, fault: snapshot.text.utf16.count == 80 ? .directorySync : nil)
+      })
+    let uncertainID = UUID()
+    let small = RecoverySnapshot(
+      id: uncertainID, text: String(repeating: "a", count: 10),
+      encoding: .utf8, hasBOM: false)
+    let large = RecoverySnapshot(
+      id: uncertainID, text: String(repeating: "a", count: 80),
+      encoding: .utf8, hasBOM: false)
+    try await uncertainOwner.persist(small, revision: 1)
+    do {
+      try await uncertainOwner.persist(large, revision: 3)
+      preconditionFailure("Uncertain publication must not acknowledge recovery")
+    } catch FileStoreError.publicationUncertain {}
+    try await uncertainOwner.persist(small, revision: 2)
+    let uncertainStore = try RecoveryStore(directory: uncertainDirectory, limits: uncertainLimits)
+    let uncertainLoaded = try uncertainStore.loadAll()
+    precondition(
+      uncertainLoaded.first?.text.utf16.count == 80,
+      "An older revision must not overwrite uncertain newer publication")
+    let another = RecoverySnapshot(
+      id: UUID(), text: String(repeating: "b", count: 50),
+      encoding: .utf8, hasBOM: false)
+    do {
+      try await uncertainOwner.persist(another, revision: 1)
+      preconditionFailure("Readback must account for80 published units before admitting50")
+    } catch RecoveryError.resourceLimit {}
+    let quotaLoaded = try uncertainStore.loadAll()
+    precondition(quotaLoaded.count == 1)
+    try await uncertainOwner.persist(small, revision: 4)
+    try await uncertainOwner.persist(another, revision: 2)
+    let finalLoaded = try uncertainStore.loadAll()
+    precondition(finalLoaded.reduce(0) { $0 + $1.text.utf16.count } == 60)
+
+    let blockedDirectory = directory.appendingPathComponent("blocked-readback")
+    let blockedOwner = RecoveryCoordinator(
+      directory: blockedDirectory, limits: uncertainLimits,
+      saveRecovery: { store, snapshot in
+        try store.save(snapshot, fault: snapshot.text.utf16.count == 80 ? .directorySync : nil)
+      })
+    try await blockedOwner.persist(small, revision: 1)
+    do {
+      try await blockedOwner.persistBatch([(uncertainID, 3, large), (another.id, 1, another)])
+      preconditionFailure("Batch must propagate uncertain write without exceeding quota")
+    } catch FileStoreError.publicationUncertain {}
+    let blockedStore = try RecoveryStore(directory: blockedDirectory, limits: uncertainLimits)
+    let batchLoaded = try blockedStore.loadAll()
+    precondition(batchLoaded.count == 1 && batchLoaded[0].text.utf16.count == 80)
+    // A second uncertain attempt recreates the pending validation barrier.
+    do { try await blockedOwner.persist(large, revision: 4) } catch FileStoreError
+      .publicationUncertain
+    {}
+    let blockedFile = blockedDirectory.appendingPathComponent(uncertainID.uuidString + ".json")
+    try Data("changed externally".utf8).write(to: blockedFile)
+    for _ in 0..<2 {
+      do {
+        try await blockedOwner.persist(another, revision: 2)
+        preconditionFailure("Failed readback must keep later write admission blocked")
+      } catch FileStoreError.externalChange {}
+    }
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o644], ofItemAtPath: blockedFile.path)
+    do {
+      try await blockedOwner.close(id: uncertainID)
+      preconditionFailure("Unsafe cleanup must fail without forgetting uncertainty")
+    } catch RecoveryError.invalidSnapshot {}
+    do {
+      try await blockedOwner.persist(another, revision: 3)
+      preconditionFailure("Failed close must not remove the validation barrier")
+    } catch FileStoreError.externalChange {}
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o600], ofItemAtPath: blockedFile.path)
+    try await blockedOwner.close(id: uncertainID)
+    try await blockedOwner.persist(another, revision: 4)
+    let afterClose = try blockedStore.loadAll()
+    precondition(afterClose.map(\.id) == [another.id])
+
     print(
       "PASS recovery quotas, batch shrink ordering, cleanup on error, revision coalescing and bounded retry"
     )

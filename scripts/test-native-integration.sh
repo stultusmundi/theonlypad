@@ -17,6 +17,11 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   "$build_path"/PadCore.build/*.o -o .local/native-integration/ui-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/ui" .local/native-integration/ui-test
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/PreferencesController.swift \
+  Tests/NativeIntegration/PreferencesFailureHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/preferences-failure-test
+.local/native-integration/preferences-failure-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" Sources/TheOnlyPad/SearchPanelController.swift \
   Tests/NativeIntegration/SearchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/search-test
@@ -89,6 +94,11 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/LaunchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/launch-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/launch" .local/native-integration/launch-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${native_sources[@]}" \
+  Tests/NativeIntegration/SaveFailureHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/save-failure-test
+THEONLYPAD_STATE_DIRECTORY="$fixtures/save-failure" .local/native-integration/save-failure-test
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" "${native_sources[@]}" \
   Tests/NativeIntegration/DirtyStateHarness.swift "$build_path"/PadCore.build/*.o \

@@ -4,7 +4,8 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
-  private let store = SettingsStore(directory: SettingsStore.defaultDirectory)
+  private let store: SettingsStore
+  private let saveSettings: @Sendable (EditorSettings) throws -> Void
   private let onApply: (EditorSettings) -> Void
   private var current = EditorSettings.defaults
   private var loaded = false
@@ -23,7 +24,13 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
   private let resetButton = NSButton(title: String(localized: "Reset…"), target: nil, action: nil)
   private var rows: [(String, NSView)] = []
 
-  init(onApply: @escaping (EditorSettings) -> Void) {
+  init(
+    store: SettingsStore = SettingsStore(directory: SettingsStore.defaultDirectory),
+    saveSettings: (@Sendable (EditorSettings) throws -> Void)? = nil,
+    onApply: @escaping (EditorSettings) -> Void
+  ) {
+    self.store = store
+    self.saveSettings = saveSettings ?? { try store.save($0) }
     self.onApply = onApply
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 570, height: 425), styleMask: [.titled, .closable],
@@ -184,18 +191,43 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
     }
     setBusy(true)
     status.stringValue = String(localized: "Saving preferences…")
-    let store = store
+    let saveSettings = saveSettings
     Task {
       do {
-        try await Task.detached { try store.save(settings) }.value
+        try await Task.detached { try saveSettings(settings) }.value
         loaded = true
         display(settings)
         onApply(settings)
         status.stringValue = String(localized: "Preferences saved.")
       } catch {
-        display(current)
-        present(error)
-        status.stringValue = String(localized: "Preferences were not changed.")
+        let saveError = error
+        if case FileStoreError.publicationUncertain = error {
+          do {
+            let store = store
+            let observed = try await Task.detached { try store.load() }.value
+            try requireAvailableFont(observed)
+            loaded = true
+            display(observed)
+            onApply(observed)
+            present(saveError)
+            status.stringValue = String(
+              localized:
+                "Save was not confirmed. Current disk values are shown; change a setting to save again."
+            )
+          } catch {
+            loaded = false
+            display(current)
+            present(saveError)
+            status.stringValue = String(
+              localized:
+                "Save was not confirmed and stored preferences could not be read. Import a valid file or reset explicitly."
+            )
+          }
+        } else {
+          display(current)
+          present(error)
+          status.stringValue = String(localized: "Preferences were not changed.")
+        }
       }
       setBusy(false)
     }
