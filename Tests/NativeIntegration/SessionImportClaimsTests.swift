@@ -315,4 +315,45 @@ import XCTest
     try coordinator.validateImport(claim)
   }
 
+  func testRenewalRetainsExactProvenanceAfterOtherMembershipChange() async throws {
+    let coordinator = await fixture(tabs: [SessionTab(), SessionTab()])
+    let entries = coordinator.unresolved
+    let original = try coordinator.claimImport(entries[0])
+    coordinator.resolved(entries[1])
+    XCTAssertThrowsError(try coordinator.validateImport(original))
+    let renewed = try coordinator.renewImportClaim(original)
+    XCTAssertEqual(renewed.documentID, original.documentID)
+    XCTAssertEqual(renewed.windowID, original.windowID)
+    let foreign = await fixture()
+    XCTAssertThrowsError(try foreign.renewImportClaim(original))
+    try coordinator.resolveImport(renewed)
+    XCTAssertThrowsError(try coordinator.renewImportClaim(original))
+    XCTAssertThrowsError(try coordinator.renewImportClaim(renewed))
+  }
+
+  func testRecoveryRenewalKeepsPreservationFenceAndExactRetainedSnapshot() async throws {
+    let snapshots = (0..<2).map { _ in
+      RecoverySnapshot(id: UUID(), text: "synthetic 👩🏽‍💻", encoding: .utf16LE, hasBOM: true)
+    }
+    let coordinator = SessionCoordinator(
+      loadSession: { throw Failure.synthetic },
+      claimRecovery: { .init(snapshots: snapshots, quarantinedCount: 0) })
+    await coordinator.restore { window in
+      Dictionary(uniqueKeysWithValues: window.tabs.map { ($0.metadata.id, "Pending") })
+    }
+    let entries = coordinator.unresolved
+    let claim = try coordinator.claimRecoveryImport(entries[0])
+    coordinator.resolved(entries[1])
+    XCTAssertThrowsError(try coordinator.validateRecoveryImport(claim))
+    let renewed = try coordinator.renewImportClaim(claim)
+    XCTAssertEqual(renewed.snapshot, claim.snapshot)
+    XCTAssertEqual(renewed.windowID, claim.windowID)
+    XCTAssertThrowsError(try coordinator.claimImport(entries[0]))
+    XCTAssertThrowsError(try coordinator.captureSession(windows: []))
+    let foreign = await fixture()
+    XCTAssertThrowsError(try foreign.renewImportClaim(claim))
+    try coordinator.resolveRecoveryImport(renewed)
+    XCTAssertThrowsError(try coordinator.renewImportClaim(claim))
+  }
+
 }

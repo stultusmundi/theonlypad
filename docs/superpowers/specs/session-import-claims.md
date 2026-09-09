@@ -15,3 +15,7 @@ A separate `SessionRecoveryImportClaim` supplies the exact immutable retained re
 ## Reserved import capacity
 
 Both claim types expose pre-factory `preflightImport(_:liveWindows:)`. It requires exact provenance, unique live ownership, disjoint window/document IDs and the 32-window/128-live-document limits. Import restores only to the original reserved window and explicitly compares before/after live-plus-unresolved ID sets. Unchanged over-capacity unresolved unions are retained honestly; this is not permission for session publication. A requested document already live is refused. This snapshot is not an ownership reservation; the process intake owner must revalidate registry and callback state separately.
+
+## Exact renewal after ownership transfer
+
+Typed `renewImportClaim` overloads accept only their issuing coordinator and reissue provenance through the existing exact-entry admission rules. A revision change caused by another record may be reconciled; missing or semantically different source records cannot. Recovery-only renewal returns the retained immutable snapshot and leaves publication preservation guards intact. The process owner must verify its already-owned handle and assignment before renewal/resolution. It must not rerun pre-factory admission for that already-live ID.

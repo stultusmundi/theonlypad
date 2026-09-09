@@ -10,3 +10,5 @@ Steps 1–3 implemented and verified: nine claim tests, seven capacity tests and
 Recovery-only preservation extension implemented and independently reviewed; expanded 11 tests passed. This enables validated recovery provenance without clearing session preservation errors. Native binding/import remains step 4.
 
 Reserved capacity admission implemented and reviewed; 13 tests pass with coherent 127/128/129 ownership. Process intake/native activation remains outstanding.
+
+Exact typed renewal implemented and reviewed; 15 tests pass. Native/process ownership reconciliation remains separate.

@@ -76,6 +76,6 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 
 `scripts/test-recovery-close.sh` passed 25 actor/store tests; `scripts/test-document-recovery-ownership.sh .build/recovery-close-candidate/arm64-apple-macosx/debug` uses the verified core build for hidden model checks (26 assertions plus shared-pane ownership). Full integrated core suite passed 404 tests. Managed native close/publisher activation remains outstanding.
 
-`scripts/test-session-import-claims.sh` passed 13 coordinator tests, including actual temporary recovery-file preservation. Claims are provenance and require caller revalidation after callbacks; native import activation remains outstanding.
+`scripts/test-session-import-claims.sh` passed 15 coordinator tests, including actual temporary recovery-file preservation. Claims are provenance and require caller revalidation after callbacks; native import activation remains outstanding.
 
 `scripts/test-document-adoption.sh` passed 41 registry tests (11 adoption plus the original 30); `scripts/test-application-document-closing.sh` passed 19 process-owner tests including real paired publication and fresh same-process readers. These are Foundation integration tests, not native window-close acceptance.

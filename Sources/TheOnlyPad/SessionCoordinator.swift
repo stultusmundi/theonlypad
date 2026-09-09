@@ -123,6 +123,16 @@ struct SessionStartupBudget {
     recoveryIDs.remove(claim.documentID)
     unresolved.removeAll { $0.metadata.id == claim.documentID }
   }
+  /// Reconciliation only: the caller must already retain the exact imported handle/assignment.
+  /// Permit a new membership revision, never a different coordinator or semantic source record.
+  func renewImportClaim(_ claim: SessionImportClaim) throws -> SessionImportClaim {
+    guard claim.owner == importOwner else { throw SessionImportError.invalidClaim }
+    return try claimImport(claim.entry)
+  }
+  func renewImportClaim(_ claim: SessionRecoveryImportClaim) throws -> SessionRecoveryImportClaim {
+    guard claim.base.owner == importOwner else { throw SessionImportError.invalidClaim }
+    return try claimRecoveryImport(claim.base.entry)
+  }
   /// Pre-factory admission only; the intake owner must separately revalidate callback/registry state.
   func preflightImport(_ claim: SessionImportClaim, liveWindows: [UUID: Set<UUID>]) throws
     -> SessionCapacitySnapshot
