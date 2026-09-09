@@ -1,6 +1,18 @@
 import Foundation
 import PadCore
 
+@MainActor struct DocumentHistoryClaim {
+  fileprivate let registryID: UUID
+  fileprivate let entryID: UUID
+  fileprivate let source: any WorkspaceDocumentHandle
+  fileprivate let state: DocumentCloseState
+  let metadata: WorkspaceDocumentMetadata
+  let sourceDocumentID: UUID
+  let windowID: UUID
+  let replacementID: UUID
+
+}
+
 struct DocumentAdoptionLease: Equatable {
   let registryID: UUID
   let requestID: UUID
@@ -68,7 +80,13 @@ struct DocumentAdoptionState: Equatable {
   }
   private var leases: [UUID: CloseLease] = [:]
   private var admissionGenerations: [UUID: UUID] = [:]
-  private var history: [UUID: [Record]] = [:]
+  private struct HistoryEntry {
+    let id = UUID()
+    let record: Record
+    let documentID: UUID
+    let state: DocumentCloseState
+  }
+  private var history: [UUID: [HistoryEntry]] = [:]
   private let registryID = UUID()
   private var adoptionRequests = Set<UUID>()
   private let adoptionServices: DocumentAdoptionServices?
@@ -226,6 +244,75 @@ struct DocumentAdoptionState: Equatable {
     }
   }
   func closedHistoryCount(windowID: UUID) -> Int { history[windowID]?.count ?? 0 }
+  /// The replacement identity is fixed before any factory/adoption callback.
+  func peekHistory(windowID: UUID, replacementID: UUID) throws -> DocumentHistoryClaim? {
+    try readHistory {
+      guard windows[windowID] != nil else { throw DocumentRegistryError.unknownWindow }
+      guard !allIDs.contains(replacementID) else { throw DocumentRegistryError.duplicateID }
+      guard let entry = history[windowID]?.last else { return nil }
+      let claim = DocumentHistoryClaim(
+        registryID: registryID, entryID: entry.id, source: entry.record.handle,
+        state: entry.state, metadata: entry.record.metadata,
+        sourceDocumentID: entry.documentID, windowID: windowID, replacementID: replacementID)
+      try validateHistoryEntry(claim)
+      return claim
+    }
+  }
+  func validateHistory(_ claim: DocumentHistoryClaim) throws {
+    try readHistory { try validateHistoryEntry(claim) }
+  }
+  /// Capturing native immutable seed values is permitted; registry mutation is excluded.
+  func withHistorySource<T>(
+    _ claim: DocumentHistoryClaim,
+    read: (any WorkspaceDocumentHandle) throws -> T
+  ) throws -> T {
+    try readHistory {
+      try validateHistoryEntry(claim)
+      let value = try read(claim.source)
+      try validateHistoryEntry(claim)
+      return value
+    }
+  }
+  func consumeHistory(_ claim: DocumentHistoryClaim, replacementID: UUID) throws {
+    try mutate {
+      try validateHistoryEntry(claim)
+      guard replacementID == claim.replacementID, replacementID != claim.sourceDocumentID,
+        let replacement = records[replacementID], replacement.adoption == .active,
+        replacement.assignment.windowID == claim.windowID,
+        replacement.handle !== claim.source, replacement.handle.id == replacementID,
+        leases[replacementID] == nil
+      else { throw DocumentRegistryError.staleHistory }
+      guard let index = history[claim.windowID]?.firstIndex(where: { $0.id == claim.entryID })
+      else {
+        throw DocumentRegistryError.staleHistory
+      }
+      history[claim.windowID]!.remove(at: index)
+      handleIdentities.remove(ObjectIdentifier(claim.source))
+      // The source UUID remains in allIDs even after its retained object is released.
+      return true
+    }
+  }
+  private func readHistory<T>(_ body: () throws -> T) throws -> T {
+    guard !mutating else { throw DocumentRegistryError.busy }
+    mutating = true
+    defer { mutating = false }
+    return try body()
+  }
+  private func validateHistoryEntry(_ claim: DocumentHistoryClaim) throws {
+    guard claim.registryID == registryID,
+      let entry = history[claim.windowID]?.first(where: { $0.id == claim.entryID }),
+      entry.record.handle === claim.source, entry.documentID == claim.sourceDocumentID,
+      entry.record.handle.id == entry.documentID,
+      entry.record.assignment.windowID == claim.windowID,
+      entry.record.metadata == claim.metadata, entry.state == claim.state,
+      claim.sourceDocumentID != claim.replacementID,
+      entry.state.kind == .editable, !entry.state.isDirty, entry.state.canRetainCleanHistory
+    else { throw DocumentRegistryError.staleHistory }
+    try requireSafeClose(entry.state)
+    guard try state(of: entry.record, id: claim.sourceDocumentID) == entry.state else {
+      throw DocumentRegistryError.staleHistory
+    }
+  }
   private func ensureGroupOpen(_ group: DocumentGroupSnapshot) throws {
     guard group.documentIDs.allSatisfy({ records[$0]?.adoption.blocksAdmission == false }) else {
       throw DocumentRegistryError.adoptionBlocked
@@ -341,10 +428,10 @@ struct DocumentAdoptionState: Equatable {
         // allIDs intentionally retains the retired document UUID for this registry's lifetime.
         if ticket.disposition == .retainCleanHistory {
           var entries = history[window.id] ?? []
-          entries.append(record)
+          entries.append(HistoryEntry(record: record, documentID: id, state: ticket.request.state))
           if entries.count > 10 {
             let removed = entries.removeFirst()
-            handleIdentities.remove(ObjectIdentifier(removed.handle))
+            handleIdentities.remove(ObjectIdentifier(removed.record.handle))
           }
           history[window.id] = entries
         } else {
@@ -638,7 +725,7 @@ struct DocumentAdoptionState: Equatable {
         throw DocumentRegistryError.notEmpty
       }
       for entry in history.removeValue(forKey: windowID) ?? [] {
-        handleIdentities.remove(ObjectIdentifier(entry.handle))
+        handleIdentities.remove(ObjectIdentifier(entry.record.handle))
       }
       windows[windowID] = nil
       windowOrder.removeAll { $0 == windowID }

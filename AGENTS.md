@@ -87,3 +87,5 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 `scripts/test-application-document-intake.sh` passed 16 process-owner tests, including actual startup publisher integration and a paired receipt/reload. Native controller routing remains separate.
 
 `scripts/test-native-close-model.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 106 close-model checks plus factory/shared controls; process-close suite now passes 20 tests with pre-await repair context. Complete native close admission remains outstanding.
+
+`scripts/test-document-history.sh` passed 49 registry/history tests. History claims retain close-time source identity and require active replacement before consumption; native reopen remains separate.

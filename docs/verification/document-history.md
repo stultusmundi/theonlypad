@@ -1,0 +1,7 @@
+# Closed-document history provenance verification
+
+Registry history retains the successful close-time state, immutable source UUID and entry identity. Opaque claims bind that source to a fresh replacement UUID. Guarded reads validate before and after callbacks; consumption requires a different active replacement in the original window. The old source UUID stays retired, and the existing ten-entry limit is preserved.
+
+Root source review found no material issue. `scripts/test-document-history.sh` independently passed 49 XCTest cases in 0.025 seconds (`.local/document-history-root.log`): all 41 prior registry cases and eight history cases. Tests exercise actual close-to-history transitions, foreign/replayed/evicted claims, changed source identity/state, guarded callback reentry, active replacement correlation and wrong-window refusal. The initial 46-case compiling seam had ten runtime failures; a later changed-source-ID regression failed before immutable close-time UUID storage was added.
+
+These are Foundation registry tests. Native cloning, process intake history consumption and Reopen Closed Tab routing are still separate work. Native teardown must preserve the claimed source semantics or use an explicitly reviewed immutable history snapshot; it must never silently renew a mutated source. No desktop reopen acceptance is claimed. Platform: ARM64 macOS 26.6.2/Swift 6.3.3, Swift 5 mode.

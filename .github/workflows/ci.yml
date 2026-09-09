@@ -26,6 +26,7 @@ jobs:
           scripts/test-session-presentation-flow.sh
           scripts/test-application-documents.sh
           scripts/test-document-adoption.sh
+          scripts/test-document-history.sh
           scripts/test-application-document-closing.sh
           scripts/test-application-session-checkpoints.sh
           scripts/test-application-document-intake.sh
