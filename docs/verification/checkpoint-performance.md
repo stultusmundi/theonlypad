@@ -45,4 +45,4 @@ Controlled release comparison used identical native sources and the existing per
 
 The median publication time was approximately47% lower in this workload. Peak RSS increased31,801,344bytes (about2.4%); no memory improvement is claimed. Capture times remained approximately0.008–0.042ms with the previously stated exclusions. Fixed run order, cache/allocator/thermal effects and three samples limit interpretation; this does not establish general typing responsiveness or a p95 target.
 
-Raw results: `.local/recovery-single-encode/results/legacy-100MB.json` and `candidate-100MB.json`. The helper and compatibility tests were adopted after independent review; fresh full core65954 passed204 tests in8.598seconds. Application checkpoint integration verification is pending.
+Raw results: `.local/recovery-single-encode/results/legacy-100MB.json` and `candidate-100MB.json`. The helper and compatibility tests were adopted after independent review; fresh full core65954 passed204 tests in8.598seconds. Production ApplicationCheckpointHarness51449 passed after adoption.

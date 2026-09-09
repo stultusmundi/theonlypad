@@ -104,7 +104,7 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/LaunchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/launch-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/launch" .local/native-integration/launch-test
-for capture_harness in SharedHighlightHarness SharedPaneOwnershipHarness SessionCaptureHarness SessionMetadataCaptureHarness SessionChangeHarness WindowCheckpointHarness ApplicationCheckpointHarness; do
+for capture_harness in EditorPaneHostHarness SharedHighlightHarness SharedPaneOwnershipHarness SessionCaptureHarness SessionMetadataCaptureHarness SessionChangeHarness WindowCheckpointHarness ApplicationCheckpointHarness; do
   swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
     -I "$build_path/Modules" "${native_sources[@]}" \
     "Tests/NativeIntegration/$capture_harness.swift" "$build_path"/PadCore.build/*.o \
