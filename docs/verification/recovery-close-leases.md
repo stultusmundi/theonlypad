@@ -1,0 +1,19 @@
+# Recovery close lease verification
+
+Implemented and independently reviewed: capture-time writer epochs, non-destructive close preparation, checked recovery deletion, exact retirement receipts, fresh atomic repair, repair-capacity preflight, and an authorized entry point for the existing paired checkpoint publisher. Native managed adoption and close integration remain outstanding. This preserves the existing crash contract: durable closed-tab placement depends on a subsequent confirmed paired checkpoint.
+
+## Actual tests
+
+`scripts/test-recovery-close.sh` freezes the actual recovery actor, core and tests into a private Swift 5 package. The final root run `run.OnyzdNn9` passed 25 tests in 0.036 seconds: 13 actor tests and 12 real-file removal tests. The integrated application built in 10.99 seconds and all 404 core tests passed in 15.863 seconds against `.local/recovery-close-integrated/source-provenance.json`. Logs: `.local/recovery-close-final-root.log` and `.local/recovery-close-integrated-full.log`. No warnings were reported in those build logs.
+
+Coverage includes stale/high-revision writer rejection, mixed-batch refusal before publication, authority-bearing checkpoint receipts, exact close/retire/repair correlation, Unicode and encoding/BOM snapshots, checked deletion faults and symlink/parent/target changes, uncertain repair publication, quota reinventory, capacity preflight, and repeated repair with a fresh epoch under the same registry ticket. Preflight does not mutate recovery records or quarantine invalid input; normal private-directory initialization remains permitted.
+
+The initial actor projection setup incorrectly looked for AppIdentity outside PadCore and failed before behavioral tests. Subsequent compiled red runs exercised missing authority/deletion/repair behavior. Independent review then found two retry gaps: unrelated validation could clear shared uncertainty state, and post-save parent-check failure could lose successful publication progress. Both were reproduced as two distinct runtime failures and fixed by retaining transaction-local publication progress. Original-parent validation and a fresh successful save remain required; readback alone never issues a repair receipt. Historical snapshots and red/green logs remain under `.local/recovery-close/`.
+
+## Integration boundary
+
+The scheduler's 12 tests and existing regression harness passed against these types; session-presentation flow passed nine tests. The model ownership/capture harness passed 26 assertions plus the unchanged shared-pane ownership/lifetime harness. These do not activate managed recovery in native controllers.
+
+The existing hidden monitor lifecycle initially failed in `run.6db2to1b` while requiring one enabled conflict button. Its compile succeeded; runtime exited with a precondition failure. A controlled scheduling reproduction identified a harness gap: a new registration token could be combined with the previous delivered observation. The production action guard correctly refused that stale authority. The harness now requires a newly delivered bridge token equal to the registration token. The original generic failure did not record its exact action/token details, so those details are not retroactively asserted.
+
+The same controlled gap passed with the stronger wait, then the full normal harness passed in the agent run and an independent root rerun: `.local/recovery-close-monitor-final/.local/native-monitor-lifecycle-retained/run.ql__aj89`. All existing open/save/reload/copy/Locate/undo/close/quit-veto scenarios passed; production action guards were unchanged. This rerun used the integrated candidate frozen before subsequent process-owner/import-claim work, with the corrected harness. No windows were shown. Desktop close/recovery, forced-termination integration of the new managed protocol and current packaged runtime remain unverified.

@@ -118,7 +118,7 @@ public struct RecoveryStore: Sendable {
     try AtomicFileStore().validatePublication(evidence, expected: encoded)
   }
   public func loadAll() throws -> [RecoverySnapshot] { try loadReport().snapshots }
-  public func loadReport() throws -> RecoveryLoadReport {
+  public func loadReport(quarantineInvalid: Bool = true) throws -> RecoveryLoadReport {
     try validateDirectory()
     let files = try inventory().files
     var snapshots: [RecoverySnapshot] = []
@@ -152,6 +152,7 @@ public struct RecoveryStore: Sendable {
         // Capacity is not corruption. Original data and all later files stay in place.
         throw RecoveryError.resourceLimit
       } catch {
+        guard quarantineInvalid else { throw error }
         try FileManager.default.moveItem(
           at: file, to: directory.appendingPathComponent(UUID().uuidString + ".corrupt"))
         quarantined += 1
@@ -206,6 +207,7 @@ public struct RecoveryStore: Sendable {
       if name == "." || name == ".." { continue }
       count += 1
       guard count <= limits.maximumDirectoryEntries else { throw RecoveryError.resourceLimit }
+      if name.hasPrefix(".recovery-removal-") { throw RecoveryError.resourceLimit }
       if name.hasSuffix(".json") {
         guard files.count < limits.maximumSnapshots else { throw RecoveryError.resourceLimit }
         files.append(directory.appendingPathComponent(name))
@@ -296,5 +298,143 @@ public struct RecoveryStore: Sendable {
       result.append(chunk)
     }
     return result
+  }
+}
+
+public enum RecoveryRemovalFault: Sendable { case beforeRename, afterRename, directorySync }
+public enum RecoveryRemovalBoundary: Sendable { case beforeRename, afterRename }
+public struct RecoveryRemovalEvidence: Sendable {
+  public let documentID: UUID
+  fileprivate let directory: URL
+  fileprivate let parentDevice: dev_t
+  fileprivate let parentInode: ino_t
+  fileprivate let targetDevice: dev_t?
+  fileprivate let targetInode: ino_t?
+  fileprivate let quarantine: String?
+}
+public struct RecoveryRemovalReceipt: Sendable {
+  public let evidence: RecoveryRemovalEvidence
+  fileprivate init(evidence: RecoveryRemovalEvidence) { self.evidence = evidence }
+}
+public enum RecoveryRemovalError: Error {
+  case unsafeTarget, changed, injected
+  case uncertain(RecoveryRemovalEvidence)
+}
+extension RecoveryStore {
+  /// Exact bounded admission only. Does not save records or quarantine invalid data.
+  public func preflightSave(_ snapshot: RecoverySnapshot) throws {
+    try validateDirectory()
+    try validate(snapshot)
+    let encoded = try encodeEnvelope(snapshot)
+    try validateSaveCapacity(id: snapshot.id, encodedBytes: encoded.count)
+  }
+  public func removeChecked(
+    id: UUID, fault: RecoveryRemovalFault? = nil,
+    boundaryHook: (@Sendable (RecoveryRemovalBoundary) throws -> Void)? = nil
+  ) throws -> RecoveryRemovalReceipt {
+    let parent = try removalDirectory()
+    defer { close(parent.fd) }
+    let name = id.uuidString + ".json"
+    let file = openat(parent.fd, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+    if file < 0 {
+      guard errno == ENOENT else { throw RecoveryRemovalError.unsafeTarget }
+      let evidence = RecoveryRemovalEvidence(
+        documentID: id, directory: directory,
+        parentDevice: parent.info.st_dev, parentInode: parent.info.st_ino,
+        targetDevice: nil, targetInode: nil, quarantine: nil)
+      return try finishCheckedRemoval(evidence, fault: fault)
+    }
+    defer { close(file) }
+    var target = stat()
+    guard fstat(file, &target) == 0, target.st_mode & S_IFMT == S_IFREG,
+      target.st_uid == geteuid(), target.st_mode & 0o077 == 0
+    else {
+      throw RecoveryRemovalError.unsafeTarget
+    }
+    let quarantine = ".recovery-removal-" + UUID().uuidString
+    let evidence = RecoveryRemovalEvidence(
+      documentID: id, directory: directory,
+      parentDevice: parent.info.st_dev, parentInode: parent.info.st_ino,
+      targetDevice: target.st_dev, targetInode: target.st_ino, quarantine: quarantine)
+    try validateRemovalParent(evidence)
+    try boundaryHook?(.beforeRename)
+    try validateRemovalParent(evidence)
+    if fault == .beforeRename { throw RecoveryRemovalError.injected }
+    guard renameatx_np(parent.fd, name, parent.fd, quarantine, UInt32(RENAME_EXCL)) == 0 else {
+      throw RecoveryRemovalError.changed
+    }
+    do {
+      try boundaryHook?(.afterRename)
+      if fault == .afterRename { throw RecoveryRemovalError.injected }
+      return try finishCheckedRemoval(evidence, fault: fault)
+    } catch { throw RecoveryRemovalError.uncertain(evidence) }
+  }
+
+  /// Parent continuity only, not proof of deletion or a publication acknowledgement.
+  public func validateRepairParent(_ receipt: RecoveryRemovalReceipt) throws {
+    guard receipt.evidence.directory == directory else { throw RecoveryRemovalError.changed }
+    try validateRemovalParent(receipt.evidence)
+  }
+
+  /// Validates and finishes only this operation's retained object. Never acknowledges a save.
+  public func finishCheckedRemoval(
+    _ evidence: RecoveryRemovalEvidence,
+    fault: RecoveryRemovalFault? = nil
+  ) throws -> RecoveryRemovalReceipt {
+    do {
+      guard evidence.directory == directory else { throw RecoveryRemovalError.changed }
+      let parent = try removalDirectory()
+      defer { close(parent.fd) }
+      guard parent.info.st_dev == evidence.parentDevice, parent.info.st_ino == evidence.parentInode
+      else {
+        throw RecoveryRemovalError.changed
+      }
+      try validateRemovalParent(evidence)
+      var canonical = stat()
+      let name = evidence.documentID.uuidString + ".json"
+      guard fstatat(parent.fd, name, &canonical, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
+        throw RecoveryRemovalError.changed
+      }
+      if let quarantine = evidence.quarantine {
+        var moved = stat()
+        if fstatat(parent.fd, quarantine, &moved, AT_SYMLINK_NOFOLLOW) == 0 {
+          guard moved.st_dev == evidence.targetDevice, moved.st_ino == evidence.targetInode,
+            moved.st_mode & S_IFMT == S_IFREG, moved.st_uid == geteuid(), moved.st_mode & 0o077 == 0
+          else {
+            throw RecoveryRemovalError.changed
+          }
+          guard unlinkat(parent.fd, quarantine, 0) == 0 else { throw RecoveryRemovalError.changed }
+        } else if errno != ENOENT {
+          throw RecoveryRemovalError.changed
+        }
+      }
+      if fault == .directorySync { throw RecoveryRemovalError.injected }
+      guard fsync(parent.fd) == 0 else { throw RecoveryRemovalError.changed }
+      try validateRemovalParent(evidence)
+      guard fstatat(parent.fd, name, &canonical, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
+        throw RecoveryRemovalError.changed
+      }
+      return RecoveryRemovalReceipt(evidence: evidence)
+    } catch { throw RecoveryRemovalError.uncertain(evidence) }
+  }
+  private func removalDirectory() throws -> (fd: Int32, info: stat) {
+    let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard fd >= 0 else { throw RecoveryRemovalError.unsafeTarget }
+    var info = stat()
+    guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
+      info.st_uid == geteuid(), info.st_mode & 0o077 == 0
+    else {
+      close(fd)
+      throw RecoveryRemovalError.unsafeTarget
+    }
+    return (fd, info)
+  }
+  private func validateRemovalParent(_ evidence: RecoveryRemovalEvidence) throws {
+    let parent = try removalDirectory()
+    defer { close(parent.fd) }
+    guard parent.info.st_dev == evidence.parentDevice, parent.info.st_ino == evidence.parentInode
+    else {
+      throw RecoveryRemovalError.changed
+    }
   }
 }
