@@ -24,9 +24,19 @@ public enum DiskContentRelation: Sendable, Equatable {
 }
 public enum DiskLocationProblem: Sendable, Equatable {
   case missing, inaccessible, symbolicLink, nonregular, parentChanged
-  case changedDuringRead, unsupportedVolume, tooLarge, checkDelayed
+  case changedDuringRead, unsupportedVolume, tooLarge, checkDelayed, notDownloaded
 }
 public struct DiskObservation: Sendable {
+  public init(
+    metadata: FileMetadata?, content: DiskContentRelation,
+    locationProblem: DiskLocationProblem?, readOnlyHint: Bool, movedCandidate: URL?
+  ) {
+    self.metadata = metadata
+    self.content = content
+    self.locationProblem = locationProblem
+    self.readOnlyHint = readOnlyHint
+    self.movedCandidate = movedCandidate
+  }
   public let metadata: FileMetadata?
   public let content: DiskContentRelation
   public let locationProblem: DiskLocationProblem?
@@ -38,12 +48,19 @@ public struct DiskRead: Sendable {
   public let observation: DiskObservation
 }
 public enum ExternalFileProbeError: Error, Equatable {
-  case observationChanged
+  case observationChanged, notDownloaded
 }
 enum ProbeBoundary: Sendable, Equatable {
   case afterOpen, beforeRead, afterRead, beforeRevalidate, beforeParentReopen
 }
 struct ProbeHooks: Sendable {
+  var observeGuard: @Sendable (() throws -> DiskObservation) throws -> DiskObservation = {
+    try FileMaterializationGuard.perform($0)
+  }
+  var readGuard: @Sendable (() throws -> DiskRead) throws -> DiskRead = {
+    try FileMaterializationGuard.perform($0)
+  }
+
   var boundary: @Sendable (ProbeBoundary) throws -> Void = { _ in }
   var read: @Sendable (Int32, UnsafeMutableRawPointer, Int) -> Int = { Darwin.read($0, $1, $2) }
   var isLocalVolume: @Sendable (Int32) throws -> Bool = { descriptor in
@@ -63,6 +80,26 @@ public struct ExternalFileProbe: Sendable {
   init(hooks: ProbeHooks) { self.hooks = hooks }
 
   public func observe(
+    _ url: URL, expected: Data, boundIdentity: FileTargetIdentity?,
+    forceContents: Bool, previous: DiskObservation?, isCancelled: @Sendable () -> Bool
+  ) throws -> DiskObservation {
+    do {
+      return try withoutActuallyEscaping(isCancelled) { cancellation in
+        try hooks.observeGuard {
+          try observeWithinPolicy(
+            url, expected: expected, boundIdentity: boundIdentity,
+            forceContents: forceContents, previous: previous, isCancelled: cancellation)
+        }
+      }
+    } catch let error as NSError
+      where error.domain == NSPOSIXErrorDomain && error.code == Int(EDEADLK)
+    {
+      return DiskObservation(
+        metadata: nil, content: .unavailable, locationProblem: .notDownloaded,
+        readOnlyHint: false, movedCandidate: nil)
+    }
+  }
+  private func observeWithinPolicy(
     _ url: URL, expected: Data, boundIdentity: FileTargetIdentity?,
     forceContents: Bool, previous: DiskObservation?,
     isCancelled: @Sendable () -> Bool
@@ -104,7 +141,22 @@ public struct ExternalFileProbe: Sendable {
         readOnlyHint: false, movedCandidate: nil)
     }
   }
-  public func read(
+  public func read(_ url: URL, matching: DiskObservation, isCancelled: @Sendable () -> Bool) throws
+    -> DiskRead
+  {
+    do {
+      return try withoutActuallyEscaping(isCancelled) { cancellation in
+        try hooks.readGuard {
+          try readWithinPolicy(url, matching: matching, isCancelled: cancellation)
+        }
+      }
+    } catch let error as NSError
+      where error.domain == NSPOSIXErrorDomain && error.code == Int(EDEADLK)
+    {
+      throw ExternalFileProbeError.notDownloaded
+    }
+  }
+  private func readWithinPolicy(
     _ url: URL, matching: DiskObservation,
     isCancelled: @Sendable () -> Bool
   ) throws -> DiskRead {
@@ -153,6 +205,8 @@ public struct ExternalFileProbe: Sendable {
           url, directory: directory, descriptor: descriptor, before: before, check: check)
         return DiskRead(bytes: bytes, observation: matching)
       }
+    } catch ProbeFailure.location(.notDownloaded) {
+      throw ExternalFileProbeError.notDownloaded
     } catch is ProbeFailure {
       throw ExternalFileProbeError.observationChanged
     }
@@ -274,7 +328,8 @@ public struct ExternalFileProbe: Sendable {
     try check()
   }
   private func revalidationError(_ fallback: DiskLocationProblem) -> ProbeFailure {
-    .location(errno == EACCES || errno == EPERM ? .inaccessible : fallback)
+    if errno == EDEADLK { return .location(.notDownloaded) }
+    return .location(errno == EACCES || errno == EPERM ? .inaccessible : fallback)
   }
   private func regular(_ info: stat) throws {
     if info.st_mode & S_IFMT == S_IFLNK { throw ProbeFailure.location(.symbolicLink) }
