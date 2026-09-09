@@ -7,19 +7,27 @@ public struct SessionTab: Equatable, Sendable {
   public let pinned: Bool
   public let encoding: DocumentEncoding
   public let manualLanguage: DocumentLanguage?
-  public let selection: NSRange
+  public let presentation: SessionPresentation
+  /// Safe compatibility view; structural validation still rejects an invalid focused index.
+  public var selection: NSRange {
+    guard presentation.focusedPaneIndex >= 0,
+      presentation.focusedPaneIndex < presentation.panes.count
+    else { return NSRange(location: 0, length: 0) }
+    return presentation.panes[presentation.focusedPaneIndex].selection
+  }
   public let bookmarks: [Int]
   public init(
     id: UUID = UUID(), originalPath: String? = nil, pinned: Bool = false,
     encoding: DocumentEncoding = .utf8, manualLanguage: DocumentLanguage? = nil,
-    selection: NSRange = NSRange(location: 0, length: 0), bookmarks: [Int] = []
+    selection: NSRange = NSRange(location: 0, length: 0), bookmarks: [Int] = [],
+    presentation: SessionPresentation? = nil
   ) {
     self.id = id
     self.originalPath = originalPath
     self.pinned = pinned
     self.encoding = encoding
     self.manualLanguage = manualLanguage
-    self.selection = selection
+    self.presentation = presentation ?? .single(selection: selection)
     self.bookmarks = bookmarks
   }
 }
@@ -48,7 +56,8 @@ public enum SessionStoreError: Error, LocalizedError {
   public var errorDescription: String? {
     switch self {
     case .invalidMetadata:
-      return "Session metadata has invalid IDs, paths, selections or bookmark positions."
+      return
+        "Session metadata has invalid IDs, paths, pane positions, selections or bookmark positions."
     case .limit:
       return
         "Session limits were exceeded. At most 32 windows, 128 tabs and 10,000 bookmarks per tab are supported."
@@ -74,7 +83,7 @@ public struct SessionStore: Sendable {
   public init(directory: URL = Self.defaultDirectory) { self.directory = directory }
   private static let lock = NSLock()
   private static let maximumBytes = 16_777_216
-  private struct Wire: Codable {
+  private struct WireV1: Codable {
     let version: Int
     let windows: [Window]
     let recentPaths: [String]?
@@ -122,6 +131,81 @@ public struct SessionStore: Sendable {
         }, recentPaths: recentPaths ?? [])
     }
   }
+  private struct WireV2: Codable {
+    let version: Int
+    let windows: [Window]
+    let recentPaths: [String]?
+    struct Window: Codable {
+      let id: UUID
+      let tabs: [Tab]
+      let selectedTabID: UUID?
+    }
+    struct Tab: Codable {
+      let id: UUID
+      let originalPath: String?
+      let pinned: Bool
+      let encoding: DocumentEncoding
+      let manualLanguage: DocumentLanguage?
+      let bookmarks: [Int]
+      let presentation: Presentation
+    }
+    struct Presentation: Codable {
+      let axis: SessionPaneAxis
+      let panes: [Pane]
+      let focusedPaneIndex: Int
+      struct Pane: Codable {
+        let location: Int
+        let length: Int
+        let scrollX: Double
+        let scrollY: Double
+      }
+      init(_ value: SessionPresentation) {
+        axis = value.axis
+        focusedPaneIndex = value.focusedPaneIndex
+        panes = value.panes.map {
+          Pane(
+            location: $0.selection.location, length: $0.selection.length,
+            scrollX: $0.scrollOrigin.x, scrollY: $0.scrollOrigin.y)
+        }
+      }
+      var value: SessionPresentation {
+        SessionPresentation(
+          axis: axis,
+          panes: panes.map {
+            SessionPaneState(
+              selection: NSRange(location: $0.location, length: $0.length),
+              scrollOrigin: SessionScrollOrigin(x: $0.scrollX, y: $0.scrollY))
+          }, focusedPaneIndex: focusedPaneIndex)
+      }
+    }
+    init(_ session: EditorSession) {
+      version = 2
+      recentPaths = session.recentPaths.isEmpty ? nil : session.recentPaths
+      windows = session.windows.map { window in
+        Window(
+          id: window.id,
+          tabs: window.tabs.map {
+            Tab(
+              id: $0.id, originalPath: $0.originalPath, pinned: $0.pinned,
+              encoding: $0.encoding, manualLanguage: $0.manualLanguage, bookmarks: $0.bookmarks,
+              presentation: Presentation($0.presentation))
+          }, selectedTabID: window.selectedTabID)
+      }
+    }
+    var session: EditorSession {
+      EditorSession(
+        windows: windows.map { window in
+          SessionWindow(
+            id: window.id,
+            tabs: window.tabs.map {
+              SessionTab(
+                id: $0.id, originalPath: $0.originalPath, pinned: $0.pinned,
+                encoding: $0.encoding, manualLanguage: $0.manualLanguage,
+                bookmarks: $0.bookmarks, presentation: $0.presentation.value)
+            }, selectedTabID: window.selectedTabID)
+        }, recentPaths: recentPaths ?? [])
+    }
+  }
   private func validate(_ session: EditorSession) throws {
     guard session.windows.count <= 32 else { throw SessionStoreError.limit }
     guard session.recentPaths.count <= 50 else { throw SessionStoreError.limit }
@@ -143,9 +227,7 @@ public struct SessionStore: Sendable {
       for tab in window.tabs {
         guard ids.insert(tab.id).inserted else { throw SessionStoreError.invalidMetadata }
         if let path = tab.originalPath { try validatePath(path) }
-        guard tab.selection.location >= 0, tab.selection.location <= 100_000_000,
-          tab.selection.length >= 0, tab.selection.length <= 100_000_000 - tab.selection.location
-        else { throw SessionStoreError.invalidMetadata }
+        try tab.presentation.validate()
         guard tab.bookmarks.count <= 10_000 else { throw SessionStoreError.limit }
         var previous = -1
         for mark in tab.bookmarks {
@@ -163,7 +245,7 @@ public struct SessionStore: Sendable {
       URL(fileURLWithPath: path).standardizedFileURL.path.utf8.elementsEqual(path.utf8)
     else { throw SessionStoreError.invalidMetadata }
   }
-  private func encoded(_ wire: Wire) throws -> Data {
+  private func encoded<T: Encodable>(_ wire: T) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     return try encoder.encode(wire)
@@ -173,10 +255,20 @@ public struct SessionStore: Sendable {
     do {
       let decoder = JSONDecoder()
       let header = try decoder.decode(Header.self, from: data)
-      guard header.version == 1 else { throw SessionStoreError.unsupportedVersion(header.version) }
-      let wire = try decoder.decode(Wire.self, from: data)
-      guard try encoded(wire) == data else { throw SessionStoreError.corrupt }
-      let session = wire.session
+      let session: EditorSession
+      switch header.version {
+      case 1:
+        // Canonicalize the decoded original wire, not the migrated model: nil and [] differ.
+        let wire = try decoder.decode(WireV1.self, from: data)
+        guard try encoded(wire) == data else { throw SessionStoreError.corrupt }
+        session = wire.session
+      case 2:
+        let wire = try decoder.decode(WireV2.self, from: data)
+        guard try encoded(wire) == data else { throw SessionStoreError.corrupt }
+        session = wire.session
+      default:
+        throw SessionStoreError.unsupportedVersion(header.version)
+      }
       try validate(session)
       return session
     } catch let error as SessionStoreError {
@@ -261,7 +353,7 @@ public struct SessionStore: Sendable {
   }
   public func save(_ session: EditorSession, fault: SaveFault? = nil) throws {
     try validate(session)
-    let data = try encoded(Wire(session))
+    let data = try encoded(WireV2(session))
     guard data.count <= Self.maximumBytes else { throw SessionStoreError.limit }
     try withDirectory(create: true) { directoryFD in
       guard let directoryFD else { throw SessionStoreError.ioFailure }

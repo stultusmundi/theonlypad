@@ -14,6 +14,14 @@ final class SessionStoreTests: XCTestCase {
   func session(_ tabs: [SessionTab]) -> EditorSession {
     EditorSession(windows: [SessionWindow(tabs: tabs, selectedTabID: tabs.first?.id)])
   }
+  func testAuthorizedSavePublishesVersionTwo() throws {
+    try fixture { directory in
+      try SessionStore(directory: directory).save(EditorSession(windows: []))
+      let data = try Data(contentsOf: directory.appendingPathComponent("Session.json"))
+      let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      XCTAssertEqual(wire["version"] as? Int, 2)
+    }
+  }
   func testRoundTripPreservesWindowTabOrderIDsAndMetadataWithoutLoadingPaths() throws {
     try fixture { directory in
       let store = SessionStore(directory: directory)
@@ -101,7 +109,7 @@ final class SessionStoreTests: XCTestCase {
     }
   }
   func testCorruptAndFutureVersionArePreservedWithoutInventedMigration() throws {
-    for bytes in [Data("{broken".utf8), Data("{\"version\":2,\"windows\":[]}".utf8)] {
+    for bytes in [Data("{broken".utf8), Data("{\"version\":3,\"windows\":[]}".utf8)] {
       try fixture { directory in
         let store = SessionStore(directory: directory)
         try store.save(EditorSession(windows: []))

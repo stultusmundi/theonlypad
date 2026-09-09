@@ -65,9 +65,9 @@ public enum SessionRestoration {
       for tab in window.tabs {
         guard tabIDs.insert(tab.id).inserted else { throw SessionRestorationError.duplicateID }
         if let path = tab.originalPath { try validatePath(path) }
-        guard tab.selection.location >= 0, tab.selection.location <= 100_000_000,
-          tab.selection.length >= 0, tab.selection.length <= 100_000_000 - tab.selection.location
-        else { throw SessionRestorationError.invalidMetadata }
+        do { try tab.presentation.validate() } catch {
+          throw SessionRestorationError.invalidMetadata
+        }
         guard tab.bookmarks.count <= 10_000 else { throw SessionRestorationError.limit }
         var previous = -1
         for mark in tab.bookmarks {
