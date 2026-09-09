@@ -12,6 +12,20 @@ The highlighter initially failed to color the second layout manager. Its storage
 
 EditorPaneHost uses existing scroll views and never allocates document storage or implicitly detaches/collapses panes on resize. The reviewed host candidate passed hidden geometry, both axes, resize/small-bound behavior, invalid-input refusal without mutation, divider-key event handling, focus transfer, labels and ownership checks. Its copied/formatted production source passed EditorPaneHostHarness51449. Text views retain the established “Document text” label. These are in-process event/focus checks, not physical keyboard/mouse, VoiceOver or packaged desktop acceptance.
 
-The routing candidate is still ignored. Its real composition regression demonstrated another pane changing provisional marked text. Initial corrected routing tests now cover shared undo/recovery, a focus change during a suspended transform, composition exclusion and quit/veto state. Existing compatibility runs and independent review are underway; no production routing or visible split controls are claimed.
+Routing is now copied into production. Its real composition regression demonstrated another pane changing provisional marked text. Retained tests cover shared undo/recovery, stale focus/selection/revision/attachment/tab results, composition exclusion, all-pane save/quit protection, explicit Find/Outline source reactivation, orphan callbacks, and late close/JSON/encoding results. Each of14 modes passed in the integrated native suite. No visible split controls are claimed.
 
 Current packaged desktop automation requires macOS user authentication. The distribution artifact remains the earlier checkpoint build. Shared-pane packaged workflows, physical IME, accessibility and performance acceptance remain unverified.
+
+## Shared highlighting cache integration checkpoint
+
+The ignored cache candidate compiled and passed its real-owner harness on the first execution. It was copied into production with the single invalidation call in EditorDocument's existing character observer, and passed the full integrated native run6143. There was no pre-implementation behavioral red for this addition.
+
+The controlled parser verifies one invocation for both layouts, cached attachment without reparsing, rejection of foreign/detached layouts, invalidation after text changes away and back, and rejection of a cancelled parser that deliberately returns stale tokens. Exact Unicode/mixed-ending bytes, selections, undo availability and temporary-only attributes are preserved. Plain text and buffers above two million UTF-16 units do not parse.
+
+Independent source review found no material issue in generation, attachment, range, cancellation or ownership checks. Pending-parser disposal and malformed injected ranges were source-reviewed, not directly exercised. Automatic cache application through visible pane attachment and packaged desktop acceptance remain outstanding.
+
+## Integrated routing verification
+
+Core204 tests passed10.355seconds. First native run94053 passed all14 routing modes but stalled in LaunchHarness: batched launch requests were incorrectly subject to current-focus validation. A stack sample identified navigate -> present -> modal; the owned process was terminated, so this run exited143 and is not a pass. A modal-mode watchdog then reproduced a bounded assertion failure75031. Launch requests now use captured-document navigation while interactive Go to Line retains strict focus validation; the unchanged exact path/position/batch assertions passed30675.
+
+Full native retry6143 exited0, including all routing/cache/ownership harnesses, save failures, encoding/BOM undo, lifetime release, window/session restoration, tabs/recent files, and both process-kill recovery cases. Subsequent sibling-focus regression97984 reproduced delayed launch navigation stealing focus from the other pane. Gating the final focus request by the interactive policy fixed it; the retained15th routing mode and exact LaunchHarness both passed68373. Independent final review found no material issue. The full suite was not repeated after that narrow focus refinement; its directly affected two-pane and real launch workflows were rerun. Packaged desktop automation remains blocked on user authentication; prior package results do not apply to these sources.

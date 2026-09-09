@@ -275,7 +275,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     editor.open(
       request.url,
       onOpened: { [weak editor] in
-        editor?.navigate(line: request.line, column: request.column)
+        // A later file in the same batch may become active before this offset is ready.
+        editor?.navigate(line: request.line, column: request.column, requireFocus: false)
       })
   }
 

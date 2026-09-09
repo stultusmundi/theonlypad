@@ -99,12 +99,25 @@ native_sources=()
 for source in Sources/TheOnlyPad/*.swift; do
   if [ "$source" != "Sources/TheOnlyPad/TheOnlyPadApplication.swift" ]; then native_sources+=("$source"); fi
 done
+# Same-file fixtures exercise private controller callbacks without widening the app API.
+routing_sources=()
+for source in "${native_sources[@]}"; do
+  if [ "$source" != "Sources/TheOnlyPad/EditorWindowController.swift" ]; then routing_sources+=("$source"); fi
+done
+cat Sources/TheOnlyPad/EditorWindowController.swift Tests/NativeIntegration/SharedPaneCommandsHarness.swift \
+  > "$fixtures/SharedPaneCommandsCombined.swift"
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${routing_sources[@]}" "$fixtures/SharedPaneCommandsCombined.swift" \
+  "$build_path"/PadCore.build/*.o -o .local/native-integration/shared-pane-commands-test
+for mode in default close-composition late-close late-json late-encoding stale-selection stale-edit stale-detach stale-tab positive orphan-callback save-freeze find-reactivate outline-reactivate noninteractive-navigation; do
+  THEONLYPAD_STATE_DIRECTORY="$fixtures/routing-$mode" .local/native-integration/shared-pane-commands-test "$mode"
+done
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" "${native_sources[@]}" \
   Tests/NativeIntegration/LaunchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/launch-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/launch" .local/native-integration/launch-test
-for capture_harness in EditorPaneHostHarness SharedHighlightHarness SharedPaneOwnershipHarness SessionCaptureHarness SessionMetadataCaptureHarness SessionChangeHarness WindowCheckpointHarness ApplicationCheckpointHarness; do
+for capture_harness in EditorPaneHostHarness SharedHighlightHarness SharedPaneHighlightHarness SharedPaneOwnershipHarness SessionCaptureHarness SessionMetadataCaptureHarness SessionChangeHarness WindowCheckpointHarness ApplicationCheckpointHarness; do
   swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
     -I "$build_path/Modules" "${native_sources[@]}" \
     "Tests/NativeIntegration/$capture_harness.swift" "$build_path"/PadCore.build/*.o \

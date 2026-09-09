@@ -25,7 +25,7 @@
 
 The local feasibility probe uses one storage, two layout managers and one undo manager. It verifies exact edits, selection rebasing, independent scrolling, manager-local temporary attributes and responder-chain undo. Its detached originating view remained retained: **deallocation with live undo history was not proven**. Physical IME and accessibility remain unverified.
 
-Production currently makes `EditorDocument` private inside EditorWindowController, owns one `editor` and `scroll`, and places UndoManager on DocumentTextView. `display` removes every host subview and reinstalls one scroll view. Delegate lookups identify documents using `document.editor === textView`. Dirty state, persistence, language work and most commands obtain text via that one view. NativeSyntaxHighlighter applies temporary colors to only one layout manager. SessionTab holds one selection, not presentation state. Every coupling below must be addressed before enabling the split commands.
+At the original planning baseline, `EditorDocument` was private inside EditorWindowController and each DocumentTextView owned its UndoManager. Task1 has since extracted shared storage/undo and storage-owned highlighting; the pane host is also committed and tested. Production still displays one scroll view and retains temporary first-pane accessors. Task2 routing is being verified in an ignored candidate. SessionTab still holds one selection rather than presentation state. The remaining couplings below must be addressed before enabling split commands.
 
 The working document model must have one storage character-edit observer, distinct edit and capture revisions, one save baseline, one recovery identity and one shared manager regardless of the number of attached panes. Never mirror string contents by assigning a second view's `.string`: it creates duplicate transaction/undo paths and may destroy composition or selection state.
 
@@ -237,7 +237,7 @@ func applyCachedTokens(to layoutManager: NSLayoutManager)
 
 F-01 maps to Tasks 1–4 ownership/axes/shared edits/undo/independent selections and Task 5 real desktop evidence. Pane-specific T-05 maps to Task 5. F-02 remains untouched: no document transfer between windows or separate pane tab groups is implemented by this plan. Existing F-07 status must continue to report the focused pane. Separate engine reassessment and advanced-selection requirements are unchanged.
 
-Every proposed cross-file interface is named above. No matrix or continuation file was edited during this planning task. New source/test paths and code blocks describe planned work only; none is claimed to exist or pass. The BUILD_PROMPT waives repeated design/handoff approval, so the coordinator may execute this plan after its normal source-ownership and test-slot coordination without asking the user to choose an execution style.
+Every proposed cross-file interface is named above. The initial planning task made no implementation claim; subsequent execution evidence is recorded below and in verification/shared-document-panes.md. Unchecked items still require their stated integration or acceptance evidence even where preparatory code exists. The BUILD_PROMPT waives repeated design/handoff approval, so execution proceeds with source ownership and test-slot coordination.
 
 ## Ownership extraction execution checkpoint
 

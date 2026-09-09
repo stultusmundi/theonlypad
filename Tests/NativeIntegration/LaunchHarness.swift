@@ -8,6 +8,13 @@ import PadCore
     defer { try? FileManager.default.removeItem(at: directory) }
     setenv("THEONLYPAD_STATE_DIRECTORY", directory.appendingPathComponent("state").path, 1)
     let app = NSApplication.shared
+    let unexpectedAlert = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+      MainActor.assumeIsolated {
+        precondition(app.modalWindow == nil, "Launch routing must not present an error dialog")
+      }
+    }
+    RunLoop.main.add(unexpectedAlert, forMode: .modalPanel)
+    defer { unexpectedAlert.invalidate() }
     let delegate = AppDelegate()
     app.delegate = delegate
     delegate.applicationDidFinishLaunching(

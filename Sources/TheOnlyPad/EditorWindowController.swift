@@ -7,6 +7,22 @@ struct SessionWindowCheckpointCapture: Sendable {
   let recovery: [RecoveryCheckpointItem]
 }
 
+struct PaneCommandContext: Equatable {
+  let documentID: UUID
+  let paneID: UUID
+  let editRevision: UInt64
+  let selection: NSRange
+}
+enum PaneRoutingError: LocalizedError {
+  case stale, composition
+  var errorDescription: String? {
+    switch self {
+    case .stale: return "The source pane, document, or selection changed. Run the command again."
+    case .composition: return "Finish text composition before changing panes."
+    }
+  }
+}
+
 /// Injectable I/O boundary; production work runs in the detached save task.
 struct EditorSaveServices: Sendable {
   var write: @Sendable (Data, URL, Data?) throws -> Void = {
@@ -48,6 +64,76 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var checkpointRetryAction: (() -> Void)?
   private let onSessionChange: (() -> Void)?
   private var current: EditorDocument? { documents.first { $0.id == selectedID } }
+  var focusedPane: EditorPane? { current.map { preferredPane(in: $0) } }
+  var visiblePanes: [EditorPane] { current?.panePool.filter(\.isAttached) ?? [] }
+  private func preferredPane(in document: EditorDocument) -> EditorPane {
+    document.panePool.first { $0.id == document.preferredPaneID && $0.isAttached }
+      ?? document.panePool.first(where: \.isAttached) ?? document.panePool[0]
+  }
+  private func pane(for editor: NSTextView) -> EditorPane? {
+    documents.lazy.flatMap(\.panePool).first { $0.editor === editor }
+  }
+  func paneContext() -> PaneCommandContext? {
+    guard let pane = focusedPane else { return nil }
+    return context(for: pane)
+  }
+  private func context(for pane: EditorPane) -> PaneCommandContext {
+    PaneCommandContext(
+      documentID: pane.document.id, paneID: pane.id,
+      editRevision: pane.document.editRevision, selection: pane.editor.selectedRange())
+  }
+  func accepts(_ context: PaneCommandContext, requireFocus: Bool = true) -> Bool {
+    guard !windowClosed, !preparingToQuit,
+      let document = documents.first(where: { $0.id == context.documentID }),
+      !document.saving, document.composingPaneID == nil,
+      document.editRevision == context.editRevision,
+      let pane = document.panePool.first(where: { $0.id == context.paneID && $0.isAttached })
+    else { return false }
+    return !requireFocus
+      || (current === document && focusedPane === pane
+        && pane.editor.selectedRange() == context.selection)
+  }
+  private func mayMutate(_ pane: EditorPane) -> Bool {
+    let document = pane.document
+    return !windowClosed && !preparingToQuit && !document.saving && pane.isAttached
+      && documents.contains(where: { $0 === document })
+      && (document.composingPaneID == nil || document.composingPaneID == pane.id)
+  }
+  private func refreshInteractivity(_ document: EditorDocument) {
+    for pane in document.panePool { pane.editor.isEditable = mayMutate(pane) }
+  }
+  func focusPane(id: UUID) throws {
+    guard !windowClosed, !preparingToQuit,
+      let document = current,
+      let pane = document.panePool.first(where: { $0.id == id && $0.isAttached })
+    else { throw PaneRoutingError.stale }
+    guard document.composingPaneID == nil || document.composingPaneID == id
+    else { throw PaneRoutingError.composition }
+    let previous = focusedPane
+    if previous !== pane {
+      previous?.editor.breakUndoCoalescing()
+      pane.editor.breakUndoCoalescing()
+    }
+    guard window?.makeFirstResponder(pane.editor) == true else { throw PaneRoutingError.stale }
+    document.preferredPaneID = pane.id
+    updateStatus()
+  }
+  private func activateSource(_ pane: EditorPane, snapshot: String, range: NSRange) throws {
+    guard !windowClosed, !preparingToQuit,
+      documents.contains(where: { $0 === pane.document }), pane.isAttached,
+      !pane.document.saving, pane.document.composingPaneID == nil,
+      current?.composingPaneID == nil,
+      pane.document.storage.string.utf16.elementsEqual(snapshot.utf16),
+      range.location >= 0, range.length >= 0, range.location <= (snapshot as NSString).length,
+      range.length <= (snapshot as NSString).length - range.location,
+      Range(range, in: snapshot) != nil
+    else { throw PaneRoutingError.stale }
+    pane.document.preferredPaneID = pane.id
+    display(pane.document)
+    try focusPane(id: pane.id)
+    pane.editor.setSelectedRange(range)
+    pane.editor.scrollRangeToVisible(range)
+  }
   private var settings = EditorSettings.defaults
   private var loadingCount = 0
   private var preparingToQuit = false
@@ -197,20 +283,21 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           id: document.id, originalPath: document.url?.path, pinned: document.pinned,
           encoding: document.savedEncoding,
           manualLanguage: document.manualLanguage ? document.language : nil,
-          selection: document.editor.selectedRange(), bookmarks: document.bookmarks.offsets)
+          selection: preferredPane(in: document).editor.selectedRange(),
+          bookmarks: document.bookmarks.offsets)
       }, selectedTabID: selectedID)
   }
 
   /// Scalar budget preflight; no recovery snapshot or String copy is constructed here.
   var checkpointRecoveryUTF16Count: Int {
     documents.reduce(0) { count, document in
-      count + (document.url == nil || document.dirty ? document.editor.textStorage?.length ?? 0 : 0)
+      count + (document.url == nil || document.dirty ? document.storage.length : 0)
     }
   }
 
   var sessionResourceUsage: (utf16Count: Int, originalByteCount: Int) {
     documents.reduce(into: (utf16Count: 0, originalByteCount: 0)) { usage, document in
-      usage.utf16Count += document.editor.textStorage?.length ?? 0
+      usage.utf16Count += document.storage.length
       usage.originalByteCount += document.originalBytes?.count ?? 0
     }
   }
@@ -232,7 +319,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       throw SessionStoreError.invalidMetadata
     }
     let document = EditorDocument(id: metadata.id)
-    document.editor.string = decoded.text
+    document.storage.mutableString.setString(decoded.text)
     document.encoding = decoded.encoding
     document.hasBOM = decoded.hasBOM
     document.pinned = metadata.pinned
@@ -252,10 +339,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         "Recovered "
         + (metadata.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
     }
-    document.editor.delegate = self
+    for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.insert(document, at: index)
     display(document)
-    document.editor.setSelectedRange(viewState.selection)
+    document.panePool[0].editor.setSelectedRange(viewState.selection)
     refresh()
   }
 
@@ -267,7 +354,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func newDocument() {
     guard !preparingToQuit else { return }
     let document = EditorDocument()
-    document.editor.delegate = self
+    for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.append(document)
     display(document)
   }
@@ -279,12 +366,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }.value
     guard !preparingToQuit, !windowClosed else { throw CancellationError() }
     let document = EditorDocument()
-    document.editor.string = decoded.text
+    document.storage.mutableString.setString(decoded.text)
     document.encoding = decoded.encoding
     document.hasBOM = decoded.hasBOM
     document.recoveredName =
       "Backup — " + URL(fileURLWithPath: record.originalPath).lastPathComponent
-    document.editor.delegate = self
+    for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.append(document)
     display(document)
     scheduleRecovery()
@@ -408,13 +495,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.hasBOM = loaded.1.hasBOM
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
-        document.editor.string = loaded.1.text
+        document.storage.mutableString.setString(loaded.1.text)
         document.bookmarks.removeAll()
         document.pendingBookmarks = nil
-        (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
+        for pane in document.panePool {
+          (pane.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
+        }
         document.language = LanguageService.detect(
           filename: url.lastPathComponent, text: loaded.1.text)
-        document.editor.delegate = self
+        for pane in document.panePool { self.installCallbacks(for: pane) }
         self.documents.append(document)
         self.display(document)
         finish(nil, false)
@@ -446,7 +535,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func execute(_ id: String) {
-    guard !preparingToQuit else { return }
+    guard !preparingToQuit, !windowClosed else { return }
+    guard current?.composingPaneID == nil else {
+      present(PaneRoutingError.composition)
+      return
+    }
     switch id {
     case "file.openFolder":
       let panel = NSOpenPanel()
@@ -508,7 +601,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       manager.showWindow(nil)
     case "file.print":
       guard let document = current else { return }
-      guard document.editor.string.utf16.count <= 2_000_000 else {
+      guard document.storage.string.utf16.count <= 2_000_000 else {
         present(
           NSError(
             domain: "TheOnlyPad", code: 8,
@@ -519,8 +612,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         return
       }
       DocumentPrinting.printDocument(
-        text: document.editor.string,
-        font: document.editor.font ?? .monospacedSystemFont(ofSize: 12, weight: .regular),
+        text: document.storage.string,
+        font: preferredPane(in: document).editor.font
+          ?? .monospacedSystemFont(ofSize: 12, weight: .regular),
         name: document.name)
     case "file.saveAs": if let current { save(current, saveAs: true) }
     case "file.saveAll":
@@ -530,12 +624,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "file.duplicate":
       if let source = current {
         let document = EditorDocument()
-        document.editor.string = source.editor.string
+        document.storage.mutableString.setString(source.storage.string)
         document.encoding = source.encoding
         document.language = source.language
         document.manualLanguage = source.manualLanguage
         document.hasBOM = source.hasBOM
-        document.editor.delegate = self
+        for pane in document.panePool { self.installCallbacks(for: pane) }
         documents.append(document)
         display(document)
       }
@@ -583,13 +677,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "tool.statistics": showStatistics()
     case "tool.outline":
       guard let document = current else { return }
+      let source = preferredPane(in: document)
       outline?.close()
-      let panel = OutlineController(text: document.editor.string, language: document.language) {
+      let panel = OutlineController(text: document.storage.string, language: document.language) {
         [weak self, weak document] range, snapshot in
         guard let self else { return }
         guard !self.preparingToQuit, !self.windowClosed else { return }
         guard let document, self.documents.contains(where: { $0 === document }),
-          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+          document.storage.string.utf16.elementsEqual(snapshot.utf16)
         else {
           self.present(
             NSError(
@@ -600,8 +695,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
               ]))
           return
         }
-        self.display(document)
-        self.selectSearchResult(range, snapshot: snapshot)
+        do { try self.activateSource(source, snapshot: snapshot, range: range) } catch {
+          self.present(error)
+        }
       }
       outline = panel
       panel.onClose = { [weak self, weak panel] in
@@ -611,7 +707,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "tool.previewMarkdown":
       guard let document = current else { return }
       markdownPreview?.close()
-      let preview = MarkdownPreviewController(text: document.editor.string)
+      let preview = MarkdownPreviewController(text: document.storage.string)
       preview.window?.title = "Markdown Preview — " + document.name
       markdownPreview = preview
       preview.onClose = { [weak self, weak preview] in
@@ -620,7 +716,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       preview.showWindow(nil)
     case "tool.compare":
       guard let document = current else { return }
-      guard document.editor.string.utf8.count <= 2_000_000 else {
+      guard document.storage.string.utf8.count <= 2_000_000 else {
         present(
           NSError(
             domain: "TheOnlyPad", code: 16,
@@ -632,7 +728,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       comparison?.close()
       let controller = ComparisonController(
-        leftText: document.editor.string, leftName: document.name)
+        leftText: document.storage.string, leftName: document.name)
       comparison = controller
       controller.showWindow(nil)
     case "edit.findFolder":
@@ -663,7 +759,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func isCommandAvailable(_ id: String) -> Bool {
-    guard !preparingToQuit else { return false }
+    guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     if id.hasPrefix("bookmark.") { return current != nil && current?.saving == false }
     switch id {
     case "macro.start":
@@ -716,9 +812,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let originalEncoding = document.savedEncoding
     let services = saveServices
     let snapshot = DecodedDocument(
-      text: document.editor.string, encoding: document.encoding, hasBOM: document.hasBOM)
+      text: document.storage.string, encoding: document.encoding, hasBOM: document.hasBOM)
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self] in
       do {
@@ -762,7 +858,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = snapshot.encoding
         document.savedHasBOM = snapshot.hasBOM
         document.pendingPublication = nil
-        document.editor.isEditable = true
+        self.refreshInteractivity(document)
         self.refresh()
         self.updateLanguage(document)
         self.scheduleRecovery()
@@ -774,10 +870,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         guard let self, !self.windowClosed,
           self.documents.contains(where: { $0 === document })
         else {
-          document.editor.isEditable = false
+          for pane in document.panePool { pane.editor.isEditable = false }
           return
         }
-        document.editor.isEditable = true
+        self.refreshInteractivity(document)
         if case EditorSaveFailure.uncertain = error { self.scheduleRecovery() }
         self.refresh()
         if case EditorSaveFailure.uncertain = error {
@@ -831,7 +927,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self] in
       let result = await Task.detached(priority: .userInitiated) {
@@ -839,28 +935,30 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }.value
       document.saving = false
       guard let self else {
-        document.editor.isEditable = true
+        for pane in document.panePool { pane.editor.isEditable = false }
         fail(CancellationError())
         return
       }
       guard !self.windowClosed, !self.preparingToQuit,
         self.documents.contains(where: { $0 === document }), shouldAccept?() != false
       else {
-        document.editor.isEditable = !self.windowClosed && !self.preparingToQuit
+        self.refreshInteractivity(document)
         if !self.windowClosed { self.refresh() }
         fail(CancellationError())
         return
       }
-      document.editor.isEditable = true
+      refreshInteractivity(document)
       switch result {
       case .failure(let error):
         self.refresh()
         fail(error)
       case .success(let loaded):
-        document.editor.string = loaded.1.text
+        document.storage.mutableString.setString(loaded.1.text)
         document.bookmarks.removeAll()
         document.pendingBookmarks = nil
-        (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
+        for pane in document.panePool {
+          (pane.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
+        }
         document.savedText = loaded.1.text
         document.pendingPublication = nil
         document.originalBytes = loaded.0
@@ -868,7 +966,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.hasBOM = loaded.1.hasBOM
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
-        document.editor.documentUndo.removeAllActions()
+        document.undoManager.removeAllActions()
         self.refresh()
         self.updateLanguage(document)
         self.scheduleRecovery()
@@ -879,15 +977,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func showEncoding() {
     guard let document = current, !document.saving, let window else { return }
+    let source = preferredPane(in: document)
     let panel = EncodingPanelController(
       current: DecodedDocument(
-        text: document.editor.string, encoding: document.encoding, hasBOM: document.hasBOM),
+        text: document.storage.string, encoding: document.encoding, hasBOM: document.hasBOM),
       onConvert: { [weak self, weak document] encoding, bom in
-        guard let self, let document else { return }
+        guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+          self.documents.contains(where: { $0 === document })
+        else { return }
         self.convertEncoding(document, encoding: encoding, bom: bom)
       },
       onReopen: { [weak self, weak document] encoding in
-        guard let self, let document else { return }
+        guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+          self.documents.contains(where: { $0 === document })
+        else { return }
         guard document.url != nil else {
           let alert = NSAlert()
           alert.messageText = "This scratch document has no file to reopen"
@@ -900,38 +1003,54 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         self.reload(encoding: encoding)
       },
       onLineEnding: { [weak self, weak document] ending in
-        guard let self, let document, !document.saving else { return }
-        let snapshot = document.editor.string
+        guard let self, let document, !document.saving, !self.windowClosed, !self.preparingToQuit,
+          document.composingPaneID == nil, source.isAttached,
+          self.documents.contains(where: { $0 === document })
+        else { return }
+        let snapshot = document.storage.string
         document.saving = true
-        document.editor.isEditable = false
+        self.refreshInteractivity(document)
         self.refresh()
         Task {
           let replacement = await Task.detached { LineEndings.convert(snapshot, to: ending) }.value
           document.saving = false
-          document.editor.isEditable = true
+          self.refreshInteractivity(document)
           self.replaceDocumentText(
-            document, expected: snapshot, replacement: replacement, action: "Convert Line Endings")
+            document, source: source, expected: snapshot, replacement: replacement,
+            action: "Convert Line Endings")
         }
       })
     encodingPanel = panel
     panel.present(for: window)
   }
 
-  private func convertEncoding(_ document: EditorDocument, encoding: DocumentEncoding, bom: Bool) {
-    guard !document.saving, !preparingToQuit else { return }
-    let snapshot = DecodedDocument(text: document.editor.string, encoding: encoding, hasBOM: bom)
+  private func convertEncoding(
+    _ document: EditorDocument, encoding: DocumentEncoding, bom: Bool,
+    validate: @escaping @Sendable (DecodedDocument) throws -> Void = {
+      _ = try DocumentCodec.encode($0)
+    },
+    onFinish: (() -> Void)? = nil
+  ) {
+    guard !document.saving, !preparingToQuit, !windowClosed, document.composingPaneID == nil,
+      documents.contains(where: { $0 === document })
+    else { return }
+    let snapshot = DecodedDocument(text: document.storage.string, encoding: encoding, hasBOM: bom)
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self] in
+      defer { onFinish?() }
       do {
-        _ = try await Task.detached { try DocumentCodec.encode(snapshot) }.value
+        try await Task.detached { try validate(snapshot) }.value
         document.saving = false
-        document.editor.isEditable = true
-        self?.setEncoding(document, encoding: encoding, bom: bom)
+        self?.refreshInteractivity(document)
+        guard let self, !self.windowClosed, !self.preparingToQuit,
+          self.documents.contains(where: { $0 === document })
+        else { return }
+        self.setEncoding(document, encoding: encoding, bom: bom)
       } catch {
         document.saving = false
-        document.editor.isEditable = true
+        self?.refreshInteractivity(document)
         self?.refresh()
         self?.present(error)
       }
@@ -945,24 +1064,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     let previous = document.encoding
     let previousBOM = document.hasBOM
-    document.editor.documentUndo.registerUndo(withTarget: self) { [weak document] controller in
+    document.undoManager.registerUndo(withTarget: self) { [weak document] controller in
       guard let document else { return }
       controller.setEncoding(document, encoding: previous, bom: previousBOM)
     }
     document.encoding = encoding
     document.hasBOM = bom
-    document.editor.documentUndo.setActionName("Convert Encoding")
+    document.undoManager.setActionName("Convert Encoding")
     refresh()
     scheduleRecovery()
   }
 
   @discardableResult private func replaceDocumentText(
-    _ document: EditorDocument, expected: String, replacement: String, action: String,
+    _ document: EditorDocument, source: EditorPane, expected: String, replacement: String,
+    action: String,
     edit: TextEdit? = nil
   ) -> Bool {
-    guard !preparingToQuit, !document.saving,
+    guard !preparingToQuit, !windowClosed, !document.saving, source.isAttached,
+      source.document === document, document.composingPaneID == nil,
       documents.contains(where: { $0 === document }),
-      document.editor.string.utf16.elementsEqual(expected.utf16),
+      document.storage.string.utf16.elementsEqual(expected.utf16),
       !expected.utf16.elementsEqual(replacement.utf16)
     else { return false }
     let change: TextEdit
@@ -974,16 +1095,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       present(error)
       return false
     }
-    guard document.editor.shouldChangeText(in: change.range, replacementString: change.replacement)
+    guard source.editor.shouldChangeText(in: change.range, replacementString: change.replacement)
     else {
       return false
     }
-    document.editor.breakUndoCoalescing()
-    document.editor.documentUndo.beginUndoGrouping()
-    document.editor.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
-    document.editor.didChangeText()
-    document.editor.documentUndo.endUndoGrouping()
-    document.editor.documentUndo.setActionName(action)
+    source.editor.breakUndoCoalescing()
+    document.undoManager.beginUndoGrouping()
+    source.editor.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
+    source.editor.didChangeText()
+    document.undoManager.endUndoGrouping()
+    document.undoManager.setActionName(action)
     refresh()
     return true
   }
@@ -996,29 +1117,35 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-    current?.editor.documentUndo
+    focusedPane?.document.undoManager
   }
 
   private func setBookmarks(_ document: EditorDocument, value: DocumentBookmarks) {
     let previous = document.bookmarks
     guard previous != value else { return }
     document.typingBookmarkNextLocation = nil
-    document.editor.documentUndo.registerUndo(withTarget: self) { [weak document] controller in
+    document.undoManager.registerUndo(withTarget: self) { [weak document] controller in
       guard let document else { return }
       controller.setBookmarks(document, value: previous)
     }
     document.bookmarks = value
-    (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(value.offsets)
+    for pane in document.panePool {
+      (pane.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(value.offsets)
+    }
     notifySessionChange()
   }
 
   private func performBookmarkCommand(_ id: String) {
     guard let document = current, !document.saving, !preparingToQuit else { return }
-    let snapshot = document.editor.string
-    let selection = document.editor.selectedRange()
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    guard accepts(sourceContext) else { return }
+
+    let snapshot = document.storage.string
+    let selection = source.editor.selectedRange()
     let original = document.bookmarks
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self, weak document] in
       do {
@@ -1041,12 +1168,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }.value
         guard let self, let document else { return }
         document.saving = false
-        document.editor.isEditable = true
+        self.refreshInteractivity(document)
         self.refresh()
-        guard !self.preparingToQuit, !self.windowClosed, self.current === document,
-          document.editor.selectedRange() == selection,
+        guard self.accepts(sourceContext),
+          source.editor.selectedRange() == selection,
           document.bookmarks == original,
-          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+          document.storage.string.utf16.elementsEqual(snapshot.utf16)
         else {
           throw NSError(
             domain: "TheOnlyPad", code: 18,
@@ -1055,23 +1182,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             ])
         }
         if result.0 != original {
-          document.editor.breakUndoCoalescing()
-          document.editor.documentUndo.beginUndoGrouping()
+          source.editor.breakUndoCoalescing()
+          document.undoManager.beginUndoGrouping()
           self.setBookmarks(document, value: result.0)
-          document.editor.documentUndo.endUndoGrouping()
-          document.editor.documentUndo.setActionName("Bookmarks")
+          document.undoManager.endUndoGrouping()
+          document.undoManager.setActionName("Bookmarks")
         }
         if let offset = result.1 {
-          document.editor.setSelectedRange(NSRange(location: offset, length: 0))
-          document.editor.scrollRangeToVisible(NSRange(location: offset, length: 0))
+          source.editor.setSelectedRange(NSRange(location: offset, length: 0))
+          source.editor.scrollRangeToVisible(NSRange(location: offset, length: 0))
         }
         if let text = result.2 {
           self.newDocument()
-          self.current?.editor.insertText(text, replacementRange: NSRange(location: 0, length: 0))
+          self.focusedPane?.editor.insertText(
+            text, replacementRange: NSRange(location: 0, length: 0))
         }
       } catch {
         document?.saving = false
-        document?.editor.isEditable = true
+        if let document { self?.refreshInteractivity(document) }
         self?.refresh()
         self?.present(error)
       }
@@ -1082,10 +1210,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ action: String, operation: @escaping @Sendable (String, NSRange) throws -> LineCommandResult
   ) {
     guard let document = current, !document.saving else { return }
-    let snapshot = document.editor.string
-    let selection = document.editor.selectedRange()
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    guard accepts(sourceContext) else { return }
+
+    let snapshot = document.storage.string
+    let selection = source.editor.selectedRange()
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self, weak document] in
       do {
@@ -1095,11 +1227,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }.value
         guard let self, let document else { return }
         document.saving = false
-        document.editor.isEditable = true
+        self.refreshInteractivity(document)
         self.refresh()
-        guard !self.preparingToQuit, !self.windowClosed, self.current === document,
-          document.editor.selectedRange() == selection,
-          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+        guard self.accepts(sourceContext),
+          source.editor.selectedRange() == selection,
+          document.storage.string.utf16.elementsEqual(snapshot.utf16)
         else {
           throw NSError(
             domain: "TheOnlyPad", code: 15,
@@ -1110,23 +1242,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         if result.text.utf16.elementsEqual(snapshot.utf16)
           || self.replaceDocumentText(
-            document, expected: snapshot, replacement: result.text, action: action, edit: edit)
+            document, source: source, expected: snapshot, replacement: result.text, action: action,
+            edit: edit)
         {
-          document.editor.setSelectedRange(result.selection)
-          document.editor.scrollRangeToVisible(result.selection)
+          source.editor.setSelectedRange(result.selection)
+          source.editor.scrollRangeToVisible(result.selection)
         }
       } catch {
         document?.saving = false
-        document?.editor.isEditable = true
+        if let document { self?.refreshInteractivity(document) }
         self?.refresh()
         self?.present(error)
       }
     }
   }
 
-  func navigate(line: Int, column: Int) {
+  func navigate(line: Int, column: Int, requireFocus: Bool = true) {
     guard let document = current else { return }
-    let snapshot = document.editor.string
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    let snapshot = document.storage.string
     Task { [weak self, weak document] in
       do {
         let offset = try await Task.detached(priority: .userInitiated) {
@@ -1135,7 +1270,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         guard let self, let document, !self.preparingToQuit,
           self.documents.contains(where: { $0 === document })
         else { return }
-        guard document.editor.string.utf16.elementsEqual(snapshot.utf16) else {
+        guard self.accepts(sourceContext, requireFocus: requireFocus),
+          document.storage.string.utf16.elementsEqual(snapshot.utf16)
+        else {
           throw NSError(
             domain: "TheOnlyPad", code: 14,
             userInfo: [
@@ -1144,39 +1281,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             ])
         }
         let range = NSRange(location: offset, length: 0)
-        document.editor.setSelectedRange(range)
-        document.editor.scrollRangeToVisible(range)
-        if self.current === document { self.window?.makeFirstResponder(document.editor) }
+        source.editor.setSelectedRange(range)
+        source.editor.scrollRangeToVisible(range)
+        if requireFocus, self.current === document {
+          self.window?.makeFirstResponder(source.editor)
+        }
       } catch { self?.present(error) }
     }
   }
 
   func selectSearchResult(_ range: NSRange, snapshot: String) {
-    guard let document = current else { return }
-    guard document.editor.string.utf16.elementsEqual(snapshot.utf16),
-      range.location >= 0, range.length >= 0,
-      range.location <= snapshot.utf16.count,
-      range.length <= snapshot.utf16.count - range.location,
-      Range(range, in: snapshot) != nil
-    else {
-      present(
-        NSError(
-          domain: "TheOnlyPad", code: 11,
-          userInfo: [
-            NSLocalizedDescriptionKey:
-              "This search result is stale. Search again before navigating to it."
-          ]))
-      return
-    }
-    document.editor.setSelectedRange(range)
-    document.editor.scrollRangeToVisible(range)
-    window?.makeFirstResponder(document.editor)
+    guard let source = focusedPane else { return }
+    do { try activateSource(source, snapshot: snapshot, range: range) } catch { present(error) }
   }
 
   private func showStatistics() {
     guard let document = current else { return }
-    let snapshot = document.editor.string
-    let selection = document.editor.selectedRange()
+    let snapshot = document.storage.string
+    let selection = preferredPane(in: document).editor.selectedRange()
     let name = document.name
     let savedBytes = document.originalBytes.map { String($0.count) } ?? "Not saved"
     statisticsTask?.cancel()
@@ -1205,15 +1327,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func showTextUtilities() {
     guard let document = current, !document.saving else { return }
-    let snapshot = document.editor.string
-    let selected = document.editor.selectedRange()
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    guard accepts(sourceContext) else { return }
+
+    let snapshot = document.storage.string
+    let selected = source.editor.selectedRange()
     let range = selected.length == 0 ? NSRange(location: 0, length: snapshot.utf16.count) : selected
     let input = (snapshot as NSString).substring(with: range)
     textUtilities?.close()
     let panel = TextUtilitiesController(text: input) { [weak self, weak document] replacement in
       guard let self, let document else { return }
-      guard !self.preparingToQuit, !self.windowClosed, self.current === document, !document.saving,
-        document.editor.string.utf16.elementsEqual(snapshot.utf16)
+      guard self.accepts(sourceContext), !document.saving,
+        document.storage.string.utf16.elementsEqual(snapshot.utf16)
       else {
         self.present(
           NSError(
@@ -1224,7 +1350,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             ]))
         return
       }
-      let editor = document.editor
+      let editor = source.editor
       guard editor.shouldChangeText(in: range, replacementString: replacement) else { return }
       editor.breakUndoCoalescing()
       editor.documentUndo.beginUndoGrouping()
@@ -1241,28 +1367,34 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func showSearch() {
     guard let document = current else { return }
+    let source = preferredPane(in: document)
     let panel = SearchPanelController(
       snapshot: { [weak self, weak document] in
         guard let self, let document, self.documents.contains(where: { $0 === document }),
-          !document.saving, !self.preparingToQuit
+          !document.saving, !self.preparingToQuit, !self.windowClosed, source.isAttached,
+          document.composingPaneID == nil
         else { return nil }
-        return document.editor.string
+        return document.storage.string
       },
       select: { [weak self, weak document] range, expected in
         guard let self, let document, self.documents.contains(where: { $0 === document }),
-          document.editor.string.utf16.elementsEqual(expected.utf16)
+          document.storage.string.utf16.elementsEqual(expected.utf16)
         else { return false }
-        self.display(document)
-        document.editor.setSelectedRange(range)
-        document.editor.scrollRangeToVisible(range)
-        return true
+        do {
+          try self.activateSource(source, snapshot: expected, range: range)
+          return true
+        } catch {
+          self.present(error)
+          return false
+        }
       },
       replace: { [weak self, weak document] expected, replacement in
         guard let self, let document, self.documents.contains(where: { $0 === document }),
-          !document.saving, !self.preparingToQuit,
-          document.editor.string.utf16.elementsEqual(expected.utf16)
+          !document.saving, !self.preparingToQuit, !self.windowClosed, source.isAttached,
+          document.composingPaneID == nil,
+          document.storage.string.utf16.elementsEqual(expected.utf16)
         else { return false }
-        let editor = document.editor
+        let editor = source.editor
         let range = NSRange(location: 0, length: expected.utf16.count)
         guard editor.shouldChangeText(in: range, replacementString: replacement) else {
           return false
@@ -1273,6 +1405,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         editor.didChangeText()
         editor.documentUndo.endUndoGrouping()
         editor.documentUndo.setActionName("Replace All")
+        document.preferredPaneID = source.id
         self.display(document)
         return true
       })
@@ -1317,7 +1450,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func updateLanguage(_ document: EditorDocument) {
     if !document.manualLanguage {
       document.language = LanguageService.detect(
-        filename: document.name, text: document.editor.string)
+        filename: document.name, text: document.storage.string)
     }
     document.highlighter.update(language: document.language)
     if document.id == selectedID {
@@ -1337,27 +1470,41 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     updateStatus()
   }
 
-  private func formatJSON() {
+  private func formatJSON(
+    operation: @escaping @Sendable (String) throws -> String = {
+      try LanguageService.formatJSON($0)
+    },
+    onFinish: (() -> Void)? = nil
+  ) {
     guard let document = current, !document.saving else { return }
-    let captured = document.editor.string
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    guard accepts(sourceContext, requireFocus: false) else { return }
+    let captured = document.storage.string
     Task { [weak self] in
+      defer { onFinish?() }
       do {
         let formatted = try await Task.detached(priority: .userInitiated) {
-          try LanguageService.formatJSON(captured)
+          try operation(captured)
         }.value
-        guard let self, !self.preparingToQuit, !document.saving,
+        guard let self, !self.windowClosed, !self.preparingToQuit, !document.saving,
           self.documents.contains(where: { $0.id == document.id })
         else { return }
-        guard document.editor.string.utf16.elementsEqual(captured.utf16) else {
-          let alert = NSAlert()
-          alert.messageText = "The document changed while JSON was formatting"
-          alert.informativeText = "Run Format JSON again to format the current text."
-          alert.runModal()
+        guard self.accepts(sourceContext, requireFocus: false),
+          document.storage.string.utf16.elementsEqual(captured.utf16)
+        else {
+          self.present(
+            NSError(
+              domain: "TheOnlyPad", code: 15,
+              userInfo: [
+                NSLocalizedDescriptionKey:
+                  "The document changed while JSON was formatting. Run Format JSON again to format the current text."
+              ]))
           return
         }
         guard !formatted.utf16.elementsEqual(captured.utf16) else { return }
         let range = NSRange(location: 0, length: (captured as NSString).length)
-        let editor = document.editor
+        let editor = source.editor
         guard editor.shouldChangeText(in: range, replacementString: formatted) else { return }
         editor.breakUndoCoalescing()
         editor.documentUndo.beginUndoGrouping()
@@ -1384,39 +1531,42 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let font =
       settings.fontName == EditorSettings.systemMonospacedFontName
       ? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
-      : (NSFont(name: settings.fontName, size: settings.fontSize)
-        ?? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular))
-    document.editor.font = font
+      : NSFont(name: settings.fontName, size: settings.fontSize)
+        ?? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
     let paragraph = NSMutableParagraphStyle()
     paragraph.tabStops = []
     paragraph.defaultTabInterval =
       (" " as NSString).size(withAttributes: [.font: font]).width * CGFloat(settings.tabWidth)
-    document.editor.defaultParagraphStyle = paragraph
-    document.editor.typingAttributes[.paragraphStyle] = paragraph
-    document.editor.textStorage?.addAttribute(
+    for pane in document.panePool {
+      pane.editor.font = font
+      pane.editor.defaultParagraphStyle = paragraph
+      pane.editor.typingAttributes[.paragraphStyle] = paragraph
+    }
+    document.storage.addAttribute(
       .paragraphStyle, value: paragraph,
-      range: NSRange(location: 0, length: (document.editor.string as NSString).length))
+      range: NSRange(location: 0, length: document.storage.length))
     configureWrap(document, enabled: settings.wrap)
     document.settingsApplied = true
   }
-
   private func configureWrap(_ document: EditorDocument, enabled wrap: Bool) {
-    let editor = document.editor
-    editor.isHorizontallyResizable = !wrap
-    document.scroll.hasHorizontalScroller = !wrap
-    editor.textContainer?.widthTracksTextView = wrap
-    editor.textContainer?.containerSize = NSSize(
-      width: wrap ? max(100, document.scroll.contentSize.width) : CGFloat.greatestFiniteMagnitude,
-      height: CGFloat.greatestFiniteMagnitude)
-    if wrap {
-      editor.setFrameSize(
-        NSSize(width: max(100, document.scroll.contentSize.width), height: editor.frame.height))
+    for pane in document.panePool {
+      let editor = pane.editor
+      editor.isHorizontallyResizable = !wrap
+      pane.scroll.hasHorizontalScroller = !wrap
+      editor.textContainer?.widthTracksTextView = wrap
+      editor.textContainer?.containerSize = NSSize(
+        width: wrap ? max(100, pane.scroll.contentSize.width) : CGFloat.greatestFiniteMagnitude,
+        height: CGFloat.greatestFiniteMagnitude)
+      if wrap {
+        editor.setFrameSize(
+          NSSize(width: max(100, pane.scroll.contentSize.width), height: editor.frame.height))
+      }
     }
   }
 
   private func toggleWrap() {
     guard let document = current else { return }
-    configureWrap(document, enabled: document.editor.isHorizontallyResizable)
+    configureWrap(document, enabled: preferredPane(in: document).editor.isHorizontallyResizable)
     refresh()
   }
 
@@ -1426,55 +1576,97 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     display(documents[tabs.indexOfSelectedItem])
   }
 
-  private func display(_ document: EditorDocument) {
-    document.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
-    selectedID = document.id
-    for subview in host.subviews { subview.removeFromSuperview() }
-    host.addSubview(document.scroll)
-    document.scroll.frame = host.bounds
-    document.scroll.autoresizingMask = [.width, .height]
-    if !document.settingsApplied { configureSettings(document) }
-    if let ruler = document.scroll.verticalRulerView as? LineNumberRuler {
-      document.editor.onTypingRunEnded = { [weak document] in
-        document?.typingBookmarkNextLocation = nil
+  private func installCallbacks(for pane: EditorPane) {
+    let document = pane.document
+    let editor = pane.editor
+    editor.delegate = self
+    editor.canFocus = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane else { return false }
+      return !self.windowClosed && !self.preparingToQuit && pane.isAttached
+        && (document.composingPaneID == nil || document.composingPaneID == pane.id)
+        && (self.current?.composingPaneID == nil || self.current === document)
+    }
+    editor.canMutate = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane else { return false }
+      return withExtendedLifetime(document) { self.mayMutate(pane) }
+    }
+    editor.onFocus = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane, self.current === document else { return }
+      if self.focusedPane !== pane {
+        self.focusedPane?.editor.breakUndoCoalescing()
+        pane.editor.breakUndoCoalescing()
       }
-      document.editor.onCompositionBegan = { [weak document] in
-        guard let document else { return }
-        document.editor.breakUndoCoalescing()
-        document.compositionBookmarks = document.bookmarks
-        // Keep one snapshot per composition so restoring canceled replacement text can restore lost anchors.
-        document.compositionOriginalText =
-          document.bookmarks.offsets.isEmpty ? nil : document.editor.string
-        document.compositionUndoRegistered = false
-      }
-      document.editor.onCompositionEnded = { [weak self, weak document] in
-        guard let self, let document, let before = document.compositionBookmarks else { return }
-        if let originalText = document.compositionOriginalText,
-          document.editor.string.utf16.elementsEqual(originalText.utf16)
-        {
-          document.bookmarks = before
-          (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
+      document.preferredPaneID = pane.id
+      self.updateStatus()
+    }
+    editor.onTypingRunEnded = { [weak document] in document?.typingBookmarkNextLocation = nil }
+    editor.onCompositionBegan = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane else { return }
+      document.composingPaneID = pane.id
+      pane.editor.breakUndoCoalescing()
+      document.compositionBookmarks = document.bookmarks
+      document.compositionOriginalText =
+        document.bookmarks.offsets.isEmpty ? nil : document.storage.string
+      document.compositionUndoRegistered = false
+      self.refreshInteractivity(document)
+    }
+    editor.onCompositionEnded = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane, document.composingPaneID == pane.id else { return }
+      if let before = document.compositionBookmarks,
+        let original = document.compositionOriginalText,
+        document.storage.string.utf16.elementsEqual(original.utf16)
+      {
+        document.bookmarks = before
+        for presentation in document.panePool {
+          (presentation.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
             before.offsets)
         }
-        document.compositionBookmarks = nil
-        document.compositionOriginalText = nil
-        document.compositionUndoRegistered = false
-        self.refresh()
       }
-      document.editor.onMarkedTextUpdated = { [weak document] in
-        guard let document, document.pendingBookmarks != nil else { return }
-        document.editor.didChangeText()
-      }
+      document.composingPaneID = nil
+      document.compositionBookmarks = nil
+      document.compositionOriginalText = nil
+      document.compositionUndoRegistered = false
+      self.refreshInteractivity(document)
+      self.refresh()
+    }
+    editor.onMarkedTextUpdated = { [weak document, weak pane] in
+      guard let document, let pane, document.pendingBookmarks != nil else { return }
+      pane.editor.didChangeText()
+    }
+    if let ruler = pane.scroll.verticalRulerView as? LineNumberRuler {
       ruler.bookmarkOffsets = Set(document.bookmarks.offsets)
-      ruler.onToggleBookmark = { [weak self, weak document] offset in
-        guard let self, let document, !self.preparingToQuit, !self.windowClosed,
-          self.current === document, !document.saving
+      ruler.onToggleBookmark = { [weak self, weak document, weak pane] offset in
+        guard let self, let document, let pane, self.current === document, self.mayMutate(pane),
+          pane.document.composingPaneID == nil
         else { return }
-        document.editor.setSelectedRange(NSRange(location: offset, length: 0))
+        do { try self.focusPane(id: pane.id) } catch {
+          self.present(error)
+          return
+        }
+        pane.editor.setSelectedRange(NSRange(location: offset, length: 0))
         self.performBookmarkCommand("bookmark.toggle")
       }
     }
-    window?.makeFirstResponder(document.editor)
+  }
+
+  private func display(_ document: EditorDocument) {
+    guard !windowClosed, !preparingToQuit else { return }
+    guard current?.composingPaneID == nil || current === document else {
+      present(PaneRoutingError.composition)
+      return
+    }
+    document.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
+    selectedID = document.id
+    for subview in host.subviews { subview.removeFromSuperview() }
+    for pane in document.panePool where pane.isAttached {
+      installCallbacks(for: pane)
+      host.addSubview(pane.scroll)
+      pane.scroll.frame = host.bounds
+      pane.scroll.autoresizingMask = [.width, .height]
+    }
+    if !document.settingsApplied { configureSettings(document) }
+    refreshInteractivity(document)
+    window?.makeFirstResponder(preferredPane(in: document).editor)
     updateLanguage(document)
     refresh()
   }
@@ -1487,6 +1679,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func closeDocuments(ids: Set<UUID>) {
     guard !preparingToQuit, !windowClosed else { return }
     let closing = documents.filter { ids.contains($0.id) }
+    guard current?.composingPaneID == nil, !closing.contains(where: { $0.composingPaneID != nil })
+    else {
+      present(PaneRoutingError.composition)
+      return
+    }
     guard !closing.isEmpty, !closing.contains(where: { $0.saving }), confirmDiscard(closing) else {
       return
     }
@@ -1517,10 +1714,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.savedEncoding = old.savedEncoding
     document.savedHasBOM = old.savedHasBOM
     document.bookmarks = old.bookmarks
-    document.editor.string = old.editor.string
+    document.storage.mutableString.setString(old.storage.string)
     document.language = old.language
     document.manualLanguage = old.manualLanguage
-    document.editor.delegate = self
+    for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.append(document)
     display(document)
     scheduleRecovery()
@@ -1574,8 +1771,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func windowShouldClose(_ sender: NSWindow) -> Bool { canClose() }
 
   func canClose() -> Bool {
-    guard !preparingToQuit else { return false }
+    guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     guard allowLeavingUnsavedRecording() else { return false }
+    guard !documents.contains(where: { $0.composingPaneID != nil }) else {
+      present(PaneRoutingError.composition)
+      return false
+    }
     guard loadingCount == 0, !macroSaving, !documents.contains(where: { $0.saving }) else {
       let alert = NSAlert()
       alert.messageText = "A file operation is still running"
@@ -1595,6 +1796,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     statisticsTask?.cancel()
     statisticsGeneration += 1
     searchPanel?.close()
+    encodingPanel?.close()
+    encodingPanel = nil
     textUtilities?.close()
     folderSearch?.close()
     if !preparingToQuit { for document in documents { discardRecovery(document.id) } }
@@ -1619,14 +1822,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func textDidChange(_ notification: Notification) {
     if let editor = notification.object as? NSTextView,
-      let document = documents.first(where: { $0.editor === editor })
+      let source = pane(for: editor), source.isAttached,
+      let document = Optional(source.document)
     {
       if let updated = document.pendingBookmarks {
         document.pendingBookmarks = nil
-        if document.editor.isComposingText || document.pendingBookmarksHaveUndo {
+        if source.editor.isComposingText || document.pendingBookmarksHaveUndo {
           document.bookmarks = updated
-          (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
-            updated.offsets)
+          for pane in document.panePool {
+            (pane.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
+              updated.offsets)
+          }
         } else {
           setBookmarks(document, value: updated)
         }
@@ -1642,14 +1848,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
     replacementString: String?
   ) -> Bool {
-    if let document = documents.first(where: { $0.editor === textView }) {
+    guard let source = pane(for: textView), mayMutate(source) else { return false }
+    let document = source.document
+    do {
       document.pendingBookmarks = nil
       document.pendingBookmarksHaveUndo = false
-      if document.editor.documentUndo.isUndoing || document.editor.documentUndo.isRedoing {
+      if document.undoManager.isUndoing || document.undoManager.isRedoing {
         document.typingBookmarkNextLocation = nil
       }
       if !document.bookmarks.offsets.isEmpty, let replacementString,
-        !document.editor.documentUndo.isUndoing, !document.editor.documentUndo.isRedoing
+        !document.undoManager.isUndoing, !document.undoManager.isRedoing
       {
         do {
           var updated = document.bookmarks
@@ -1666,26 +1874,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             }
           if isNoOp {
             document.pendingBookmarksHaveUndo = true
-          } else if document.editor.isComposingText {
+          } else if source.editor.isComposingText {
             // Register before AppKit's first text undo, then let provisional text edits coalesce.
             if !document.compositionUndoRegistered, let before = document.compositionBookmarks {
-              document.editor.documentUndo.registerUndo(withTarget: self) {
+              document.undoManager.registerUndo(withTarget: self) {
                 [weak document] controller in
                 guard let document else { return }
                 controller.setBookmarks(document, value: before)
               }
               document.compositionUndoRegistered = true
             }
-          } else if document.editor.isOrdinaryTextInsertion, affectedCharRange.length == 0,
+          } else if source.editor.isOrdinaryTextInsertion, affectedCharRange.length == 0,
             !replacementString.utf16.contains(where: { $0 == 10 || $0 == 13 })
           {
             if document.typingBookmarkNextLocation != affectedCharRange.location
-              || !document.editor.documentUndo.canUndo
+              || !document.undoManager.canUndo
             {
-              document.editor.breakUndoCoalescing()
+              source.editor.breakUndoCoalescing()
               let before = document.bookmarks
               if before != updated {
-                document.editor.documentUndo.registerUndo(withTarget: self) {
+                document.undoManager.registerUndo(withTarget: self) {
                   [weak document] controller in
                   guard let document else { return }
                   controller.setBookmarks(document, value: before)
@@ -1696,7 +1904,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             document.typingBookmarkNextLocation = affectedCharRange.location + replacement.length
             document.pendingBookmarksHaveUndo = true
           } else {
-            if document.typingBookmarkNextLocation != nil { document.editor.breakUndoCoalescing() }
+            if document.typingBookmarkNextLocation != nil { source.editor.breakUndoCoalescing() }
             document.typingBookmarkNextLocation = nil
           }
           document.pendingBookmarks = updated
@@ -1707,7 +1915,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
     }
     guard let id = recordingDocumentID,
-      documents.first(where: { $0.id == id })?.editor === textView,
+      source.document.id == id,
       let replacementString
     else { return true }
     let count = replacementString.utf16.count
@@ -1787,8 +1995,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func externalCommandContext() throws -> CommandContext {
     guard let document = current else { return CommandContext(path: nil, selection: "") }
-    let text = document.editor.string as NSString
-    let selection = document.editor.selectedRange()
+    let text = document.storage.string as NSString
+    let selection = preferredPane(in: document).editor.selectedRange()
     guard selection.length <= 1_000_000 else {
       throw NSError(
         domain: "TheOnlyPad", code: 9,
@@ -1800,7 +2008,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let selected = text.substring(with: selection)
     return CommandContext(
       path: document.url?.path, selection: selected,
-      text: text.length <= 1_000_000 ? document.editor.string : nil)
+      text: text.length <= 1_000_000 ? document.storage.string : nil)
   }
 
   func cancelMacroReplay() { replayCancellation?.cancel() }
@@ -1810,11 +2018,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard let document = current, !document.saving, !preparingToQuit, !isRecordingMacro,
       replayCancellation == nil
     else { return }
-    let snapshot = document.editor.string
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    guard accepts(sourceContext, requireFocus: false) else { return }
+    let snapshot = document.storage.string
     let cancellation = MacroCancellation()
     replayCancellation = cancellation
     document.saving = true
-    document.editor.isEditable = false
+    refreshInteractivity(document)
     refresh()
     Task { [weak self] in
       do {
@@ -1826,32 +2037,39 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         guard let self else { return }
         self.replayCancellation = nil
         document.saving = false
-        document.editor.isEditable = true
-        guard !cancellation.isCancelled, document.editor.string.utf16.elementsEqual(snapshot.utf16)
+        self.refreshInteractivity(document)
+        guard self.accepts(sourceContext, requireFocus: false), !cancellation.isCancelled,
+          document.storage.string.utf16.elementsEqual(snapshot.utf16)
         else {
           self.refresh()
           return
         }
         let range = NSRange(location: 0, length: snapshot.utf16.count)
-        if document.editor.shouldChangeText(in: range, replacementString: replacement) {
-          document.editor.breakUndoCoalescing()
-          document.editor.documentUndo.beginUndoGrouping()
-          document.editor.textStorage?.replaceCharacters(in: range, with: replacement)
-          document.editor.didChangeText()
-          document.editor.documentUndo.endUndoGrouping()
-          document.editor.documentUndo.setActionName(macro.name)
+        if source.editor.shouldChangeText(in: range, replacementString: replacement) {
+          source.editor.breakUndoCoalescing()
+          document.undoManager.beginUndoGrouping()
+          source.editor.textStorage?.replaceCharacters(in: range, with: replacement)
+          source.editor.didChangeText()
+          document.undoManager.endUndoGrouping()
+          document.undoManager.setActionName(macro.name)
         }
         self.refresh()
       } catch {
         self?.replayCancellation = nil
         document.saving = false
-        document.editor.isEditable = true
+        self?.refreshInteractivity(document)
         self?.refresh()
         if !cancellation.isCancelled { self?.present(error) }
       }
     }
   }
-  func textViewDidChangeSelection(_ notification: Notification) { updateStatus() }
+  func textViewDidChangeSelection(_ notification: Notification) {
+    guard let editor = notification.object as? NSTextView, let pane = pane(for: editor),
+      pane.isAttached, current === pane.document
+    else { return }
+    if window?.firstResponder === editor { pane.document.preferredPaneID = pane.id }
+    updateStatus()
+  }
 
   private func refresh() {
     tabBar.update(
@@ -1859,7 +2077,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         TabItem(id: $0.id, title: $0.name, dirty: $0.dirty, pinned: $0.pinned)
       }, selectedID: selectedID)
     for document in documents {
-      document.scroll.rulersVisible = document.editor.string.utf16.count <= 2_000_000
+      for pane in document.panePool {
+        pane.scroll.rulersVisible = document.storage.length <= 2_000_000
+      }
     }
     tabs.removeAllItems()
     for document in documents {
@@ -1880,8 +2100,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func updateStatus() {
     notifySessionChange()
     guard let document = current else { return }
-    let text = document.editor.string as NSString
-    let caret = min(document.editor.selectedRange().location, text.length)
+    let text = document.storage.string as NSString
+    let caret = min(preferredPane(in: document).editor.selectedRange().location, text.length)
     // Status on very large text avoids a full-buffer scan for every caret movement.
     let location: String
     if text.length <= 1_000_000 {
@@ -1900,9 +2120,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     } else {
       location = "UTF-16 offset \(caret)"
     }
-    let selection = document.editor.selectedRange().length
+    let selection = preferredPane(in: document).editor.selectedRange().length
     status.stringValue =
-      "\(document.language.rawValue)  |  \(location)  |  Selected \(selection) UTF-16 units  |  \(document.encoding.rawValue)\(document.hasBOM ? " BOM" : "")  |  \(document.editor.isHorizontallyResizable ? "No Wrap" : "Wrap")"
+      "\(document.language.rawValue)  |  \(location)  |  Selected \(selection) UTF-16 units  |  \(document.encoding.rawValue)\(document.hasBOM ? " BOM" : "")  |  \(preferredPane(in: document).editor.isHorizontallyResizable ? "No Wrap" : "Wrap")"
       + (text.length > 2_000_000 ? "  |  Highlighting disabled: large document" : "")
       + (loadingCount > 0 ? "  |  Loading…" : "")
       + (document.saving ? "  |  Working…" : "")
@@ -1918,9 +2138,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         let startup = try await recovery.claimStartup()
         guard let self else { return }
         self.loadingCount -= 1
+        guard !self.windowClosed, !self.preparingToQuit else { return }
         for snapshot in startup.snapshots {
           let document = EditorDocument(id: snapshot.id)
-          document.editor.string = snapshot.text
+          document.storage.mutableString.setString(snapshot.text)
           document.encoding = snapshot.encoding
           document.hasBOM = snapshot.hasBOM
           document.recoveredName =
@@ -1928,7 +2149,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             + (snapshot.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent }
               ?? "Untitled")
           // Never restore the original URL: Save must ask for a destination.
-          document.editor.delegate = self
+          for pane in document.panePool { self.installCallbacks(for: pane) }
           self.documents.append(document)
           self.display(document)
         }
@@ -1943,6 +2164,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       } catch {
         guard let self else { return }
         self.loadingCount -= 1
+        guard !self.windowClosed, !self.preparingToQuit else { return }
         self.refresh()
         self.reportRecoveryFailure(error)
       }
@@ -1969,7 +2191,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       let snapshot =
         document.url == nil || document.dirty
         ? RecoverySnapshot(
-          id: document.id, text: document.editor.string,
+          id: document.id, text: document.storage.string,
           encoding: document.encoding, hasBOM: document.hasBOM,
           originalPath: document.url?.path) : nil
       return (document.id, document.recoveryRevision, snapshot)
@@ -2051,6 +2273,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func prepareToQuit(persistRecovery: Bool = true) async -> Bool {
     guard allowLeavingUnsavedRecording() else { return false }
+    guard !documents.contains(where: { $0.composingPaneID != nil }) else {
+      present(PaneRoutingError.composition)
+      return false
+    }
     guard loadingCount == 0, !macroSaving, !documents.contains(where: { $0.saving }) else {
       let alert = NSAlert()
       alert.messageText = "A file operation is still running"
@@ -2060,11 +2286,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     preparingToQuit = true
     for document in documents {
-      if document.selectableBeforeQuit == nil {
-        document.selectableBeforeQuit = document.editor.isSelectable
+      for pane in document.panePool {
+        if pane.selectableBeforeQuit == nil { pane.selectableBeforeQuit = pane.editor.isSelectable }
+        pane.editor.isEditable = false
+        pane.editor.isSelectable = false
       }
-      document.editor.isEditable = false
-      document.editor.isSelectable = false
     }
     recoveryDebounce?.cancel()
     await recoveryWork?.value
@@ -2082,14 +2308,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func cancelPreparedQuit() {
     preparingToQuit = false
     for document in documents {
-      let selectable = document.selectableBeforeQuit ?? document.editor.isSelectable
-      document.editor.isEditable = !document.saving
-      document.editor.isSelectable = selectable
-      document.selectableBeforeQuit = nil
+      for pane in document.panePool {
+        let selectable = pane.selectableBeforeQuit ?? pane.editor.isSelectable
+        pane.editor.isEditable = mayMutate(pane)
+        pane.editor.isSelectable = selectable
+        pane.selectableBeforeQuit = nil
+      }
     }
   }
 
   private func reportRecoveryFailure(_ error: Error, always: Bool = false) {
+    guard !windowClosed else { return }
     guard always || !recoveryFailureShown else { return }
     recoveryFailureShown = true
     let alert = NSAlert()
@@ -2101,6 +2330,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func present(_ error: Error) {
+    guard !windowClosed, !preparingToQuit else { return }
     if let errorHandler { errorHandler(error) } else { NSAlert(error: error).runModal() }
   }
 }

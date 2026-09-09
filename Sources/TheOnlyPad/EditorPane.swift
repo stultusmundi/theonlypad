@@ -54,11 +54,13 @@ import AppKit
     guard !isAttached else { return }
     document.storage.addLayoutManager(layoutManager)
     isAttached = true
+    editor.isEditable = editor.canMutate?() ?? true
   }
   func detach() {
     guard isAttached else { return }
     scroll.removeFromSuperview()
     document.storage.removeLayoutManager(layoutManager)
     isAttached = false
+    editor.isEditable = false
   }
 }

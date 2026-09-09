@@ -9,7 +9,10 @@ final class DocumentTextView: NSTextView {
   }
   required init?(coder: NSCoder) { fatalError("Use injected document undo manager") }
   var onFocus: (() -> Void)?
+  var canFocus: (() -> Bool)?
+  var canMutate: (() -> Bool)?
   override func becomeFirstResponder() -> Bool {
+    guard canFocus?() ?? true else { return false }
     let accepted = super.becomeFirstResponder()
     if accepted { onFocus?() }
     return accepted
@@ -24,6 +27,7 @@ final class DocumentTextView: NSTextView {
   // AppKit may call setMarkedText again inside unmarkText; finalize only at the outer boundary.
   private var compositionOperationDepth = 0
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    guard canMutate?() ?? true else { return }
     if !isComposingText {
       isComposingText = true
       onCompositionBegan?()
@@ -35,6 +39,7 @@ final class DocumentTextView: NSTextView {
     if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
   }
   override func insertText(_ insertString: Any, replacementRange: NSRange) {
+    guard canMutate?() ?? true else { return }
     let previousInsertion = isOrdinaryTextInsertion
     isOrdinaryTextInsertion = !isComposingText && replacementRange.location == NSNotFound
     compositionOperationDepth += 1

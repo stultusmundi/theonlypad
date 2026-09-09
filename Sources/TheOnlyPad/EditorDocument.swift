@@ -15,6 +15,7 @@ final class EditorDocument {
   private(set) var panePool: [EditorPane] = []
   private(set) var editRevision: UInt64 = 0
   var composingPaneID: UUID?
+  var preferredPaneID: UUID?
   // Transitional single-pane accessors; focus routing is a subsequent integration step.
   var editor: DocumentTextView { panePool[0].editor }
   var scroll: NSScrollView { panePool[0].scroll }
@@ -88,6 +89,7 @@ final class EditorDocument {
         {
           self?.editRevision &+= 1
           self?.cachedTextDirty = nil
+          self?.highlighter.invalidateForCharacterEdit()
           self?.onCharactersChanged?()
         }
       }
