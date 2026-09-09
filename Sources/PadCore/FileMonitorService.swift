@@ -28,16 +28,21 @@ private final class ShutdownState: @unchecked Sendable {
     lock.unlock()
   }
 }
-public final class FileCheckToken: @unchecked Sendable {
+private enum ManualValue {
+  case observation(DiskObservation)
+  case snapshot(ExternalFileActionSnapshot)
+  case validated
+}
+private final class ManualToken: @unchecked Sendable {
   private let lock = NSLock()
   private let shutdown: ShutdownState
   private var admitted = false
   private var cancelled = false
   private var completed = false
-  private var callback: ((Result<DiskObservation, FileCheckError>) -> Void)?
+  private var callback: ((Result<ManualValue, FileActionError>) -> Void)?
   private var onCompletion: (() -> Void)?
   fileprivate init(
-    shutdown: ShutdownState, callback: @escaping (Result<DiskObservation, FileCheckError>) -> Void,
+    shutdown: ShutdownState, callback: @escaping (Result<ManualValue, FileActionError>) -> Void,
     onCompletion: @escaping () -> Void
   ) {
     self.shutdown = shutdown
@@ -59,14 +64,14 @@ public final class FileCheckToken: @unchecked Sendable {
     if !completed { cancelled = true }
     lock.unlock()
   }
-  fileprivate func complete(_ result: Result<DiskObservation, FileCheckError>) {
+  fileprivate func complete(_ result: Result<ManualValue, FileActionError>) {
     lock.lock()
     guard !completed else {
       lock.unlock()
       return
     }
     completed = true
-    let delivered: Result<DiskObservation, FileCheckError> =
+    let delivered: Result<ManualValue, FileActionError> =
       cancelled || (admitted && shutdown.isStopped) ? .failure(.cancelled) : result
     let callback = self.callback
     self.callback = nil
@@ -80,6 +85,11 @@ public final class FileCheckToken: @unchecked Sendable {
     invalidate()
     complete(.failure(.cancelled))
   }
+}
+public final class FileCheckToken: @unchecked Sendable {
+  fileprivate let token: ManualToken
+  fileprivate init(_ token: ManualToken) { self.token = token }
+  public func cancel() { token.cancel() }
 }
 public final class FileMonitorRegistration: @unchecked Sendable {
   private let lock = NSLock()
@@ -155,6 +165,15 @@ public final class FileMonitorRegistration: @unchecked Sendable {
   }
   public func cancel() { _ = cancelAndSnapshot() }
 }
+public enum FileActionError: Error, Equatable, Sendable {
+  case cancelled, capacity, invalidRequest, stopped, observationChanged, decoding, notDownloaded,
+    policy, readFailed
+}
+public final class FileActionToken: @unchecked Sendable {
+  fileprivate let token: ManualToken
+  fileprivate init(_ token: ManualToken) { self.token = token }
+  public func cancel() { token.cancel() }
+}
 public final class FileMonitorService: @unchecked Sendable {
   private let core: MonitorCore
   public init() { core = MonitorCore(hooks: MonitorHooks()) }
@@ -167,6 +186,34 @@ public final class FileMonitorService: @unchecked Sendable {
     try core.register(
       documentID: documentID, url: url, baseline: baseline,
       baselineRevision: baselineRevision, boundIdentity: boundIdentity, receive: receive)
+  }
+  public func readOnce(
+    requestID: UUID, url: URL, matching: DiskObservation, fallbackEncoding: DocumentEncoding,
+    receive: @escaping @Sendable (UUID, Result<ExternalFileActionSnapshot, FileActionError>) -> Void
+  ) -> FileActionToken {
+    FileActionToken(
+      core.enqueue(
+        requestID: requestID, url: url, operation: .read(url, matching, fallbackEncoding)
+      ) { result in
+        switch result {
+        case .success(.snapshot(let snapshot)): receive(requestID, .success(snapshot))
+        case .success: receive(requestID, .failure(.readFailed))
+        case .failure(let error): receive(requestID, .failure(error))
+        }
+      })
+  }
+  public func revalidateOnce(
+    requestID: UUID, snapshot: ExternalFileActionSnapshot,
+    receive: @escaping @Sendable (UUID, Result<Void, FileActionError>) -> Void
+  ) -> FileActionToken {
+    FileActionToken(
+      core.enqueue(requestID: requestID, url: nil, operation: .revalidate(snapshot)) { result in
+        switch result {
+        case .success(.validated): receive(requestID, .success(()))
+        case .success: receive(requestID, .failure(.readFailed))
+        case .failure(let error): receive(requestID, .failure(error))
+        }
+      })
   }
   public func requestCheck(documentID: UUID, forceContents: Bool = true) {
     core.queue.async { [core] in
@@ -252,31 +299,25 @@ private struct DeliveryPayload {
   let observation: DiskObservation
   let generation: UUID?
 }
+private enum ManualOperation {
+  case check(URL, Data, FileTargetIdentity?)
+  case read(URL, DiskObservation, DocumentEncoding)
+  case revalidate(ExternalFileActionSnapshot)
+}
 private final class ManualJob {
   let completionID: UUID
   let id: UUID
-  let documentID: UUID
-  let revision: UInt64
-  let boundIdentity: FileTargetIdentity?
-  let url: URL
-  let baseline: Data
-  let token: FileCheckToken
+  let operation: ManualOperation
+  let token: ManualToken
   var running = false
   var workFinished = false
   var callbackFinished = false
   var completionQueued = false
   var completionDrained = false
-  init(
-    completionID: UUID, id: UUID, documentID: UUID, revision: UInt64,
-    boundIdentity: FileTargetIdentity?, url: URL, baseline: Data, token: FileCheckToken
-  ) {
+  init(completionID: UUID, id: UUID, operation: ManualOperation, token: ManualToken) {
     self.completionID = completionID
     self.id = id
-    self.documentID = documentID
-    self.revision = revision
-    self.boundIdentity = boundIdentity
-    self.url = url
-    self.baseline = baseline
+    self.operation = operation
     self.token = token
   }
 }
@@ -338,6 +379,15 @@ enum WatchPreparationStage: CaseIterable, Sendable {
   case resolvingParent, openingParent, openingFile, checkingIdentity
 }
 struct MonitorHooks: Sendable {
+  var readAction:
+    @Sendable (URL, DiskObservation, DocumentEncoding, @escaping @Sendable () -> Bool) throws ->
+      ExternalFileActionSnapshot = {
+        try ExternalFileActionReader().read($0, matching: $1, fallbackEncoding: $2, isCancelled: $3)
+      }
+  var revalidateAction:
+    @Sendable (ExternalFileActionSnapshot, @escaping @Sendable () -> Bool) throws -> Void = {
+      try ExternalFileActionReader().revalidate($0, isCancelled: $1)
+    }
   var beforeFirstBinding: @Sendable () -> Void = {}
   var afterFirstBinding: @Sendable () -> Void = {}
   var beforeManualDelivery: @Sendable () -> Void = {}
@@ -441,9 +491,32 @@ private final class MonitorCore: @unchecked Sendable {
     boundIdentity: FileTargetIdentity?,
     receive: @escaping @Sendable (UUID, Result<DiskObservation, FileCheckError>) -> Void
   ) -> FileCheckToken {
+    FileCheckToken(
+      enqueue(requestID: requestID, url: url, operation: .check(url, baseline, boundIdentity)) {
+        result in
+        switch result {
+        case .success(.observation(let observation)): receive(requestID, .success(observation))
+        case .success: receive(requestID, .failure(.failed))
+        case .failure(let error):
+          let mapped: FileCheckError
+          switch error {
+          case .cancelled: mapped = .cancelled
+          case .capacity: mapped = .capacity
+          case .invalidRequest: mapped = .invalidRequest
+          case .stopped: mapped = .stopped
+          default: mapped = .failed
+          }
+          receive(requestID, .failure(mapped))
+        }
+      })
+  }
+  func enqueue(
+    requestID: UUID, url: URL?, operation: ManualOperation,
+    receive: @escaping (Result<ManualValue, FileActionError>) -> Void
+  ) -> ManualToken {
     let completionID = UUID()
-    let token = FileCheckToken(
-      shutdown: shutdown, callback: { receive(requestID, $0) },
+    let token = ManualToken(
+      shutdown: shutdown, callback: receive,
       onCompletion: { [weak self] in
         self?.queue.async { [weak self] in
           guard let self, let job = self.manual[requestID], job.completionID == completionID else {
@@ -454,24 +527,26 @@ private final class MonitorCore: @unchecked Sendable {
           self.pump()
         }
       })
-    let refusal: FileCheckError? = queue.sync {
+    let refusal: FileActionError? = queue.sync {
       guard !stopped && !shutdown.isStopped else { return .stopped }
-      guard url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost",
-        url.path.hasPrefix("/"), !url.path.utf8.contains(0), url.path.utf8.count < 4096,
-        baseline.count <= 100_000_000, manual[requestID] == nil
-      else { return .invalidRequest }
+      if let url {
+        guard url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost",
+          url.path.hasPrefix("/"), !url.path.utf8.contains(0), url.path.utf8.count < 4096
+        else { return .invalidRequest }
+      }
+      if case .check(_, let baseline, _) = operation, baseline.count > 100_000_000 {
+        return .invalidRequest
+      }
+      guard manual[requestID] == nil else { return .invalidRequest }
       guard manual.count < 16 else { return .capacity }
       token.markAdmitted()
       let job = ManualJob(
-        completionID: completionID, id: requestID, documentID: documentID, revision: revision,
-        boundIdentity: boundIdentity, url: url, baseline: baseline, token: token)
+        completionID: completionID, id: requestID, operation: operation, token: token)
       manual[requestID] = job
       manualOrder.append(requestID)
       pump()
       return nil
     }
-    // Rejections never add to a blocked receiver queue; callback is on the caller,
-    // outside the control queue. Accepted results use a bounded callback queue.
     if let refusal { token.complete(.failure(refusal)) }
     return token
   }
@@ -483,7 +558,7 @@ private final class MonitorCore: @unchecked Sendable {
     manual.removeValue(forKey: job.id)
     manualOrder.removeAll { $0 == job.id }
   }
-  func scheduleManualCompletion(_ job: ManualJob, result: Result<DiskObservation, FileCheckError>) {
+  func scheduleManualCompletion(_ job: ManualJob, result: Result<ManualValue, FileActionError>) {
     guard !job.completionQueued else { return }
     job.completionQueued = true
     pendingManualCallbacks += 1
@@ -503,19 +578,30 @@ private final class MonitorCore: @unchecked Sendable {
     workers += 1
     peakReservations = max(peakReservations, watchReservations + workers * 6)
     DispatchQueue.global(qos: .utility).async { [self] in
-      let result: Result<DiskObservation, FileCheckError>
+      let result: Result<ManualValue, FileActionError>
       do {
-        result = .success(
-          try hooks.observationGuard {
-            try hooks.probe(job.url, job.baseline, job.boundIdentity, { job.token.isCancelled })
-          })
+        if job.token.isCancelled { throw CancellationError() }
+        switch job.operation {
+        case .check(let url, let baseline, let identity):
+          result = .success(
+            .observation(
+              try hooks.observationGuard {
+                try hooks.probe(url, baseline, identity, { job.token.isCancelled })
+              }))
+        case .read(let url, let observation, let encoding):
+          result = .success(
+            .snapshot(try hooks.readAction(url, observation, encoding, { job.token.isCancelled })))
+        case .revalidate(let snapshot):
+          try hooks.revalidateAction(snapshot, { job.token.isCancelled })
+          result = .success(.validated)
+        }
       } catch {
-        if job.token.isCancelled {
+        if job.token.isCancelled || error is CancellationError {
           result = .failure(.cancelled)
-        } else if isMaterializationRefusal(error) {
-          result = .success(unavailableAfter(error))
+        } else if case .check = job.operation, isMaterializationRefusal(error) {
+          result = .success(.observation(unavailableAfter(error)))
         } else {
-          result = .failure(.failed)
+          result = .failure(actionError(error))
         }
       }
       queue.async { [self] in
@@ -960,4 +1046,14 @@ private func movedCandidate(
     Int64(after.st_ctimespec.tv_nsec) == metadata.changeNanoseconds
   else { return nil }
   return candidate
+}
+
+private func actionError(_ error: Error) -> FileActionError {
+  if error is FileMaterializationError { return .policy }
+  if isMaterializationRefusal(error) { return .notDownloaded }
+  if error is DocumentCodecError || error is ExternalDocumentDecodingError { return .decoding }
+  if let probe = error as? ExternalFileProbeError, case .observationChanged = probe {
+    return .observationChanged
+  }
+  return .readFailed
 }

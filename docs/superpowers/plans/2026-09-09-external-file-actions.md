@@ -1,6 +1,6 @@
 # External file action execution
 
-Status: action reader component verified; service admission and native actions outstanding.
+Status: action reader and shared service admission verified in core328 tests; native actions outstanding.
 This extends the reviewed external-file monitoring design and native integration map.
 
 ## Shared worker admission
@@ -61,7 +61,7 @@ The reader's seven real-file tests and full279 core tests passed; see
 `docs/verification/external-file-monitoring.md`. Planned native acceptance includes
 tab switch, all-pane selections, dirty/uncertain confirmation, changed disk during
 dialog, late close/quit, recording/composition, action cancellation and failed decode.
-The shared service and real desktop workflows remain unimplemented/unverified.
+The shared service is implemented and tested; native transactions and real desktop workflows remain unimplemented/unverified.
 
 Proven component command:
 
