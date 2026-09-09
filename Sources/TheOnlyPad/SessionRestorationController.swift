@@ -15,17 +15,29 @@ struct UnresolvedSessionEntry: Equatable, Sendable {
 }
 
 struct SessionResolvedFile: Sendable {
+  let seed: NativeDocumentSeed?
   let url: URL?
   let originalBytes: Data?
   let decoded: DecodedDocument
   let resolvedViewState: RestoredViewState?
   let resolvedPresentation: RestoredPresentationState?
   let utf16Count: Int
+  /// Every field derives from one immutable worker-prepared seed; no UI decode or text scan.
+  init(seed: NativeDocumentSeed) {
+    self.seed = seed
+    self.url = seed.url
+    self.originalBytes = seed.originalBytes
+    self.decoded = .init(text: seed.text, encoding: seed.encoding, hasBOM: seed.hasBOM)
+    self.resolvedPresentation = seed.presentation
+    self.resolvedViewState = seed.presentation?.focusedViewState
+    self.utf16Count = seed.textUTF16Count
+  }
   init(
     url: URL?, originalBytes: Data?, decoded: DecodedDocument,
     resolvedViewState: RestoredViewState? = nil,
     resolvedPresentation: RestoredPresentationState? = nil
   ) {
+    self.seed = nil
     self.url = url
     self.originalBytes = originalBytes
     self.decoded = decoded

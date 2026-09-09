@@ -356,4 +356,66 @@ import XCTest
     XCTAssertThrowsError(try coordinator.renewImportClaim(claim))
   }
 
+  func testRealFilePreparationCarriesImmutableSeed() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appendingPathComponent("synthetic.swift")
+    let text = "let emoji = \"👩🏽‍💻\"\r\n"
+    let bytes = try DocumentCodec.encode(.init(text: text, encoding: .utf16BE, hasBOM: true))
+    try bytes.write(to: file)
+    let tab = SessionTab(originalPath: file.path, pinned: true, encoding: .utf16BE)
+    let prepared = try await Task.detached { try SessionCoordinator.read(tab, at: file) }.value
+    let seed = try XCTUnwrap(prepared.seed)
+    XCTAssertEqual(seed.id, tab.id)
+    XCTAssertEqual(seed.url, file)
+    XCTAssertEqual(seed.originalBytes, bytes)
+    XCTAssertEqual(seed.textUTF16Count, prepared.utf16Count)
+    XCTAssertEqual(Array(seed.text.utf16), Array(text.utf16))
+    XCTAssertEqual(seed.presentation, prepared.resolvedPresentation)
+    XCTAssertTrue(seed.pinned)
+    XCTAssertTrue(seed.hasBOM)
+    let coordinator = SessionCoordinator(
+      loadSession: { EditorSession(windows: [.init(tabs: [tab], selectedTabID: tab.id)]) },
+      claimRecovery: { .init(snapshots: [], quarantinedCount: 0) })
+    var forwarded: PreparedSessionTab?
+    await coordinator.restore { window in
+      forwarded = window.tabs.first
+      return [:]
+    }
+    let startup = try XCTUnwrap(forwarded)
+    let startupSeed = try XCTUnwrap(startup.seed)
+    XCTAssertEqual(startupSeed.id, tab.id)
+    XCTAssertEqual(startup.metadata, tab)
+    XCTAssertEqual(Array(startupSeed.text.utf16), Array(text.utf16))
+    XCTAssertEqual(startupSeed.presentation, startup.resolvedPresentation)
+    XCTAssertEqual(startupSeed.url, file)
+  }
+
+  func testRecoveryStartupAndRetryCarryURLLessPreparedSeed() async throws {
+    let snapshot = RecoverySnapshot(
+      id: UUID(), text: "synthetic 👩🏽‍💻\r\n", encoding: .utf16LE,
+      hasBOM: true, originalPath: "/synthetic/original.swift")
+    let coordinator = SessionCoordinator(
+      loadSession: { nil },
+      claimRecovery: { .init(snapshots: [snapshot], quarantinedCount: 0) })
+    var startupSeed: NativeDocumentSeed?
+    await coordinator.restore { window in
+      startupSeed = window.tabs.first?.seed
+      return [snapshot.id: "Retained for retry test"]
+    }
+    let initial = try XCTUnwrap(startupSeed)
+    XCTAssertNil(initial.url)
+    XCTAssertNil(initial.originalBytes)
+    XCTAssertEqual(Array(initial.text.utf16), Array(snapshot.text.utf16))
+    let entry = try XCTUnwrap(coordinator.unresolved.first)
+    let retry = try await coordinator.retry(entry)
+    let seed = try XCTUnwrap(retry.seed)
+    XCTAssertEqual(seed.id, snapshot.id)
+    XCTAssertNil(seed.url)
+    XCTAssertEqual(seed.encoding, .utf16LE)
+    XCTAssertTrue(seed.hasBOM)
+    XCTAssertEqual(seed.presentation, retry.resolvedPresentation)
+  }
+
 }

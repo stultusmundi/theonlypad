@@ -37,6 +37,7 @@ struct SessionCapacitySnapshot: Equatable, Sendable {
 }
 
 struct PreparedSessionTab: Sendable {
+  let seed: NativeDocumentSeed?
   let metadata: SessionTab
   let decoded: DecodedDocument
   let originalBytes: Data?
@@ -384,20 +385,26 @@ struct SessionStartupBudget {
                 throw SessionStoreError.invalidMetadata
               }
               value = PreparedSessionTab(
-                metadata: tab.metadata, decoded: file.decoded, originalBytes: file.originalBytes,
+                seed: file.seed, metadata: tab.metadata, decoded: file.decoded,
+                originalBytes: file.originalBytes,
                 url: file.url, viewState: state, resolvedPresentation: file.resolvedPresentation,
                 utf16Count: file.utf16Count)
             case .recovery(let snapshot):
               value = try await Task.detached {
-                let presentation = try RestoredPresentationState.resolve(
-                  tab.metadata.presentation, bookmarks: tab.metadata.bookmarks, in: snapshot.text)
-                return PreparedSessionTab(
-                  metadata: tab.metadata,
-                  decoded: DecodedDocument(
+                let seed = try NativeDocumentSeed.restored(
+                  tab.metadata,
+                  decoded: .init(
                     text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM),
+                  originalBytes: nil, url: nil)
+                guard let presentation = seed.presentation else {
+                  throw SessionStoreError.invalidMetadata
+                }
+                return PreparedSessionTab(
+                  seed: seed, metadata: tab.metadata,
+                  decoded: .init(text: seed.text, encoding: seed.encoding, hasBOM: seed.hasBOM),
                   originalBytes: nil, url: nil,
                   viewState: presentation.focusedViewState, resolvedPresentation: presentation,
-                  utf16Count: snapshot.text.utf16.count)
+                  utf16Count: seed.textUTF16Count)
               }.value
             }
             guard request == generation else { return }
@@ -447,13 +454,11 @@ struct SessionStartupBudget {
   func retry(_ entry: UnresolvedSessionEntry) async throws -> SessionResolvedFile {
     if let snapshot = recoveryByID[entry.metadata.id] {
       return try await Task.detached {
-        let decoded = DecodedDocument(
-          text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM)
-        return SessionResolvedFile(
-          url: nil, originalBytes: nil, decoded: decoded,
-          resolvedPresentation: try RestoredPresentationState.resolve(
-            entry.metadata.presentation, bookmarks: entry.metadata.bookmarks,
-            in: snapshot.text))
+        let seed = try NativeDocumentSeed.restored(
+          entry.metadata,
+          decoded: .init(text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM),
+          originalBytes: nil, url: nil)
+        return SessionResolvedFile(seed: seed)
       }.value
     }
     guard let path = entry.metadata.originalPath else {
@@ -589,10 +594,7 @@ struct SessionStartupBudget {
           length: min(LargeFileReader.maximumWindowSize, Int(reader.identity.size) - bytes.count)))
     }
     _ = try reader.readWindow(offset: reader.identity.size, length: 0)
-    let decoded = try DocumentCodec.decode(bytes, encoding: metadata.encoding)
-    return SessionResolvedFile(
-      url: url, originalBytes: bytes, decoded: decoded,
-      resolvedPresentation: try RestoredPresentationState.resolve(
-        metadata.presentation, bookmarks: metadata.bookmarks, in: decoded.text))
+    let seed = try NativeDocumentSeed.restored(metadata, url: url, originalBytes: bytes)
+    return SessionResolvedFile(seed: seed)
   }
 }

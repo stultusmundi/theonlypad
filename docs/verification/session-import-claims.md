@@ -19,3 +19,9 @@ The expanded suite passed 13 tests in 0.021 seconds (`.local/import-capacity-fin
 ## Claim renewal
 
 The suite passed 15 tests in 0.017 seconds (`.local/import-renewal-green.log`), after two compiled behavioral failures in the expanded 15-test suite. Renewal tests cover unrelated membership changes, foreign and removed claims, exact retained recovery snapshots and continued ordinary-import/publication refusal under preservation errors. Independent source review was clear. Renewal is provenance only; native handle/assignment reconciliation remains process-owner work.
+
+## Worker-prepared native seeds
+
+Default file loading, recovery startup and recovery retry now carry an immutable NativeDocumentSeed. Encoded file restoration decodes once; the UI handoff derives its compatibility fields and UTF-16 count from that seed. Recovery seeds remain URL-less even when metadata retains an informational original path. Injected legacy test readers may still omit the seed; application routing must require it.
+
+The final runner passed 17 tests in 0.051 seconds (`.local/prepared-session-seed-final.log`), including real UTF-16BE/BOM file loading through the actual startup callback and recovery startup/retry. The compiled behavioral red failed two of 17 tests; an earlier fixture compile failure is separately retained. Independent review requested the actual startup forwarding assertion, which was added before the final run. Compatibility passed nine presentation-flow tests and seven capacity tests. No native AppDelegate activation or desktop acceptance is claimed.

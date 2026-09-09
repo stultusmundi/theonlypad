@@ -26,7 +26,7 @@ def freeze(source,destination):
     manifest.append({'source':source.as_posix(),'destination':str(destination.relative_to(package)),'sha256':hashlib.sha256(contents).hexdigest()})
 for source in sorted(Path('Sources/PadCore').glob('*.swift')):
     freeze(source,core/source.name)
-for name in ['SessionCoordinator.swift','SessionRestorationController.swift','RecoveryCoordinator.swift']:
+for name in ['NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','RecoveryCoordinator.swift']:
     freeze(Path('Sources/TheOnlyPad')/name,native/name)
 freeze(Path('Tests/NativeIntegration/SessionImportClaimsTests.swift'),tests/'SessionImportClaimsTests.swift')
 (package/'Package.swift').write_text('''// swift-tools-version: 6.0
