@@ -38,6 +38,7 @@ jobs:
           scripts/test-pane-session.sh "$build_path"
           scripts/test-pane-save.sh "$build_path"
           scripts/test-document-recovery-ownership.sh "$build_path"
+          scripts/test-document-factory.sh "$build_path"
       - name: Package promotion rollback tests
         run: python3 scripts/test-package-promotion.py
       - name: Local package
