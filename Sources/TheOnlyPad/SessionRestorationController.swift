@@ -19,15 +19,18 @@ struct SessionResolvedFile: Sendable {
   let originalBytes: Data?
   let decoded: DecodedDocument
   let resolvedViewState: RestoredViewState?
+  let resolvedPresentation: RestoredPresentationState?
   let utf16Count: Int
   init(
     url: URL?, originalBytes: Data?, decoded: DecodedDocument,
-    resolvedViewState: RestoredViewState? = nil
+    resolvedViewState: RestoredViewState? = nil,
+    resolvedPresentation: RestoredPresentationState? = nil
   ) {
     self.url = url
     self.originalBytes = originalBytes
     self.decoded = decoded
-    self.resolvedViewState = resolvedViewState
+    self.resolvedPresentation = resolvedPresentation
+    self.resolvedViewState = resolvedPresentation?.focusedViewState ?? resolvedViewState
     self.utf16Count = decoded.text.utf16.count
   }
 }

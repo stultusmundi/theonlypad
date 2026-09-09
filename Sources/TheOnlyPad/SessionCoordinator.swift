@@ -1,12 +1,19 @@
 import Foundation
 import PadCore
 
+struct SessionCapacitySnapshot: Equatable, Sendable {
+  let sessionRevision: UUID
+  let windowIDs: Set<UUID>
+  let documentIDs: Set<UUID>
+}
+
 struct PreparedSessionTab: Sendable {
   let metadata: SessionTab
   let decoded: DecodedDocument
   let originalBytes: Data?
   let url: URL?
   let viewState: RestoredViewState
+  let resolvedPresentation: RestoredPresentationState?
   let utf16Count: Int
 }
 struct PreparedSessionWindow: Sendable {
@@ -38,8 +45,32 @@ struct SessionStartupBudget {
 
 /// Owns unresolved metadata. Async readers do not create or change editor windows.
 @MainActor final class SessionCoordinator {
+  private(set) var capacityRevision = UUID()
+  func transferCapacity(liveWindows: [UUID: Set<UUID>]) throws -> SessionCapacitySnapshot {
+    try requireRestoredSession()
+    guard removals.isEmpty else {
+      throw Self.error(
+        "Recovery cleanup is pending. Retry the document move after cleanup completes.")
+    }
+    var windows = Set(liveWindows.keys)
+    var documents = Set(liveWindows.values.flatMap { $0 })
+    for entry in unresolved {
+      windows.insert(entry.windowID)
+      documents.insert(entry.metadata.id)
+    }
+    return SessionCapacitySnapshot(
+      sessionRevision: capacityRevision, windowIDs: windows, documentIDs: documents)
+  }
+
   var onSessionChange: (() -> Void)?
   private(set) var unresolved: [UnresolvedSessionEntry] = [] {
+    willSet {
+      if unresolved.map({ [$0.windowID, $0.metadata.id] })
+        != newValue.map({ [$0.windowID, $0.metadata.id] })
+      {
+        capacityRevision = UUID()
+      }
+    }
     didSet {
       // Error prose is panel state, not persisted metadata.
       let unchanged =
@@ -53,9 +84,12 @@ struct SessionStartupBudget {
   private(set) var warnings: [String] = []
   private(set) var startupErrors: [String] = []
   private(set) var restorationComplete = false {
+    willSet { if newValue != restorationComplete { capacityRevision = UUID() } }
     didSet { if oldValue != restorationComplete { onSessionChange?() } }
   }
-  private var preservationError: Error?
+  private var preservationError: Error? {
+    willSet { capacityRevision = UUID() }
+  }
   private var originalWindows: [SessionWindow] = [] {
     didSet { if oldValue != originalWindows { onSessionChange?() } }
   }
@@ -68,14 +102,18 @@ struct SessionStartupBudget {
     }
   }
   private var generation = 0
-  private var started = false
+  private var started = false {
+    willSet { if newValue != started { capacityRevision = UUID() } }
+  }
   private var recoveryIDs = Set<UUID>()
   private var recoveryByID: [UUID: RecoverySnapshot] = [:]
   private struct PendingRemoval {
     let token = UUID()
     let task: Task<Void, Error>
   }
-  private var removals: [UUID: PendingRemoval] = [:]
+  private var removals: [UUID: PendingRemoval] = [:] {
+    willSet { capacityRevision = UUID() }
+  }
   private let removeRecovery: @MainActor (UUID) async throws -> Void
   private let loadSession: @MainActor () async throws -> EditorSession?
   private let claimRecovery: @MainActor () async throws -> RecoveryCoordinator.Startup
@@ -126,7 +164,10 @@ struct SessionStartupBudget {
     try await RecoveryCoordinator.shared.close(id: id)
   }
 
-  func cancelRestoration() { generation += 1 }
+  func cancelRestoration() {
+    capacityRevision = UUID()
+    generation += 1
+  }
 
   func restore(importWindow: @MainActor (PreparedSessionWindow) -> [UUID: String]) async {
     guard !started else { return }
@@ -174,31 +215,38 @@ struct SessionStartupBudget {
               )
             case .file(let path, _):
               let file = try await readFile(tab.metadata, URL(fileURLWithPath: path))
-              guard let state = file.resolvedViewState else {
+              guard let state = file.resolvedViewState,
+                file.resolvedPresentation != nil
+                  || tab.metadata.presentation == .single(selection: tab.metadata.selection)
+              else {
                 throw SessionStoreError.invalidMetadata
               }
               value = PreparedSessionTab(
                 metadata: tab.metadata, decoded: file.decoded, originalBytes: file.originalBytes,
-                url: file.url, viewState: state, utf16Count: file.utf16Count)
+                url: file.url, viewState: state, resolvedPresentation: file.resolvedPresentation,
+                utf16Count: file.utf16Count)
             case .recovery(let snapshot):
               value = try await Task.detached {
-                PreparedSessionTab(
+                let presentation = try RestoredPresentationState.resolve(
+                  tab.metadata.presentation, bookmarks: tab.metadata.bookmarks, in: snapshot.text)
+                return PreparedSessionTab(
                   metadata: tab.metadata,
                   decoded: DecodedDocument(
                     text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM),
                   originalBytes: nil, url: nil,
-                  viewState: try RestoredViewState.resolve(
-                    selection: tab.metadata.selection, bookmarks: tab.metadata.bookmarks,
-                    in: snapshot.text), utf16Count: snapshot.text.utf16.count)
+                  viewState: presentation.focusedViewState, resolvedPresentation: presentation,
+                  utf16Count: snapshot.text.utf16.count)
               }.value
             }
             guard request == generation else { return }
             try budget.admit(
               utf16Count: value.utf16Count, originalByteCount: value.originalBytes?.count ?? 0)
             prepared.append(value)
-            if value.viewState.selectionAdjusted || !value.viewState.invalidBookmarks.isEmpty {
+            if value.viewState.selectionAdjusted || !value.viewState.invalidBookmarks.isEmpty
+              || value.resolvedPresentation?.adjustedPaneIndices.isEmpty == false
+            {
               warnings.append(
-                "Saved positions for \(tab.metadata.originalPath ?? tab.metadata.id.uuidString) no longer match its text; selection was clamped and invalid bookmarks were omitted."
+                "Saved positions for \(tab.metadata.originalPath ?? tab.metadata.id.uuidString) no longer match its text; pane selections were clamped where needed and invalid bookmarks were omitted."
               )
             }
           } catch {
@@ -241,8 +289,8 @@ struct SessionStartupBudget {
           text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM)
         return SessionResolvedFile(
           url: nil, originalBytes: nil, decoded: decoded,
-          resolvedViewState: try RestoredViewState.resolve(
-            selection: entry.metadata.selection, bookmarks: entry.metadata.bookmarks,
+          resolvedPresentation: try RestoredPresentationState.resolve(
+            entry.metadata.presentation, bookmarks: entry.metadata.bookmarks,
             in: snapshot.text))
       }.value
     }
@@ -382,7 +430,7 @@ struct SessionStartupBudget {
     let decoded = try DocumentCodec.decode(bytes, encoding: metadata.encoding)
     return SessionResolvedFile(
       url: url, originalBytes: bytes, decoded: decoded,
-      resolvedViewState: try RestoredViewState.resolve(
-        selection: metadata.selection, bookmarks: metadata.bookmarks, in: decoded.text))
+      resolvedPresentation: try RestoredPresentationState.resolve(
+        metadata.presentation, bookmarks: metadata.bookmarks, in: decoded.text))
   }
 }
