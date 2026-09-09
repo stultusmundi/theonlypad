@@ -20,8 +20,12 @@ Recorder lifecycle checks inject monitor admission/event ownership: consume capt
 
 Independent review found no material defect in this bounded recorder. Physical capture, native editor/field-editor routing, keyboard-only preferences navigation, VoiceOver and layout variants remain acceptance gates.
 
-## Application owner review in progress
+## Application owner
 
-The isolated owner initially passed17 tests. Independent review then found a validate-to-read receipt race during uncertain-save retry: replacing a parent directory with identical bytes could give a new receipt authority over the replacement. A real regression and identity revalidation fix are required before production adoption. Existing passing tests did not cover that race. Pending evidence and the current runtime profile must survive refusal.
+The isolated owner initially passed17 tests. Independent review then found a validate-to-read receipt race during uncertain-save retry: replacing a parent directory with identical bytes could give a new receipt authority over the replacement. A real regression failed six assertions before the fix. The owner now revalidates original publication evidence after readback and before granting the temporary retry receipt; the store checks that receipt's parent again at write time. Re-review found no remaining material issue in this scope.
+
+`scripts/test-application-shortcuts.sh` freezes production PadCore/owner/test sources into an ignored Swift5 package. Its first retained run `.local/application-shortcuts-tests/run.sRzW59jh` passed18 tests in0.179 seconds, build9.53 seconds, no warnings. Tests cover off-main services, overlapping operations, catalog churn, reentrant publication, explicit repair/discard, pending evidence, exact retry and public revisions. The actual app subsequently compiled with this owner and the full368-test suite passed in14.599 seconds (`.local/shortcut-native-integration.log`). The owner is not yet connected to application menus.
+
+The native editor remains isolated. Its first29 checks missed real owner notifications during Apply: updates could invalidate the operation's own successful completion or hide a later export error. Independent review identified both cases; fixes and new regression evidence are required before adoption. Passing component tests alone do not establish integrated behavior.
 
 Current GUI access is blocked. Do not infer desktop success from these hidden or core checks. The requirements matrix retains H-01 as partial.
