@@ -29,3 +29,20 @@ An ignored instrumented copy preserved the same three100 MB saves and all valida
 Together these two encoding phases account for approximately95.7–96.6% of measured checkpoint wall time; corresponding process-CPU times were close to wall time. SHA-256 took31–33ms, atomic publication109–134ms (including93–97ms writes and about11ms file sync), and session save0.48–0.69ms. Replacement byte-check phases took about22–27ms. The final envelope was105,882,689bytes.
 
 These instrumented results identify JSON encoding as the dominant cost for this particular workload, rather than merely inferring it from source. Totals and nested phases overlap; do not sum every row. The instrumentation has overhead, is retained locally in an ignored source copy, and does not establish production allocation attribution or a universal filesystem/JSON ratio. A candidate optimization would need to preserve the recovery envelope/checksum contract and every validation step, with exact compatibility tests before adoption.
+
+## Compatible single-encode optimization
+
+A candidate now reuses the canonical snapshot JSON as the envelope payload, adding only fixed v1 framing and the computed hexadecimal checksum. All user text/path escaping remains JSONEncoder-owned. Save and uncertain-publication validation share the same encoder helper; load-time checksum validation, bounds and atomic-save steps remain intact.
+
+The unchanged legacy writer and candidate both passed the same25 tests:5 new compatibility tests (100 encoding/BOM/edge combinations and64 seeded combinations) plus20 existing file/recovery tests. Tests require byte equality with the legacy encoder, legacy reads, exact envelope limits, preservation on prepublication faults and uncertain readback. There was no invented failing correctness assertion for an optimization whose contract is unchanged.
+
+Controlled release comparison used identical native sources and the existing performance harness frozen from5f8121c, with one fresh100 MB process per implementation and three saves each. Both verified exact persisted text and unchanged original bytes.
+
+| Implementation | Actor publication seconds, runs1/2/3 | Maximum cumulative process RSS bytes |
+| --- | --- | --- |
+| Legacy | 4.153 / 4.195 / 4.196 | 1,349,566,464 |
+| Single encode | 2.137 / 2.226 / 2.227 | 1,381,367,808 |
+
+The median publication time was approximately47% lower in this workload. Peak RSS increased31,801,344bytes (about2.4%); no memory improvement is claimed. Capture times remained approximately0.008–0.042ms with the previously stated exclusions. Fixed run order, cache/allocator/thermal effects and three samples limit interpretation; this does not establish general typing responsiveness or a p95 target.
+
+Raw results: `.local/recovery-single-encode/results/legacy-100MB.json` and `candidate-100MB.json`. The helper and compatibility tests were adopted after independent review; fresh full core65954 passed204 tests in8.598seconds. Application checkpoint integration verification is pending.

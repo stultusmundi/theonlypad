@@ -101,9 +101,7 @@ public struct RecoveryStore: Sendable {
     try validate(snapshot)
     let file = url(snapshot.id)
     let previous = try readIfPresent(file)
-    let envelope = Envelope(version: 1, snapshot: snapshot, checksum: try checksum(snapshot))
-    let encoded = try encoder().encode(envelope)
-    guard encoded.count <= limits.maximumEnvelopeBytes else { throw RecoveryError.resourceLimit }
+    let encoded = try encodeEnvelope(snapshot)
     try validateSaveCapacity(id: snapshot.id, encodedBytes: encoded.count)
     try AtomicFileStore().save(encoded, to: file, expected: previous, fault: fault)
   }
@@ -116,9 +114,7 @@ public struct RecoveryStore: Sendable {
     guard evidence.destination.standardizedFileURL == url(snapshot.id).standardizedFileURL else {
       throw RecoveryError.invalidSnapshot
     }
-    let envelope = Envelope(version: 1, snapshot: snapshot, checksum: try checksum(snapshot))
-    let encoded = try encoder().encode(envelope)
-    guard encoded.count <= limits.maximumEnvelopeBytes else { throw RecoveryError.resourceLimit }
+    let encoded = try encodeEnvelope(snapshot)
     try AtomicFileStore().validatePublication(evidence, expected: encoded)
   }
   public func loadAll() throws -> [RecoverySnapshot] { try loadReport().snapshots }
@@ -250,6 +246,24 @@ public struct RecoveryStore: Sendable {
     let value = JSONEncoder()
     value.outputFormatting = [.sortedKeys]
     return value
+  }
+  /// Preserve the compact sorted-key v1 wire format while encoding snapshot content once.
+  /// All variable user content remains JSONEncoder-owned; framing includes only fixed keys
+  /// and a lowercase hexadecimal digest. Mutate the one encoded buffer to avoid retaining
+  /// an additional complete envelope alongside it (allocator peak remains measured separately).
+  private func encodeEnvelope(_ snapshot: RecoverySnapshot) throws -> Data {
+    var encoded = try encoder().encode(snapshot)
+    let digest = SHA256.hash(data: encoded).map { String(format: "%02x", $0) }.joined()
+    let prefix = Data(("{\"checksum\":\"" + digest + "\",\"snapshot\":").utf8)
+    let suffix = Data(",\"version\":1}".utf8)
+    let overhead = prefix.count + suffix.count
+    guard overhead <= limits.maximumEnvelopeBytes,
+      encoded.count <= limits.maximumEnvelopeBytes - overhead
+    else { throw RecoveryError.resourceLimit }
+    encoded.reserveCapacity(encoded.count + overhead)
+    encoded.insert(contentsOf: prefix, at: encoded.startIndex)
+    encoded.append(suffix)
+    return encoded
   }
   private func checksum(_ snapshot: RecoverySnapshot) throws -> String {
     SHA256.hash(data: try encoder().encode(snapshot)).map { String(format: "%02x", $0) }.joined()
