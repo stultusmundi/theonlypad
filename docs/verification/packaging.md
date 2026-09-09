@@ -2,11 +2,11 @@
 
 ## Latest verified artifact
 
-Source checkpoint `fdf0b3c` was packaged on 2026-09-09 after the exact dirty optimization passed the full native suite and the external decoder passed all 263 core tests. `scripts/package.sh --ad-hoc-sign` (local session 13719) exited 0; release compilation took 19.12 seconds. A separate post-promotion `scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` also passed.
+Source checkpoint `eaf5145` was packaged on2026-09-09 after native monitoring and checked Reload/Copy/Locate passed component and hidden controller verification. `scripts/package.sh --ad-hoc-sign` (session87796) exited0; release compilation took11.79seconds. Independent post-promotion `python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` also passed.
 
-Executable SHA-256: `2ce6bc8feb840c2fbfc0d32a3c6c924f668d66ffbdf64e8b24e6e1f24a8bb710`. The app, ZIP and development SBOM are in `dist/`. Verification covered six bundle files, exact archive/bundle contents, executable SBOM hash, safe archive paths and the script's narrow machine-path markers. This remains a local ad-hoc ARM64 build, without Developer ID or notarization. No external dependency or asset was added. The file-monitor service/native actions are not integrated.
+Executable SHA256: `370926fd82402e7ef4978e54f1907de67dd4f01ac30adb637ae54618216350ce`. App, ZIP and development SBOM are in `dist/`. Checks covered6bundle files, exact archive/bundle contents, executable SBOM hash, safe archive paths and specified ASCII machine-path markers. This is a local ad-hoc ARM64 build, with no DeveloperID/notarization/publication. No external dependency or asset was added.
 
-Current packaged desktop execution remains blocked by macOS UI Automation authentication. Earlier workflow passes apply only to their recorded historical binary hashes; this package has no packaged workflow acceptance claim. The following sections retain historical packaging development evidence.
+Current packaged desktop execution remains blocked by GUI access and macOS UI Automation authentication. Earlier workflow passes apply only to their recorded historical binary hashes; this package has no desktop workflow acceptance claim. Two new Reload/Copy XCUITest sources passed build-for-testing only. See [file-monitoring evidence](external-file-monitoring.md) for the exact core/hidden-native scope. The following sections retain historical packaging development evidence.
 
 ## Implemented
 

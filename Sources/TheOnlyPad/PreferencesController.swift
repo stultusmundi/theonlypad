@@ -7,6 +7,8 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
   private let store: SettingsStore
   private let saveSettings: @Sendable (EditorSettings) throws -> Void
   private let onApply: (EditorSettings) -> Void
+  var onShowShortcuts: (() -> Void)?
+  private let shortcutsButton = NSButton(title: "Keyboard Shortcuts…", target: nil, action: nil)
   private var current = EditorSettings.defaults
   private var loaded = false
   private var busy = false
@@ -33,7 +35,7 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
     self.saveSettings = saveSettings ?? { try store.save($0) }
     self.onApply = onApply
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 570, height: 425), styleMask: [.titled, .closable],
+      contentRect: NSRect(x: 0, y: 0, width: 570, height: 475), styleMask: [.titled, .closable],
       backing: .buffered, defer: false)
     super.init(window: window)
     window.title = String(localized: "Preferences")
@@ -42,6 +44,11 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
     window.center()
     window.initialFirstResponder = search
     load()
+  }
+
+  @objc private func showShortcuts() { onShowShortcuts?() }
+  func updateShortcutAttention(_ needed: Bool) {
+    shortcutsButton.title = needed ? "Keyboard Shortcuts — Needs Attention…" : "Keyboard Shortcuts…"
   }
 
   required init?(coder: NSCoder) { nil }
@@ -101,9 +108,13 @@ final class PreferencesController: NSWindowController, NSSearchFieldDelegate {
     }
 
     let buttons = NSStackView(views: [importButton, exportButton, resetButton])
+    shortcutsButton.target = self
+    shortcutsButton.action = #selector(showShortcuts)
+    shortcutsButton.setAccessibilityIdentifier("preferences.shortcuts")
     buttons.orientation = .horizontal
     buttons.spacing = 10
     stack.addArrangedSubview(buttons)
+    stack.addArrangedSubview(shortcutsButton)
     importButton.target = self
     importButton.action = #selector(importPreferences)
     exportButton.target = self

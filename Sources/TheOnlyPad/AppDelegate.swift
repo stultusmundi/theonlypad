@@ -6,6 +6,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var editors: [EditorWindowController] = []
   private var palette: CommandPaletteController?
   private var registry = CommandRegistry()
+  private var shortcutController: ApplicationShortcutController?
+  private var shortcutRegistryReady = false
   private var preparingQuit = false
   private var preferences: PreferencesController?
   private var settings = EditorSettings.defaults
@@ -39,7 +41,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       NSApp.terminate(nil)
       return
     }
-    buildMenus()
+    let shortcutOwner = ApplicationShortcuts(
+      services: ShortcutServices(store: ShortcutStore()), catalog: registry.commands)
+    let shortcuts = ApplicationShortcutController(
+      owner: shortcutOwner, isPreparingQuit: { [weak self] in self?.preparingQuit ?? true },
+      publish: { [weak self] state in self?.publishShortcuts(state) })
+    shortcutController = shortcuts
+    publishShortcuts(shortcuts.state)
+    shortcuts.start { [weak self] in self?.refreshExtensionCommands() }
     for name in [
       NSWorkspace.didWakeNotification, NSWorkspace.didMountNotification,
       NSWorkspace.didUnmountNotification,
@@ -51,7 +60,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
           Task { @MainActor [weak self] in self?.fileMonitoring.reconcile() }
         })
     }
-    refreshExtensionCommands()
     session.onSessionChange = { [weak self] in self?.checkpoints.requestCheckpoint() }
     restoreStartupSession()
     do {
@@ -85,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard let self else { return }
       do {
         try self.session.recordRecentOpen(url)
-        self.recentFiles?.update(
+        self.recentFiles?.refreshPresentation(
           paths: self.session.recentPaths, openedPath: url.standardizedFileURL.path)
       } catch { NSAlert(error: error).runModal() }
     }
@@ -143,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   private func showUnresolvedSession() {
     if let sessionPanel {
-      sessionPanel.update(entries: session.unresolved)
+      sessionPanel.refreshPresentation(entries: session.unresolved)
       sessionPanel.showWindow(nil)
       return
     }
@@ -213,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private func showRecentFiles() {
     guard session.restorationComplete else { return }
     if let recentFiles {
-      recentFiles.update(paths: session.recentPaths)
+      recentFiles.refreshPresentation(paths: session.recentPaths)
       recentFiles.showWindow(nil)
       return
     }
@@ -309,6 +317,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !preparingQuit else { return .terminateLater }
+    guard shortcutController?.canQuit != false else {
+      shortcutController?.explainQuitVeto()
+      return .terminateCancel
+    }
     preparingQuit = true
     fileMonitoring.suspend()
     recentFiles?.setSuspended(true)
@@ -365,6 +377,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   private func dispatch(_ id: String) {
     guard !preparingQuit else { return }
+    if id == "app.shortcuts" {
+      shortcutController?.showEditor()
+      return
+    }
+    guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else { return }
     if let viewer = NSApp.keyWindow?.windowController as? LargeFileWindowController {
       if id == "file.close" {
         viewer.close()
@@ -446,6 +463,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let controller = PreferencesController { [weak self] settings in
           self?.applySettings(settings)
         }
+        controller.onShowShortcuts = { [weak self] in self?.dispatch("app.shortcuts") }
+        controller.updateShortcutAttention(shortcutController?.needsAttention == true)
         preferences = controller
         controller.showWindow(nil)
       }
@@ -461,12 +480,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       if let command = extensionCommands[id] {
         let editor = activeEditor ?? newWindow()
         let documentID = editor.selectedDocumentID
+        let shortcutRevision = shortcutController?.state.catalogRevision
         Task { [weak self, weak editor] in
           do {
             let enabled = try await Task.detached {
               try ExtensionCatalog(directory: ExtensionCatalog.defaultDirectory).enabledCommands()
             }.value
-            guard let self, !self.preparingQuit, let editor else { return }
+            guard let self, !self.preparingQuit, let editor, self.shortcutRegistryReady,
+              self.shortcutController?.state.catalogRevision == shortcutRevision
+            else { return }
             guard let current = enabled.first(where: { $0.id == command.id }),
               current == command
             else { throw ExtensionCatalogError.missing }
@@ -496,6 +518,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     guard let id = menuItem.representedObject as? String else { return true }
     if preparingQuit { return false }
+    if id == "app.shortcuts" { return shortcutController != nil }
+    guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else {
+      return false
+    }
     if id == "file.recent" { return true }
     if id == "file.retrySession" { return checkpoints.lastError != nil }
     if id == "file.restoreSession" { return !session.unresolved.isEmpty }
@@ -521,9 +547,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   private func refreshExtensionCommands() {
+    guard !preparingQuit else { return }
     extensionGeneration += 1
     let generation = extensionGeneration
     extensionCommands = [:]
+    if let base = try? AppCommands.registry() { shortcutController?.updateCatalog(base.commands) }
     Task { [weak self] in
       do {
         let commands = try await Task.detached {
@@ -535,15 +563,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
           try updated.register(
             CommandDescriptor(id: command.id, title: command.extensionName + ": " + command.title))
         }
-        self.registry = updated
         self.extensionCommands = Dictionary(uniqueKeysWithValues: commands.map { ($0.id, $0) })
-        self.buildMenus()
+        self.shortcutController?.updateCatalog(updated.commands)
       } catch {
         guard let self, !self.preparingQuit, self.extensionGeneration == generation else { return }
-        self.registry = (try? AppCommands.registry()) ?? CommandRegistry()
-        self.buildMenus()
+        if let base = try? AppCommands.registry() {
+          self.shortcutController?.updateCatalog(base.commands)
+        }
         NSAlert(error: error).runModal()
       }
+    }
+  }
+
+  private func publishShortcuts(_ state: ShortcutOwnerState) {
+    guard !preparingQuit else { return }
+    shortcutRegistryReady = state.composition != nil
+    if let effective = state.composition { registry = effective.registry }
+    palette?.close()
+    palette = nil
+    help?.close()
+    help = nil
+    preferences?.updateShortcutAttention(shortcutController?.needsAttention == true)
+    buildMenus()
+  }
+  private func withdrawShortcutEquivalents(_ menu: NSMenu) {
+    for item in menu.items {
+      if item.representedObject is String {
+        item.keyEquivalent = ""
+        item.keyEquivalentModifierMask = []
+      }
+      if let submenu = item.submenu { withdrawShortcutEquivalents(submenu) }
     }
   }
 
@@ -589,20 +638,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             ? tools
             : descriptor.id.hasPrefix("macro.")
               ? macros : descriptor.id.hasPrefix("app.") ? app : view
-      let components = descriptor.shortcut?.split(separator: "+").map(String.init) ?? []
-      let key = components.last ?? ""
-      let functionKeys = ["up": "\u{F700}", "down": "\u{F701}"]
-      let item = NSMenuItem(
-        title: descriptor.title, action: #selector(command(_:)),
-        keyEquivalent: functionKeys[key] ?? key)
+      let title =
+        descriptor.id == "app.shortcuts" && shortcutController?.needsAttention == true
+        ? "Keyboard Shortcuts — Needs Attention…" : descriptor.title
+      let item = NSMenuItem(title: title, action: #selector(command(_:)), keyEquivalent: "")
       item.target = self
       item.representedObject = descriptor.id
-      var modifiers: NSEvent.ModifierFlags = []
-      if components.contains("cmd") { modifiers.insert(.command) }
-      if components.contains("shift") { modifiers.insert(.shift) }
-      if components.contains("ctrl") { modifiers.insert(.control) }
-      if components.contains("alt") { modifiers.insert(.option) }
-      item.keyEquivalentModifierMask = modifiers
+      NativeKeyboardShortcut.configure(
+        item,
+        shortcut: shortcutRegistryReady
+          ? descriptor.shortcut.flatMap { try? KeyboardShortcut(canonicalString: $0) } : nil)
       if menu === app { menu.insertItem(item, at: 1) } else { menu.addItem(item) }
     }
     let window = submenu("Window")
@@ -614,6 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)),
       keyEquivalent: "")
     NSApp.windowsMenu = window
+    if !shortcutRegistryReady { withdrawShortcutEquivalents(main) }
     NSApp.mainMenu = main
   }
 }

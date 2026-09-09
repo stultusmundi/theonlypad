@@ -19,6 +19,14 @@ jobs:
         run: xcrun swift-format lint --strict --recursive Sources Tests Package.swift
       - name: Native integration
         run: scripts/test-native-integration.sh
+      - name: Shortcut ownership and native recording
+        run: |
+          scripts/test-application-shortcuts.sh
+          scripts/test-shortcut-application.sh
+          build_path=$(scripts/swift.sh build --show-bin-path)
+          scripts/test-shortcut-recorder.sh "$build_path"
+          scripts/test-shortcut-editor.sh "$build_path"
+          scripts/test-native-presentation-refresh.sh "$build_path"
       - name: Package promotion rollback tests
         run: python3 scripts/test-package-promotion.py
       - name: Local package

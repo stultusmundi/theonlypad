@@ -8,6 +8,8 @@ Scintilla is the strongest next **native adapter prototype**, because an actual 
 
 Keep the working TextKit application as the baseline while testing a narrow Scintilla adapter. Do not add a bespoke multicursor text engine to NSTextView before that comparison. CodeMirror 6 in WKWebView is a credible fallback if Scintilla fails the Unicode/accessibility gates, but there is no local CodeMirror runtime evidence yet. Native integration preference favors Scintilla; it does not override correctness.
 
+
+Subsequent evidence: [CodeMirror feasibility](codemirror-feasibility.md) now records local functional/tuned and ordinary multiline probes; the no-runtime statement above is historical. Its tuned adapter's1M-unit cap does not establish100MB acceptance. The additional native selection probe in [editor feasibility](../../verification/editor-feasibility.md) confirms that retained nonempty ranges still do not provide multicursor typing. A bounded command transaction gate remains isolated; no engine migration or production multicursor layer has been adopted.
 ## Official capability evidence
 
 | Area | Scintilla Cocoa | CodeMirror 6 |

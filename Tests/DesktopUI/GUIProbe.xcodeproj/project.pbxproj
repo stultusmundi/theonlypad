@@ -81,6 +81,8 @@
 		<dict>
 			<key>buildSettings</key>
 			<dict>
+				<key>ALWAYS_SEARCH_USER_PATHS</key>
+				<string>NO</string>
 				<key>CODE_SIGN_IDENTITY</key>
 				<string>-</string>
 				<key>CODE_SIGN_STYLE</key>
@@ -90,7 +92,7 @@
 				<key>GENERATE_INFOPLIST_FILE</key>
 				<string>YES</string>
 				<key>MACOSX_DEPLOYMENT_TARGET</key>
-				<string>13.0</string>
+				<string>14.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>org.theonlypad.GUIProbe</string>
 				<key>PRODUCT_NAME</key>

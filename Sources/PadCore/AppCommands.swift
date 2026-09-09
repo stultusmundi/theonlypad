@@ -74,6 +74,7 @@ public enum AppCommands {
       .init(id: "macro.manage", title: "Manage and Replay Macros…"),
       .init(id: "macro.cancel", title: "Cancel Macro Replay"),
       .init(id: "app.preferences", title: "Settings…", shortcut: "cmd+,"),
+      .init(id: "app.shortcuts", title: "Keyboard Shortcuts…"),
       .init(id: "app.help", title: "Help and Shortcuts"),
       .init(id: "view.palette", title: "Command Palette…", shortcut: "cmd+shift+p"),
     ]

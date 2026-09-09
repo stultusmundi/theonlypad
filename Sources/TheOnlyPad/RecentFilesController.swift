@@ -19,6 +19,7 @@ final class RecentFilesController: NSWindowController, NSWindowDelegate, NSTable
     title: NSLocalizedString("Remove From List", comment: "Recent files"), target: nil, action: nil)
   private let clearButton = NSButton(
     title: NSLocalizedString("Clear List", comment: "Recent files"), target: nil, action: nil)
+  private var restoringSelection = false
   private var generation = 0
   private var closed = false
   private var suspended = false
@@ -145,12 +146,30 @@ final class RecentFilesController: NSWindowController, NSWindowDelegate, NSTable
       wrappingLabelWithString: URL(fileURLWithPath: path).lastPathComponent + "\n" + path)
   }
   func tableViewSelectionDidChange(_ notification: Notification) {
+    guard !restoringSelection else { return }
     if isBusy { invalidate() }
     status.stringValue = ""
     refresh()
   }
   private var selectedPath: String? {
     paths.indices.contains(table.selectedRow) ? paths[table.selectedRow] : nil
+  }
+  /// Refreshing the list does not replace an active request whose selected path still exists.
+  /// Explicit update, suspension, close, or a real selection change remain cancellation boundaries.
+  func refreshPresentation(paths: [String], openedPath: String? = nil) {
+    guard !closed else { return }
+    guard let selection = selectedPath, paths.contains(selection) else {
+      update(paths: paths, openedPath: openedPath)
+      return
+    }
+    self.paths = paths
+    reload(selected: selection)
+    refresh()
+    if let openedPath, !isBusy, !suspended {
+      status.stringValue = String(
+        format: NSLocalizedString("Opened %@.", comment: "Recent files"),
+        URL(fileURLWithPath: openedPath).lastPathComponent)
+    }
   }
   private func invalidate() {
     generation += 1
@@ -159,6 +178,8 @@ final class RecentFilesController: NSWindowController, NSWindowDelegate, NSTable
     isBusy = false
   }
   private func reload(selected path: String?) {
+    restoringSelection = true
+    defer { restoringSelection = false }
     table.reloadData()
     if let path, let index = paths.firstIndex(of: path) {
       table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)

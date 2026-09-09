@@ -473,4 +473,212 @@ final class GUIProbe: XCTestCase {
     assertText(dirty, in: app)
     XCTAssertEqual(try Data(contentsOf: file), Data(disk.utf8))
   }
+
+  @MainActor
+  func testLocateMovedFilePreservesDirtyUndoAndSavesToChosenLocation() throws {
+    let (app, state) = try fixture()
+    let original = state.appendingPathComponent("synthetic-before-move.txt")
+    let moved = state.appendingPathComponent("synthetic-after-move.txt")
+    let saved = "synthetic saved before move\n"
+    let dirty = "synthetic unsaved after move\n"
+    try Data(saved.utf8).write(to: original)
+    open(original, in: app)
+    assertText(saved, in: app)
+    let tab = app.descendants(matching: .any).matching(
+      NSPredicate(
+        format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+        "tab.select.", original.lastPathComponent)
+    ).firstMatch
+    XCTAssertTrue(tab.waitForExistence(timeout: 10))
+    let tabID = tab.identifier
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("a", modifierFlags: .command)
+    app.typeText(dirty)
+    assertText(dirty, in: app)
+    try FileManager.default.moveItem(at: original, to: moved)
+    let missing = app.staticTexts.matching(
+      NSPredicate(
+        format: "value CONTAINS %@ OR label CONTAINS %@",
+        "The original file is missing.", "The original file is missing.")
+    ).firstMatch
+    XCTAssertTrue(missing.waitForExistence(timeout: 40))
+    diskAction("document.locateFile", in: app)
+    let panel = app.dialogs["open-panel"]
+    XCTAssertTrue(panel.waitForExistence(timeout: 10))
+    app.typeKey(.escape, modifierFlags: [])
+    assertText(dirty, in: app)
+    XCTAssertTrue(missing.exists, "Cancel must retain the original missing-file binding")
+    XCTAssertEqual(try Data(contentsOf: moved), Data(saved.utf8))
+
+    diskAction("document.locateFile", in: app)
+    XCTAssertTrue(panel.waitForExistence(timeout: 10))
+    app.typeKey("g", modifierFlags: [.command, .shift])
+    app.typeText(moved.path)
+    app.typeKey(.return, modifierFlags: [])
+    let choose = panel.buttons["OKButton"]
+    XCTAssertTrue(choose.waitForExistence(timeout: 10))
+    choose.click()
+    let sameTab = app.descendants(matching: .any).matching(identifier: tabID).firstMatch
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", moved.lastPathComponent),
+            object: sameTab)
+        ], timeout: 10), .completed)
+    assertText(dirty, in: app)
+    XCTAssertEqual(
+      try Data(contentsOf: moved), Data(saved.utf8),
+      "Locate must not write unsaved buffer contents to the selected file")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("z", modifierFlags: .command)
+    assertText(saved, in: app)
+    app.typeKey("z", modifierFlags: [.command, .shift])
+    assertText(dirty, in: app)
+    app.typeKey("s", modifierFlags: .command)
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+              (try? Data(contentsOf: moved)) == Data(dirty.utf8)
+            }, object: nil)
+        ], timeout: 10), .completed)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+    quitAndRelaunch(app)
+    assertText(dirty, in: app)
+    XCTAssertEqual(try Data(contentsOf: moved), Data(dirty.utf8))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+    let restoredTab = app.descendants(matching: .any).matching(
+      NSPredicate(
+        format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+        "tab.select.", moved.lastPathComponent)
+    ).firstMatch
+    XCTAssertTrue(restoredTab.waitForExistence(timeout: 10))
+    restoredTab.click()
+    let reopened = dirty + "synthetic edit after relaunch\n"
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("a", modifierFlags: .command)
+    app.typeText(reopened)
+    assertText(reopened, in: app)
+    app.typeKey("s", modifierFlags: .command)
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+              (try? Data(contentsOf: moved)) == Data(reopened.utf8)
+            }, object: nil)
+        ], timeout: 10), .completed)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+  }
+
+  @MainActor
+  func testCustomShortcutRecordingPersistenceAndRestoreDefaults() throws {
+    let (app, _) = try fixture()
+    func shortcuts() -> XCUIElement {
+      let menu = app.menuBars.menuBarItems["TheOnlyPad"]
+      menu.click()
+      let command = menu.menus.menuItems.matching(
+        NSPredicate(format: "title BEGINSWITH %@", "Keyboard Shortcuts")
+      ).firstMatch
+      XCTAssertTrue(command.waitForExistence(timeout: 10))
+      XCTAssertTrue(command.isEnabled)
+      command.click()
+      let window = app.windows["Keyboard Shortcuts"]
+      XCTAssertTrue(window.waitForExistence(timeout: 10))
+      return window
+    }
+    func tabCount() -> Int {
+      app.descendants(matching: .any).matching(
+        NSPredicate(format: "identifier BEGINSWITH %@", "tab.select.")
+      ).count
+    }
+    func assertTabCountRemains(_ count: Int) {
+      let changed = XCTNSPredicateExpectation(
+        predicate: NSPredicate { _, _ in tabCount() != count }, object: nil)
+      changed.isInverted = true
+      XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 1), .completed)
+      XCTAssertEqual(tabCount(), count)
+    }
+    func assertApplied(in window: XCUIElement) {
+      let status = window.textViews["shortcuts.status"]
+      XCTAssertTrue(status.waitForExistence(timeout: 5))
+      XCTAssertEqual(
+        XCTWaiter.wait(
+          for: [
+            XCTNSPredicateExpectation(
+              predicate: NSPredicate(format: "value CONTAINS %@", "Shortcut settings saved."),
+              object: status)
+          ], timeout: 10), .completed)
+    }
+    let window = shortcuts()
+    let search = window.searchFields["shortcuts.search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5))
+    search.click()
+    search.typeText("New Tab")
+    let row = window.tables["shortcuts.commands"].staticTexts["New Tab"].firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.click()
+    let record = window.buttons["shortcuts.record"]
+    XCTAssertTrue(record.isEnabled)
+    record.click()
+    app.typeKey("n", modifierFlags: [.command, .option])
+    let apply = window.buttons["shortcuts.apply"]
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"), object: apply)
+        ], timeout: 10), .completed)
+    apply.click()
+    assertApplied(in: window)
+    window.buttons["shortcuts.cancel"].click()
+    app.textViews["Document text"].firstMatch.click()
+    let before = tabCount()
+    app.typeKey("n", modifierFlags: .command)
+    assertTabCountRemains(before)
+    assertText("", in: app)
+    app.typeKey("n", modifierFlags: [.command, .option])
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in tabCount() == before + 1 }, object: nil)
+        ],
+        timeout: 10), .completed)
+    app.textViews["Document text"].firstMatch.click()
+    app.typeText("synthetic customized shortcut tab")
+    assertText("synthetic customized shortcut tab", in: app)
+    quitAndRelaunch(app)
+    assertText("synthetic customized shortcut tab", in: app)
+    let restoredCount = tabCount()
+    app.typeKey("n", modifierFlags: [.command, .option])
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in tabCount() == restoredCount + 1 }, object: nil)
+        ],
+        timeout: 10), .completed)
+    assertText("", in: app)
+    let reset = shortcuts()
+    reset.buttons["shortcuts.reset"].click()
+    XCTAssertTrue(reset.buttons["shortcuts.apply"].isEnabled)
+    reset.buttons["shortcuts.apply"].click()
+    assertApplied(in: reset)
+    reset.buttons["shortcuts.cancel"].click()
+    let resetCount = tabCount()
+    app.typeKey("n", modifierFlags: [.command, .option])
+    assertTabCountRemains(resetCount)
+    app.typeKey("n", modifierFlags: .command)
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in tabCount() == resetCount + 1 }, object: nil)
+        ],
+        timeout: 10), .completed)
+  }
 }

@@ -148,6 +148,26 @@ final class SessionRestorationController: NSWindowController, NSWindowDelegate,
     }
     refresh()
   }
+  /// Status and unrelated-record refreshes preserve the selected request's semantic identity.
+  /// update(entries:) remains the explicit cancellation API, including quit fencing.
+  func refreshPresentation(entries: [UnresolvedSessionEntry]) {
+    guard !closed else { return }
+    guard let current = selected,
+      let replacement = entries.first(where: { $0.metadata.id == current.metadata.id }),
+      replacement.windowID == current.windowID,
+      replacement.metadata == current.metadata,
+      replacement.hasRecovery == current.hasRecovery
+    else {
+      update(entries: entries)
+      return
+    }
+    self.entries = entries
+    table.reloadData()
+    if let index = entries.firstIndex(where: { $0.metadata.id == current.metadata.id }) {
+      table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+    }
+    refresh()
+  }
   private func invalidate() {
     generation += 1
     task?.cancel()

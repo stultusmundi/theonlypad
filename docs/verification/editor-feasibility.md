@@ -53,3 +53,12 @@ An earlier `glyphRange(forBoundingRect:)` probe returned implausibly tiny times 
 The wrapped pathological-line layout takes over 100 ms even for the first 2,000 requested characters. Detect long lines before editor installation; expose a large-file/long-line capability mode and benchmark no-wrap/limited-layout behavior. Do not claim the 50 ms input target or 100 MB usable-within-five-seconds target from these storage timings.
 
 Still outstanding: cold launch; repeated event-to-paint latency/p95; full document scrolling and jumps; 1 GB bounded-memory viewing/search; peak memory; incremental syntax edits and cancellation; rectangular-selection gestures/rendering; recovery; real IME composition; VoiceOver/focus; GUI automation; packaged-app behavior. Accessibility trust is unavailable for this process, and no UI automation or manual desktop test was exercised here. Continue independent implementation and use a permitted desktop harness or explicit user-granted accessibility access for those acceptance tests.
+
+
+## Additional native selection semantics (2026-09-09)
+
+A hidden AppKit probe used the actual DocumentTextView subclass, two TextKit1 layout managers and shared NSTextStorage/UndoManager without constructing a window. It retained three nonempty selected ranges, then tested insertion, newline, backward/forward deletion, subsequent insertions and programmatic marked text. Both insertion APIs and newline replace only the first range. Backward/forward deletion removes all three ranges, then collapses to one caret. Multiple empty ranges collapse; mixed empty/nonempty ranges retain only the nonempty selection. This agrees with the installed NSTextView header's restriction to nonzero-length multiple ranges.
+
+All11 cases restored exact UTF16 content through grouped shared undo/redo, including whole combining/emoji graphemes amid Hebrew, CRLF and CJK. That does not prove multi-caret typing, physical IME, gesture rectangles, accessibility or real typing coalescence. No timing or memory claim is made. Private evidence: `.local/multiselection-spike/run.nxkGzSBp`, exit0, no compiler diagnostics.
+
+A bounded real-controller command transaction gate is now being evaluated in ignored sources. It is not a production selection layer or adoption of a bespoke engine. Existing mature Scintilla/CodeMirror comparison and their Unicode, exact-line-ending, history and large-file limitations remain required architecture inputs.
