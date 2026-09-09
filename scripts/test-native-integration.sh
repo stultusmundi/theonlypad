@@ -99,6 +99,20 @@ native_sources=()
 for source in Sources/TheOnlyPad/*.swift; do
   if [ "$source" != "Sources/TheOnlyPad/TheOnlyPadApplication.swift" ]; then native_sources+=("$source"); fi
 done
+# Test-only same-file access and comparison counters stay out of the application model.
+dirty_sources=()
+for source in "${native_sources[@]}"; do
+  if [ "$source" != "Sources/TheOnlyPad/EditorDocument.swift" ]; then dirty_sources+=("$source"); fi
+done
+dirty_model=$(python3 scripts/prepare-dirty-harness.py)
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${dirty_sources[@]}" "$dirty_model" \
+  Tests/NativeIntegration/DirtyDifferentialHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/dirty-differential-test
+python3 - <<'PY'
+import subprocess
+subprocess.run([".local/native-integration/dirty-differential-test"], check=True, timeout=60)
+PY
 # Same-file fixtures exercise private controller callbacks without widening the app API.
 routing_sources=()
 for source in "${native_sources[@]}"; do

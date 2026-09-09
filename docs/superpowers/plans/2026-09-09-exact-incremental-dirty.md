@@ -1,6 +1,6 @@
 # Exact incremental dirty comparison: execution plan
 
-Status: fixed native API-contract probe passed; remaining tests and optimized implementation are planned. The measured controller baseline and work-bound red precede implementation. Engine owns the ignored candidate; root owns production integration. Preserve unrelated changes. See [design](../specs/exact-incremental-dirty.md) and [contract evidence](../../verification/storage-edit-range-contract.md).
+Status: reviewed production implementation and full native integration passed; broader performance and packaged desktop acceptance remain incomplete. The measured controller baseline and work-bound red precede implementation. Engine owns the ignored candidate; root owns production integration. Preserve unrelated changes. See [design](../specs/exact-incremental-dirty.md) and [contract evidence](../../verification/storage-edit-range-contract.md).
 
 ## First API-contract probe (before optimization)
 
@@ -59,9 +59,9 @@ No promise all histories are O(edit size): unknown baselines, transient batches 
 | Fixed native edit-range contract | Tested | 31 processed edits and109 exact dirty-oracle queries passed; storage-edit-range-contract.md records limits and fixture failures. |
 | Instrumented unchanged controller work bound | Tested red | Actual100MB EOF replacement reached the intended submitted-span assertion after exactness/visibility checks:100,000,000 units exceeds4,096. No optimized implementation yet. |
 | Repeated unchanged controller attribution | Tested | All six fresh children passed,108 operations; same-length100MB medians433–456ms, comparator425–447ms. See ../../verification/incremental-dirty-baseline.md. |
-| Implement conservative exact interval/suffix proof | In progress, isolated | Engine owns ignored candidate; root owns EditorDocument and native-suite integration. Keep metadata/publication independent and fallback exact. No candidate tests or production adoption yet. |
-| Seeded transition/oracle and native history tests | Planned | At least100 seeds ×200 operations, proof invariants and exact dirty oracle at every state; retain native shared-pane/undo/marked-text cases. |
-| Candidate work bound and measured comparison | Planned | Same retained baseline protocol and fixtures, unchanged gates/targets; incomplete runs remain incomplete. |
-| Independent code review and production integration | Planned | Resolve material findings, copy only reviewed source/tests, run core and affected/full native compatibility, then package when appropriate. |
+| Implement conservative exact interval/suffix proof | Implemented and tested | Reviewed extraction in EditorDocument; exact fallback and independent metadata/publication state retained. |
+| Seeded transition/oracle and native history tests | Tested | Retained native harness: 40,000 operations, 43,226 oracle checks, 70,936 proof checks, seven span/fallback cases. |
+| Candidate work bound and measured comparison | Tested, scoped | Unchanged protocol: six fresh measurement children, 108 operations; 100 MB replacement median 19.24 ms versus 452.98 ms baseline. See incremental-dirty-results.md; checkpoint workload excluded. |
+| Independent code review and production integration | Integrated, native tested | Independent algorithm review clear; full native run 37987 exited 0. Final independent integration review clear; current package predates extraction. |
 
 Current local baseline commands are `bash .local/controller-latency-review/baseline/compile.sh`, then `python3 .local/controller-latency-review/baseline/run.py 100000000 work-bound`, followed by `measure` mode for100000000 and10000000. The work-bound command intentionally returns failure on unchanged code. Initial restricted log-descriptor setup failure was preserved separately and does not count as behavioral red. These ignored investigation commands are not yet public reproduction tooling for an adopted optimization.

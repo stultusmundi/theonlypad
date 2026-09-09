@@ -1,0 +1,224 @@
+[
+  {
+    "directory": "20260909T165940.789588Z-6f07df0d",
+    "size": 100000000,
+    "samples": 54,
+    "operations": {
+      "append": {
+        "n": 9,
+        "medianTotalMS": 18.89524999933201,
+        "maxTotalMS": 22.039250001398614,
+        "p95TotalMS": 22.039250001398614,
+        "medianCompareMS": 0,
+        "submittedSpans": [
+          0
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.004666671884479001,
+          "status.total": 0.08287499804282561,
+          "language.detect": 0.2937916651717387,
+          "highlighter.clear": 0.19137500203214586,
+          "storage.observer": 0.009708332072477788
+        }
+      },
+      "redo": {
+        "n": 9,
+        "medianTotalMS": 7.129291665478377,
+        "maxTotalMS": 8.12295833384269,
+        "p95TotalMS": 8.12295833384269,
+        "medianCompareMS": 0.0013750031939707696,
+        "submittedSpans": [
+          35
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.0014583347365260124,
+          "status.total": 0.033375003113178536,
+          "language.detect": 0.11900000026798807,
+          "highlighter.clear": 0.0652083326713182,
+          "storage.observer": 0.007375001587206498
+        }
+      },
+      "replace": {
+        "n": 9,
+        "medianTotalMS": 19.236291667766636,
+        "maxTotalMS": 25.12820833362639,
+        "p95TotalMS": 25.12820833362639,
+        "medianCompareMS": 0.003333330823807046,
+        "submittedSpans": [
+          35
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.003458331775618717,
+          "status.total": 0.053583335102302954,
+          "language.detect": 0.2739583360380493,
+          "highlighter.clear": 0.1567083345435094,
+          "storage.observer": 0.00687500141793862
+        }
+      },
+      "restore": {
+        "n": 9,
+        "medianTotalMS": 16.346374999557156,
+        "maxTotalMS": 19.36299999943003,
+        "p95TotalMS": 19.36299999943003,
+        "medianCompareMS": 0.0032083335099741817,
+        "submittedSpans": [
+          35
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.01424999936716631,
+          "status.total": 0.06929166193003766,
+          "language.detect": 0.3013749992533121,
+          "highlighter.clear": 0.18454166638548486,
+          "storage.observer": 0.009750001481734216
+        }
+      },
+      "undo": {
+        "n": 9,
+        "medianTotalMS": 15.671291665057652,
+        "maxTotalMS": 21.941875002085,
+        "p95TotalMS": 21.941875002085,
+        "medianCompareMS": 0.003166664100717753,
+        "submittedSpans": [
+          35
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.007208334864117205,
+          "status.total": 0.08079166582319885,
+          "language.detect": 0.29399999766610563,
+          "highlighter.clear": 0.16541666627745144,
+          "storage.observer": 0.009166666131932288
+        }
+      },
+      "undoAppend": {
+        "n": 9,
+        "medianTotalMS": 15.605708333168877,
+        "maxTotalMS": 22.316666665574303,
+        "p95TotalMS": 22.316666665574303,
+        "medianCompareMS": 0.003666664269985631,
+        "submittedSpans": [
+          35
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.005166661139810458,
+          "status.total": 0.11862499741255306,
+          "language.detect": 0.31420833329320885,
+          "highlighter.clear": 0.23499999952036887,
+          "storage.observer": 0.009708332072477788
+        }
+      }
+    },
+    "peakRSSBytes": 532905984,
+    "maxNavigationMS": 23.386083332297858
+  },
+  {
+    "directory": "20260909T170058.665985Z-45cdd7d5",
+    "size": 10000000,
+    "samples": 54,
+    "operations": {
+      "append": {
+        "n": 9,
+        "medianTotalMS": 18.36729166461737,
+        "maxTotalMS": 20.627458332455717,
+        "p95TotalMS": 20.627458332455717,
+        "medianCompareMS": 0,
+        "submittedSpans": [
+          0
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.005458328814711422,
+          "status.total": 0.12725000124191865,
+          "language.detect": 0.46295833453768864,
+          "highlighter.clear": 0.31099999978323467,
+          "storage.observer": 0.01237499964190647
+        }
+      },
+      "redo": {
+        "n": 9,
+        "medianTotalMS": 10.508499999559717,
+        "maxTotalMS": 13.7102499975299,
+        "p95TotalMS": 13.7102499975299,
+        "medianCompareMS": 0.0024583350750617683,
+        "submittedSpans": [
+          10
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.0029999973776284605,
+          "status.total": 0.06733333066222258,
+          "language.detect": 0.2355833348701708,
+          "highlighter.clear": 0.1620833318156656,
+          "storage.observer": 0.008291666745208204
+        }
+      },
+      "replace": {
+        "n": 9,
+        "medianTotalMS": 19.747333331906702,
+        "maxTotalMS": 24.72183333520661,
+        "p95TotalMS": 24.72183333520661,
+        "medianCompareMS": 0.005541663995245472,
+        "submittedSpans": [
+          10
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.005416666681412607,
+          "status.total": 0.09862500155577436,
+          "language.detect": 0.4671666683861986,
+          "highlighter.clear": 0.23158333351602778,
+          "storage.observer": 0.01545833220006898
+        }
+      },
+      "restore": {
+        "n": 9,
+        "medianTotalMS": 13.82045833452139,
+        "maxTotalMS": 18.355041665927274,
+        "p95TotalMS": 18.355041665927274,
+        "medianCompareMS": 0.003041666786884889,
+        "submittedSpans": [
+          10
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.004041670763399452,
+          "status.total": 0.0632499941275455,
+          "language.detect": 0.26950000028591603,
+          "highlighter.clear": 0.16366666386602446,
+          "storage.observer": 0.012750002497341484
+        }
+      },
+      "undo": {
+        "n": 9,
+        "medianTotalMS": 19.373833332792856,
+        "maxTotalMS": 26.268416666425765,
+        "p95TotalMS": 26.268416666425765,
+        "medianCompareMS": 0.0038750004023313522,
+        "submittedSpans": [
+          10
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.005416666681412607,
+          "status.total": 0.15124999845284037,
+          "language.detect": 0.4533333340077661,
+          "highlighter.clear": 0.7473750010831282,
+          "storage.observer": 0.013916665920987725
+        }
+      },
+      "undoAppend": {
+        "n": 9,
+        "medianTotalMS": 20.12595833366504,
+        "maxTotalMS": 20.789624999451917,
+        "p95TotalMS": 20.789624999451917,
+        "medianCompareMS": 0.004875000740867108,
+        "submittedSpans": [
+          10
+        ],
+        "maxStageMS": {
+          "status.bridge": 0.019416667782934383,
+          "status.total": 0.14108333562035114,
+          "language.detect": 0.5682083319697995,
+          "highlighter.clear": 0.2735833331826143,
+          "storage.observer": 0.013875000149710104
+        }
+      }
+    },
+    "peakRSSBytes": 165363712,
+    "maxNavigationMS": 23.219166665512603
+  }
+]
