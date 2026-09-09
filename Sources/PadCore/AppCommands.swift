@@ -16,6 +16,7 @@ public enum AppCommands {
       .init(id: "file.close", title: "Close Tab", shortcut: "cmd+w"),
       .init(id: "file.recent", title: "Recent Files…"),
       .init(id: "file.restoreSession", title: "Unresolved Session Tabs…"),
+      .init(id: "file.retrySession", title: "Retry Session Recovery Save"),
       .init(id: "file.reopenClosed", title: "Reopen Closed Tab", shortcut: "cmd+shift+t"),
       .init(id: "file.nextTab", title: "Next Tab", shortcut: "cmd+shift+]"),
       .init(id: "file.previousTab", title: "Previous Tab", shortcut: "cmd+shift+["),

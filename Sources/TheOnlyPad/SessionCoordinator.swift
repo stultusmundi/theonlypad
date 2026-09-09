@@ -38,18 +38,44 @@ struct SessionStartupBudget {
 
 /// Owns unresolved metadata. Async readers do not create or change editor windows.
 @MainActor final class SessionCoordinator {
-  private(set) var unresolved: [UnresolvedSessionEntry] = []
+  var onSessionChange: (() -> Void)?
+  private(set) var unresolved: [UnresolvedSessionEntry] = [] {
+    didSet {
+      // Error prose is panel state, not persisted metadata.
+      let unchanged =
+        oldValue.count == unresolved.count
+        && zip(oldValue, unresolved).allSatisfy {
+          $0.windowID == $1.windowID && $0.metadata == $1.metadata
+        }
+      if !unchanged { onSessionChange?() }
+    }
+  }
   private(set) var warnings: [String] = []
   private(set) var startupErrors: [String] = []
-  private(set) var restorationComplete = false
+  private(set) var restorationComplete = false {
+    didSet { if oldValue != restorationComplete { onSessionChange?() } }
+  }
   private var preservationError: Error?
-  private var originalWindows: [SessionWindow] = []
-  private(set) var recentPaths: [String] = []
+  private var originalWindows: [SessionWindow] = [] {
+    didSet { if oldValue != originalWindows { onSessionChange?() } }
+  }
+  private(set) var recentPaths: [String] = [] {
+    didSet {
+      let unchanged =
+        oldValue.count == recentPaths.count
+        && zip(oldValue, recentPaths).allSatisfy { $0.utf8.elementsEqual($1.utf8) }
+      if !unchanged { onSessionChange?() }
+    }
+  }
   private var generation = 0
   private var started = false
   private var recoveryIDs = Set<UUID>()
   private var recoveryByID: [UUID: RecoverySnapshot] = [:]
-  private var removals: [UUID: Task<Void, Error>] = [:]
+  private struct PendingRemoval {
+    let token = UUID()
+    let task: Task<Void, Error>
+  }
+  private var removals: [UUID: PendingRemoval] = [:]
   private let removeRecovery: @MainActor (UUID) async throws -> Void
   private let loadSession: @MainActor () async throws -> EditorSession?
   private let claimRecovery: @MainActor () async throws -> RecoveryCoordinator.Startup
@@ -235,26 +261,40 @@ struct SessionStartupBudget {
   }
   func remove(_ entry: UnresolvedSessionEntry) async throws {
     let id = entry.metadata.id
-    let operation: Task<Void, Error>
+    let operation: PendingRemoval
     if let existing = removals[id] {
       operation = existing
     } else {
       let hasRecovery = recoveryIDs.contains(id)
       let cleanup = removeRecovery
-      operation = Task { if hasRecovery { try await cleanup(id) } }
+      operation = PendingRemoval(task: Task { if hasRecovery { try await cleanup(id) } })
       removals[id] = operation
     }
     do {
-      try await operation.value
-      resolved(entry)
-      recoveryIDs.remove(id)
-      removals[id] = nil
+      try await operation.task.value
+      finishRemoval(id: id, token: operation.token)
     } catch {
-      removals[id] = nil
-      if let index = unresolved.firstIndex(where: { $0.metadata.id == id }) {
-        unresolved[index].errorMessage = error.localizedDescription
+      if removals[id]?.token == operation.token {
+        removals[id] = nil
+        if let index = unresolved.firstIndex(where: { $0.metadata.id == id }) {
+          unresolved[index].errorMessage = error.localizedDescription
+        }
       }
       throw error
+    }
+  }
+  private func finishRemoval(id: UUID, token: UUID) {
+    guard removals[id]?.token == token else { return }
+    unresolved.removeAll { $0.metadata.id == id }
+    recoveryIDs.remove(id)
+    recoveryByID[id] = nil
+    removals[id] = nil
+  }
+  func drainPendingRemovals() async throws {
+    // Re-read after each suspension: newly confirmed removals also precede this barrier.
+    while let (id, operation) = removals.first {
+      try await operation.task.value
+      finishRemoval(id: id, token: operation.token)
     }
   }
 
@@ -274,17 +314,23 @@ struct SessionStartupBudget {
   }
 
   func persist(windows: [SessionWindow]) async throws {
+    try requireRestoredSession()
+    try await drainPendingRemovals()
+    try await saveSession(captureSession(windows: windows))
+  }
+  private func requireRestoredSession() throws {
     guard restorationComplete else {
       throw Self.error(
         "Session restoration has not completed. The previous session remains unchanged.")
     }
     if let preservationError { throw preservationError }
-    // A confirmed deletion can outlive its panel. Drain its commit before capturing metadata.
-    for (id, operation) in removals {
-      try await operation.value
-      unresolved.removeAll { $0.metadata.id == id }
-      recoveryIDs.remove(id)
-      recoveryByID[id] = nil
+  }
+  func captureSession(windows: [SessionWindow]) throws -> EditorSession {
+    try requireRestoredSession()
+    guard removals.isEmpty else {
+      throw Self.error(
+        "Recovery cleanup is still pending. Drain pending removals before capturing session metadata."
+      )
     }
     var merged: [SessionWindow] = []
     var remaining = windows
@@ -308,7 +354,7 @@ struct SessionStartupBudget {
           selectedTabID: tabs.contains { $0.id == preferred } ? preferred : tabs.first?.id))
     }
     merged.append(contentsOf: remaining)
-    try await saveSession(EditorSession(windows: merged, recentPaths: recentPaths))
+    return EditorSession(windows: merged, recentPaths: recentPaths)
   }
   private func preserve(_ error: Error) {
     preservationError = preservationError ?? error

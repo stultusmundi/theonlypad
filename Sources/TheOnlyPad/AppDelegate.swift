@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var extensionGeneration = 0
   private var help: HelpController?
   private let session = SessionCoordinator()
+  private lazy var checkpoints = ApplicationSessionCheckpoints(
+    session: session, windows: { [weak self] in self?.editors ?? [] },
+    onRetry: { [weak self] in self?.dispatch("file.retrySession") })
   private var startupTask: Task<Void, Never>?
   private var sessionPanel: SessionRestorationController?
   private var repairTargets: [UUID: EditorWindowController] = [:]
@@ -30,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     buildMenus()
     refreshExtensionCommands()
+    session.onSessionChange = { [weak self] in self?.checkpoints.requestCheckpoint() }
     restoreStartupSession()
     do {
       let arguments = Array(CommandLine.arguments.dropFirst()).filter { !$0.hasPrefix("-psn_") }
@@ -51,7 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   @discardableResult
   private func newWindow(id: UUID = UUID(), createDocument: Bool = true) -> EditorWindowController {
-    let editor = EditorWindowController(id: id, restoreStartup: false)
+    let editor = EditorWindowController(
+      id: id, restoreStartup: false,
+      onSessionChange: { [weak self] in self?.checkpoints.requestCheckpoint() })
     if createDocument { editor.newDocument() }
     editor.applySettings(settings)
     editors.append(editor)
@@ -65,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     editor.onClose = { [weak self, weak editor] in
       self?.editors.removeAll { $0 === editor }
+      self?.checkpoints.requestCheckpoint()
     }
     editor.onOpenLargeFile = { [weak self] url in
       guard let self, !self.preparingQuit else { return }
@@ -102,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return failures
       }
       if self.editors.isEmpty { self.newWindow() }
+      self.checkpoints.startAfterRestoration()
       if !self.session.unresolved.isEmpty { self.showUnresolvedSession() }
       let notices = self.session.startupErrors + self.session.warnings
       if !notices.isEmpty {
@@ -284,6 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     recentFiles?.setSuspended(true)
     Task {
       await startupTask?.value
+      await checkpoints.pauseAndDrain()
       // Invalidate pending repair callbacks before capturing the frozen session.
       sessionPanel?.update(entries: session.unresolved)
       for editor in editors {
@@ -291,24 +300,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
           for editor in editors { editor.cancelPreparedQuit() }
           preparingQuit = false
           recentFiles?.setSuspended(false)
+          checkpoints.resumeAfterVeto()
           NSApp.reply(toApplicationShouldTerminate: false)
           return
         }
       }
-      guard await EditorWindowController.finishPendingCloses() else {
-        for editor in editors { editor.cancelPreparedQuit() }
-        preparingQuit = false
-        recentFiles?.setSuspended(false)
-        NSApp.reply(toApplicationShouldTerminate: false)
-        return
-      }
       do {
-        try await EditorWindowController.persistPreparedRecovery(editors)
-        try await session.persist(windows: editors.map(\.sessionMetadata))
+        _ = try await checkpoints.commitFinal()
       } catch {
         for editor in editors { editor.cancelPreparedQuit() }
         preparingQuit = false
         recentFiles?.setSuspended(false)
+        checkpoints.resumeAfterVeto()
         NSAlert(error: error).runModal()
         NSApp.reply(toApplicationShouldTerminate: false)
         return
@@ -343,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return
     }
     switch id {
+    case "file.retrySession": checkpoints.requestCheckpoint()
     case "file.recent":
       Task { [weak self] in
         await self?.startupTask?.value
@@ -449,6 +453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   private static let largeViewerCommands: Set<String> = [
     "file.close", "file.new", "file.newWindow", "file.open", "file.restoreSession", "file.recent",
+    "file.retrySession",
     "app.preferences", "edit.copy",
     "edit.selectAll",
   ]
@@ -456,6 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     guard let id = menuItem.representedObject as? String else { return true }
     if preparingQuit { return false }
     if id == "file.recent" { return true }
+    if id == "file.retrySession" { return checkpoints.lastError != nil }
     if id == "file.restoreSession" { return !session.unresolved.isEmpty }
     if NSApp.keyWindow?.windowController is LargeFileWindowController {
       return Self.largeViewerCommands.contains(id)

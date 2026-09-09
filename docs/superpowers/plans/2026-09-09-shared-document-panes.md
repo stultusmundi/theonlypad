@@ -27,7 +27,7 @@ The local feasibility probe uses one storage, two layout managers and one undo m
 
 Production currently makes `EditorDocument` private inside EditorWindowController, owns one `editor` and `scroll`, and places UndoManager on DocumentTextView. `display` removes every host subview and reinstalls one scroll view. Delegate lookups identify documents using `document.editor === textView`. Dirty state, persistence, language work and most commands obtain text via that one view. NativeSyntaxHighlighter applies temporary colors to only one layout manager. SessionTab holds one selection, not presentation state. Every coupling below must be addressed before enabling the split commands.
 
-The working document model must have one storage character-edit observer, one revision, one save baseline, one recovery identity and one shared manager regardless of the number of attached panes. Never mirror string contents by assigning a second view's `.string`: it creates duplicate transaction/undo paths and may destroy composition or selection state.
+The working document model must have one storage character-edit observer, distinct edit and capture revisions, one save baseline, one recovery identity and one shared manager regardless of the number of attached panes. Never mirror string contents by assigning a second view's `.string`: it creates duplicate transaction/undo paths and may destroy composition or selection state.
 
 ## Ownership and interfaces
 
@@ -52,7 +52,8 @@ Create `Sources/TheOnlyPad/EditorDocument.swift`, moving existing metadata and d
   let id: UUID
   let storage: NSTextStorage
   let undoManager: UndoManager
-  private(set) var revision: UInt64
+  private(set) var editRevision: UInt64
+  var recoveryRevision: UInt64 // Existing capture issuance counter; never repurpose as edit count.
   private(set) var panePool: [EditorPane] // At most two, retained for document lifetime.
   var composingPaneID: UUID?
   func makePane() throws -> EditorPane
@@ -67,6 +68,7 @@ Create `Sources/TheOnlyPad/EditorDocument.swift`, moving existing metadata and d
   let editor: DocumentTextView
   let scroll: NSScrollView
   private(set) var isAttached: Bool
+  var selectableBeforeQuit: Bool?
   func attach()
   func detach()
 }
@@ -74,7 +76,7 @@ enum PaneAxis { case sideBySide, stacked }
 struct PaneCommandContext {
   let documentID: UUID
   let paneID: UUID
-  let revision: UInt64
+  let editRevision: UInt64
   let selection: NSRange
 }
 ```
@@ -93,13 +95,56 @@ func paneContext() -> PaneCommandContext?
 func accepts(_ context: PaneCommandContext) -> Bool
 ```
 
-`accepts` requires matching selected document, attached originating pane, unchanged revision and exact selection, focused originating pane, and neither saving, composing nor quitting/closed state. Async commands conservatively reject changed focus rather than apply to the newly focused selection. Saving is different: retain its existing document-bound snapshot/commit semantics; changing pane focus must not change the saved document.
+`accepts` requires matching selected document, attached originating pane, unchanged editRevision and exact selection, focused originating pane, and neither saving, composing nor quitting/closed state. Async commands conservatively reject changed focus rather than apply to the newly focused selection. Saving is different: retain its existing document-bound snapshot/commit semantics; changing pane focus must not change the saved document.
+
+## Current integration corrections (planned requirements)
+
+The checkpoint/save changes landed after the original pane plan. Preserve them during extraction:
+
+- `recoveryRevision` counts immutable capture issuance. Two captures of unchanged text must have fresh capture revisions. Add a distinct `editRevision` for PaneCommandContext; do not use capture issuance as evidence that text changed.
+- `pendingPublication` stays document-owned and forces dirty/recovery eligibility even if text returns exactly to savedText. Moving its type out of the currently private controller file requires internal module visibility, not public API. Capture both panes as one logical live ID/recovery item and retain the previous URL during uncertain Save As.
+- `selectableBeforeQuit` becomes presentation-owned. Freeze editability and selectability in every pane; restore each original selectability on veto, including repeated cancellation. Preserve the new tab/popup/ruler lifecycle guards.
+- Keep both application-level and per-window synchronous `assertNoPendingCloses` checks immediately before capture, with no suspension inside the paired text/metadata capture. One document observer notifies the application scheduler; adding a second pane must not re-enable legacy per-window recovery timers or create a second writer.
+- Retain all existing save-failure, WindowCheckpointHarness and capture harness assertions through the ownership refactor. Add pending-save baseline-return and pending Save As paired-capture cases to the pane harness.
 
 ## Task 1: Extract ownership with unchanged single-pane behavior
 
 **Files:** create DocumentTextView.swift, EditorDocument.swift, EditorPane.swift; modify EditorWindowController.swift; create Tests/NativeIntegration/SharedPaneOwnershipHarness.swift; modify scripts/test-native-integration.sh compilation source arrays.
 
-- [ ] Write a native harness constructing one document and two presentations; first assert shared storage/manager identity and independent initial selection. Add exact shared edit and cross-pane undo assertions:
+- [ ] First retain an ignored copy of the current EditorWindowController source and append the following main-actor probe in that same file, so its existing private DocumentTextView is exercised without weakening production access control. Compile it using the existing native harness dependency list, replacing the normal harness entry point with this probe. No window or GUI interaction is required. The expected red is exact undo restoration through the other view, because the current subclass allocates separate managers:
+
+```swift
+@main struct SharedUndoRedProbe {
+  @MainActor static func main() {
+    _ = NSApplication.shared
+    let storage = NSTextStorage(string: "a😀e\u{301}\r\nz")
+    func presentation() -> DocumentTextView {
+      let layout = NSLayoutManager()
+      let container = NSTextContainer(size: NSSize(width: 600, height: 600))
+      storage.addLayoutManager(layout)
+      layout.addTextContainer(container)
+      let view = DocumentTextView(frame: .zero, textContainer: container)
+      view.isRichText = false
+      view.allowsUndo = true
+      return view
+    }
+    let left = presentation(), right = presentation()
+    let before = Array(storage.string.utf16)
+    left.undoManager!.beginUndoGrouping()
+    left.insertText("X", replacementRange: NSRange(location: 1, length: 0))
+    left.undoManager!.endUndoGrouping()
+    precondition(left.textStorage === right.textStorage)
+    precondition(Array(right.string.utf16) != before)
+    right.undoManager!.undo()
+    precondition(Array(storage.string.utf16) == before,
+                 "Undo from the other presentation must restore exact shared text")
+  }
+}
+```
+
+The first implementation interface is injected document-owned UndoManager in DocumentTextView, with one independent layout manager/container per presentation. After extraction, retain the equivalent shared-manager regression in SharedPaneOwnershipHarness rather than keeping a second application entry point in production.
+
+- [ ] Write the native ownership harness constructing one document and two presentations; assert shared storage/manager identity and independent initial selection. Add exact shared edit and cross-pane undo assertions:
 
 ```swift
 let document = EditorDocument()
@@ -119,7 +164,7 @@ right.editor.undoManager!.undo()
 precondition(Array(document.storage.string.utf16) == before)
 ```
 
-- [ ] Compile that harness against the isolated adapter source, capture the expected unavailable-interface red result, and preserve the current full native baseline before extraction.
+- [ ] Run the behavioral red probe below against an ignored copy of the current source before extraction. Preserve its exact failed undo assertion and the current native baseline. Then compile the proposed ownership-interface harness above after introducing those interfaces; missing API compilation alone is not the behavioral regression evidence.
 - [ ] Move the existing subclass and model methods verbatim first; inject manager/storage and move construction into EditorPane. Change model dirty/save/recovery text reads to `storage.string` / `storage.mutableString` and model undo registrations to `undoManager`.
 - [ ] Preserve one visible pane while converting every document lookup from editor identity to a lookup across `panePool`. A temporary accessor is allowed during isolated refactoring; remove ambiguous `document.editor` / `document.scroll` access before enabling splits.
 - [ ] Run the ownership harness and existing native suite. Exact encoding/dirty, programmatic editing, bookmark composition undo, save/backup/recovery and session restoration harnesses must remain green.
@@ -129,7 +174,7 @@ precondition(Array(document.storage.string.utf16) == before)
 
 **Files:** modify EditorWindowController.swift, EditorPane.swift, DocumentTextView.swift; create Tests/NativeIntegration/SharedPaneCommandsHarness.swift.
 
-- [ ] Add failing assertions for two edits from distinct panes with one shared undo sequence, only one recovery revision per completed character change, and bookmark/macros recorded once. Capture original source pane for pre-edit bookmark computation; never infer an edit from selection notifications.
+- [ ] Add failing assertions for two edits from distinct panes with one shared undo sequence, one document editRevision increment for an ordinary completed character edit and one recovery item/live ID per logical document per capture, and bookmark/macros recorded once. Capture original source pane for pre-edit bookmark computation; never infer an edit from selection notifications.
 - [ ] Implement `onFocus` after successful `becomeFirstResponder`; resolve current selection, status, search, outline, ruler clicks, text utilities, line/language commands, copy/paste and `windowWillReturnUndoManager` from focusedPane. Model byte/dirty/save work remains document-bound.
 - [ ] At ordinary focus handoff call `breakUndoCoalescing` on both text views. Register each explicit command as one model-owned group; keep existing bookmark metadata in that same group. Assert actual menu/keyboard undo later, not only manager calls.
 - [ ] Implement context validation and add a suspended async transform test: capture left context, focus right before resuming, and assert rejection with unchanged text and actionable existing stale-result error. Repeat after detach, edit, document switch, close and quit.

@@ -66,6 +66,9 @@ bin_path=$(scripts/swift.sh build --configuration release --show-bin-path)
 bundle="$stage/$app_name.app"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$bin_path/$app_name" "$bundle/Contents/MacOS/$app_name"
+# Remove linker debug-map paths from the distributable copy before signing.
+# The original build output remains available for local diagnostics.
+/usr/bin/strip -S "$bundle/Contents/MacOS/$app_name"
 cp "$stage/Info.plist" "$bundle/Contents/Info.plist"
 cp LICENSE "$bundle/Contents/Resources/LICENSE.txt"
 cp docs/third-party-notices.md "$bundle/Contents/Resources/ThirdPartyNotices.md"
@@ -83,5 +86,6 @@ archive="$PWD/dist/$app_name-$app_version-$(uname -m).zip"
 # Omit Finder/resource-fork metadata from the distributable archive.
 ditto -c -k --norsrc --noextattr --keepParent "$bundle" "$stage/$(basename "$archive")"
 python3 scripts/sbom.py "$bundle" "$stage/$app_name.sbom.json" "$stage/package.json"
+python3 scripts/check-package.py "$bundle" "$stage/$(basename "$archive")" "$stage/$app_name.sbom.json"
 python3 scripts/promote-package.py "$stage" "$PWD/dist" "$app_name.app" "$(basename "$archive")" "$app_name.sbom.json"
 printf 'Application: %s\nArchive: %s\n' "$artifact" "$archive"

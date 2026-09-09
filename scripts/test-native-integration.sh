@@ -12,6 +12,16 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   -o .local/native-integration/recovery-test
 .local/native-integration/recovery-test "$fixtures/ordering"
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/RecoveryCoordinator.swift \
+  Tests/NativeIntegration/SessionCheckpointStoreHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/checkpoint-store-test
+.local/native-integration/checkpoint-store-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/RecoveryCoordinator.swift Sources/TheOnlyPad/SessionCheckpointCoordinator.swift \
+  Tests/NativeIntegration/SessionCheckpointSchedulerHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/checkpoint-scheduler-test
+.local/native-integration/checkpoint-scheduler-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
   Sources/TheOnlyPad/DocumentPrinting.swift Sources/TheOnlyPad/RecoveryCoordinator.swift Sources/TheOnlyPad/NativeSyntaxHighlighter.swift Sources/TheOnlyPad/LineNumberRuler.swift Sources/TheOnlyPad/DocumentTabBar.swift Sources/TheOnlyPad/WorkspaceSidebar.swift Sources/TheOnlyPad/EncodingPanelController.swift Sources/TheOnlyPad/MacroCancellation.swift Sources/TheOnlyPad/SearchPanelController.swift Tests/NativeIntegration/NativeUIHarness.swift \
   "$build_path"/PadCore.build/*.o -o .local/native-integration/ui-test
@@ -94,6 +104,13 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/LaunchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/launch-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/launch" .local/native-integration/launch-test
+for capture_harness in SessionCaptureHarness SessionMetadataCaptureHarness SessionChangeHarness WindowCheckpointHarness ApplicationCheckpointHarness; do
+  swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+    -I "$build_path/Modules" "${native_sources[@]}" \
+    "Tests/NativeIntegration/$capture_harness.swift" "$build_path"/PadCore.build/*.o \
+    -o ".local/native-integration/$capture_harness"
+  ".local/native-integration/$capture_harness"
+done
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
   -I "$build_path/Modules" "${native_sources[@]}" \
   Tests/NativeIntegration/SaveFailureHarness.swift "$build_path"/PadCore.build/*.o \
@@ -127,3 +144,22 @@ result = subprocess.run([".local/native-integration/ui-test", "crash"], env=env,
 assert result.returncode == -signal.SIGKILL, "Recovery child did not reach intentional force termination"
 subprocess.run([".local/native-integration/ui-test", "restore"], env=env, check=True)
 PY
+
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${native_sources[@]}" \
+  Tests/NativeIntegration/CheckpointCrashHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/checkpoint-crash-test
+python3 - "$fixtures/checkpoint-crash" <<'PYCRASH'
+import pathlib
+import signal
+import subprocess
+import sys
+state = sys.argv[1]
+result = subprocess.run([".local/native-integration/checkpoint-crash-test", "write", state],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=40)
+assert result.returncode == -signal.SIGKILL, "Checkpoint writer did not reach intentional force termination"
+assert b"ACKNOWLEDGED_CHECKPOINT" in result.stdout, "Writer did not acknowledge its checkpoint"
+assert pathlib.Path(state, "Checkpoint.expected").is_file(), "Expected checkpoint marker missing"
+subprocess.run([".local/native-integration/checkpoint-crash-test", "restore", state],
+               check=True, timeout=40)
+PYCRASH

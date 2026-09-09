@@ -1,6 +1,12 @@
 import AppKit
 import PadCore
 
+struct SessionWindowCheckpointCapture: Sendable {
+  let window: SessionWindow
+  let liveTabIDs: Set<UUID>
+  let recovery: [RecoveryCheckpointItem]
+}
+
 /// Injectable I/O boundary; production work runs in the detached save task.
 struct EditorSaveServices: Sendable {
   var write: @Sendable (Data, URL, Data?) throws -> Void = {
@@ -104,6 +110,8 @@ private final class EditorDocument {
     }
   }
   private var savedUTF16Length = 0
+  var selectableBeforeQuit: Bool?
+  var onCharactersChanged: (() -> Void)?
   private var cachedTextDirty: Bool?
   private var storageObserver: NSObjectProtocol?
   var encoding: DocumentEncoding = .utf8
@@ -186,6 +194,7 @@ private final class EditorDocument {
           storage.editedMask.contains(.editedCharacters)
         {
           self?.cachedTextDirty = nil
+          self?.onCharactersChanged?()
         }
       }
     }
@@ -213,6 +222,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let workspaceSplit = NSSplitView()
   private lazy var workspace = WorkspaceSidebar { [weak self] url in self?.open(url) }
   private let status = NSTextField(labelWithString: "")
+  private let checkpointStatus = NSTextField(wrappingLabelWithString: "")
+  private let checkpointRetry = NSButton(title: "Retry", target: nil, action: nil)
+  private let checkpointStatusRow = NSStackView()
+  private var checkpointRetryAction: (() -> Void)?
+  private let onSessionChange: (() -> Void)?
   private var current: EditorDocument? { documents.first { $0.id == selectedID } }
   private var settings = EditorSettings.defaults
   private var loadingCount = 0
@@ -249,8 +263,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     id: UUID = UUID(), restoreStartup: Bool = true,
     saveServices: EditorSaveServices = EditorSaveServices(),
     chooseSaveDestination: ((URL?, String) -> URL?)? = nil,
-    onError: ((Error) -> Void)? = nil
+    onError: ((Error) -> Void)? = nil,
+    onSessionChange: (() -> Void)? = nil
   ) {
+    self.onSessionChange = onSessionChange
     self.saveServices = saveServices
     self.chooseSaveDestination = chooseSaveDestination
     self.errorHandler = onError
@@ -280,13 +296,28 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     workspaceSplit.addSubview(workspace)
     workspaceSplit.addSubview(host)
     workspace.isHidden = true
-    let stack = NSStackView(views: [tabBar, tabs, languagePicker, workspaceSplit, status])
+    checkpointStatus.setAccessibilityIdentifier("session.checkpoint.status")
+    checkpointStatus.identifier = .init("session.checkpoint.status")
+    checkpointStatus.setAccessibilityLabel("Session checkpoint status")
+    checkpointRetry.setAccessibilityIdentifier("session.checkpoint.retry")
+    checkpointRetry.identifier = .init("session.checkpoint.retry")
+    checkpointRetry.setAccessibilityLabel("Retry session checkpoint")
+    checkpointRetry.target = self
+    checkpointRetry.action = #selector(retrySessionCheckpoint)
+    checkpointRetry.isHidden = true
+    checkpointStatusRow.addArrangedSubview(checkpointStatus)
+    checkpointStatusRow.addArrangedSubview(checkpointRetry)
+    checkpointStatusRow.spacing = 8
+    checkpointStatusRow.isHidden = true
+    let stack = NSStackView(views: [
+      tabBar, tabs, languagePicker, workspaceSplit, status, checkpointStatusRow,
+    ])
     stack.orientation = .vertical
     stack.alignment = .leading
     stack.spacing = 8
     stack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
     window.contentView = stack
-    for view in [tabBar, tabs, languagePicker, workspaceSplit, status] {
+    for view in [tabBar, tabs, languagePicker, workspaceSplit, status, checkpointStatusRow] {
       view.translatesAutoresizingMaskIntoConstraints = false
       view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20).isActive = true
     }
@@ -299,16 +330,44 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       newDocument()
       restoreRecovery()
     }
-    recoveryPeriodic = Task { [weak self] in
-      while !Task.isCancelled {
-        do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
-        guard let self else { return }
-        if !self.preparingToQuit { self.enqueueRecovery() }
+    if onSessionChange == nil {
+      recoveryPeriodic = Task { [weak self] in
+        while !Task.isCancelled {
+          do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
+          guard let self else { return }
+          if !self.preparingToQuit { self.enqueueRecovery() }
+        }
       }
     }
+
   }
 
   required init?(coder: NSCoder) { fatalError("Use init()") }
+
+  /// Rendering this status must never schedule another checkpoint.
+  func updateSessionCheckpointStatus(message: String, retry: (() -> Void)? = nil) {
+    checkpointStatus.stringValue = message
+    checkpointRetryAction = retry
+    checkpointRetry.isHidden = retry == nil
+    checkpointStatusRow.isHidden = message.isEmpty && retry == nil
+  }
+  @objc private func retrySessionCheckpoint() { checkpointRetryAction?() }
+
+  private func notifySessionChange() {
+    guard !preparingToQuit, !windowClosed else { return }
+    onSessionChange?()
+  }
+
+  func captureSessionCheckpoint() throws -> SessionWindowCheckpointCapture {
+    try Self.assertNoPendingCloses()
+    guard !windowClosed else { throw CancellationError() }
+    // No suspension between recovery text/disposition and the paired metadata/view state.
+    let recovery = recoveryBatch().map {
+      RecoveryCheckpointItem(id: $0.0, revision: $0.1, snapshot: $0.2)
+    }
+    return SessionWindowCheckpointCapture(
+      window: sessionMetadata, liveTabIDs: Set(documents.map(\.id)), recovery: recovery)
+  }
 
   var sessionMetadata: SessionWindow {
     SessionWindow(
@@ -320,6 +379,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           manualLanguage: document.manualLanguage ? document.language : nil,
           selection: document.editor.selectedRange(), bookmarks: document.bookmarks.offsets)
       }, selectedTabID: selectedID)
+  }
+
+  /// Scalar budget preflight; no recovery snapshot or String copy is constructed here.
+  var checkpointRecoveryUTF16Count: Int {
+    documents.reduce(0) { count, document in
+      count + (document.url == nil || document.dirty ? document.editor.textStorage?.length ?? 0 : 0)
+    }
   }
 
   var sessionResourceUsage: (utf16Count: Int, originalByteCount: Int) {
@@ -1123,6 +1189,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     document.bookmarks = value
     (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(value.offsets)
+    notifySessionChange()
   }
 
   private func performBookmarkCommand(_ id: String) {
@@ -1440,7 +1507,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   @objc private func selectLanguage() {
-    guard !preparingToQuit, let document = current,
+    guard !preparingToQuit, !windowClosed, let document = current,
       let title = languagePicker.titleOfSelectedItem,
       let language = DocumentLanguage(rawValue: title)
     else { return }
@@ -1534,11 +1601,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   @objc private func selectTab() {
-    guard documents.indices.contains(tabs.indexOfSelectedItem) else { return }
+    guard !preparingToQuit, !windowClosed, documents.indices.contains(tabs.indexOfSelectedItem)
+    else { return }
     display(documents[tabs.indexOfSelectedItem])
   }
 
   private func display(_ document: EditorDocument) {
+    document.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
     selectedID = document.id
     for subview in host.subviews { subview.removeFromSuperview() }
     host.addSubview(document.scroll)
@@ -1578,7 +1647,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       ruler.bookmarkOffsets = Set(document.bookmarks.offsets)
       ruler.onToggleBookmark = { [weak self, weak document] offset in
-        guard let self, let document, self.current === document, !document.saving else { return }
+        guard let self, let document, !self.preparingToQuit, !self.windowClosed,
+          self.current === document, !document.saving
+        else { return }
         document.editor.setSelectedRange(NSRange(location: offset, length: 0))
         self.performBookmarkCommand("bookmark.toggle")
       }
@@ -1594,7 +1665,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func closeDocuments(ids: Set<UUID>) {
-    guard !preparingToQuit else { return }
+    guard !preparingToQuit, !windowClosed else { return }
     let closing = documents.filter { ids.contains($0.id) }
     guard !closing.isEmpty, !closing.contains(where: { $0.saving }), confirmDiscard(closing) else {
       return
@@ -1643,18 +1714,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func configureTabBar() {
     tabBar.onSelect = { [weak self] id in
-      guard let self, let document = self.documents.first(where: { $0.id == id }) else { return }
+      guard let self, !self.preparingToQuit, !self.windowClosed,
+        let document = self.documents.first(where: { $0.id == id })
+      else { return }
       self.display(document)
     }
     tabBar.onClose = { [weak self] id in self?.closeDocuments(ids: [id]) }
     tabBar.onPin = { [weak self] id in
-      guard let self, let document = self.documents.first(where: { $0.id == id }) else { return }
+      guard let self, !self.preparingToQuit, !self.windowClosed,
+        let document = self.documents.first(where: { $0.id == id })
+      else { return }
       document.pinned.toggle()
       self.documents = self.documents.filter(\.pinned) + self.documents.filter { !$0.pinned }
       self.refresh()
     }
     tabBar.onMove = { [weak self] id, index in
-      guard let self else { return }
+      guard let self, !self.preparingToQuit, !self.windowClosed else { return }
       do {
         let ids = try TabOrder.reordered(items: self.documents.map(\.id), moving: id, to: index)
         let lookup = Dictionary(uniqueKeysWithValues: self.documents.map { ($0.id, $0) })
@@ -1664,11 +1739,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       } catch { self.present(error) }
     }
     tabBar.onCloseOthers = { [weak self] id in
-      guard let self else { return }
+      guard let self, !self.preparingToQuit, !self.windowClosed else { return }
       self.closeDocuments(ids: Set(self.documents.filter { $0.id != id && !$0.pinned }.map(\.id)))
     }
     tabBar.onCloseRight = { [weak self] id in
-      guard let self, let index = self.documents.firstIndex(where: { $0.id == id }) else { return }
+      guard let self, !self.preparingToQuit, !self.windowClosed,
+        let index = self.documents.firstIndex(where: { $0.id == id })
+      else { return }
       self.closeDocuments(
         ids: Set(self.documents.dropFirst(index + 1).filter { !$0.pinned }.map(\.id)))
     }
@@ -1981,6 +2058,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func updateStatus() {
+    notifySessionChange()
     guard let document = current else { return }
     let text = document.editor.string as NSString
     let caret = min(document.editor.selectedRange().location, text.length)
@@ -2052,7 +2130,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func scheduleRecovery() {
-    guard !preparingToQuit else { return }
+    guard !preparingToQuit, !windowClosed else { return }
+    if onSessionChange != nil {
+      notifySessionChange()
+      return
+    }
     recoveryDebounce?.cancel()
     recoveryDebounce = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 750_000_000) } catch { return }
@@ -2075,6 +2157,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func enqueueRecovery() {
+    guard !preparingToQuit, !windowClosed else { return }
+    if onSessionChange != nil {
+      notifySessionChange()
+      return
+    }
     let batch = recoveryBatch()
     let previous = recoveryWork
     recoveryWork = Task { [weak self, recovery] in
@@ -2096,25 +2183,46 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     Self.pendingCloses[id] = (recovery, cleanup)
     recoveryWork = Task { [weak self] in
-      if let error = await cleanup.value { self?.reportRecoveryFailure(error) }
+      let error = await cleanup.value
+      if let self, self.onSessionChange != nil {
+        self.onSessionChange?()
+      } else if let error {
+        self?.reportRecoveryFailure(error)
+      }
+    }
+  }
+
+  /// Synchronous guard for the final no-await capture boundary, including zero-window captures.
+  static func assertNoPendingCloses() throws {
+    guard pendingCloses.isEmpty else {
+      throw NSError(
+        domain: "TheOnlyPad.Recovery", code: 1,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "Recovery cleanup is pending. Retry the checkpoint after cleanup completes."
+        ])
+    }
+  }
+
+  static func drainPendingCloses() async throws {
+    while let (id, entry) = pendingCloses.first {
+      if await entry.1.value != nil { try await entry.0.close(id: id) }
+      pendingCloses.removeValue(forKey: id)
     }
   }
 
   static func finishPendingCloses() async -> Bool {
-    while let (id, entry) = pendingCloses.first {
-      if await entry.1.value != nil {
-        do { try await entry.0.close(id: id) } catch {
-          let alert = NSAlert()
-          alert.messageText = "Discarded recovery data could not be removed"
-          alert.informativeText =
-            "Quit was cancelled so cleanup can be retried. " + error.localizedDescription
-          alert.runModal()
-          return false
-        }
-      }
-      pendingCloses.removeValue(forKey: id)
+    do {
+      try await drainPendingCloses()
+      return true
+    } catch {
+      let alert = NSAlert()
+      alert.messageText = "Discarded recovery data could not be removed"
+      alert.informativeText =
+        "Quit was cancelled so cleanup can be retried. " + error.localizedDescription
+      alert.runModal()
+      return false
     }
-    return true
   }
 
   static func persistPreparedRecovery(_ editors: [EditorWindowController]) async throws {
@@ -2131,7 +2239,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return false
     }
     preparingToQuit = true
-    for document in documents { document.editor.isEditable = false }
+    for document in documents {
+      if document.selectableBeforeQuit == nil {
+        document.selectableBeforeQuit = document.editor.isSelectable
+      }
+      document.editor.isEditable = false
+      document.editor.isSelectable = false
+    }
     recoveryDebounce?.cancel()
     await recoveryWork?.value
     guard persistRecovery else { return true }
@@ -2147,7 +2261,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func cancelPreparedQuit() {
     preparingToQuit = false
-    for document in documents { document.editor.isEditable = !document.saving }
+    for document in documents {
+      let selectable = document.selectableBeforeQuit ?? document.editor.isSelectable
+      document.editor.isEditable = !document.saving
+      document.editor.isSelectable = selectable
+      document.selectableBeforeQuit = nil
+    }
   }
 
   private func reportRecoveryFailure(_ error: Error, always: Bool = false) {

@@ -87,3 +87,16 @@ Implement the adapter in these steps:
 - Accessibility navigation, pane labels/focus order, VoiceOver, screenshots, and physical pointer/keyboard interaction remain unverified.
 
 The next implementation can therefore be a contained document/pane ownership refactor with a shared TextKit adapter. There is no evidence here requiring a wholesale rewrite, and no evidence that the full editor feature scope is complete.
+
+
+## Integration correction after checkpoint/save changes — planned
+
+The production checkpoint and pending-save safeguards added after this spike must survive the pane extraction. This section is a design correction, not new runtime evidence or an implemented pane feature.
+
+Document ownership includes pending-publication evidence/attempted bytes and its forced dirty disposition, so text returned to its old baseline remains recoverable. Uncertain Save As retains the prior logical URL. A checkpoint emits one recovery item/live ID per logical document, regardless of attached presentations, and retains the synchronous pending-close guards even for zero-window application capture.
+
+Distinguish **editRevision** (text mutation identity for stale pane commands) from **recoveryRevision** (the existing immutable capture issuance counter). Capturing unchanged text still advances recoveryRevision. Do not test or implement recovery revisions as one-per-keystroke counters. One document-owned character observer notifies the single application checkpoint scheduler; the second pane must not create another recovery timer/writer.
+
+Quit selection state is per presentation: preserve each pane's prior isSelectable, disable editability/selectability across all panes, guard tab/popup/ruler callbacks while frozen, and restore prior values on veto, including repeated cancellation. Retain bounded detached views for shared native undo; this remains a lifecycle policy to validate, not proof that undo targets can be deallocated.
+
+The first implementation gate is behavioral: two current DocumentTextViews share one NSTextStorage but allocate separate UndoManagers. Insert through view A, invoke undo through view B, and assert exact mixed-ending/emoji UTF16 restoration. Expect this to fail before document-owned manager injection; a missing-type compiler error is insufficient evidence for that behavior. The executable probe, proposed injected-manager interface, ownership boundaries and subsequent native/desktop gates are in [the shared-pane implementation plan](../plans/2026-09-09-shared-document-panes.md). No code, build, GUI run or engine migration was performed for this amendment.

@@ -33,7 +33,9 @@ import PadCore
       Documents and recovery
       File > Open loads text documents. Each tab keeps its own native undo history. Save As currently requires a new filename. If a file changes externally, saving refuses to overwrite the changed version; use a new filename or explicitly revert.
 
-      App quit snapshots scratch and unsaved documents. Recovery opens them as scratch tabs so historical paths are not overwritten. Closing a dirty tab explicitly asks whether to discard it.
+      While editing, session checkpoints save recovery copies and tab metadata without saving your original files. The session recovery status reports pending work or failures; use Retry when a failure is resolved. Quit waits for a final checkpoint. Recovery opens unsaved content as scratch tabs so historical paths are not overwritten. Closing a dirty tab explicitly asks whether to discard it.
+
+      Changes after the latest checkpoint can still be lost if the app is force-terminated. Recovery text and session metadata are separate files, so an interrupted checkpoint can restore newer text with older tab metadata. Optional autosave of original files is not implemented.
 
       Finding text
       Find and Replace supports literal, escaped-text and ICU regular-expression modes. Replacement templates accept numbered capture references such as $1. Search bounds and cancellation can stop expensive queries. The ICU dialect differs from Notepad++ Boost regex.

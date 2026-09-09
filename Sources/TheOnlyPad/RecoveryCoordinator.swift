@@ -1,6 +1,25 @@
 import Foundation
 import PadCore
 
+struct RecoveryCheckpointItem: Sendable {
+  let id: UUID
+  let revision: UInt64
+  let snapshot: RecoverySnapshot?
+}
+struct SessionCheckpointCapture: Sendable {
+  let generation: UInt64
+  let liveTabIDs: Set<UUID>
+  let recovery: [RecoveryCheckpointItem]
+  let session: EditorSession
+}
+struct SessionCheckpointReceipt: Sendable {
+  let generation: UInt64
+  let recoveryRevisions: [UUID: UInt64]
+}
+enum CheckpointFailure: Error, Equatable {
+  case superseded, closedDocument, publicationUncertain
+}
+
 /// Serial owner of recovery I/O. Revisions reject reordered writes; tombstones
 /// permanently reject writes captured before a document was explicitly closed.
 actor RecoveryCoordinator {
@@ -13,6 +32,10 @@ actor RecoveryCoordinator {
   private var store: RecoveryStore?
   private var startupClaimed = false
   private let limits: RecoveryLimits
+  private let saveCheckpointSession: @Sendable (EditorSession) throws -> Void
+  private var checkpointGeneration: UInt64 = 0
+  private let readCheckpointSession: @Sendable () throws -> EditorSession?
+  private var uncertainSession: EditorSession?
   private let saveRecovery: @Sendable (RecoveryStore, RecoverySnapshot) throws -> Void
   private var uncertainPublication: (snapshot: RecoverySnapshot, evidence: FilePublicationEvidence)?
   private var capacityKnown = false
@@ -25,11 +48,83 @@ actor RecoveryCoordinator {
     directory: URL, limits: RecoveryLimits = RecoveryLimits(),
     saveRecovery: @escaping @Sendable (RecoveryStore, RecoverySnapshot) throws -> Void = {
       try $0.save($1)
+    },
+    saveCheckpointSession: @escaping @Sendable (EditorSession) throws -> Void = {
+      try SessionStore().save($0)
+    },
+    readCheckpointSession: @escaping @Sendable () throws -> EditorSession? = {
+      try SessionStore().load()
     }
   ) {
     self.directory = directory
     self.limits = limits
     self.saveRecovery = saveRecovery
+    self.saveCheckpointSession = saveCheckpointSession
+    self.readCheckpointSession = readCheckpointSession
+  }
+
+  /// Serial publication boundary: no suspension is permitted between admission and receipt.
+  /// Recovery files and Session.json remain separate filesystem publications, not a transaction.
+  func commitSessionCheckpoint(_ capture: SessionCheckpointCapture) throws
+    -> SessionCheckpointReceipt
+  {
+    guard uncertainSession == nil else { throw CheckpointFailure.publicationUncertain }
+    guard capture.generation > checkpointGeneration else { throw CheckpointFailure.superseded }
+    guard capture.recovery.count <= 128 else { throw RecoveryError.resourceLimit }
+    let tabs = capture.session.windows.flatMap(\.tabs)
+    let tabIDs = Set(tabs.map(\.id))
+    guard tabIDs.count == tabs.count, capture.liveTabIDs.isSubset(of: tabIDs),
+      Set(capture.recovery.map(\.id)) == capture.liveTabIDs,
+      capture.recovery.count == capture.liveTabIDs.count
+    else { throw RecoveryError.invalidSnapshot }
+    let scratchIDs = Set(tabs.filter { $0.originalPath == nil }.map(\.id))
+    var admitted: [UUID: UInt64] = [:]
+    for item in capture.recovery {
+      guard admitted[item.id] == nil, tabIDs.contains(item.id),
+        item.snapshot == nil || item.snapshot?.id == item.id,
+        !scratchIDs.contains(item.id) || item.snapshot != nil
+      else { throw RecoveryError.invalidSnapshot }
+      guard !closed.contains(item.id) else { throw CheckpointFailure.closedDocument }
+      // Legacy persist accepts equal revisions with different contents. Checkpoints therefore
+      // require a fresh capture revision rather than infer identity from an equal number.
+      guard item.revision > revisions[item.id, default: 0] else {
+        throw CheckpointFailure.superseded
+      }
+      admitted[item.id] = item.revision
+    }
+    // Reserve attempted generations too: a failed directory sync may follow publication.
+    // Retrying requires a newly captured generation and fresh document revisions.
+    checkpointGeneration = capture.generation
+    try persistBatch(capture.recovery.map { ($0.id, $0.revision, $0.snapshot) })
+    for item in capture.recovery {
+      guard !closed.contains(item.id), revisions[item.id] == item.revision else {
+        throw CheckpointFailure.superseded
+      }
+    }
+    do {
+      try saveCheckpointSession(capture.session)
+    } catch SessionStoreError.committedButNotSynced {
+      uncertainSession = capture.session
+      throw SessionStoreError.committedButNotSynced
+    }
+    return SessionCheckpointReceipt(generation: capture.generation, recoveryRevisions: admitted)
+  }
+
+  /// Readback validates observed publication; it does not retroactively acknowledge durability.
+  /// A new capture and successful save are still required for a checkpoint receipt.
+  func validateUncertainCheckpoint() throws {
+    guard let expected = uncertainSession else { return }
+    guard let actual = try readCheckpointSession(), actual == expected else {
+      throw CheckpointFailure.publicationUncertain
+    }
+    let expectedPaths =
+      expected.windows.flatMap { $0.tabs.compactMap(\.originalPath) } + expected.recentPaths
+    let actualPaths =
+      actual.windows.flatMap { $0.tabs.compactMap(\.originalPath) } + actual.recentPaths
+    guard zip(expectedPaths, actualPaths).allSatisfy({ $0.utf8.elementsEqual($1.utf8) }) else {
+      throw CheckpointFailure.publicationUncertain
+    }
+    uncertainSession = nil
   }
 
   nonisolated private static func defaultDirectory() -> URL {
