@@ -11,3 +11,7 @@ This is provenance, not a reservation. Native import code must revalidate after 
 ## Recovery-only extension
 
 The expanded runner passed 11 tests in 0.011 seconds (`.local/recovery-import-green.log`). Its compiled red had three failures across 11 tests; earlier sandbox I/O and callback fixture compilation failures are retained separately. Added tests use actual corrupt session bytes and a recovery store to prove exact Unicode/encoding/BOM transfer, continued refusal of session capture/persist, retained recovery disk data, and foreign/stale/missing/pending-cleanup refusal. Independent review found no material issue. Native URL-less scratch binding remains an integration obligation, not a claim made by these tests.
+
+## Capacity admission extension
+
+The expanded suite passed 13 tests in 0.021 seconds (`.local/import-capacity-final.log`). The new compiled red had two failures. The final coherent fixture resolves the first 127 reservations before treating them as live, admits the 128th without growing the 129-ID union, then refuses the 129th while retaining its record. Other assertions reject duplicate live ownership, cross-kind ID collisions and a 33rd live window, and exercise recovery-only admission with corrupt session metadata. Independent source review was clear; its requested coherent-fixture refinement was applied and rerun. These tests do not implement the process intake transaction or native factory admission.

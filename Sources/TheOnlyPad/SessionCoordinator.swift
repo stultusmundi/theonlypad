@@ -123,6 +123,54 @@ struct SessionStartupBudget {
     recoveryIDs.remove(claim.documentID)
     unresolved.removeAll { $0.metadata.id == claim.documentID }
   }
+  /// Pre-factory admission only; the intake owner must separately revalidate callback/registry state.
+  func preflightImport(_ claim: SessionImportClaim, liveWindows: [UUID: Set<UUID>]) throws
+    -> SessionCapacitySnapshot
+  {
+    try validateImport(claim)
+    return try importCapacity(entry: claim.entry, liveWindows: liveWindows)
+  }
+  func preflightImport(_ claim: SessionRecoveryImportClaim, liveWindows: [UUID: Set<UUID>]) throws
+    -> SessionCapacitySnapshot
+  {
+    try validateRecoveryImport(claim)
+    return try importCapacity(entry: claim.base.entry, liveWindows: liveWindows)
+  }
+  private func importCapacity(entry: UnresolvedSessionEntry, liveWindows: [UUID: Set<UUID>]) throws
+    -> SessionCapacitySnapshot
+  {
+    guard liveWindows.count <= 32 else { throw SessionStoreError.limit }
+    var liveIDs = Set<UUID>()
+    for ids in liveWindows.values {
+      guard ids.count <= 128, liveIDs.isDisjoint(with: ids) else {
+        throw SessionRestorationError.duplicateID
+      }
+      liveIDs.formUnion(ids)
+      guard liveIDs.count <= 128 else { throw SessionStoreError.limit }
+    }
+    guard !liveIDs.contains(entry.metadata.id) else { throw SessionRestorationError.duplicateID }
+    let reservedWindows = Set(unresolved.map(\.windowID))
+    let reservedIDs = Set(unresolved.map { $0.metadata.id })
+    let beforeWindows = Set(liveWindows.keys).union(reservedWindows)
+    let beforeIDs = liveIDs.union(reservedIDs)
+    guard beforeWindows.isDisjoint(with: beforeIDs) else {
+      throw SessionRestorationError.duplicateID
+    }
+    // Restore to the original reserved window only. A new destination is a separate transfer.
+    var candidate = liveWindows
+    candidate[entry.windowID, default: []].insert(entry.metadata.id)
+    let candidateIDs = liveIDs.union([entry.metadata.id])
+    guard candidate.count <= 32, candidateIDs.count <= 128 else { throw SessionStoreError.limit }
+    let remaining = unresolved.filter { $0.metadata.id != entry.metadata.id }
+    let afterWindows = Set(candidate.keys).union(remaining.map(\.windowID))
+    let afterIDs = candidateIDs.union(remaining.map { $0.metadata.id })
+    guard afterWindows == beforeWindows, afterIDs == beforeIDs else {
+      throw SessionImportError.invalidClaim
+    }
+    // The union may exceed persistence limits; never hide excess unresolved records or issue a receipt.
+    return SessionCapacitySnapshot(
+      sessionRevision: capacityRevision, windowIDs: afterWindows, documentIDs: afterIDs)
+  }
   private func requireRecoveryImportAdmission() throws {
     guard restorationComplete else { throw SessionImportError.invalidClaim }
     guard removals.isEmpty else { throw SessionImportError.cleanupPending }

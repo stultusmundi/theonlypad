@@ -220,6 +220,9 @@ import XCTest
     XCTAssertEqual(claim.documentID, entry.metadata.id)
     XCTAssertEqual(claim.windowID, entry.windowID)
     try coordinator.validateRecoveryImport(claim)
+    let capacity = try coordinator.preflightImport(claim, liveWindows: [:])
+    XCTAssertEqual(capacity.documentIDs, [snapshot.id])
+    XCTAssertEqual(capacity.windowIDs, [entry.windowID])
     var callbacks = 0
     coordinator.onSessionChange = {
       callbacks += 1
@@ -265,6 +268,51 @@ import XCTest
     let fresh = try coordinator.claimRecoveryImport(entries[0])
     try coordinator.resolveRecoveryImport(fresh)
     XCTAssertTrue(coordinator.unresolved.isEmpty)
+  }
+
+  func testReservedImportMayReplaceWithoutGrowingOverCapacityUnion() async throws {
+    let tabs = (0..<129).map { _ in SessionTab() }
+    let coordinator = await fixture(tabs: tabs)
+    XCTAssertEqual(coordinator.unresolved.count, 129)
+    for restored in Array(coordinator.unresolved.prefix(127)) {
+      try coordinator.resolveImport(coordinator.claimImport(restored))
+    }
+    let entry = coordinator.unresolved[0]
+    let claim = try coordinator.claimImport(entry)
+    let live = Set(tabs.prefix(127).map(\.id))
+    let capacity = try coordinator.preflightImport(claim, liveWindows: [entry.windowID: live])
+    XCTAssertEqual(capacity.documentIDs, Set(tabs.map(\.id)))
+    XCTAssertEqual(capacity.windowIDs, [entry.windowID])
+    XCTAssertEqual(capacity.sessionRevision, coordinator.capacityRevision)
+    XCTAssertEqual(coordinator.unresolved.count, 2, "Admission never consumes a reservation")
+    try coordinator.resolveImport(claim)
+    let last = try coordinator.claimImport(coordinator.unresolved[0])
+    XCTAssertThrowsError(
+      try coordinator.preflightImport(
+        last,
+        liveWindows: [entry.windowID: Set(tabs.prefix(128).map(\.id))]))
+  }
+
+  func testImportPreflightRefusesDuplicateLiveOwnershipAndWindowCollision() async throws {
+    let coordinator = await fixture()
+    let entry = try XCTUnwrap(coordinator.unresolved.first)
+    let claim = try coordinator.claimImport(entry)
+    XCTAssertThrowsError(
+      try coordinator.preflightImport(
+        claim,
+        liveWindows: [entry.windowID: [entry.metadata.id]]))
+    XCTAssertThrowsError(
+      try coordinator.preflightImport(
+        claim,
+        liveWindows: [entry.metadata.id: []]))
+    let other = UUID()
+    XCTAssertThrowsError(
+      try coordinator.preflightImport(
+        claim,
+        liveWindows: [UUID(): [other], UUID(): [other]]))
+    let windows = Dictionary(uniqueKeysWithValues: (0..<32).map { _ in (UUID(), Set<UUID>()) })
+    XCTAssertThrowsError(try coordinator.preflightImport(claim, liveWindows: windows))
+    try coordinator.validateImport(claim)
   }
 
 }

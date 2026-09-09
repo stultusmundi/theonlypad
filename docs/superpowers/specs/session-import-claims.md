@@ -11,3 +11,7 @@ Legacy resolved(entry) remains available until the actual application migration.
 ## Recovery-only preservation path
 
 A separate `SessionRecoveryImportClaim` supplies the exact immutable retained recovery snapshot after restoration completes. It checks the same owner/revision/entry provenance and pending-cleanup exclusion, but permits recovering validated content while `preservationError` continues to block every session capture/write and all ordinary import claims. It cannot authorize an arbitrary file or clear preservation errors. Resolution clears unresolved recovery ownership before callbacks without deleting disk data. Native callers must create a URL-less scratch document from this snapshot, including when its originalPath is populated. Native activation remains unimplemented.
+
+## Reserved import capacity
+
+Both claim types expose pre-factory `preflightImport(_:liveWindows:)`. It requires exact provenance, unique live ownership, disjoint window/document IDs and the 32-window/128-live-document limits. Import restores only to the original reserved window and explicitly compares before/after live-plus-unresolved ID sets. Unchanged over-capacity unresolved unions are retained honestly; this is not permission for session publication. A requested document already live is refused. This snapshot is not an ownership reservation; the process intake owner must revalidate registry and callback state separately.
