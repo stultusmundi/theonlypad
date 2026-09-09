@@ -503,6 +503,7 @@ import PadCore
     try await conflictActions()
     try await reloadCopyActions()
     try await uncertainReload()
+    try await NativeMonitorLocateScenarios.run()
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }

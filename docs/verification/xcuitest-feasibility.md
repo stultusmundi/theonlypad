@@ -105,3 +105,9 @@ Follow-up nonvisible AppKit probe found that select/close buttons have `NSView.i
 ## Additional multiwindow regression
 
 The same `4654c5fc0744d6b4e094c2f7cd35b3257656866db91f34eab3ca15cc01fe18cf` executable passed the new focused multiwindow/pinned-tab test: one test, zero failures,39.700 seconds, `.local/desktop-ui/run.gDhAX0/results.xcresult` (ignored). It exercised two windows and three scratch buffers, native pinning, normal quit/relaunch, exact content, stable IDs, first-window order/selection and native Window-menu focus. Harness corrections and prior failed diagnostic runs are recorded in `../superpowers/plans/2026-09-09-multiwindow-desktop-session.md`. Later source changes are not included in this historical package.
+
+## External-file workflows added (compile-only)
+
+Two new actual desktop workflows are retained in `Tests/DesktopUI/GUIProbe.swift`: external atomic replacement → nonmodal notice → explicit clean Reload → quit/relaunch, and dirty external change → real discard Cancel → Open Disk Copy → original-tab preservation. They use synthetic files, actual selectors and the existing native file-picker helper. `xcodebuild build-for-testing` passed; the existing traditional-headermap warning remains. Private compile log: `.local/desktop-external-compile/build.log`.
+
+Neither workflow executed while the screen is locked and UI automation access remains pending. These sources are not desktop acceptance evidence. Real renamed-file Locate through the native chooser, permission UX, and dirty/copy relaunch coverage remain outstanding. No authentication attempt, application launch or security setting change was made for this compile-only check.

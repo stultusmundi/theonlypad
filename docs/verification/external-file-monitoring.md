@@ -1,6 +1,6 @@
 # External file monitoring: component verification
 
-Status: the bounded probe, reducer, guarded watcher/action service, native document ownership and status/conflict controls are implemented and have component/hidden-native evidence below. Checked reload/copy integration is active; rename/Locate transactions and packaged desktop workflows remain outstanding. A-07/A-08 are not complete. No original-file autosave or automatic reload is introduced.
+Status: the bounded probe, reducer, guarded watcher/action service, native document ownership and status/conflict controls are implemented and have component/hidden-native evidence below. Checked Reload/Copy/Locate transactions are implemented and hidden-tested; packaged desktop workflows remain outstanding. A-07/A-08 are not complete. No original-file autosave or automatic reload is introduced.
 
 ## Probe
 
@@ -90,7 +90,7 @@ The real status row renders observations without filesystem access or session wr
 
 Fresh hidden verification against production source: bridge105 semantic +18 real-service +26 process-owner assertions (`run.SILVC6Wl`); owner20 model +36 actual-controller checks (`run.khoeUOtB`); lifecycle/action phases (`run.pxlu_bxv`); and existing SaveFailure/WindowCheckpoint/ApplicationCheckpoint harnesses (`run.4ru_iv6f`) all passed. Lifecycle tests exercise real temporary files, split/tab registration continuity, equal-byte baseline acknowledgement, dirty/undo preservation, quit-veto adoption, retained-close fencing, Check, Keep Buffer, stale Save As refusal, and captured-document Save As without moving unrelated focus. A genuine suspended-open and suspended-save adoption failure preceded the pending-adoption fix. Coordinator/component test details are distinct from this native integration evidence.
 
-These harnesses instantiate actual AppKit controllers but do not show windows, activate the application or display native dialogs. Actual conflict-panel interaction, physical IME, accessibility and packaged desktop acceptance remain unverified. The complete native suite includes visible harnesses and has not been rerun while the screen is locked. The current local package does not yet contain this integration.
+These harnesses instantiate actual AppKit controllers but do not show windows, activate the application or display native dialogs. Actual conflict-panel interaction, physical IME, accessibility and packaged desktop acceptance remain unverified. The complete native suite includes visible harnesses and has not been rerun while the screen is locked. The package was subsequently updated below; runtime acceptance remains outstanding.
 
 
 ## Checked native reload and disk copy
@@ -110,3 +110,21 @@ scripts/test-disk-action-coordinator.sh .build/native-monitor-integration/arm64-
 ```
 
 Final neighboring compatibility run.5setnkt3 also passed SaveFailureHarness, WindowCheckpointHarness and ApplicationCheckpointHarness against the frozen integrated action sources. Independent lifecycle/script review found no further material issue.
+
+Local checkpoint b59bfab was packaged in session71799: release build20.67s, ad-hoc signature, bundle/archive6file byte checks, SBOM hash and specified ASCII path-marker checks passed. Independent post-promotion check also passed. Executable SHA256 a87320054c7d7d2f58f091a7b9f12fc041e719548d2c6b17ded0d1da0424f536. This package includes the native monitoring/Reload/Copy integration, not Locate. It was not launched while GUI access remains pending; no notarization or release publication occurred.
+
+
+## Locate identity continuity (bridge verified; transaction pending)
+
+Optional `adoptBaseline(bytes:validatedIdentity:)` now forces a fresh registration when a validated candidate identity is supplied. The old registration is retired without importing its identity; capacity/manual fallback and retry retain the candidate identity. Ordinary nil-identity adoption remains unchanged. This does not itself expose a Locate action or adopt a URL.
+
+Isolated runtime reds caught registration reuse (`run.NY6fS32I`) and a real parent replacement accepted after validation (`run.tq2hP7wQ`). Root reviewed the minimal delta before copying. The retained production bridge runner passed111 semantic +20 real-service +26 process-owner checks (`run.yHgc0QfP`), with empty compiler logs. No GUI or provider-account test ran. Native candidate validation/adoption and desktop Locate acceptance remain outstanding.
+
+
+## Native Locate integrated
+
+The actual conflict panel now offers an explicit chooser for admitted Locate actions. Two shared-worker checks compare exact saved bytes and complete candidate metadata; adoption changes the URL/binding while retaining current/saved encoding, bytes/text, dirty state, bookmarks, undo and both panes. A validated identity seeds fresh monitoring. Pending save uncertainty excludes Locate. No hint automatically follows a renamed file.
+
+Missing-button red run._ejg7drk preceded wiring. Final combined hidden run.r0rwjt2e passed all earlier lifecycle/Reload/Copy/uncertain-save phases plus Locate Cancel, different bytes, captured-tab focus, exact preservation, old-registration cancellation, new metadata/identity and pending-publication exclusion. Successful adoption emits exactly one controller session and one recent-file callback; Cancel/refusal emits neither, and reconciliation does not duplicate them. A test initially required a different bridge object; the design requires a fresh registration, so the retained failure run.ns2um9yt led to stronger registration-authority assertions without changing production code. Independent coordinator/controller source reviews found no material issue.
+
+Full core/native compilation13575 passed328 tests with zero failures in14.613seconds. Native chooser interaction and packaged desktop behavior remain unverified. The current b59bfab package predates Locate.

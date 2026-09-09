@@ -232,7 +232,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var windowClosed = false
   private var fileMonitoring: ApplicationFileMonitoring?
   private var diskActions: DocumentDiskActionCoordinator?
+  private var locateActions: DocumentLocateCoordinator?
   var confirmDiskReload: ((EditorDocument) -> Bool)?
+  var chooseDiskLocation: ((URL?) -> URL?)?
   private var pendingFileStateAdoptions: Set<UUID> = []
   private var onDiskStateChange: (() -> Void)?
   private var diskConflict: DocumentDiskConflictController?
@@ -244,6 +246,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard fileMonitoring == nil, !windowClosed else { return }
     fileMonitoring = owner
     diskActions = DocumentDiskActionCoordinator(application: owner)
+    locateActions = DocumentLocateCoordinator(application: owner)
     onDiskStateChange = { [weak self] in self?.renderDiskStatus() }
     for document in documents { adoptFileState(document) }
     renderDiskStatus()
@@ -273,7 +276,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       quitting: preparingToQuit || owner.isSuspended,
       deliveryGeneration: owner.deliveryGeneration)
   }
-  private func adoptFileState(_ document: EditorDocument) {
+  private func adoptFileState(
+    _ document: EditorDocument, validatedIdentity: FileTargetIdentity? = nil
+  ) {
     guard let owner = fileMonitoring, !windowClosed,
       documents.contains(where: { $0 === document }), document.url != nil,
       let bytes = document.originalBytes
@@ -290,7 +295,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           return self.fileStateContext(document)
         }, onChange: { [weak self] in self?.onDiskStateChange?() })
     }
-    document.fileState?.adoptBaseline(bytes: bytes)
+    document.fileState?.adoptBaseline(bytes: bytes, validatedIdentity: validatedIdentity)
     pendingFileStateAdoptions.remove(document.id)
   }
   private func invalidateFileState(_ document: EditorDocument) {
@@ -374,6 +379,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           })
       }
     }
+    if !isRecordingMacro, let context = bridge.captureAction(.locate) {
+      actions.append(
+        .init(title: "Locate File…", accessibilityID: "document.locateFile") {
+          [weak self, weak document] in
+          guard let self, let document else { return }
+          self.locateFile(document, context: context)
+        })
+    }
     actions.append(
       .init(title: "Check Again", accessibilityID: "document.checkDisk") {
         [weak self, weak document] in
@@ -407,6 +420,106 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         "The buffer is preserved. Keeping it does not authorize overwriting a changed file. Save As writes to a new filename."
         + (bridge.state.observation?.movedCandidate.map { " Suggested location: " + $0.path } ?? ""),
       actions: actions)
+  }
+  private func locateFile(_ document: EditorDocument, context: FileStateActionContext) {
+    guard context.action == .locate, let bridge = document.fileState,
+      bridge.isCurrent(context), !isRecordingMacro, document.pendingPublication == nil,
+      let originalURL = document.url, let bytes = document.originalBytes,
+      let coordinator = locateActions
+    else {
+      reportStaleDiskAction()
+      return
+    }
+    let suggested = bridge.state.observation?.movedCandidate ?? originalURL
+    let candidate: URL?
+    if let chooseDiskLocation {
+      candidate = chooseDiskLocation(suggested)
+    } else {
+      let panel = NSOpenPanel()
+      panel.title = "Locate File"
+      panel.message =
+        "Choose the file containing the last saved bytes. Your buffer edits will be kept."
+      panel.canChooseFiles = true
+      panel.canChooseDirectories = false
+      panel.allowsMultipleSelection = false
+      panel.directoryURL = suggested.deletingLastPathComponent()
+      panel.nameFieldStringValue = suggested.lastPathComponent
+      candidate = panel.runModal() == .OK ? panel.url : nil
+    }
+    guard let candidate else { return }
+    guard bridge.isCurrent(context), !isRecordingMacro, document.pendingPublication == nil else {
+      reportStaleDiskAction()
+      return
+    }
+    let input = DocumentLocateInput(
+      documentID: document.id, originalURL: originalURL, candidateURL: candidate,
+      baselineRevision: document.baselineRevision, originalBytes: bytes)
+    let admitted = coordinator.start(
+      input,
+      callbacks: DocumentLocateCallbacks(
+        beginOperation: { [weak self, weak document] in
+          guard let self, let document, !self.isRecordingMacro, bridge.isCurrent(context),
+            !document.saving, document.pendingPublication == nil
+          else { return nil }
+          let operation = document.beginFileOperation()
+          document.saving = true
+          self.refreshInteractivity(document)
+          return operation
+        },
+        isCurrent: { [weak self, weak document] operation in
+          guard let self, let document else { return false }
+          return !self.isRecordingMacro && document.pendingPublication == nil
+            && bridge.isCurrent(context, owningOperation: operation)
+        },
+        apply: { [weak self, weak document] url, identity, operation in
+          guard let self, let document, document.operationID == operation else {
+            throw CancellationError()
+          }
+          self.applyLocatedFile(document, url: url, identity: identity)
+        },
+        finish: { [weak self, weak document] operation in
+          Self.completeFileOperation(document, id: operation, controller: self)
+        },
+        reportError: { [weak self] error in self?.reportLocateError(error) }))
+    if !admitted, bridge.isCurrent(context) { reportDiskActionError(FileActionError.capacity) }
+  }
+  private func applyLocatedFile(
+    _ document: EditorDocument, url: URL, identity: FileTargetIdentity
+  ) {
+    let changedURL = document.url != url
+    document.url = url
+    document.acknowledgeFileBaseline()
+    adoptFileState(document, validatedIdentity: identity)
+    if !document.manualLanguage {
+      document.language = LanguageService.detect(
+        filename: document.name, text: document.storage.string)
+    }
+    document.highlighter.update(language: document.language)
+    refresh()
+    // refresh records the single controller session change; standalone windows need recovery too.
+    if onSessionChange == nil { scheduleRecovery() }
+    if changedURL { onOpenedURL?(url) }
+  }
+  private func reportLocateError(_ error: Error) {
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
+      !(error is CancellationError), (error as? MonitorFailure) != .cancelled
+    else { return }
+    let message: String
+    switch error as? DocumentLocateError {
+    case .differentBytes:
+      message =
+        "That file has different bytes from the last saved version. Your buffer and original location are preserved. Choose another file, or open this file separately."
+    case .changedCandidate:
+      message =
+        "The selected file changed while it was being checked. Your buffer and original location are preserved. Locate it again."
+    case .unavailable(.notDownloaded):
+      message =
+        "Download the selected file explicitly before locating it again. Your buffer and original location are preserved."
+    default:
+      message =
+        "The selected file could not be verified. Choose an accessible local regular file containing the last saved bytes. Your buffer and original location are preserved."
+    }
+    present(NSError(domain: "TheOnlyPad", code: 26, userInfo: [NSLocalizedDescriptionKey: message]))
   }
   private func performCheckedDiskAction(
     _ document: EditorDocument, context: FileStateActionContext
@@ -2317,6 +2430,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   func windowWillClose(_ notification: Notification) {
     windowClosed = true
     diskActions?.cancel()
+    locateActions?.cancel()
     diskConflict?.close()
     diskConflict = nil
     for document in documents { invalidateFileState(document) }

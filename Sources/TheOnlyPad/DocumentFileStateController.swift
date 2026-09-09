@@ -100,10 +100,11 @@ private final class DeliveryFence: @unchecked Sendable {
     else { return }
     if boundIdentity == nil { boundIdentity = receipt.boundIdentity }
   }
-  func adoptBaseline(bytes: Data) {
+  func adoptBaseline(bytes: Data, validatedIdentity: FileTargetIdentity? = nil) {
     guard let value = live() else { return }
     clearAdmission()
-    boundIdentity = nil
+    if validatedIdentity != nil { retireRegistration(retainingContinuity: false) }
+    boundIdentity = validatedIdentity
     fence.set(value.deliveryGeneration)
     guard let url = value.url else {
       binding = nil

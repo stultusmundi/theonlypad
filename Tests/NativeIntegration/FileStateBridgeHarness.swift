@@ -517,6 +517,34 @@ let matching = DiskObservation(
     let currentKeep = kept.bridge.captureAction(.keepBuffer)!
     kept.bridge.invalidate()
     check(!kept.bridge.keepBuffer(currentKeep), "closed bridge refuses notice dismissal")
+    let located = Fixture()
+    located.bridge.adoptBaseline(bytes: Data([1]))
+    let locatedOldHandle = located.client.handle
+    let candidate = FileTargetIdentity(
+      parentDevice: 10, parentInode: 20, fileDevice: 10, fileInode: 30)
+    located.bridge.adoptBaseline(bytes: Data([1]), validatedIdentity: candidate)
+    check(
+      located.client.registrations == 2,
+      "validated identity forces fresh registration at same URL and revision")
+    check(locatedOldHandle.snapshot.cancelled, "validated adoption cancels old registration")
+    check(
+      located.client.registeredIdentity == candidate, "fresh registration carries candidate parent")
+    located.client.failRegister = true
+    located.live.bindingID = UUID()
+    located.live.baselineRevision += 1
+    located.bridge.adoptBaseline(bytes: Data([1]), validatedIdentity: candidate)
+    check(
+      located.bridge.lastFailure == .capacity, "validated adoption exposes registration capacity")
+    located.bridge.checkAgain()
+    check(
+      located.client.passedIdentity == candidate, "capacity manual check retains candidate identity"
+    )
+    located.client.failRegister = false
+    located.bridge.retryRegistration()
+    check(
+      located.client.registeredIdentity == candidate,
+      "retry registration retains candidate identity")
+    located.bridge.invalidate()
     print("PASS \(checks) deterministic bridge assertions; no real monitor or GUI exercised")
   }
 }

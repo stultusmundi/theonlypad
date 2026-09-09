@@ -385,4 +385,92 @@ final class GUIProbe: XCTestCase {
     quitAndRelaunch(app)
     assertText("synthetic after failed quit\n", in: app)
   }
+
+  // External-file desktop acceptance sources. These require a packaged build with
+  // monitoring and an unlocked, authorized desktop; compile-only is not execution.
+  @MainActor
+  private func waitForDiskChange(_ app: XCUIApplication) {
+    let reason = app.staticTexts.matching(
+      NSPredicate(
+        format: "value CONTAINS %@ OR label CONTAINS %@",
+        "The file changed on disk.", "The file changed on disk.")
+    ).firstMatch
+    XCTAssertTrue(
+      reason.waitForExistence(timeout: 40), "A real external change must become visible")
+    let resolve = app.buttons["document.resolveDiskChange"]
+    XCTAssertTrue(resolve.waitForExistence(timeout: 5))
+    XCTAssertTrue(resolve.isEnabled)
+  }
+
+  @MainActor
+  private func diskAction(_ identifier: String, in app: XCUIApplication) {
+    app.buttons["document.resolveDiskChange"].click()
+    let action = app.buttons[identifier]
+    XCTAssertTrue(action.waitForExistence(timeout: 10))
+    XCTAssertTrue(action.isEnabled)
+    action.click()
+  }
+
+  @MainActor
+  func testExternalFileNoticeAndExplicitCleanReloadSurviveRelaunch() throws {
+    let (app, state) = try fixture()
+    let file = state.appendingPathComponent("synthetic-external-clean.txt")
+    let before = "synthetic saved before\n"
+    let after = "synthetic external after\n"
+    try Data(before.utf8).write(to: file)
+    open(file, in: app)
+    assertText(before, in: app)
+    try Data(after.utf8).write(to: file, options: .atomic)
+    waitForDiskChange(app)
+    assertText(before, in: app)  // A notice must not automatically replace the buffer.
+    diskAction("document.diskReload", in: app)
+    assertText(after, in: app)
+    XCTAssertEqual(try Data(contentsOf: file), Data(after.utf8))
+    quitAndRelaunch(app)
+    assertText(after, in: app)
+    XCTAssertEqual(try Data(contentsOf: file), Data(after.utf8))
+  }
+
+  @MainActor
+  func testExternalDirtyReloadCancelAndDiskCopyPreserveOriginal() throws {
+    let (app, state) = try fixture()
+    let file = state.appendingPathComponent("synthetic-external-dirty.txt")
+    let saved = "synthetic saved original\n"
+    let dirty = "synthetic unsaved buffer\n"
+    let disk = "synthetic independent disk\n"
+    try Data(saved.utf8).write(to: file)
+    open(file, in: app)
+    assertText(saved, in: app)
+    let originalTab = app.descendants(matching: .any).matching(
+      NSPredicate(
+        format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+        "tab.select.", file.lastPathComponent)
+    ).firstMatch
+    XCTAssertTrue(originalTab.waitForExistence(timeout: 10))
+    let originalTabID = originalTab.identifier
+    let editor = app.textViews["Document text"].firstMatch
+    editor.click()
+    app.typeKey("a", modifierFlags: .command)
+    app.typeText(dirty)
+    assertText(dirty, in: app)
+    try Data(disk.utf8).write(to: file, options: .atomic)
+    waitForDiskChange(app)
+    assertText(dirty, in: app)
+    diskAction("document.diskReload", in: app)
+    let discard = app.buttons["Reload from Disk"]
+    XCTAssertTrue(
+      discard.waitForExistence(timeout: 10), "Dirty reload requires an actual confirmation")
+    let cancel = app.buttons["Cancel"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    cancel.click()
+    assertText(dirty, in: app)
+    XCTAssertEqual(try Data(contentsOf: file), Data(disk.utf8))
+    diskAction("document.diskCopy", in: app)
+    assertText(disk, in: app)
+    let source = app.descendants(matching: .any).matching(identifier: originalTabID).firstMatch
+    XCTAssertTrue(source.waitForExistence(timeout: 10))
+    source.click()
+    assertText(dirty, in: app)
+    XCTAssertEqual(try Data(contentsOf: file), Data(disk.utf8))
+  }
 }

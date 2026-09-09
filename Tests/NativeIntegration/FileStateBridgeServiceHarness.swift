@@ -150,6 +150,27 @@ final class CallbackGate: @unchecked Sendable {
     check(
       blocked.bridge.state.observation?.locationProblem == .parentChanged,
       "released stale registered result cannot overwrite manual refusal")
+    let candidateParent = directory.appendingPathComponent("candidate-parent")
+    try FileManager.default.createDirectory(at: candidateParent, withIntermediateDirectories: true)
+    let candidateFile = candidateParent.appendingPathComponent("synthetic.txt")
+    try original.write(to: candidateFile)
+    let candidateFixture = RealFixture(url: candidateFile, service: service)
+    defer { candidateFixture.bridge.invalidate() }
+    candidateFixture.bridge.adoptBaseline(bytes: original)
+    try await wait("candidate identity initially established") {
+      candidateFixture.bridge.state.observation?.metadata != nil
+    }
+    let validated = candidateFixture.bridge.state.observation!.metadata!.identity
+    try FileManager.default.moveItem(
+      at: candidateParent, to: directory.appendingPathComponent("validated-parent"))
+    try FileManager.default.createDirectory(at: candidateParent, withIntermediateDirectories: true)
+    try original.write(to: candidateFile)
+    candidateFixture.live.bindingID = UUID()
+    candidateFixture.live.baselineRevision += 1
+    candidateFixture.bridge.adoptBaseline(bytes: original, validatedIdentity: validated)
+    try await wait("fresh validated registration rejects parent changed after Locate validation") {
+      candidateFixture.bridge.state.observation?.locationProblem == .parentChanged
+    }
     print(
       "PASS \(checks) production service/bridge assertions; no AppKit/GUI or editor-owner integration"
     )

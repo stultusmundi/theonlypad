@@ -5,6 +5,7 @@ scripts/swift.sh build
 build_path=$(scripts/swift.sh build --show-bin-path)
 scripts/test-file-state-bridge.sh "$build_path"
 scripts/test-disk-action-coordinator.sh "$build_path"
+scripts/test-locate-coordinator.sh "$build_path"
 scripts/test-file-state-owner.sh --build-path "$build_path"
 scripts/test-native-monitor-lifecycle.sh "$build_path"
 scripts/test-disk-status-view.sh "$build_path"
@@ -28,7 +29,7 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   -o .local/native-integration/checkpoint-scheduler-test
 .local/native-integration/checkpoint-scheduler-test
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
-  -I "$build_path/Modules" Sources/TheOnlyPad/DocumentDiskActionCoordinator.swift Sources/TheOnlyPad/DiskActionBoundary.swift Sources/TheOnlyPad/DiskSelectionPreparer.swift Sources/TheOnlyPad/DocumentDiskStatusView.swift Sources/TheOnlyPad/DocumentDiskConflictController.swift Sources/TheOnlyPad/ApplicationFileMonitoring.swift Sources/TheOnlyPad/FileMonitorClient.swift Sources/TheOnlyPad/DocumentFileStateController.swift Sources/TheOnlyPad/NativeFileMonitorClient.swift Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/DocumentTextView.swift Sources/TheOnlyPad/EditorDocument.swift Sources/TheOnlyPad/EditorPane.swift Sources/TheOnlyPad/EditorPaneHost.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
+  -I "$build_path/Modules" Sources/TheOnlyPad/DocumentLocateCoordinator.swift Sources/TheOnlyPad/LocateBoundary.swift Sources/TheOnlyPad/DocumentDiskActionCoordinator.swift Sources/TheOnlyPad/DiskActionBoundary.swift Sources/TheOnlyPad/DiskSelectionPreparer.swift Sources/TheOnlyPad/DocumentDiskStatusView.swift Sources/TheOnlyPad/DocumentDiskConflictController.swift Sources/TheOnlyPad/ApplicationFileMonitoring.swift Sources/TheOnlyPad/FileMonitorClient.swift Sources/TheOnlyPad/DocumentFileStateController.swift Sources/TheOnlyPad/NativeFileMonitorClient.swift Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/DocumentTextView.swift Sources/TheOnlyPad/EditorDocument.swift Sources/TheOnlyPad/EditorPane.swift Sources/TheOnlyPad/EditorPaneHost.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
   Sources/TheOnlyPad/DocumentPrinting.swift Sources/TheOnlyPad/RecoveryCoordinator.swift Sources/TheOnlyPad/NativeSyntaxHighlighter.swift Sources/TheOnlyPad/LineNumberRuler.swift Sources/TheOnlyPad/DocumentTabBar.swift Sources/TheOnlyPad/WorkspaceSidebar.swift Sources/TheOnlyPad/EncodingPanelController.swift Sources/TheOnlyPad/MacroCancellation.swift Sources/TheOnlyPad/SearchPanelController.swift Tests/NativeIntegration/NativeUIHarness.swift \
   "$build_path"/PadCore.build/*.o -o .local/native-integration/ui-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/ui" .local/native-integration/ui-test

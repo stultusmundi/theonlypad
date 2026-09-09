@@ -81,8 +81,10 @@ for path in sorted((repo / "Sources/TheOnlyPad").glob("*.swift")):
         text += "\n" + data.decode()
     (sources / path.name).write_text(text)
     manifest["augmented/" + path.name] = hashlib.sha256(text.encode()).hexdigest()
-harness = repo / "Tests/NativeIntegration/NativeMonitorLifecycleHarness.swift"
-manifest[str(harness.relative_to(repo))] = hashlib.sha256(harness.read_bytes()).hexdigest()
+harnesses = [repo / "Tests/NativeIntegration" / name for name in (
+    "NativeMonitorLifecycleHarness.swift", "NativeMonitorLocateScenarios.swift")]
+for harness in harnesses:
+    manifest[str(harness.relative_to(repo))] = hashlib.sha256(harness.read_bytes()).hexdigest()
 for path in objects:
     manifest["PadCore.build/" + path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
 (run / "source-sha256.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -92,7 +94,7 @@ binary = run / "lifecycle-test"
 command = ["xcrun", "swiftc", "-target", platform.machine() + "-apple-macosx14.0",
            "-module-cache-path", str(cache), "-parse-as-library", "-I", str(build / "Modules")]
 command += [str(path) for path in sorted(sources.glob("*.swift"))]
-command += [str(harness)] + [str(path) for path in objects] + ["-o", str(binary)]
+command += [str(harness) for harness in harnesses] + [str(path) for path in objects] + ["-o", str(binary)]
 bounded(command, "compile")
 bounded([str(binary)], "runtime")
 record["status"] = "passed"

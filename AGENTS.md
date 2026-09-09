@@ -47,6 +47,7 @@ Hidden monitor/ownership integration checks (proven against a built debug direct
 scripts/swift.sh test --scratch-path .build/native-monitor-integration --filter AppCommandsTests
 scripts/test-file-state-bridge.sh .build/native-monitor-integration/arm64-apple-macosx/debug
 scripts/test-disk-action-coordinator.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-locate-coordinator.sh .build/native-monitor-integration/arm64-apple-macosx/debug
 scripts/test-file-state-owner.sh --build-path .build/native-monitor-integration/arm64-apple-macosx/debug
 scripts/test-native-monitor-lifecycle.sh .build/native-monitor-integration/arm64-apple-macosx/debug
 scripts/test-disk-status-view.sh .build/native-monitor-integration/arm64-apple-macosx/debug
