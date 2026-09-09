@@ -10,7 +10,7 @@
 
 **Spec:** [external-file-monitoring.md](../specs/external-file-monitoring.md).
 
-**Status:** independently reviewed design/plan after five corrections; implementation/build/runtime results outstanding. Task1 test/seam preparation is authorized in an ignored package; execution awaits the coordinated slot. No matrix or continuation edits are part of this task.
+**Status:** Tasks1/2 implemented and tested in production PadCore (30 probe +24 reducer tests; full258 passed). Task3 service is in isolated test/seam preparation; native integration/actions/desktop acceptance remain outstanding. See [component evidence](../../verification/external-file-monitoring.md).
 
 ## Global constraints
 
@@ -109,7 +109,7 @@ public enum FileActionAdmission: Equatable, Sendable {
 // Intended pure entry points on ObservedFileState:
 // mutating accept(_:token:currentToken:) -> Bool
 // admission(for:dirty:pendingPublication:busy:composing:quitting:) -> FileActionAdmission
-// mutating dismiss(sequence:)
+// mutating dismiss(token:)
 ```
 
 - [ ] Write red tests for accepting a result from an old URL epoch, old saved baseline and an older sequence: state must remain unchanged. Matching bytes with pending publication must retain uncertainty. Keep Buffer must retain conflict and saved-byte baseline; changed+read-only must retain both facets.
@@ -194,3 +194,7 @@ Deferred: automatic clean reload preference, overwrite-on-conflict, three-way me
 ## Review response and remaining status
 
 All five independent design findings are addressed in the spec and Tasks 3/5: BOM precedence, one-shot manual API, macro-recording reload veto, explicit 268-FD reservation budget, and worker-only filesystem operations with gated-stall tests. This is a documentation revision, not runtime validation or implementation. The new tests, capacity limits and queue guarantees still require independent implementation review and actual execution; no code, matrix, continuation or acceptance state changed.
+
+## Integration notes after component review
+
+Full-token dismissal supersedes the original sequence-only proposal; stale epoch/baseline regressions passed after the correction. The service must expose a bounded thread-safe live latest-issued token snapshot (including cancellation), because result admission must not compare a captured token to itself. Issue a sequence when a probe starts; queued coalescing alone need not invalidate the current issued result. Metadata-only observation reuse is currently disabled after a false-clean regression; any later cache needs reviewed immutable baseline provenance and explicit tests.
