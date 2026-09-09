@@ -1,6 +1,27 @@
 import Foundation
 import PadCore
 
+struct SessionImportClaim: Sendable {
+  fileprivate let owner: UUID
+  fileprivate let revision: UUID
+  fileprivate let entry: UnresolvedSessionEntry
+  var documentID: UUID { entry.metadata.id }
+  var windowID: UUID { entry.windowID }
+}
+
+enum SessionImportError: Error, LocalizedError {
+  case invalidClaim, cleanupPending
+  var errorDescription: String? {
+    switch self {
+    case .invalidClaim:
+      return "The saved session record changed. Refresh the recovery list and try again."
+    case .cleanupPending:
+      return
+        "Recovery cleanup is still pending. Retry importing this record after cleanup completes."
+    }
+  }
+}
+
 struct SessionCapacitySnapshot: Equatable, Sendable {
   let sessionRevision: UUID
   let windowIDs: Set<UUID>
@@ -45,6 +66,47 @@ struct SessionStartupBudget {
 
 /// Owns unresolved metadata. Async readers do not create or change editor windows.
 @MainActor final class SessionCoordinator {
+  private let importOwner = UUID()
+  /// Provenance only: callers must revalidate after native/registry callbacks, not treat this as a reservation.
+  func claimImport(_ entry: UnresolvedSessionEntry) throws -> SessionImportClaim {
+    try requireImportAdmission()
+    guard let current = unresolved.first(where: { Self.sameImportEntry($0, entry) }) else {
+      throw SessionImportError.invalidClaim
+    }
+    return SessionImportClaim(owner: importOwner, revision: capacityRevision, entry: current)
+  }
+  func validateImport(_ claim: SessionImportClaim) throws {
+    try requireImportAdmission()
+    guard claim.owner == importOwner, claim.revision == capacityRevision,
+      unresolved.contains(where: { Self.sameImportEntry($0, claim.entry) })
+    else { throw SessionImportError.invalidClaim }
+  }
+  func resolveImport(_ claim: SessionImportClaim) throws {
+    try validateImport(claim)
+    // Transfer unresolved ownership before the array observer can expose the completed transition.
+    // This never removes recovery from disk; the live document's publisher now owns that decision.
+    recoveryByID[claim.documentID] = nil
+    recoveryIDs.remove(claim.documentID)
+    unresolved.removeAll { $0.metadata.id == claim.documentID }
+  }
+  private func requireImportAdmission() throws {
+    try requireRestoredSession()
+    guard removals.isEmpty else { throw SessionImportError.cleanupPending }
+  }
+  private static func sameImportEntry(
+    _ first: UnresolvedSessionEntry, _ second: UnresolvedSessionEntry
+  )
+    -> Bool
+  {
+    guard first.windowID == second.windowID, first.metadata == second.metadata,
+      first.hasRecovery == second.hasRecovery
+    else { return false }
+    switch (first.metadata.originalPath, second.metadata.originalPath) {
+    case (nil, nil): return true
+    case (let left?, let right?): return left.utf8.elementsEqual(right.utf8)
+    default: return false
+    }
+  }
   private(set) var capacityRevision = UUID()
   func transferCapacity(liveWindows: [UUID: Set<UUID>]) throws -> SessionCapacitySnapshot {
     try requireRestoredSession()
@@ -63,6 +125,8 @@ struct SessionStartupBudget {
   }
 
   var onSessionChange: (() -> Void)?
+  // Post-startup public operations only change membership or error prose. A future semantic
+  // metadata update must also rotate capacityRevision, including for an A→B→A update sequence.
   private(set) var unresolved: [UnresolvedSessionEntry] = [] {
     willSet {
       if unresolved.map({ [$0.windowID, $0.metadata.id] })

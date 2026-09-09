@@ -72,4 +72,8 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 
 `scripts/test-application-documents.sh` passed 30 registry tests (13 ownership and 17 close-state cases); `scripts/test-session-capacity.sh` passed7 coordinator tests with synthetic files. These freeze their actual sources into private packages and do not create native windows. Registry registration/metadata/selection and pure aggregate-capacity snapshots are tested independently; native document transfer, native close enforcement and the required two-phase recovery service remain unimplemented. Registry close leases alone do not establish native data safety.
 
-`scripts/test-checkpoint-pause.sh` passed eight deterministic scheduler pause tests and the existing scheduler regression harness. It uses frozen production sources, no native windows, and does not verify the new recovery actor or native close integration.
+`scripts/test-checkpoint-pause.sh` passed 12 deterministic scheduler pause/receipt tests and the existing scheduler regression harness. It uses frozen production sources, no native windows, and does not verify the new recovery actor or native close integration.
+
+`scripts/test-recovery-close.sh` passed 25 actor/store tests; `scripts/test-document-recovery-ownership.sh .build/recovery-close-candidate/arm64-apple-macosx/debug` uses the verified core build for hidden model checks (26 assertions plus shared-pane ownership). Full integrated core suite passed 404 tests. Managed native close/publisher activation remains outstanding.
+
+`scripts/test-session-import-claims.sh` passed nine coordinator tests, including actual temporary recovery-file preservation. Claims are provenance and require caller revalidation after callbacks; native import activation remains outstanding.
