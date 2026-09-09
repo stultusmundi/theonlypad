@@ -19,7 +19,7 @@
 - Preserve current exact UTF16 dirty comparisons, encoding/BOM, original bytes, backup, atomic-save, recovery, bookmark and macro contracts.
 - This plan changes no engine-selection decision. F-02 inter-window/document transfer, split session persistence, linked scrolling, minimap and comparison remain separate requirements, not implied acceptance.
 - Scope first implementation to two presentations of the selected tab, with either split axis and independent scrolling. “Synchronized” means shared document edits/undo, not forcing both scroll positions together.
-- No production changes are authorized by this planning task. Execution uses isolated green-before-copy work and coordinated GUI/CPU slots. Local checkpoint commits remain optional until the root coordinator's integration checkpoint.
+- The initial planning task made no production changes. Execution is now proceeding under the original autonomous build authorization, with coordinated source ownership and GUI/CPU slots. Local checkpoint commits remain optional until the root coordinator's integration checkpoint.
 
 ## Current evidence and integration hazards
 
@@ -190,14 +190,14 @@ EditorPaneHost owns only arrangement and takes existing pane scroll views:
 
 ```swift
 @MainActor final class EditorPaneHost: NSView {
-  func show(_ panes: [EditorPane], axis: PaneAxis)
+  func present(panes: [EditorPane], axis: PaneAxis) throws
 }
 ```
 
 - [ ] Add failing tests for `splitCurrent(.sideBySide)` and `.stacked`, distinct pane IDs, shared document ID, independent initial scroll/carets, and collapse preserving active pane text/selection/undo.
-- [ ] Implement NSSplitView with `isVertical = (axis == .sideBySide)`. Use a 160-point minimum pane extent; prevent divider dragging below that extent and shrink to a single presentation if the window cannot fit both, preserving document data and retained presentation state. Keep both scroll views constrained to their pane bounds.
+- [ ] Implement NSSplitView with `isVertical = (axis == .sideBySide)`. Use a 160-point preferred minimum pane extent and constrain divider movement when space permits. The controller sets an appropriate minimum window size during split presentation; the host lays out within its actual bounds and never implicitly collapses/detaches panes on resize. Keep both scroll views constrained to pane bounds. This refinement preserves the user’s chosen split during resizing.
 - [ ] Register `view.splitVertical` (“Split Side by Side”), `view.splitHorizontal` (“Split Top and Bottom”), `view.closeSplit` (“Close Other Pane”), and `view.focusOtherPane` (“Focus Other Pane”) in the shared registry. Existing split changes orientation without creating a third pane. Last-pane close is not exposed; closeSplit is disabled with one pane.
-- [ ] Assign actual accessibility identifiers `editor.pane.<UUID>` and `editor.text.<UUID>` with labels “Document text, pane 1/2”. Expose focus through actual responder changes. Preserve the single document tab/title/dirty indicator; selecting another tab shows that document's own presentation arrangement.
+- [ ] Assign actual accessibility identifiers `editor.pane.<UUID>` and `editor.text.<UUID>` while preserving the established “Document text” text-view label and distinguishing the pane containers through their own labels/IDs. Expose focus through actual responder changes. Preserve the single document tab/title/dirty indicator; selecting another tab shows that document's own presentation arrangement.
 - [ ] Test collapse after an edit in the removed pane, then undo/redo via the remaining pane. Repeat split/collapse 100 times and assert panePool count never exceeds two, attached layout-manager count is correct, and shared history survives. Test document close discards/persists once, never once per presentation.
 - [ ] Freeze every pooled/attached view during save/reload and quit. Failed operations must restore editability consistently. Assert editing the second pane cannot race an encoding reload or mutate a captured quit snapshot.
 - [ ] Initially refuse extra layout allocation above 2,000,000 UTF16 units with an actionable size message, pending Task 5 measurements. This is a provisional visible guard, not F-01 full-size acceptance or a reason to omit later performance work.
@@ -238,3 +238,23 @@ func applyCachedTokens(to layoutManager: NSLayoutManager)
 F-01 maps to Tasks 1–4 ownership/axes/shared edits/undo/independent selections and Task 5 real desktop evidence. Pane-specific T-05 maps to Task 5. F-02 remains untouched: no document transfer between windows or separate pane tab groups is implemented by this plan. Existing F-07 status must continue to report the focused pane. Separate engine reassessment and advanced-selection requirements are unchanged.
 
 Every proposed cross-file interface is named above. No matrix or continuation file was edited during this planning task. New source/test paths and code blocks describe planned work only; none is claimed to exist or pass. The BUILD_PROMPT waives repeated design/handoff approval, so the coordinator may execute this plan after its normal source-ownership and test-slot coordination without asking the user to choose an execution style.
+
+## Ownership extraction execution checkpoint
+
+After checkpoint commit0b92dfe, the exact same-file behavioral probe compiled successfully against a copy of the current controller, then failed the cross-view undo assertion with SIGTRAP. Shared storage and visible insertion had passed first. Ignored evidence is under `.local/shared-pane-ownership`; controller source SHA256546cf083d8f1dd33a5470661b075746f0ddf3da48fc477d79d8d196f5d074117. Task1 model/view/pane extraction is now in progress. No visible split or focused-pane command behavior is implemented yet.
+
+Shared highlighter regression: two layout managers on one storage initially failed the second-view color assertion (72016). NativeSyntaxHighlighter now accepts storage ownership, parses once and applies temporary attributes to every attached layout manager; compatibility init(editor:) remains. SharedHighlightHarness passed21565, checking both color application/clearing, exact text and independent selections. This is adapter evidence, not visible split completion.
+
+Ownership extraction reached a real disposal failure after shared undo/redo, detached-origin undo, reuse and uncertainty assertions passed: document released but a view remained retained by native undo history. Investigating document-disposal-only cleanup and executor isolation; never clear history when detaching a pane. No lifetime acceptance claim until the retained-view regression passes.
+
+### Routing audit refinement
+
+Selection-sensitive transformations (line/comment commands, bookmark actions and selection text utilities) must validate the captured pane ID, edit revision, exact selection, attachment and current focus. Snapshot-only statistics/external-command output reads the focused selection at invocation and does not need later focus validation. Save/recovery/encoding/whole-document formatting remain bound to one logical document; hold a stable originating presentation for native transaction calls, never dynamically reinterpret `document.editor` as the latest focused pane inside a suspended callback.
+
+Outline/find result clicks intentionally reactivate a captured document today. Preserve that behavior by binding each panel to an originating pane and explicitly reactivating it after snapshot/range/attachment checks. A blanket current-focus requirement would break cross-tab result navigation. Detached origins must fail clearly. Add tests for stale transform focus changes, result navigation back to the captured attached pane, rejection after detach, save acknowledgements after focus changes, and cross-pane undo of formatting/macros.
+
+Lifetime finding correction: the initial weak assertion ran before AppKit deferred release. A bounded three-second run-loop drain, matching existing NativeLifetime practice, preserved eventual-nil assertions. Both the speculative cleanup variant and the no-cleanup control passed at roughly0.9seconds. No retention cycle was established; speculative isolated-deinit/history clearing was removed. Detached panes retain undo history, and no new disposal/executor contract is introduced.
+
+Task1 focused verification: ownership harness passed at macOS14 deployment target; hidden WindowCheckpoint passed; strict source formatting and diff checks passed. DirtyState initially failed to find the encoding sheet in the tool sandbox on both current and0b92dfe sources. Diagnostics showed AppKit service connection failure; the unchanged retained harness passed with authorized unsandboxed native execution. No product/test patch was needed. Independent frozen-source review found no material issue. The full native extraction run remains pending.
+
+Task1 full core/native50290 passed:199 core tests in8.567seconds, all native integration harnesses including shared ownership/highlighting and both process-kill recovery cases. Independent review is clear. First-pane compatibility accessors are intentionally temporary; no visible split/routing feature is claimed.

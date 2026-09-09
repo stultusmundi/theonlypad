@@ -4,21 +4,24 @@ import PadCore
 /// Temporary display colors never enter document bytes or native undo history.
 @MainActor
 final class NativeSyntaxHighlighter {
-  private weak var editor: NSTextView?
+  private weak var storage: NSTextStorage?
   private var generation: UInt64 = 0
   private var pending: Task<Void, Never>?
   private var worker: Task<[SyntaxToken], Error>?
-  init(editor: NSTextView) { self.editor = editor }
+  init(storage: NSTextStorage) { self.storage = storage }
+  init(editor: NSTextView) { self.storage = editor.textStorage }
 
   func update(language: DocumentLanguage) {
     generation &+= 1
     let revision = generation
     pending?.cancel()
     worker?.cancel()
-    guard let editor else { return }
-    let text = editor.string
+    guard let storage else { return }
+    let text = storage.string
     let full = NSRange(location: 0, length: text.utf16.count)
-    editor.layoutManager?.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
+    for layout in storage.layoutManagers {
+      layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
+    }
     guard full.length <= 2_000_000, language != .plainText else { return }
     pending = Task { [weak self] in
       do { try await Task.sleep(nanoseconds: 180_000_000) } catch { return }
@@ -28,8 +31,8 @@ final class NativeSyntaxHighlighter {
       }
       self?.worker = task
       let tokens = try? await task.value
-      guard let self, let editor = self.editor, !Task.isCancelled,
-        self.generation == revision, editor.string.utf16.elementsEqual(text.utf16), let tokens
+      guard let self, let storage = self.storage, !Task.isCancelled,
+        self.generation == revision, storage.string.utf16.elementsEqual(text.utf16), let tokens
       else { return }
       for token in tokens {
         let color: NSColor
@@ -40,8 +43,10 @@ final class NativeSyntaxHighlighter {
         case .number: color = .systemBlue
         case .markup: color = .systemTeal
         }
-        editor.layoutManager?.addTemporaryAttribute(
-          .foregroundColor, value: color, forCharacterRange: token.range)
+        for layout in storage.layoutManagers {
+          layout.addTemporaryAttribute(
+            .foregroundColor, value: color, forCharacterRange: token.range)
+        }
       }
     }
   }
