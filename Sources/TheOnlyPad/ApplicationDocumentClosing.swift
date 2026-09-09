@@ -298,6 +298,11 @@ import PadCore
     guard capture.state == attempt.state, capture.snapshot.id == attempt.documentID else {
       throw DocumentClosingError.staleState
     }
+    // Freeze native expectation before the notifying stage boundary and actor suspension.
+    // The model epoch may legitimately lag the separately retained actor lease epoch.
+    let installationContext = DocumentClosingRepairContext(
+      state: capture.state,
+      modelAuthority: capture.authority, highestIssuedRevision: capture.highestIssuedRevision)
     stage(.repairing, batch)
     let receipt = try await recovery.restoreAfterClose(
       transaction.lease!, attemptID: attempt.id,
@@ -309,7 +314,7 @@ import PadCore
     else { throw DocumentClosingError.staleState }
     stage(.installingRepair, batch)
     try requireOwned(transaction)
-    try native.installRepair(transaction.handle, attempt, receipt)
+    try native.installRepair(transaction.handle, attempt, receipt, installationContext)
     let accepted = try registry.completeRecoveryRepair(
       attempt,
       result: .success(

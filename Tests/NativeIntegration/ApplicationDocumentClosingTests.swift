@@ -75,6 +75,8 @@ private final class ClosingFault: @unchecked Sendable {
   var released = 0
   var checkpoints = 0
   var installs = 0
+  var installationContexts: [DocumentClosingRepairContext] = []
+  var installationLeases: [RecoveryWriteAuthority] = []
   var projects = 0
   var rejectInstall = false
   var rejectProjection = false
@@ -140,14 +142,19 @@ private final class ClosingFault: @unchecked Sendable {
             state: handle.state, snapshot: handle.snapshot, authority: handle.authority,
             highestIssuedRevision: handle.highest)
         },
-        installRepair: { handle, attempt, receipt in
+        installRepair: { handle, attempt, receipt, context in
+          self.installationContexts.append(context)
+          self.installationLeases.append(receipt.lease.authority)
           self.installs += 1
           if self.rejectInstall {
             self.rejectInstall = false
             throw ClosingFixtureError.injected
           }
           let handle = handle as! ClosingHandle
-          guard handle.state == attempt.state else { throw DocumentClosingError.staleState }
+          guard handle.state == attempt.state, context.state == attempt.state,
+            handle.authority == context.modelAuthority,
+            handle.highest == context.highestIssuedRevision
+          else { throw DocumentClosingError.staleState }
           handle.authority = receipt.authority
           handle.highest = receipt.nextRevision - 1
           self.afterInstall?(handle)
@@ -289,6 +296,7 @@ private final class ClosingFault: @unchecked Sendable {
     let fixture = try fixture()
     let handle = try await fixture.add()
     let owner = fixture.owner()
+    let originalModelAuthority = handle.authority!
     fixture.fault.arm()
     let id = try owner.start(documentIDs: [handle.id], sourceWindowID: fixture.assignment.windowID)
     _ = try await owner.wait(for: id)
@@ -300,8 +308,45 @@ private final class ClosingFault: @unchecked Sendable {
     try owner.retry(id)
     _ = try await owner.wait(for: id)
     XCTAssertEqual(fixture.installs, 2)
+    XCTAssertEqual(
+      fixture.installationContexts.map(\.modelAuthority),
+      [originalModelAuthority, originalModelAuthority])
+    XCTAssertNotEqual(
+      fixture.installationLeases[1], originalModelAuthority,
+      "The retry actor lease is fresh while the model still legitimately retains its earlier epoch")
     XCTAssertFalse(owner.hasUnsettledTransactions)
     XCTAssertTrue(fixture.registry.allows(.edit, documentID: handle.id))
+  }
+  func testRepairExpectationRetainsFenceCapturedBeforeActorWait() async throws {
+    let fixture = try fixture()
+    let handle = try await fixture.add()
+    let owner = fixture.owner()
+    let originalAuthority = handle.authority!
+    let originalFence = handle.highest
+    fixture.fault.arm()
+    let id = try owner.start(documentIDs: [handle.id], sourceWindowID: fixture.assignment.windowID)
+    _ = try await owner.wait(for: id)
+    var changed = false
+    owner.onChange = {
+      if owner.status?.stage == .repairing, !changed {
+        changed = true
+        // Revision issuance does not alter semantic close state; an illicit producer must still be detected.
+        handle.highest += 1
+      }
+    }
+    try owner.retry(id)
+    _ = try await owner.wait(for: id)
+    XCTAssertTrue(changed)
+    XCTAssertTrue(owner.hasUnsettledTransactions)
+    XCTAssertEqual(fixture.released, 0)
+    XCTAssertEqual(fixture.installationContexts.last?.highestIssuedRevision, originalFence)
+    XCTAssertEqual(handle.authority, originalAuthority)
+    XCTAssertEqual(handle.highest, originalFence + 1)
+    owner.onChange = nil
+    try owner.retry(id)
+    _ = try await owner.wait(for: id)
+    XCTAssertFalse(owner.hasUnsettledTransactions)
+    XCTAssertEqual(fixture.installationContexts.last?.highestIssuedRevision, originalFence + 1)
   }
   func testAcceptedRepairProjectionFailureRetriesProjectionOnly() async throws {
     let fixture = try fixture()
@@ -591,7 +636,7 @@ private final class ClosingFault: @unchecked Sendable {
           return .init(
             state: handle.state, snapshot: handle.snapshot, authority: handle.authority,
             highestIssuedRevision: handle.highest)
-        }, installRepair: { _, _, _ in XCTFail("Successful deletion must not invoke repair") },
+        }, installRepair: { _, _, _, _ in XCTFail("Successful deletion must not invoke repair") },
         projectRegistry: {}))
     func until(_ predicate: () -> Bool) async throws {
       let deadline = ProcessInfo.processInfo.systemUptime + 5

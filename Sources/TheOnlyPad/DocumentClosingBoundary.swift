@@ -53,6 +53,12 @@ struct DocumentClosingCapture {
   let authority: RecoveryWriteAuthority
   let highestIssuedRevision: UInt64
 }
+/// Immutable native expectation captured before actor repair; distinct from the actor lease epoch.
+struct DocumentClosingRepairContext {
+  let state: DocumentCloseState
+  let modelAuthority: RecoveryWriteAuthority
+  let highestIssuedRevision: UInt64
+}
 @MainActor struct DocumentClosingNative {
   let confirm: (DocumentCloseRequest, UUID) async throws -> DocumentCloseDisposition?
   let applyAdmission: (any WorkspaceDocumentHandle) throws -> Void
@@ -60,6 +66,9 @@ struct DocumentClosingCapture {
   let readState: (any WorkspaceDocumentHandle) throws -> DocumentCloseState
   let capture: (any WorkspaceDocumentHandle) throws -> DocumentClosingCapture
   let installRepair:
-    (any WorkspaceDocumentHandle, DocumentRecoveryAttempt, RecoveryRepairReceipt) throws -> Void
+    (
+      any WorkspaceDocumentHandle, DocumentRecoveryAttempt, RecoveryRepairReceipt,
+      DocumentClosingRepairContext
+    ) throws -> Void
   let projectRegistry: () throws -> Void
 }

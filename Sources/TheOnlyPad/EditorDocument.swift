@@ -17,12 +17,38 @@ struct PendingDocumentPublication: Sendable {
 @MainActor
 final class EditorDocument {
   let id: UUID
+  private(set) var closeMutationGeneration = UUID()
+  private func noteCloseMutation() { closeMutationGeneration = UUID() }
+  func installRecoveryRepair(
+    _ receipt: RecoveryRepairReceipt, expectedAuthority: RecoveryWriteAuthority,
+    expectedHighestIssuedRevision: UInt64, expectedOwnershipGeneration: UUID,
+    expectedMutationGeneration: UUID
+  ) throws {
+    guard recoveryAuthority == expectedAuthority, expectedAuthority.documentID == id,
+      highestIssuedRecoveryRevision == expectedHighestIssuedRevision,
+      ownershipGeneration == expectedOwnershipGeneration,
+      closeMutationGeneration == expectedMutationGeneration,
+      receipt.mutationGeneration == expectedMutationGeneration,
+      receipt.authority.documentID == id, receipt.lease.authority.documentID == id,
+      receipt.authority.coordinatorID == expectedAuthority.coordinatorID,
+      receipt.lease.authority.coordinatorID == expectedAuthority.coordinatorID,
+      receipt.authority != expectedAuthority, receipt.authority != receipt.lease.authority,
+      receipt.nextRevision > 0
+    else { throw RecoveryAuthorityError.invalidAuthority }
+    // No callback/observer/await after validation. Recovery authority is not a semantic edit.
+    recoveryAuthority = receipt.authority
+    nextManagedRecoveryRevision = receipt.nextRevision
+    highestIssuedRecoveryRevision = receipt.nextRevision - 1
+  }
   private(set) var ownershipGeneration = UUID()
   private(set) var recoveryAuthority: RecoveryWriteAuthority?
   private var nextManagedRecoveryRevision: UInt64?
   /// Managed epoch fence; unrelated to the legacy recoveryRevision counter.
   private(set) var highestIssuedRecoveryRevision: UInt64 = 0
-  func advanceOwnershipGeneration() { ownershipGeneration = UUID() }
+  func advanceOwnershipGeneration() {
+    ownershipGeneration = UUID()
+    noteCloseMutation()
+  }
   /// Called only by the trusted process owner after legacy work has drained and capture is frozen.
   /// This model adapter does not itself adopt the document into a live registry or scheduler.
   func installRecoveryAdoption(
@@ -62,6 +88,7 @@ final class EditorDocument {
   /// Call after coherent saved-state adoption, before notifying the file-state bridge.
   /// Equality of bytes does not make an acknowledgement the same authority event.
   func acknowledgeFileBaseline() {
+    noteCloseMutation()
     if baselineRevision == .max {
       fileBindingID = UUID()
       baselineRevision = 0
@@ -74,21 +101,25 @@ final class EditorDocument {
     panePresentation.invalidate(force: true)
     let id = UUID()
     operationID = id
+    noteCloseMutation()
     return id
   }
   /// A completion must establish ownership before applying any saved-state mutation.
   @discardableResult func finishFileOperation(_ id: UUID) -> Bool {
     guard operationID == id else { return false }
     operationID = nil
+    noteCloseMutation()
     return true
   }
   let storage = NSTextStorage()
   let undoManager = UndoManager()
   private(set) var panePool: [EditorPane] = []
   private(set) var editRevision: UInt64 = 0
-  var composingPaneID: UUID?
-  var preferredPaneID: UUID?
-  var splitAxis: PaneAxis = .sideBySide
+  var composingPaneID: UUID? { didSet { if composingPaneID != oldValue { noteCloseMutation() } } }
+  var preferredPaneID: UUID? { didSet { if preferredPaneID != oldValue { noteCloseMutation() } } }
+  var splitAxis: PaneAxis = .sideBySide {
+    didSet { if splitAxis != oldValue { noteCloseMutation() } }
+  }
   let panePresentation = DocumentPanePresentation()
   // Compatibility accessors; interactive controller commands resolve their originating pane.
   var editor: DocumentTextView { panePool[0].editor }
@@ -106,11 +137,12 @@ final class EditorDocument {
     precondition(Set(panes.map(\.id)) == Set(panePool.filter(\.isAttached).map(\.id)))
     panePool = panes + panePool.filter { !$0.isAttached }
   }
-  var url: URL?
-  var originalBytes: Data?
-  var pendingPublication: PendingDocumentPublication?
+  var url: URL? { didSet { noteCloseMutation() } }
+  var originalBytes: Data? { didSet { noteCloseMutation() } }
+  var pendingPublication: PendingDocumentPublication? { didSet { noteCloseMutation() } }
   var savedText = "" {
     didSet {
+      noteCloseMutation()
       savedUTF16Length = (savedText as NSString).length
       cachedTextDirty = nil
       dirtyProof = .unknown
@@ -132,19 +164,27 @@ final class EditorDocument {
   private var processedLength = 0
   private var cachedTextDirty: Bool?
   private var storageObserver: NSObjectProtocol?
-  var encoding: DocumentEncoding = .utf8
-  var hasBOM = false
-  var savedEncoding: DocumentEncoding = .utf8
-  var savedHasBOM = false
-  var pinned = false
-  var saving = false
-  var bookmarks = DocumentBookmarks()
-  var pendingBookmarks: DocumentBookmarks?
-  var compositionBookmarks: DocumentBookmarks?
-  var compositionOriginalText: String?
-  var compositionUndoRegistered = false
+  var encoding: DocumentEncoding = .utf8 {
+    didSet { if encoding != oldValue { noteCloseMutation() } }
+  }
+  var hasBOM = false { didSet { if hasBOM != oldValue { noteCloseMutation() } } }
+  var savedEncoding: DocumentEncoding = .utf8 {
+    didSet { if savedEncoding != oldValue { noteCloseMutation() } }
+  }
+  var savedHasBOM = false { didSet { if savedHasBOM != oldValue { noteCloseMutation() } } }
+  var pinned = false { didSet { if pinned != oldValue { noteCloseMutation() } } }
+  var saving = false { didSet { if saving != oldValue { noteCloseMutation() } } }
+  var bookmarks = DocumentBookmarks() { didSet { noteCloseMutation() } }
+  var pendingBookmarks: DocumentBookmarks? { didSet { noteCloseMutation() } }
+  var compositionBookmarks: DocumentBookmarks? { didSet { noteCloseMutation() } }
+  var compositionOriginalText: String? { didSet { noteCloseMutation() } }
+  var compositionUndoRegistered = false {
+    didSet { if compositionUndoRegistered != oldValue { noteCloseMutation() } }
+  }
   var typingBookmarkNextLocation: Int?
-  var pendingBookmarksHaveUndo = false
+  var pendingBookmarksHaveUndo = false {
+    didSet { if pendingBookmarksHaveUndo != oldValue { noteCloseMutation() } }
+  }
   var dirty: Bool {
     let pending = storage.editedMask.contains(.editedCharacters)
     if pending {
@@ -234,12 +274,14 @@ final class EditorDocument {
 
   var name: String { url?.lastPathComponent ?? recoveredName ?? "Untitled" }
 
-  var language: DocumentLanguage = .plainText
-  var manualLanguage = false
+  var language: DocumentLanguage = .plainText {
+    didSet { if language != oldValue { noteCloseMutation() } }
+  }
+  var manualLanguage = false { didSet { if manualLanguage != oldValue { noteCloseMutation() } } }
   var settingsApplied = false
   lazy var highlighter = NativeSyntaxHighlighter(storage: storage)
   var recoveryRevision: UInt64 = 0
-  var recoveredName: String?
+  var recoveredName: String? { didSet { noteCloseMutation() } }
 
   init(id: UUID = UUID()) {
     self.id = id
@@ -251,6 +293,7 @@ final class EditorDocument {
         if let storage = notification.object as? NSTextStorage,
           storage.editedMask.contains(.editedCharacters)
         {
+          self?.noteCloseMutation()
           self?.editRevision &+= 1
           self?.processDirtyEdit(storage)
           self?.highlighter.invalidateForCharacterEdit()

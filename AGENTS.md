@@ -85,3 +85,5 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 `scripts/test-application-session-checkpoints.sh` passed 18 real-store publisher tests. The extracted legacy AppDelegate initializer builds; native managed activation remains outstanding.
 
 `scripts/test-application-document-intake.sh` passed 16 process-owner tests, including actual startup publisher integration and a paired receipt/reload. Native controller routing remains separate.
+
+`scripts/test-native-close-model.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 106 close-model checks plus factory/shared controls; process-close suite now passes 20 tests with pre-await repair context. Complete native close admission remains outstanding.
