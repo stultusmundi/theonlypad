@@ -1,0 +1,304 @@
+[
+  {
+    "fixture": "1000000-multiline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.02858399999786343,
+      "empiricalNearestRankP95": 0.03302612499828683,
+      "maximum": 0.03771120833334862
+    },
+    "undoSeconds": {
+      "median": 0.020933416668412974,
+      "empiricalNearestRankP95": 0.021939458332781214,
+      "maximum": 0.02199004166686791
+    },
+    "resizeSeconds": {
+      "median": 0.020599583333023475,
+      "empiricalNearestRankP95": 0.021673874998668907,
+      "maximum": 0.023232166669913568
+    },
+    "wrapToggleSeconds": {
+      "median": 0.048395812502349145,
+      "empiricalNearestRankP95": 0.05141554166766582,
+      "maximum": 0.0515698750023148
+    },
+    "peakRSSBytes": 112279552,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 112279552
+  },
+  {
+    "fixture": "1000000-multiline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.025583437502064044,
+      "empiricalNearestRankP95": 0.03385524999976042,
+      "maximum": 0.057048291666433215
+    },
+    "undoSeconds": {
+      "median": 0.020816624999497435,
+      "empiricalNearestRankP95": 0.022495791665278375,
+      "maximum": 0.024201291667850455
+    },
+    "resizeSeconds": {
+      "median": 0.038884020834302646,
+      "empiricalNearestRankP95": 0.04064370833293651,
+      "maximum": 0.04129320833453676
+    },
+    "wrapToggleSeconds": {
+      "median": 0.09578416666226985,
+      "empiricalNearestRankP95": 0.09786633333351347,
+      "maximum": 0.09816862499792478
+    },
+    "peakRSSBytes": 121552896,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 121552896
+  },
+  {
+    "fixture": "1000000-multiline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.033530041666381294,
+      "empiricalNearestRankP95": 0.050783499998942716,
+      "maximum": 0.05263766666394076
+    },
+    "undoSeconds": {
+      "median": 0.02338149999923189,
+      "empiricalNearestRankP95": 0.03906766666477779,
+      "maximum": 0.03930079166821088
+    },
+    "resizeSeconds": {
+      "median": 0.038297624998449464,
+      "empiricalNearestRankP95": 0.040886416667490266,
+      "maximum": 0.041282791669800645
+    },
+    "wrapToggleSeconds": {
+      "median": 0.08384260416642064,
+      "empiricalNearestRankP95": 0.09144337500038091,
+      "maximum": 0.09144754166845814
+    },
+    "peakRSSBytes": 114180096,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 114180096
+  },
+  {
+    "fixture": "1000000-longline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "1000000-longline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "1000000-longline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.814628187499693,
+      "empiricalNearestRankP95": 0.847128999997949,
+      "maximum": 0.8729571666663105
+    },
+    "undoSeconds": {
+      "median": 0.8060802708332631,
+      "empiricalNearestRankP95": 0.8523879583335656,
+      "maximum": 0.8542553749975923
+    },
+    "resizeSeconds": {
+      "median": 0.08076635416728095,
+      "empiricalNearestRankP95": 0.08446816666764789,
+      "maximum": 0.08614004166884115
+    },
+    "wrapToggleSeconds": {
+      "median": 1.0280812916644209,
+      "empiricalNearestRankP95": 1.0780651666646008,
+      "maximum": 1.09234537500015
+    },
+    "peakRSSBytes": 2792800256,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 2792800256
+  },
+  {
+    "fixture": "10000000-multiline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.0036880208335787756,
+      "empiricalNearestRankP95": 0.004610125000908738,
+      "maximum": 0.02274287500040373
+    },
+    "undoSeconds": {
+      "median": 0.0025819166676228633,
+      "empiricalNearestRankP95": 0.002872708333597984,
+      "maximum": 0.0029935416641819756
+    },
+    "resizeSeconds": {
+      "median": 0.003325562500322121,
+      "empiricalNearestRankP95": 0.0034862083339248784,
+      "maximum": 0.004988291668269085
+    },
+    "wrapToggleSeconds": {
+      "median": 0.01736214583252149,
+      "empiricalNearestRankP95": 0.018076583332003793,
+      "maximum": 0.018691083332669223
+    },
+    "peakRSSBytes": 142540800,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 142540800
+  },
+  {
+    "fixture": "10000000-multiline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "10000000-multiline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "10000000-longline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "10000000-longline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=window occluded"
+  },
+  {
+    "fixture": "10000000-longline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=before-edit reason=application inactive"
+  },
+  {
+    "fixture": "100000000-multiline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": 0,
+    "status": "passed",
+    "observations": 20,
+    "editSeconds": {
+      "median": 0.01599033333332045,
+      "empiricalNearestRankP95": 0.01958737499808194,
+      "maximum": 0.027674041666614357
+    },
+    "undoSeconds": {
+      "median": 0.010572666666121222,
+      "empiricalNearestRankP95": 0.011228125000343425,
+      "maximum": 0.011261166666372446
+    },
+    "resizeSeconds": {
+      "median": 0.0033487500022602035,
+      "empiricalNearestRankP95": 0.005743874997278908,
+      "maximum": 0.006912875000125496
+    },
+    "wrapToggleSeconds": {
+      "median": 0.050279895831408794,
+      "empiricalNearestRankP95": 0.05320399999982328,
+      "maximum": 0.05454637500224635
+    },
+    "peakRSSBytes": 416088064,
+    "completedSamples": 20,
+    "failure": "",
+    "observedSamplePeakRSSBytes": 416088064
+  },
+  {
+    "fixture": "100000000-multiline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 8,
+    "failure": "stage=after-undo reason=window occluded",
+    "observedSamplePeakRSSBytes": 420560896
+  },
+  {
+    "fixture": "100000000-multiline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 18,
+    "failure": "stage=after-resize reason=window occluded",
+    "observedSamplePeakRSSBytes": 424083456
+  },
+  {
+    "fixture": "100000000-longline-1-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=after-wrap-disabled reason=window occluded"
+  },
+  {
+    "fixture": "100000000-longline-2-sideBySide",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=after-edit reason=window occluded"
+  },
+  {
+    "fixture": "100000000-longline-2-stacked",
+    "timeoutSeconds": 120,
+    "samplesRequested": 20,
+    "exitCode": -5,
+    "status": "failed",
+    "completedSamples": 0,
+    "failure": "stage=after-wrap-enabled reason=window occluded"
+  }
+]
