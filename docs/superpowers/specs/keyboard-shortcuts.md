@@ -1,0 +1,82 @@
+# H-01 keyboard shortcut customization proposal
+
+Status: reviewed design; implementation gates are authorized under the build brief. No shortcut implementation or GUI acceptance is claimed yet. H-01 remains partial until its required integration and validation pass.
+
+## Existing authority and constraints
+
+`PadCore/CommandRegistry.swift` holds immutable descriptors keyed by command ID and checks duplicate IDs/shortcut strings. Its current normalization sorts modifier strings but does not validate modifier names or key grammar. `AppCommands.registry()` supplies defaults. `AppDelegate.buildMenus()` converts strings to NSMenuItem equivalents (only up/down have explicit special-key conversion), with representedObject = command ID. AppDelegate dispatch remains the command authority. `refreshExtensionCommands()` currently reconstructs defaults, so adding customization only at launch would lose it on extension refresh. Its failure path also reconstructs defaults.
+
+Hide, Quit, Minimize and native Window/Services menu actions live outside the registry. Native field editors and NSTextView responder actions have their own editing bindings; collision checking against registry entries alone is insufficient. CommandPaletteController and HelpController receive command snapshots, so retained open windows must be refreshed or closed after registry publication rather than displaying stale shortcuts.
+
+EditorSettings has an exact-key version-1 JSON schema; version 0 migration handles font/wrap. SettingsStore is a synchronous bounded store used off-main. Do not slip extra keys into version 1. Original source bytes are compared by AtomicFileStore, including publicationUncertain failures. Current settings import/export applies appearance/editor settings; it does not imply shortcuts are already part of that file.
+
+Macros store typed `MacroCommand.transform/replace`, not keyboard chords or arbitrary command IDs. Keep that format and replay unchanged. `macro.*` registry actions can be customized, but this proposal does not invent a per-named-macro command. Extension command IDs are `extension.<extensionID>.<commandID>`; disabled/uninstalled extensions can disappear between capture and apply.
+
+## Two credible options
+
+1. **EditorSettings version 2 + a Shortcuts section in Settings.** One preferences import/export can include all configuration and share the existing save path. Costs: couples shortcut conflicts/catalog revisions to font/theme edits, changes exact-key migration, and forces cross-domain reset/import decisions. Every settings apply must coordinate effective command publication.
+2. **Separate versioned shortcut profile + a Keyboard Shortcuts window reached from Settings and the shared registry (recommended).** Store only command overrides independently under the existing private Preferences directory. Appearance settings version 0/1 stay unchanged; shortcut Import/Export/Restore Defaults affect only shortcuts. One application coordinator owns profiles and effective registry publication. Costs: a second small store and explicitly separate backup/export operation.
+
+Choose option 2. Product UI is searchable command names, shortcut display/recorder, conflict explanation and Apply/Cancel; IDs/schema/raw JSON are not editing controls. Import/Export remain explicit file operations.
+
+## Core representation and policy
+
+Introduce typed `KeyboardShortcut` (key enum/value plus modifier OptionSet), canonical platform-independent representation and one AppKit adapter. Do not extend the existing plus-delimited parser with ambiguous literal-plus syntax. Validate all existing defaults through the typed adapter; compatibility descriptor strings may remain only as derived display/serialization during transition. No duplicate modifier acceptance or ignored unknown tokens.
+
+Profile version 1 is a bounded array of records `{commandID, assignment}`; assignment explicitly distinguishes disabled from assigned. Omitted command means inherit current default. An array enables rejection of duplicate command IDs rather than JSON dictionary last-write-wins. Strict schema/type validation, bounded bytes (initial 256 KiB), at most 1,024 records, bounded ID/key lengths, no executable values. Reject unknown versions/fields and duplicate records before mutation. No legacy shortcut migration exists: missing file means empty overrides; EditorSettings v0/v1 remain untouched. Future profile migrations must be explicit and lossless.
+
+Recorder policy: Command-modified single ASCII letters, digits and a documented punctuation set; Option/Control/Shift may combine. Preserve existing Command+Option Up/Down defaults through typed named keys. Reject bare text/navigation, modifier-only events, multi-key chords, dead keys/composition, unsupported function/media keys and ambiguous multi-scalar events. Shift is its own modifier; normalization must account for event.charactersIgnoringModifiers and symbol keys consistently with NSMenuItem. Freeze a supported punctuation table only after actual native recorder/menu tests; do not silently map physical key codes to characters. Non-US layouts and user/system remappings require acceptance evidence; unsupported capture should explain why rather than silently assign a different chord.
+
+Protect standard native edit bindings as the default policy: Undo/Redo/Cut/Copy/Paste/Select All retain their defaults and cannot be assigned elsewhere, because native responder/field-editor behavior may still consume them. Protect Close's Cmd+W as well until native window fallback is proven safe. Display these rows as standard system editing shortcuts, read-only with a reason. This is a deliberate bounded capability, not a claim every shortcut is customizable.
+
+Reserve app-owned native Hide/Quit/Minimize plus window cycling and application switching; explicitly deny Cmd+H/Q/M/Tab/backtick and known system combinations such as Command/Control-Space, Command-Option-Escape, Control-Command-Q and screenshot chords. Keep reservations in one tested policy table with reasons. Command-required capture already excludes plain Control-Space. Do not claim this table discovers all OS-, input-source-, Services-, accessibility- or user-defined shortcuts. App-owned reservations are deterministic; system interception remains platform acceptance scope. Preserve Escape/Return/Tab for native dialog interaction.
+
+## Effective registry composition
+
+A single pure builder consumes built-in descriptors + enabled extension descriptors + profile + reservation policy. It returns either a complete CommandRegistry and catalog revision or structured conflicts. It reconstructs descriptors by stable ID, preserving title, dispatch identity and ordering. No direct NSMenu shortcut mutations independent of this result, no NSEvent global monitor, no second key-dispatch table. Menus, palette and help use the same effective snapshot; macro invocation still reaches existing dispatch/recording machinery.
+
+Validate all assignments against one another, inherited defaults and reservations. A conflict names both commands in UI. Editing a collision requires explicitly clearing/reassigning the other command in the same draft; never silently steal a shortcut. Validate the whole batch after all changes, so swapping two shortcuts is valid atomically.
+
+Unknown command IDs from an imported profile must not disappear: retain them as unavailable records, display an unavailable-command section and omit them from active dispatch. They still participate in profile-level duplicate-assignment checks. Imports cannot execute or install extensions. When a command later appears, run the whole builder again. If a newly introduced default conflicts with a retained override, report the conflict and use one deterministic safe effective snapshot: defaults for the entire current catalog, while retaining the unapplied user profile. Do not partially apply selected overrides or lose newly disabled-extension dispatch restrictions. A missing extension alone is not a conflict and does not discard overrides. Root accepts this fallback only with a persistent visible explanation that stored customizations could not be applied; never silently overwrite the retained profile.
+
+Extension refresh and settings profile load can race. Both feed the same MainActor owner; every asynchronous result carries profile/catalog revision. Late refresh must never replace a newer profile with defaults. A stale extension registry must not authorize execution: retain existing dispatch-time extension catalog validation.
+
+## Persistence and transactional publication
+
+`ShortcutStore.load()` returns profile plus exact original file bytes (or missing receipt). Serialize load/save/import/reset on one background owner. Save uses the captured expected bytes; do not reread current bytes and treat an unrelated external edit as the caller's expected baseline. Private directory/file permissions and no-follow/symlink checks follow existing stores. Use a separate `Preferences/Shortcuts.json`; recovery discovery must not ingest it.
+
+Apply sequence: validate draft against current catalog; freeze the coordinator's catalog/profile publication revisions; save off-main; on confirmed save publish profile + effective registry + menus atomically on MainActor. Queue incoming catalog refreshes while saving, then recompute against the saved profile. Closing the window suppresses late UI only, not an already authorized durable transaction. Reject simultaneous saves and disable controls while busy. Quit must veto while a shortcut write is unresolved, or await this specific bounded owner with existing failure semantics; do not let a close cancel half a save.
+
+Before-replace failure leaves old disk/runtime unchanged. On publicationUncertain, do not announce success or blindly retry with new expected bytes: perform exact bounded readback/validation and determine whether intended bytes are present. Surface uncertain durability and require checked reconciliation before another write. If readback is corrupt/future/unavailable, preserve bytes and last known runtime profile, expose explicit recovery choices. Ordinary Apply must never overwrite unknown/corrupt stored data. Explicit Import/Restore Defaults may replace it only after a confirmation saying the unreadable shortcut settings will be replaced, using its exact receipt and preserving recoverability when publication is uncertain.
+
+Import parses to a draft, previews changed/disabled/unavailable commands and conflicts, then applies only after explicit Apply. Unsupported or malformed import changes neither draft nor persistence. Export serializes the complete current profile, including inactive records, without changing it. Restore Defaults clears overrides as a draft; cancellation has no effect, and Apply follows the same transaction. Imported duplicate JSON keys must be rejected by strict parsing rather than silently accepted by JSONSerialization/JSONDecoder; tests need a real duplicate-key fixture.
+
+## Minimal interfaces and ownership
+
+- PadCore/KeyboardShortcut.swift: typed shortcut, normalization and native-reservation policy data (no AppKit).
+- PadCore/ShortcutProfile.swift: validated versioned profile, pure whole-registry composition/conflicts. Own matching core tests.
+- PadCore/ShortcutStore.swift: bounded private storage, exact receipt transactions/import/export. Own real-filesystem tests.
+- TheOnlyPad/KeyboardShortcutController.swift: searchable NSTableView + native recorder, explicit remove/restore/apply/cancel/import/export, accessible command titles/reasons. Inject immutable catalog/profile and async apply callback; never edits the registry itself.
+- TheOnlyPad/ApplicationShortcuts.swift: single owner, catalog/profile generations, save/readback, registry publication callback, quit gate. Separate from editor sessions/recovery.
+- Root-only integration: AppDelegate registry building and extension refresh, AppCommands one `app.shortcuts` action, PreferencesController entry point, CommandPaletteController/HelpController refreshed snapshot API or close-on-publication. No EditorDocument/EditorWindowController changes expected.
+
+Do not share ownership of AppDelegate across concurrent implementers. Deliver core/store then native controller/owner, finally root wiring in one coordinated integration. Update literal native compile lists for new dependencies; do not use a passing SwiftPM build as proof those harnesses still link.
+
+## Required tests and checkpoints
+
+1. Core red-green: parse/canonical collisions, invalid/duplicate modifiers/records/JSON keys, defaults compatibility, protected native chords, case/Shift/punctuation distinctions, clear versus inherit, swap transaction, unavailable extension retention/reactivation, newly added-default conflict fallback. Distinct command titles must never determine identity.
+2. Store real temporary files: missing defaults, strict unknown version/field rejection, beforeReplace exact old bytes, expected-receipt external modification refusal, symlink and permissions, publication uncertainty/readback, malformed import no change, export/import inactive records, reset cancel versus confirmed apply. No full-text document fixtures required.
+3. Hidden AppKit: actual key-event capture and NSMenuItem keyEquivalent/modifiers; disabled standard rows, displayed conflict names, Cancel no callback, successful Apply exactly once, close during save, stale catalog result, uncertainty, quit veto/resume. Native responder routing for editor AND field editor; changing a nonprotected shortcut must remove old menu equivalent and execute the same command ID through the new one. Palette/help show the same effective shortcut snapshot.
+4. Actual desktop: choose a supported alternate shortcut in UI, apply, invoke real menu command by keys, verify old chord no longer invokes it; relaunch persists; import collision leaves working assignment; Restore Defaults returns default chord. Native standard undo/field-editor behavior preserved. Keyboard-layout variants require actual runs, not synthetic event evidence alone.
+5. Macro/extension regressions: invoking a transformed command through reassigned chord records the same typed macro operation; disabling extension removes command immediately while retaining inactive customization; re-enable restores only after full collision validation. No arbitrary command execution from imported profile.
+
+Implementation starts with typed core/profile and native key-event mapping gates; store/UI/application ownership follow reviewed interfaces. No claim of runtime collision completeness, layout-independent behavior, native GUI acceptance or persistence implementation is made by this document.
+
+
+## Root review and native evidence gate
+
+Separate versioned shortcut storage is accepted to keep existing appearance imports stable. Standard editing/close shortcuts remain protected for native responder consistency; the feature must explain these restrictions. Unknown commands remain stored but cannot authorize dispatch. The complete effective registry is published coherently and used by menus, palette and help.
+
+Apple documents equivalence between uppercase key equivalents and lowercase plus Shift, and distinguishes menu key characters from modifier masks. This supports typed normalization, but does not by itself prove every punctuation or keyboard-layout combination. See [keyEquivalentModifierMask](https://developer.apple.com/documentation/appkit/nsmenuitem/keyequivalentmodifiermask) and [menu equivalents](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MenuList/Articles/SettingMenuKeyEquiv.html). Reserved standard combinations follow the app's conservative policy informed by [Apple keyboard guidance](https://developer.apple.com/design/human-interface-guidelines/keyboards) and [Mac shortcuts](https://support.apple.com/en-us/102650); this is not system-wide conflict discovery.
+
+Before the recorder is adopted, test actual NSEvent character normalization and NSMenu.performKeyEquivalent with supported ASCII keys and the existing up/down shortcuts. The installed SDK offers charactersByApplyingModifiers (macOS10.15+), which may remove Shift through the active layout without a hardcoded US physical-key table. Unsupported/dead/multiscalar events must be refused explicitly. Synthetic events only establish tested current-layout semantics, not physical or non-US acceptance.
