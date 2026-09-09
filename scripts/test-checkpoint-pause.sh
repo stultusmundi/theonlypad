@@ -30,6 +30,7 @@ for name in ['SessionCheckpointCoordinator.swift','RecoveryCoordinator.swift']:
     freeze(Path('Sources/TheOnlyPad')/name,native/name)
     freeze(Path('Sources/TheOnlyPad')/name,regression/name)
 freeze(Path('Tests/NativeIntegration/CheckpointPauseTests.swift'),tests/'CheckpointPauseTests.swift')
+freeze(Path('Tests/NativeIntegration/CheckpointReceiptAuthorityTests.swift'),tests/'CheckpointReceiptAuthorityTests.swift')
 freeze(Path('Tests/NativeIntegration/SessionCheckpointSchedulerHarness.swift'),regression/'SessionCheckpointSchedulerHarness.swift')
 (package/'Package.swift').write_text('''// swift-tools-version: 6.0
 import PackageDescription

@@ -9,3 +9,7 @@ A token can be acquired before restoration starts. Starting restoration must res
 Native integration must never put managed closes into the legacy pending-close queue awaited by prepareCapture: doing so would make close wait for its own checkpoint drain. Preparation/capture instead refuse promptly while managed closes exist. This slice provides scheduler semantics only; actual registry, recovery, quit and native mutation integration remain separate work.
 
 Verification uses deterministic suspended preparation/publication and explicit release controls against actual scheduler source, plus retained existing scheduler regression coverage. It does not exercise desktop behavior.
+
+## Captured authority receipt validation
+
+The same scheduler must compare the receipt's recovery authority map with all nonnil authorities captured alongside document bytes and revisions. An authority's document ID must match its item's ID. Missing, extra, stale-epoch or foreign-coordinator entries fail acknowledgement even when numeric revisions match. All legacy nil-authority captures require an empty map. The actor separately preflights managed admission before disk effects; scheduler validation is the acknowledgement boundary, not a replacement for actor authorization. Native capture/commit migration remains disabled until both boundaries are tested.

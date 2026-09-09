@@ -1,4 +1,5 @@
 import Foundation
+import PadCore
 
 enum CheckpointDelay: Equatable, Sendable { case debounce, retry }
 enum CheckpointSchedulerError: Error {
@@ -225,11 +226,18 @@ struct CheckpointPauseToken: Hashable, Sendable {
     throws
   {
     var expected: [UUID: UInt64] = [:]
+    var authorities: [UUID: RecoveryWriteAuthority] = [:]
     for item in value.recovery {
       guard expected[item.id] == nil else { throw CheckpointSchedulerError.invalidReceipt }
       expected[item.id] = item.revision
+      if let authority = item.authority {
+        guard authority.documentID == item.id else { throw CheckpointSchedulerError.invalidReceipt }
+        authorities[item.id] = authority
+      }
     }
-    guard receipt.generation == value.generation, receipt.recoveryRevisions == expected else {
+    guard receipt.generation == value.generation, receipt.recoveryRevisions == expected,
+      receipt.recoveryAuthorities == authorities
+    else {
       throw CheckpointSchedulerError.invalidReceipt
     }
     lastAcknowledgedGeneration = receipt.generation

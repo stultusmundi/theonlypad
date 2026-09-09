@@ -7,3 +7,9 @@ Implemented and independently reviewed: opaque owner-bound scheduler pause token
 Cases cover acquisition before restoration, two independent tokens, suspended preparation without later capture, admitted publication drainage, foreign/duplicate/undrained tokens, cancellation retaining ownership, legacy pause isolation and final/close exclusion. The old harness also covers startup, coalescing, retry, final sharing and checkpoint receipt validation. No AppKit window or desktop workflow ran.
 
 The recovery actor was concurrently under separate development; this runner proves scheduler behavior, not the new actor API. Managed close adapters must stay outside the legacy pending-close queue awaited by capture preparation to avoid a self-drain cycle. Authorized recovery receipt validation and actual close/quit integration require separate verification before adoption.
+
+## Authority-bearing receipts
+
+Four additional tests exercise receipt authority comparison. The pre-fix run `run.vJuH2xjU` executed 12 tests and failed six assertions: omitted, stale-epoch, foreign-coordinator, extra-key, wrong-document and uncaptured legacy authorities were acknowledged. After comparing the exact captured map and document binding, `run.lGR9NSjt` passed all 12 tests in 0.007 seconds and the existing scheduler harness also exited 0. This is scheduler acknowledgement evidence only; actual actor preflight and native authority adoption have separate acceptance requirements.
+
+The final integrated actor-type run `run.9q8FKQgy` also passed all 12 tests in 0.007 seconds and the existing scheduler harness exited 0. Both independent source reviews were clear.

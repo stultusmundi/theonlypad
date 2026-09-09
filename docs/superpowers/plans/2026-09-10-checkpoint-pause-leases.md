@@ -6,3 +6,5 @@
 4. Integrate into the process-owned close adapter only after recovery authority and native admission designs are verified. Native integration is not part of this primitive's completion claim.
 
 Status: steps 1–3 implemented, tested and independently reviewed. Eight tests and the existing scheduler harness passed; see docs/verification/checkpoint-pause-leases.md. Step 4 remains outstanding.
+
+Follow-on receipt slice: add behavioral regression tests for exact captured authority acknowledgement and malformed/stale receipt refusal, implement map comparison, rerun pause/legacy compatibility and independently review. Actor has additive default-nil/default-empty fields; production native adoption remains separate.
