@@ -1,0 +1,327 @@
+import Foundation
+import PadCore
+
+struct PreparedSessionTab: Sendable {
+  let metadata: SessionTab
+  let decoded: DecodedDocument
+  let originalBytes: Data?
+  let url: URL?
+  let viewState: RestoredViewState
+  let utf16Count: Int
+}
+struct PreparedSessionWindow: Sendable {
+  let id: UUID
+  let tabs: [PreparedSessionTab]
+  let selectedTabID: UUID?
+}
+
+struct SessionStartupBudget {
+  private var units = 0
+  private var estimatedBytes = 0
+  mutating func admit(utf16Count: Int, originalByteCount: Int) throws {
+    guard utf16Count >= 0, originalByteCount >= 0,
+      utf16Count <= 100_000_000 - units,
+      originalByteCount <= 400_000_000 - estimatedBytes,
+      utf16Count <= (400_000_000 - estimatedBytes - originalByteCount) / 2
+    else {
+      throw NSError(
+        domain: "TheOnlyPad.Session", code: 2,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "Startup restoration exceeds 100 million UTF-16 units or its 400 MB retained text/byte estimate. This record remains unresolved; retry it after closing other documents."
+        ])
+    }
+    units += utf16Count
+    estimatedBytes += originalByteCount + utf16Count * 2
+  }
+}
+
+/// Owns unresolved metadata. Async readers do not create or change editor windows.
+@MainActor final class SessionCoordinator {
+  private(set) var unresolved: [UnresolvedSessionEntry] = []
+  private(set) var warnings: [String] = []
+  private(set) var startupErrors: [String] = []
+  private(set) var restorationComplete = false
+  private var preservationError: Error?
+  private var originalWindows: [SessionWindow] = []
+  private var recentPaths: [String] = []
+  private var generation = 0
+  private var started = false
+  private var recoveryIDs = Set<UUID>()
+  private var recoveryByID: [UUID: RecoverySnapshot] = [:]
+  private var removals: [UUID: Task<Void, Error>] = [:]
+  private let removeRecovery: @MainActor (UUID) async throws -> Void
+  private let loadSession: @MainActor () async throws -> EditorSession?
+  private let claimRecovery: @MainActor () async throws -> RecoveryCoordinator.Startup
+  private let saveSession: @MainActor (EditorSession) async throws -> Void
+  private let readFile: @MainActor (SessionTab, URL) async throws -> SessionResolvedFile
+
+  init(
+    loadSession: @escaping @MainActor () async throws -> EditorSession? = {
+      try await Task.detached { try SessionStore().load() }.value
+    },
+    claimRecovery: @escaping @MainActor () async throws -> RecoveryCoordinator.Startup = {
+      try await SessionCoordinator.claimRecoveryStartup()
+    },
+    saveSession: @escaping @MainActor (EditorSession) async throws -> Void = { session in
+      try await Task.detached { try SessionStore().save(session) }.value
+    },
+    removeRecovery: @escaping @MainActor (UUID) async throws -> Void = { id in
+      try await SessionCoordinator.removeRecoverySnapshot(id)
+    },
+    readFile: @escaping @MainActor (SessionTab, URL) async throws -> SessionResolvedFile = {
+      metadata, url in
+      try await Task.detached { try SessionCoordinator.read(metadata, at: url) }.value
+    }
+  ) {
+    self.removeRecovery = removeRecovery
+    self.loadSession = loadSession
+    self.claimRecovery = claimRecovery
+    self.saveSession = saveSession
+    self.readFile = readFile
+  }
+
+  nonisolated private static func claimRecoveryStartup() async throws -> RecoveryCoordinator.Startup
+  {
+    try await RecoveryCoordinator.shared.claimStartup()
+  }
+  func insertionIndex(for entry: UnresolvedSessionEntry, in window: SessionWindow) -> Int {
+    guard let original = originalWindows.first(where: { $0.id == entry.windowID }),
+      let index = original.tabs.firstIndex(where: { $0.id == entry.metadata.id })
+    else { return window.tabs.count }
+    let predecessors = Set(original.tabs.prefix(index).map(\.id))
+    return window.tabs.lastIndex(where: { predecessors.contains($0.id) }).map { $0 + 1 } ?? 0
+  }
+  func shouldSelect(_ entry: UnresolvedSessionEntry) -> Bool {
+    originalWindows.first(where: { $0.id == entry.windowID })?.selectedTabID == entry.metadata.id
+  }
+
+  nonisolated private static func removeRecoverySnapshot(_ id: UUID) async throws {
+    try await RecoveryCoordinator.shared.close(id: id)
+  }
+
+  func cancelRestoration() { generation += 1 }
+
+  func restore(importWindow: @MainActor (PreparedSessionWindow) -> [UUID: String]) async {
+    guard !started else { return }
+    started = true
+    let request = generation
+    var session: EditorSession?
+    do { session = try await loadSession() } catch { preserve(error) }
+    guard request == generation else { return }
+    var snapshots: [RecoverySnapshot] = []
+    do {
+      let recovery = try await claimRecovery()
+      snapshots = recovery.snapshots
+      recoveryIDs = Set(snapshots.map(\.id))
+      recoveryByID = Dictionary(
+        snapshots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+      if recovery.quarantinedCount > 0 {
+        warnings.append(
+          "\(recovery.quarantinedCount) recovery records could not be restored and remain quarantined."
+        )
+      }
+    } catch { preserve(error) }
+    guard request == generation else { return }
+    do {
+      let plan: SessionRestorationPlan
+      do { plan = try SessionRestoration.plan(session: session, recoveries: snapshots) } catch {
+        preserve(error)
+        // Invalid metadata must not hide otherwise valid recovery buffers.
+        plan = try SessionRestoration.plan(session: nil, recoveries: snapshots)
+      }
+      recentPaths = plan.recentPaths
+      originalWindows = plan.windows.map {
+        SessionWindow(id: $0.id, tabs: $0.tabs.map(\.metadata), selectedTabID: $0.selectedTabID)
+      }
+      var budget = SessionStartupBudget()
+      for window in plan.windows {
+        var prepared: [PreparedSessionTab] = []
+        for tab in window.tabs {
+          guard request == generation else { return }
+          do {
+            let value: PreparedSessionTab
+            switch tab.source {
+            case .missingRecovery:
+              throw Self.error(
+                "Recovery content for this scratch tab is missing. Locate an existing file or explicitly remove the record."
+              )
+            case .file(let path, _):
+              let file = try await readFile(tab.metadata, URL(fileURLWithPath: path))
+              guard let state = file.resolvedViewState else {
+                throw SessionStoreError.invalidMetadata
+              }
+              value = PreparedSessionTab(
+                metadata: tab.metadata, decoded: file.decoded, originalBytes: file.originalBytes,
+                url: file.url, viewState: state, utf16Count: file.utf16Count)
+            case .recovery(let snapshot):
+              value = try await Task.detached {
+                PreparedSessionTab(
+                  metadata: tab.metadata,
+                  decoded: DecodedDocument(
+                    text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM),
+                  originalBytes: nil, url: nil,
+                  viewState: try RestoredViewState.resolve(
+                    selection: tab.metadata.selection, bookmarks: tab.metadata.bookmarks,
+                    in: snapshot.text), utf16Count: snapshot.text.utf16.count)
+              }.value
+            }
+            guard request == generation else { return }
+            try budget.admit(
+              utf16Count: value.utf16Count, originalByteCount: value.originalBytes?.count ?? 0)
+            prepared.append(value)
+            if value.viewState.selectionAdjusted || !value.viewState.invalidBookmarks.isEmpty {
+              warnings.append(
+                "Saved positions for \(tab.metadata.originalPath ?? tab.metadata.id.uuidString) no longer match its text; selection was clamped and invalid bookmarks were omitted."
+              )
+            }
+          } catch {
+            guard request == generation else { return }
+            unresolved.append(
+              UnresolvedSessionEntry(
+                windowID: window.id, metadata: tab.metadata,
+                errorMessage: error.localizedDescription,
+                hasRecovery: recoveryIDs.contains(tab.metadata.id)))
+          }
+        }
+        guard request == generation else { return }
+        if !prepared.isEmpty {
+          let failures = importWindow(
+            PreparedSessionWindow(
+              id: window.id, tabs: prepared, selectedTabID: window.selectedTabID))
+          for tab in prepared where failures[tab.metadata.id] == nil {
+            recoveryByID[tab.metadata.id] = nil
+          }
+          for tab in prepared where failures[tab.metadata.id] != nil {
+            unresolved.append(
+              UnresolvedSessionEntry(
+                windowID: window.id, metadata: tab.metadata,
+                errorMessage: failures[tab.metadata.id]!,
+                hasRecovery: recoveryIDs.contains(tab.metadata.id)))
+          }
+        }
+      }
+      restorationComplete = true
+    } catch {
+      preserve(error)
+      restorationComplete = true
+    }
+  }
+
+  func retry(_ entry: UnresolvedSessionEntry) async throws -> SessionResolvedFile {
+    if let snapshot = recoveryByID[entry.metadata.id] {
+      return try await Task.detached {
+        let decoded = DecodedDocument(
+          text: snapshot.text, encoding: snapshot.encoding, hasBOM: snapshot.hasBOM)
+        return SessionResolvedFile(
+          url: nil, originalBytes: nil, decoded: decoded,
+          resolvedViewState: try RestoredViewState.resolve(
+            selection: entry.metadata.selection, bookmarks: entry.metadata.bookmarks,
+            in: snapshot.text))
+      }.value
+    }
+    guard let path = entry.metadata.originalPath else {
+      throw Self.error(
+        "Recovery content is missing. Locate an existing file or explicitly remove this record.")
+    }
+    return try await readFile(entry.metadata, URL(fileURLWithPath: path))
+  }
+  func locate(_ entry: UnresolvedSessionEntry, url: URL) async throws -> SessionResolvedFile {
+    try await readFile(entry.metadata, url)
+  }
+  func resolved(_ entry: UnresolvedSessionEntry) {
+    unresolved.removeAll { $0.metadata.id == entry.metadata.id }
+    recoveryByID[entry.metadata.id] = nil
+  }
+  func remove(_ entry: UnresolvedSessionEntry) async throws {
+    let id = entry.metadata.id
+    let operation: Task<Void, Error>
+    if let existing = removals[id] {
+      operation = existing
+    } else {
+      let hasRecovery = recoveryIDs.contains(id)
+      let cleanup = removeRecovery
+      operation = Task { if hasRecovery { try await cleanup(id) } }
+      removals[id] = operation
+    }
+    do {
+      try await operation.value
+      resolved(entry)
+      recoveryIDs.remove(id)
+      removals[id] = nil
+    } catch {
+      removals[id] = nil
+      if let index = unresolved.firstIndex(where: { $0.metadata.id == id }) {
+        unresolved[index].errorMessage = error.localizedDescription
+      }
+      throw error
+    }
+  }
+
+  func persist(windows: [SessionWindow]) async throws {
+    guard restorationComplete else {
+      throw Self.error(
+        "Session restoration has not completed. The previous session remains unchanged.")
+    }
+    if let preservationError { throw preservationError }
+    // A confirmed deletion can outlive its panel. Drain its commit before capturing metadata.
+    for (id, operation) in removals {
+      try await operation.value
+      unresolved.removeAll { $0.metadata.id == id }
+      recoveryIDs.remove(id)
+      recoveryByID[id] = nil
+    }
+    var merged: [SessionWindow] = []
+    var remaining = windows
+    for original in originalWindows {
+      let live = remaining.first { $0.id == original.id }
+      remaining.removeAll { $0.id == original.id }
+      let missing = unresolved.filter { $0.windowID == original.id }
+      if live == nil && missing.isEmpty { continue }
+      var tabs = live?.tabs ?? []
+      for (index, tab) in original.tabs.enumerated()
+      where missing.contains(where: { $0.metadata.id == tab.id }) {
+        guard !tabs.contains(where: { $0.id == tab.id }) else {
+          throw SessionRestorationError.duplicateID
+        }
+        tabs.insert(tab, at: min(index, tabs.count))
+      }
+      let preferred = live?.selectedTabID ?? original.selectedTabID
+      merged.append(
+        SessionWindow(
+          id: original.id, tabs: tabs,
+          selectedTabID: tabs.contains { $0.id == preferred } ? preferred : tabs.first?.id))
+    }
+    merged.append(contentsOf: remaining)
+    try await saveSession(EditorSession(windows: merged, recentPaths: recentPaths))
+  }
+  private func preserve(_ error: Error) {
+    preservationError = preservationError ?? error
+    startupErrors.append(error.localizedDescription)
+  }
+  nonisolated private static func error(_ message: String) -> NSError {
+    NSError(domain: "TheOnlyPad.Session", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+  nonisolated static func read(_ metadata: SessionTab, at url: URL) throws -> SessionResolvedFile {
+    let reader = try LargeFileReader(url: url)
+    guard reader.identity.size <= 100_000_000 else {
+      throw error(
+        "This session file exceeds 100 MB. Use Open to view it, or locate a smaller file.")
+    }
+    var bytes = Data()
+    bytes.reserveCapacity(Int(reader.identity.size))
+    while bytes.count < reader.identity.size {
+      try Task.checkCancellation()
+      bytes.append(
+        try reader.readWindow(
+          offset: Int64(bytes.count),
+          length: min(LargeFileReader.maximumWindowSize, Int(reader.identity.size) - bytes.count)))
+    }
+    _ = try reader.readWindow(offset: reader.identity.size, length: 0)
+    let decoded = try DocumentCodec.decode(bytes, encoding: metadata.encoding)
+    return SessionResolvedFile(
+      url: url, originalBytes: bytes, decoded: decoded,
+      resolvedViewState: try RestoredViewState.resolve(
+        selection: metadata.selection, bookmarks: metadata.bookmarks, in: decoded.text))
+  }
+}

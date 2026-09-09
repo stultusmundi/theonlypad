@@ -10,6 +10,41 @@ import PadCore
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate
+    delegate.applicationDidFinishLaunching(
+      Notification(name: NSApplication.didFinishLaunchingNotification))
+    func item(_ id: String) -> (NSMenu, Int) {
+      for parent in app.mainMenu!.items {
+        if let menu = parent.submenu,
+          let index = menu.items.firstIndex(where: { $0.representedObject as? String == id })
+        {
+          return (menu, index)
+        }
+      }
+      preconditionFailure("Missing registered native menu command " + id)
+    }
+    let movement = item("edit.line.moveUp")
+    precondition(movement.0.items[movement.1].keyEquivalent == "\u{F700}")
+    precondition(movement.0.items[movement.1].keyEquivalentModifierMask == [.command, .option])
+    let wrap = item("view.wrap")
+    let startupDeadline = Date().addingTimeInterval(5)
+    func documentEditor() -> NSTextView? {
+      app.windows.flatMap { $0.contentView.map(descendants) ?? [] }.compactMap {
+        $0 as? NSTextView
+      }.first { $0.accessibilityLabel() == "Document text" }
+    }
+    while documentEditor() == nil && Date() < startupDeadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    precondition(
+      documentEditor() != nil, "Asynchronous session startup must expose an editable buffer")
+    let nativeEditor = documentEditor()!
+    precondition(!nativeEditor.isHorizontallyResizable)
+    wrap.0.performActionForItem(at: wrap.1)
+    precondition(
+      nativeEditor.isHorizontallyResizable, "native menu must dispatch through the command registry"
+    )
+    wrap.0.performActionForItem(at: wrap.1)
+    precondition(!nativeEditor.isHorizontallyResizable)
     let first = directory.appendingPathComponent("unicode space é #?.txt")
     let second = directory.appendingPathComponent("second.txt")
     let firstText = "a👩🏽‍💻e\u{301}\r\nאב\r終\n"

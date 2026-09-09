@@ -1,0 +1,15 @@
+# Window and tab session restoration design
+
+Status: reviewed integration design; SessionStore implementation is delegated. Native restoration is not implemented by this document.
+
+Session metadata is separate from recovery content. A private versioned record stores window/tab order, stable UUIDs, selected tabs, pin state, local paths, saved-byte decoding encoding, language override, selection and bookmarks. Scratch and dirty content remains in checksummed RecoveryStore snapshots. Neither loading session metadata nor opening a project executes commands or extensions.
+
+At startup, load metadata and claim recovery once through the shared coordinator. Match by document UUID. Recovery content wins and opens as scratch, preserving the existing rule that historical paths never silently overwrite original files. A saved tab without recovery opens its current on-disk bytes off-main using savedEncoding. Validate/clamp selections against loaded Unicode scalar boundaries and validate bookmark line starts before applying metadata. A path is not evidence that its contents stayed unchanged.
+
+Missing, unreadable or renamed saved paths remain unresolved session entries with actionable errors. Do not drop them merely because loading failed, guess replacement paths, insert error prose into an editable user document, or overwrite the previous session with only successfully opened tabs. A restoration panel should support Retry, Locate and explicit Remove with actual behavior before acceptance. Restored tab order must follow metadata, independent of I/O completion order. New windows and user-initiated opens during restoration need a generation/ownership rule to prevent late session results replacing user work.
+
+Quit already freezes every editor, drains queued close cleanup, and persists a global recovery batch. Session capture should occur from these frozen windows and unresolved records; write it after recovery succeeds and before replying to termination. Session failure must veto quit and restore editing. Recovery may be newer than session after an interrupted quit: merge orphan recovery snapshots into additional scratch tabs rather than discarding them. Stable IDs prevent duplication. No signing or remote operation is involved.
+
+Autosave session metadata should be debounced, serialized and revision-guarded. Avoid capturing whole source text or recomputing large-file digests on the main thread. User paths and recovery metadata remain private, excluded from git and artifacts. Current v1 should be the first real schema; reject unknown versions unchanged rather than inventing a previous released format.
+
+Acceptance requires actual native multi-window/tab order and pin restoration, saved and scratch content merge, missing-path retention/repair, interrupted metadata write, corrupt/future-version errors, stale asynchronous loads, session failure quit veto, and packaged quit/reopen. Store-only tests establish serialization/privacy behavior, not complete session restoration.

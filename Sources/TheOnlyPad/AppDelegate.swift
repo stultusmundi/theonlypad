@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var extensionCommands: [String: EnabledExtensionCommand] = [:]
   private var extensionGeneration = 0
   private var help: HelpController?
+  private let session = SessionCoordinator()
+  private var startupTask: Task<Void, Never>?
+  private var sessionPanel: SessionRestorationController?
+  private var repairTargets: [UUID: EditorWindowController] = [:]
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     do { registry = try AppCommands.registry() } catch {
@@ -25,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     buildMenus()
     refreshExtensionCommands()
-    if editors.isEmpty { newWindow() }
+    restoreStartupSession()
     do {
       let arguments = Array(CommandLine.arguments.dropFirst()).filter { !$0.hasPrefix("-psn_") }
       let requests = try LaunchRequest.parse(
@@ -45,8 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   @discardableResult
-  private func newWindow() -> EditorWindowController {
-    let editor = EditorWindowController()
+  private func newWindow(id: UUID = UUID(), createDocument: Bool = true) -> EditorWindowController {
+    let editor = EditorWindowController(id: id, restoreStartup: false)
+    if createDocument { editor.newDocument() }
     editor.applySettings(settings)
     editors.append(editor)
     editor.onClose = { [weak self, weak editor] in
@@ -62,6 +67,110 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     editor.showWindow(nil)
     return editor
+  }
+
+  private func restoreStartupSession() {
+    startupTask = Task { [weak self] in
+      guard let self else { return }
+      await self.session.restore { [weak self] prepared in
+        guard let self else {
+          return Dictionary(
+            uniqueKeysWithValues: prepared.tabs.map {
+              ($0.metadata.id, "The application is closing.")
+            })
+        }
+        let editor = self.newWindow(id: prepared.id, createDocument: false)
+        var failures: [UUID: String] = [:]
+        for tab in prepared.tabs {
+          do {
+            try editor.restoreSessionTab(
+              tab.metadata, decoded: tab.decoded, originalBytes: tab.originalBytes, url: tab.url,
+              viewState: tab.viewState)
+          } catch { failures[tab.metadata.id] = error.localizedDescription }
+        }
+        editor.selectSessionTab(prepared.selectedTabID)
+        if editor.sessionMetadata.tabs.isEmpty { editor.close() }
+        return failures
+      }
+      if self.editors.isEmpty { self.newWindow() }
+      if !self.session.unresolved.isEmpty { self.showUnresolvedSession() }
+      let notices = self.session.startupErrors + self.session.warnings
+      if !notices.isEmpty {
+        let alert = NSAlert()
+        alert.messageText = "Session restoration needs attention"
+        alert.informativeText = notices.joined(separator: "\n\n")
+        alert.runModal()
+      }
+    }
+  }
+
+  private func showUnresolvedSession() {
+    if let sessionPanel {
+      sessionPanel.update(entries: session.unresolved)
+      sessionPanel.showWindow(nil)
+      return
+    }
+    let controller = SessionRestorationController(
+      entries: session.unresolved,
+      onRetry: { [weak self] entry in
+        guard let self, !self.preparingQuit else { throw CancellationError() }
+        self.repairTargets[entry.metadata.id] = self.editors.first {
+          $0.sessionMetadata.id == entry.windowID
+        }
+        return try await self.session.retry(entry)
+      },
+      onLocate: { [weak self] entry, url in
+        guard let self, !self.preparingQuit else { throw CancellationError() }
+        self.repairTargets[entry.metadata.id] = self.editors.first {
+          $0.sessionMetadata.id == entry.windowID
+        }
+        return try await self.session.locate(entry, url: url)
+      },
+      onResolved: { [weak self] entry, file in
+        guard let self, !self.preparingQuit, let state = file.resolvedViewState else {
+          throw CancellationError()
+        }
+        if let target = self.repairTargets[entry.metadata.id],
+          !self.editors.contains(where: { $0 === target })
+        {
+          throw CancellationError()
+        }
+        var budget = SessionStartupBudget()
+        for window in self.editors {
+          let usage = window.sessionResourceUsage
+          try budget.admit(utf16Count: usage.utf16Count, originalByteCount: usage.originalByteCount)
+        }
+        try budget.admit(
+          utf16Count: file.utf16Count, originalByteCount: file.originalBytes?.count ?? 0)
+        let editor =
+          self.editors.first { $0.sessionMetadata.id == entry.windowID }
+          ?? self.newWindow(id: entry.windowID, createDocument: false)
+        try editor.restoreSessionTab(
+          entry.metadata, decoded: file.decoded, originalBytes: file.originalBytes, url: file.url,
+          viewState: state,
+          insertionIndex: self.session.insertionIndex(for: entry, in: editor.sessionMetadata))
+        if self.session.shouldSelect(entry) { editor.selectSessionTab(entry.metadata.id) }
+        self.session.resolved(entry)
+        self.repairTargets[entry.metadata.id] = nil
+        if state.selectionAdjusted || !state.invalidBookmarks.isEmpty {
+          let alert = NSAlert()
+          alert.messageText = "Saved positions adjusted"
+          alert.informativeText =
+            "The loaded file differs from its saved positions. Selection was clamped and invalid bookmarks were omitted."
+          alert.runModal()
+        }
+      },
+      onRemove: { [weak self] entry in
+        guard let self, !self.preparingQuit else { throw CancellationError() }
+        try await self.session.remove(entry)
+        self.repairTargets[entry.metadata.id] = nil
+      })
+    controller.onClose = { [weak self] in
+      self?.sessionPanel = nil
+      self?.repairTargets.removeAll()
+    }
+    sessionPanel = controller
+    controller.showWindow(nil)
   }
 
   private var activeEditor: EditorWindowController? {
@@ -106,8 +215,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     guard !preparingQuit else { return .terminateLater }
     preparingQuit = true
     Task {
+      await startupTask?.value
+      // Invalidate pending repair callbacks before capturing the frozen session.
+      sessionPanel?.update(entries: session.unresolved)
       for editor in editors {
-        guard await editor.prepareToQuit() else {
+        guard await editor.prepareToQuit(persistRecovery: false) else {
           for editor in editors { editor.cancelPreparedQuit() }
           preparingQuit = false
           NSApp.reply(toApplicationShouldTerminate: false)
@@ -117,6 +229,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard await EditorWindowController.finishPendingCloses() else {
         for editor in editors { editor.cancelPreparedQuit() }
         preparingQuit = false
+        NSApp.reply(toApplicationShouldTerminate: false)
+        return
+      }
+      do {
+        try await EditorWindowController.persistPreparedRecovery(editors)
+        try await session.persist(windows: editors.map(\.sessionMetadata))
+      } catch {
+        for editor in editors { editor.cancelPreparedQuit() }
+        preparingQuit = false
+        NSAlert(error: error).runModal()
         NSApp.reply(toApplicationShouldTerminate: false)
         return
       }
@@ -150,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return
     }
     switch id {
+    case "file.restoreSession": showUnresolvedSession()
     case "app.help":
       help?.close()
       let controller = HelpController(commands: registry.commands)
@@ -248,16 +371,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   private static let largeViewerCommands: Set<String> = [
-    "file.close", "file.new", "file.newWindow", "file.open", "app.preferences", "edit.copy",
+    "file.close", "file.new", "file.newWindow", "file.open", "file.restoreSession",
+    "app.preferences", "edit.copy",
     "edit.selectAll",
   ]
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     guard let id = menuItem.representedObject as? String else { return true }
     if preparingQuit { return false }
+    if id == "file.restoreSession" { return !session.unresolved.isEmpty }
     if NSApp.keyWindow?.windowController is LargeFileWindowController {
       return Self.largeViewerCommands.contains(id)
     }
-    return true
+    if let activeEditor { return activeEditor.isCommandAvailable(id) }
+    return [
+      "file.new", "file.newWindow", "file.open", "file.openEncoding", "file.openFolder",
+      "app.preferences", "app.help", "view.palette", "macro.manage", "tool.extensions",
+      "tool.externalCommand",
+    ].contains(id)
   }
 
   private func applySettings(_ settings: EditorSettings) {
@@ -340,9 +470,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             : descriptor.id.hasPrefix("macro.")
               ? macros : descriptor.id.hasPrefix("app.") ? app : view
       let components = descriptor.shortcut?.split(separator: "+").map(String.init) ?? []
+      let key = components.last ?? ""
+      let functionKeys = ["up": "\u{F700}", "down": "\u{F701}"]
       let item = NSMenuItem(
         title: descriptor.title, action: #selector(command(_:)),
-        keyEquivalent: components.last ?? "")
+        keyEquivalent: functionKeys[key] ?? key)
       item.target = self
       item.representedObject = descriptor.id
       var modifiers: NSEvent.ModifierFlags = []

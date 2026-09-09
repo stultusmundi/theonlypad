@@ -12,7 +12,7 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   -o .local/native-integration/recovery-test
 .local/native-integration/recovery-test "$fixtures/ordering"
 swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
-  -I "$build_path/Modules" Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
+  -I "$build_path/Modules" Sources/TheOnlyPad/EditorWindowController.swift Sources/TheOnlyPad/OutlineController.swift Sources/TheOnlyPad/BackupManagerController.swift Sources/TheOnlyPad/ComparisonController.swift Sources/TheOnlyPad/MarkdownPreviewController.swift Sources/TheOnlyPad/TextUtilitiesController.swift Sources/TheOnlyPad/FolderSearchController.swift \
   Sources/TheOnlyPad/DocumentPrinting.swift Sources/TheOnlyPad/RecoveryCoordinator.swift Sources/TheOnlyPad/NativeSyntaxHighlighter.swift Sources/TheOnlyPad/LineNumberRuler.swift Sources/TheOnlyPad/DocumentTabBar.swift Sources/TheOnlyPad/WorkspaceSidebar.swift Sources/TheOnlyPad/EncodingPanelController.swift Sources/TheOnlyPad/MacroCancellation.swift Sources/TheOnlyPad/SearchPanelController.swift Tests/NativeIntegration/NativeUIHarness.swift \
   "$build_path"/PadCore.build/*.o -o .local/native-integration/ui-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/ui" .local/native-integration/ui-test
@@ -51,6 +51,30 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/FolderSearchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/folder-search-test
 .local/native-integration/folder-search-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/MarkdownPreviewController.swift \
+  Tests/NativeIntegration/MarkdownHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/markdown-test
+.local/native-integration/markdown-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/ComparisonController.swift \
+  Tests/NativeIntegration/ComparisonHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/comparison-test
+.local/native-integration/comparison-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/BackupManagerController.swift \
+  Tests/NativeIntegration/BackupHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/backup-test
+.local/native-integration/backup-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/OutlineController.swift \
+  Tests/NativeIntegration/OutlineHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/outline-test
+.local/native-integration/outline-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  Sources/TheOnlyPad/LineNumberRuler.swift Tests/NativeIntegration/BookmarkRulerHarness.swift \
+  -o .local/native-integration/bookmark-ruler-test
+.local/native-integration/bookmark-ruler-test
 native_sources=()
 for source in Sources/TheOnlyPad/*.swift; do
   if [ "$source" != "Sources/TheOnlyPad/TheOnlyPadApplication.swift" ]; then native_sources+=("$source"); fi
@@ -60,6 +84,23 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/LaunchHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/launch-test
 THEONLYPAD_STATE_DIRECTORY="$fixtures/launch" .local/native-integration/launch-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" "${native_sources[@]}" \
+  Tests/NativeIntegration/DirtyStateHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/dirty-state-test
+.local/native-integration/dirty-state-test
+for harness in NativeLifetime SessionWindow SessionIntegration ScrollExtent TabAccessibility; do
+  swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+    -I "$build_path/Modules" "${native_sources[@]}" \
+    "Tests/NativeIntegration/${harness}Harness.swift" "$build_path"/PadCore.build/*.o \
+    -o ".local/native-integration/${harness}-test"
+  THEONLYPAD_STATE_DIRECTORY="$fixtures/$harness" ".local/native-integration/${harness}-test"
+done
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/SessionRestorationController.swift \
+  Tests/NativeIntegration/SessionRestorationHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/session-panel-test
+.local/native-integration/session-panel-test
 python3 - "$fixtures/crash" <<'PY'
 import os
 import signal

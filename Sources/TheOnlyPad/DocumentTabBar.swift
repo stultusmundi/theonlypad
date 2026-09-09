@@ -86,6 +86,7 @@ final class DocumentTabBar: NSView, NSDraggingSource {
       let title = (item.pinned ? "📌 " : "") + (item.dirty ? "● " : "") + item.title
       let button = DraggableTabButton(title: title, target: self, action: #selector(selectTab(_:)))
       button.identifier = .init("tab.select." + item.id.uuidString)
+      button.setAccessibilityIdentifier("tab.select." + item.id.uuidString)
       button.setButtonType(.toggle)
       button.bezelStyle = .rounded
       button.state = item.id == selectedID ? .on : .off
@@ -102,6 +103,7 @@ final class DocumentTabBar: NSView, NSDraggingSource {
       }
       let close = NSButton(title: "×", target: self, action: #selector(closeTab(_:)))
       close.identifier = .init("tab.close." + item.id.uuidString)
+      close.setAccessibilityIdentifier("tab.close." + item.id.uuidString)
       close.isBordered = false
       close.toolTip = "Close " + item.title
       close.setAccessibilityLabel("Close " + item.title + (item.dirty ? ", unsaved changes" : ""))

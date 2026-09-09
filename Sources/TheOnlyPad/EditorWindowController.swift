@@ -5,6 +5,66 @@ import PadCore
 private final class DocumentTextView: NSTextView {
   let documentUndo = UndoManager()
   override var undoManager: UndoManager? { documentUndo }
+  var onMarkedTextUpdated: (() -> Void)?
+  var onTypingRunEnded: (() -> Void)?
+  private(set) var isOrdinaryTextInsertion = false
+  var onCompositionBegan: (() -> Void)?
+  var onCompositionEnded: (() -> Void)?
+  private(set) var isComposingText = false
+  // AppKit may call setMarkedText again inside unmarkText; finalize only at the outer boundary.
+  private var compositionOperationDepth = 0
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    if !isComposingText {
+      isComposingText = true
+      onCompositionBegan?()
+    }
+    compositionOperationDepth += 1
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+    onMarkedTextUpdated?()
+    compositionOperationDepth -= 1
+    if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
+  }
+  override func insertText(_ insertString: Any, replacementRange: NSRange) {
+    let previousInsertion = isOrdinaryTextInsertion
+    isOrdinaryTextInsertion = !isComposingText && replacementRange.location == NSNotFound
+    compositionOperationDepth += 1
+    super.insertText(insertString, replacementRange: replacementRange)
+    compositionOperationDepth -= 1
+    isOrdinaryTextInsertion = previousInsertion
+    if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
+  }
+  override func unmarkText() {
+    compositionOperationDepth += 1
+    super.unmarkText()
+    compositionOperationDepth -= 1
+    if compositionOperationDepth == 0 { finishComposition() }
+  }
+  override func breakUndoCoalescing() {
+    onTypingRunEnded?()
+    super.breakUndoCoalescing()
+  }
+  override func setSelectedRange(_ charRange: NSRange) {
+    if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    super.setSelectedRange(charRange)
+  }
+  override func setSelectedRange(
+    _ charRange: NSRange, affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool
+  ) {
+    if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    super.setSelectedRange(charRange, affinity: affinity, stillSelecting: stillSelectingFlag)
+  }
+  override func setSelectedRanges(
+    _ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool
+  ) {
+    if compositionOperationDepth == 0 { onTypingRunEnded?() }
+    super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelectingFlag)
+  }
+  private func finishComposition() {
+    guard isComposingText else { return }
+    isComposingText = false
+    onCompositionEnded?()
+  }
+
 }
 
 @MainActor
@@ -14,16 +74,39 @@ private final class EditorDocument {
   let scroll: NSScrollView
   var url: URL?
   var originalBytes: Data?
-  var savedText = ""
+  var savedText = "" {
+    didSet {
+      savedUTF16Length = (savedText as NSString).length
+      cachedTextDirty = nil
+    }
+  }
+  private var savedUTF16Length = 0
+  private var cachedTextDirty: Bool?
+  private var storageObserver: NSObjectProtocol?
   var encoding: DocumentEncoding = .utf8
   var hasBOM = false
   var savedEncoding: DocumentEncoding = .utf8
   var savedHasBOM = false
   var pinned = false
   var saving = false
+  var bookmarks = DocumentBookmarks()
+  var pendingBookmarks: DocumentBookmarks?
+  var compositionBookmarks: DocumentBookmarks?
+  var compositionOriginalText: String?
+  var compositionUndoRegistered = false
+  var typingBookmarkNextLocation: Int?
+  var pendingBookmarksHaveUndo = false
   var dirty: Bool {
-    !editor.string.utf16.elementsEqual(savedText.utf16) || encoding != savedEncoding
-      || hasBOM != savedHasBOM
+    guard encoding == savedEncoding, hasBOM == savedHasBOM else { return true }
+    let storage = editor.textStorage!
+    // Queries inside an unfinished editing batch must not reuse the previous result.
+    if storage.editedMask.contains(.editedCharacters) { cachedTextDirty = nil }
+    if let cachedTextDirty { return cachedTextDirty }
+    let changed =
+      storage.length != savedUTF16Length
+      || !storage.string.utf16.elementsEqual(savedText.utf16)
+    cachedTextDirty = changed
+    return changed
   }
   var name: String { url?.lastPathComponent ?? recoveredName ?? "Untitled" }
 
@@ -45,6 +128,9 @@ private final class EditorDocument {
     layout.allowsNonContiguousLayout = true
     editor = DocumentTextView(
       frame: NSRect(x: 0, y: 0, width: 900, height: 650), textContainer: container)
+    editor.minSize = NSSize(width: 0, height: 0)
+    editor.maxSize = NSSize(
+      width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     editor.isRichText = false
     editor.allowsUndo = true
     editor.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -68,11 +154,27 @@ private final class EditorDocument {
     scroll.hasVerticalRuler = true
     scroll.rulersVisible = true
     editor.setAccessibilityLabel("Document text")
+    storageObserver = NotificationCenter.default.addObserver(
+      forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil
+    ) { [weak self] notification in
+      MainActor.assumeIsolated {
+        if let storage = notification.object as? NSTextStorage,
+          storage.editedMask.contains(.editedCharacters)
+        {
+          self?.cachedTextDirty = nil
+        }
+      }
+    }
+  }
+
+  deinit {
+    if let storageObserver { NotificationCenter.default.removeObserver(storageObserver) }
   }
 }
 
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
+  let sessionID: UUID
   var onClose: (() -> Void)?
   var onOpenLargeFile: ((URL) -> Void)?
   private static var pendingCloses: [UUID: (RecoveryCoordinator, Task<Error?, Never>)] = [:]
@@ -90,6 +192,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var settings = EditorSettings.defaults
   private var loadingCount = 0
   private var preparingToQuit = false
+  private var windowClosed = false
   private var recoveryDebounce: Task<Void, Never>?
   private var recoveryWork: Task<Void, Never>?
   private var recoveryPeriodic: Task<Void, Never>?
@@ -99,14 +202,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var encodingPanel: EncodingPanelController?
   private var textUtilities: TextUtilitiesController?
   private var folderSearch: FolderSearchController?
+  private var statisticsTask: Task<DocumentStatistics, Error>?
+  private var statisticsGeneration = 0
+  private var markdownPreview: MarkdownPreviewController?
+  private var backupManager: BackupManagerController?
+  private var outline: OutlineController?
+  private var comparison: ComparisonController?
   private var recordingDocumentID: UUID?
   private var recordedCommands: [MacroCommand] = []
   private var recordedUnits = 0
   private var macroSaving = false
   private var replayCancellation: MacroCancellation?
   var isRecordingMacro: Bool { recordingDocumentID != nil }
+  var currentDocumentIsDirty: Bool { current?.dirty ?? false }
 
-  init() {
+  init(id: UUID = UUID(), restoreStartup: Bool = true) {
+    sessionID = id
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
@@ -147,8 +258,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     tabs.setContentHuggingPriority(.required, for: .vertical)
     languagePicker.setContentHuggingPriority(.required, for: .vertical)
     status.setContentHuggingPriority(.required, for: .vertical)
-    newDocument()
-    restoreRecovery()
+    if restoreStartup {
+      newDocument()
+      restoreRecovery()
+    }
     recoveryPeriodic = Task { [weak self] in
       while !Task.isCancelled {
         do { try await Task.sleep(nanoseconds: 15_000_000_000) } catch { return }
@@ -160,12 +273,98 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   required init?(coder: NSCoder) { fatalError("Use init()") }
 
+  var sessionMetadata: SessionWindow {
+    SessionWindow(
+      id: sessionID,
+      tabs: documents.map { document in
+        SessionTab(
+          id: document.id, originalPath: document.url?.path, pinned: document.pinned,
+          encoding: document.savedEncoding,
+          manualLanguage: document.manualLanguage ? document.language : nil,
+          selection: document.editor.selectedRange(), bookmarks: document.bookmarks.offsets)
+      }, selectedTabID: selectedID)
+  }
+
+  var sessionResourceUsage: (utf16Count: Int, originalByteCount: Int) {
+    documents.reduce(into: (utf16Count: 0, originalByteCount: 0)) { usage, document in
+      usage.utf16Count += document.editor.textStorage?.length ?? 0
+      usage.originalByteCount += document.originalBytes?.count ?? 0
+    }
+  }
+
+  /// The caller performs decoding and position validation off-main before importing.
+  /// Recovery content passes nil URL/bytes and remains scratch regardless of historical metadata.
+  func restoreSessionTab(
+    _ metadata: SessionTab, decoded: DecodedDocument, originalBytes: Data?, url: URL?,
+    viewState: RestoredViewState, insertionIndex: Int? = nil
+  ) throws {
+    guard !windowClosed, !preparingToQuit else { throw CancellationError() }
+    guard !documents.contains(where: { $0.id == metadata.id }) else {
+      throw SessionRestorationError.duplicateID
+    }
+    guard documents.count < 128 else { throw SessionStoreError.limit }
+    let index = insertionIndex ?? documents.count
+    guard (0...documents.count).contains(index) else { throw SessionStoreError.invalidMetadata }
+    guard (url == nil) == (originalBytes == nil), url == nil || url?.isFileURL == true else {
+      throw SessionStoreError.invalidMetadata
+    }
+    let document = EditorDocument(id: metadata.id)
+    document.editor.string = decoded.text
+    document.encoding = decoded.encoding
+    document.hasBOM = decoded.hasBOM
+    document.pinned = metadata.pinned
+    document.bookmarks = viewState.bookmarks
+    document.language =
+      metadata.manualLanguage
+      ?? LanguageService.detect(filename: url?.lastPathComponent ?? "", text: decoded.text)
+    document.manualLanguage = metadata.manualLanguage != nil
+    if let url, let originalBytes {
+      document.url = url
+      document.originalBytes = originalBytes
+      document.savedText = decoded.text
+      document.savedEncoding = decoded.encoding
+      document.savedHasBOM = decoded.hasBOM
+    } else {
+      document.recoveredName =
+        "Recovered "
+        + (metadata.originalPath.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Untitled")
+    }
+    document.editor.delegate = self
+    documents.insert(document, at: index)
+    display(document)
+    document.editor.setSelectedRange(viewState.selection)
+    refresh()
+  }
+
+  func selectSessionTab(_ id: UUID?) {
+    guard !windowClosed, let document = documents.first(where: { $0.id == id }) else { return }
+    display(document)
+  }
+
   func newDocument() {
     guard !preparingToQuit else { return }
     let document = EditorDocument()
     document.editor.delegate = self
     documents.append(document)
     display(document)
+  }
+
+  func restoreBackup(_ record: BackupRecord, data: Data) async throws {
+    guard !preparingToQuit, !windowClosed else { throw CancellationError() }
+    let decoded = try await Task.detached {
+      try DocumentCodec.decode(data, encoding: record.encoding)
+    }.value
+    guard !preparingToQuit, !windowClosed else { throw CancellationError() }
+    let document = EditorDocument()
+    document.editor.string = decoded.text
+    document.encoding = decoded.encoding
+    document.hasBOM = decoded.hasBOM
+    document.recoveredName =
+      "Backup — " + URL(fileURLWithPath: record.originalPath).lastPathComponent
+    document.editor.delegate = self
+    documents.append(document)
+    display(document)
+    scheduleRecovery()
   }
 
   func open(_ url: URL, encoding: DocumentEncoding? = nil, onOpened: (() -> Void)? = nil) {
@@ -228,6 +427,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
         document.editor.string = loaded.1.text
+        document.bookmarks.removeAll()
+        document.pendingBookmarks = nil
+        (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
         document.language = LanguageService.detect(
           filename: url.lastPathComponent, text: loaded.1.text)
         document.editor.delegate = self
@@ -316,6 +518,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       guard panel.runModal() == .OK else { return }
       for url in panel.urls { open(url) }
     case "file.save": if let current { save(current, saveAs: false) }
+    case "file.backups":
+      backupManager?.close()
+      let manager = BackupManagerController { [weak self] record, data in
+        guard let self else { throw CancellationError() }
+        try await self.restoreBackup(record, data: data)
+      }
+      backupManager = manager
+      manager.onClose = { [weak self, weak manager] in
+        if self?.backupManager === manager { self?.backupManager = nil }
+      }
+      manager.showWindow(nil)
     case "file.print":
       guard let document = current else { return }
       guard document.editor.string.utf16.count <= 2_000_000 else {
@@ -350,6 +563,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         display(document)
       }
     case "tool.formatJSON": formatJSON()
+    case "edit.commentLine", "edit.commentBlock":
+      guard let document = current else { return }
+      let language = document.language
+      performDocumentCommand(id == "edit.commentLine" ? "Line Comment" : "Block Comment") {
+        text, selection in
+        if id == "edit.commentLine" {
+          return try LanguageEditing.toggleLineComment(
+            text: text, selection: selection, language: language)
+        }
+        return try LanguageEditing.toggleBlockComment(
+          text: text, selection: selection, language: language)
+      }
     case "edit.goToLine":
       let alert = NSAlert()
       alert.messageText = "Go to Line and Column"
@@ -378,6 +603,61 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       navigate(line: lineValue, column: columnValue)
     case "tool.textUtilities": showTextUtilities()
+    case "tool.statistics": showStatistics()
+    case "tool.outline":
+      guard let document = current else { return }
+      outline?.close()
+      let panel = OutlineController(text: document.editor.string, language: document.language) {
+        [weak self, weak document] range, snapshot in
+        guard let self else { return }
+        guard !self.preparingToQuit, !self.windowClosed else { return }
+        guard let document, self.documents.contains(where: { $0 === document }),
+          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+        else {
+          self.present(
+            NSError(
+              domain: "TheOnlyPad", code: 19,
+              userInfo: [
+                NSLocalizedDescriptionKey:
+                  "The outline document changed or closed. Open a fresh outline to navigate."
+              ]))
+          return
+        }
+        self.display(document)
+        self.selectSearchResult(range, snapshot: snapshot)
+      }
+      outline = panel
+      panel.onClose = { [weak self, weak panel] in
+        if self?.outline === panel { self?.outline = nil }
+      }
+      panel.showWindow(nil)
+    case "tool.previewMarkdown":
+      guard let document = current else { return }
+      markdownPreview?.close()
+      let preview = MarkdownPreviewController(text: document.editor.string)
+      preview.window?.title = "Markdown Preview — " + document.name
+      markdownPreview = preview
+      preview.onClose = { [weak self, weak preview] in
+        if self?.markdownPreview === preview { self?.markdownPreview = nil }
+      }
+      preview.showWindow(nil)
+    case "tool.compare":
+      guard let document = current else { return }
+      guard document.editor.string.utf8.count <= 2_000_000 else {
+        present(
+          NSError(
+            domain: "TheOnlyPad", code: 16,
+            userInfo: [
+              NSLocalizedDescriptionKey:
+                "Comparison is limited to 2 MB of UTF-8 text per side. Copy a smaller excerpt to a new tab."
+            ]))
+        return
+      }
+      comparison?.close()
+      let controller = ComparisonController(
+        leftText: document.editor.string, leftName: document.name)
+      comparison = controller
+      controller.showWindow(nil)
     case "edit.findFolder":
       folderSearch?.close()
       let panel = FolderSearchController(root: workspace.rootURL) {
@@ -390,9 +670,45 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "edit.find":
       showSearch()
     default:
-      if id.hasPrefix("edit."), let transform = LineTransform(rawValue: String(id.dropFirst(5))) {
+      if id.hasPrefix("bookmark.") {
+        performBookmarkCommand(id)
+      } else if id.hasPrefix("edit.line."),
+        let command = LineCommand(rawValue: String(id.dropFirst(10)))
+      {
+        applyLineCommand(command)
+      } else if id.hasPrefix("edit."),
+        let transform = LineTransform(rawValue: String(id.dropFirst(5)))
+      {
         apply(transform)
       }
+    }
+  }
+
+  func isCommandAvailable(_ id: String) -> Bool {
+    guard !preparingToQuit else { return false }
+    if id.hasPrefix("bookmark.") { return current != nil && current?.saving == false }
+    switch id {
+    case "macro.start":
+      return current != nil && current?.saving == false && recordingDocumentID == nil
+        && !macroSaving && recordedCommands.isEmpty
+    case "macro.stop":
+      return !macroSaving && (recordingDocumentID != nil || !recordedCommands.isEmpty)
+        && current?.saving == false
+    case "macro.discard":
+      return !macroSaving && (recordingDocumentID != nil || !recordedCommands.isEmpty)
+    case "macro.cancel": return replayCancellation != nil
+    case "file.reopenClosed": return !closedDocuments.isEmpty
+    case "file.nextTab", "file.previousTab": return documents.count > 1
+    case "file.save", "file.saveAs", "file.revert", "document.encoding", "tool.formatJSON",
+      "tool.textUtilities", "edit.commentLine", "edit.commentBlock":
+      return current != nil && current?.saving == false
+    default:
+      if id.hasPrefix("edit.line.")
+        || (id.hasPrefix("edit.") && LineTransform(rawValue: String(id.dropFirst(5))) != nil)
+      {
+        return current != nil && current?.saving == false
+      }
+      return true
     }
   }
 
@@ -409,6 +725,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard let destination else { return }
     let sameDestination = destination.standardizedFileURL == document.url?.standardizedFileURL
     let original = document.originalBytes
+    let originalEncoding = document.savedEncoding
     let snapshot = DecodedDocument(
       text: document.editor.string, encoding: document.encoding, hasBOM: document.hasBOM)
     document.saving = true
@@ -421,6 +738,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           // Save As is create-only until an overwrite confirmation can be
           // bound to a captured version. A later-created file must not be overwritten.
           let expected = sameDestination ? original : nil
+          if let expected, expected != bytes {
+            _ = try BackupStore(directory: BackupStore.defaultDirectory).capture(
+              data: expected, originalURL: destination, encoding: originalEncoding)
+          }
           do {
             try AtomicFileStore().save(bytes, to: destination, expected: expected)
           } catch FileStoreError.externalChange where !sameDestination {
@@ -472,6 +793,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           try Self.read(url, encoding: encoding)
         }.value
         document.editor.string = loaded.1.text
+        document.bookmarks.removeAll()
+        document.pendingBookmarks = nil
+        (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
         document.savedText = loaded.1.text
         document.originalBytes = loaded.0
         document.encoding = loaded.1.encoding
@@ -562,7 +886,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     let previous = document.encoding
     let previousBOM = document.hasBOM
-    document.editor.documentUndo.registerUndo(withTarget: self) { controller in
+    document.editor.documentUndo.registerUndo(withTarget: self) { [weak document] controller in
+      guard let document else { return }
       controller.setEncoding(document, encoding: previous, bom: previousBOM)
     }
     document.encoding = encoding
@@ -572,23 +897,171 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     scheduleRecovery()
   }
 
-  private func replaceDocumentText(
-    _ document: EditorDocument, expected: String, replacement: String, action: String
-  ) {
+  @discardableResult private func replaceDocumentText(
+    _ document: EditorDocument, expected: String, replacement: String, action: String,
+    edit: TextEdit? = nil
+  ) -> Bool {
     guard !preparingToQuit, !document.saving,
-      document.editor.string.utf16.elementsEqual(expected.utf16)
-    else { return }
-    let range = NSRange(location: 0, length: expected.utf16.count)
-    guard document.editor.shouldChangeText(in: range, replacementString: replacement) else {
-      return
+      documents.contains(where: { $0 === document }),
+      document.editor.string.utf16.elementsEqual(expected.utf16),
+      !expected.utf16.elementsEqual(replacement.utf16)
+    else { return false }
+    let change: TextEdit
+    do {
+      guard let calculated = try edit ?? TextDifference.singleEdit(from: expected, to: replacement)
+      else { return false }
+      change = calculated
+    } catch {
+      present(error)
+      return false
+    }
+    guard document.editor.shouldChangeText(in: change.range, replacementString: change.replacement)
+    else {
+      return false
     }
     document.editor.breakUndoCoalescing()
     document.editor.documentUndo.beginUndoGrouping()
-    document.editor.textStorage?.replaceCharacters(in: range, with: replacement)
+    document.editor.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
     document.editor.didChangeText()
     document.editor.documentUndo.endUndoGrouping()
     document.editor.documentUndo.setActionName(action)
     refresh()
+    return true
+  }
+
+  private func applyLineCommand(_ command: LineCommand) {
+    let tabWidth = settings.tabWidth
+    performDocumentCommand(command.rawValue) { text, selection in
+      try command.apply(to: text, selection: selection, tabWidth: tabWidth)
+    }
+  }
+
+  func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+    current?.editor.documentUndo
+  }
+
+  private func setBookmarks(_ document: EditorDocument, value: DocumentBookmarks) {
+    let previous = document.bookmarks
+    guard previous != value else { return }
+    document.typingBookmarkNextLocation = nil
+    document.editor.documentUndo.registerUndo(withTarget: self) { [weak document] controller in
+      guard let document else { return }
+      controller.setBookmarks(document, value: previous)
+    }
+    document.bookmarks = value
+    (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(value.offsets)
+  }
+
+  private func performBookmarkCommand(_ id: String) {
+    guard let document = current, !document.saving, !preparingToQuit else { return }
+    let snapshot = document.editor.string
+    let selection = document.editor.selectedRange()
+    let original = document.bookmarks
+    document.saving = true
+    document.editor.isEditable = false
+    refresh()
+    Task { [weak self, weak document] in
+      do {
+        let result = try await Task.detached { () throws -> (DocumentBookmarks, Int?, String?) in
+          var marks = original
+          switch id {
+          case "bookmark.toggle": try marks.toggle(atUTF16Offset: selection.location, in: snapshot)
+          case "bookmark.clear": marks.removeAll()
+          case "bookmark.next", "bookmark.previous":
+            return (
+              marks,
+              try marks.destination(
+                from: selection.location, direction: id == "bookmark.next" ? .next : .previous,
+                in: snapshot), nil
+            )
+          case "bookmark.export": return (marks, nil, try marks.export(from: snapshot))
+          default: break
+          }
+          return (marks, nil, nil)
+        }.value
+        guard let self, let document else { return }
+        document.saving = false
+        document.editor.isEditable = true
+        self.refresh()
+        guard !self.preparingToQuit, !self.windowClosed, self.current === document,
+          document.editor.selectedRange() == selection,
+          document.bookmarks == original,
+          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+        else {
+          throw NSError(
+            domain: "TheOnlyPad", code: 18,
+            userInfo: [
+              NSLocalizedDescriptionKey: "The bookmark target changed. Run the command again."
+            ])
+        }
+        if result.0 != original {
+          document.editor.breakUndoCoalescing()
+          document.editor.documentUndo.beginUndoGrouping()
+          self.setBookmarks(document, value: result.0)
+          document.editor.documentUndo.endUndoGrouping()
+          document.editor.documentUndo.setActionName("Bookmarks")
+        }
+        if let offset = result.1 {
+          document.editor.setSelectedRange(NSRange(location: offset, length: 0))
+          document.editor.scrollRangeToVisible(NSRange(location: offset, length: 0))
+        }
+        if let text = result.2 {
+          self.newDocument()
+          self.current?.editor.insertText(text, replacementRange: NSRange(location: 0, length: 0))
+        }
+      } catch {
+        document?.saving = false
+        document?.editor.isEditable = true
+        self?.refresh()
+        self?.present(error)
+      }
+    }
+  }
+
+  private func performDocumentCommand(
+    _ action: String, operation: @escaping @Sendable (String, NSRange) throws -> LineCommandResult
+  ) {
+    guard let document = current, !document.saving else { return }
+    let snapshot = document.editor.string
+    let selection = document.editor.selectedRange()
+    document.saving = true
+    document.editor.isEditable = false
+    refresh()
+    Task { [weak self, weak document] in
+      do {
+        let (result, edit) = try await Task.detached(priority: .userInitiated) {
+          let result = try operation(snapshot, selection)
+          return (result, try TextDifference.singleEdit(from: snapshot, to: result.text))
+        }.value
+        guard let self, let document else { return }
+        document.saving = false
+        document.editor.isEditable = true
+        self.refresh()
+        guard !self.preparingToQuit, !self.windowClosed, self.current === document,
+          document.editor.selectedRange() == selection,
+          document.editor.string.utf16.elementsEqual(snapshot.utf16)
+        else {
+          throw NSError(
+            domain: "TheOnlyPad", code: 15,
+            userInfo: [
+              NSLocalizedDescriptionKey:
+                "The target document or selection changed. Run the editing command again."
+            ])
+        }
+        if result.text.utf16.elementsEqual(snapshot.utf16)
+          || self.replaceDocumentText(
+            document, expected: snapshot, replacement: result.text, action: action, edit: edit)
+        {
+          document.editor.setSelectedRange(result.selection)
+          document.editor.scrollRangeToVisible(result.selection)
+        }
+      } catch {
+        document?.saving = false
+        document?.editor.isEditable = true
+        self?.refresh()
+        self?.present(error)
+      }
+    }
   }
 
   func navigate(line: Int, column: Int) {
@@ -640,6 +1113,36 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     window?.makeFirstResponder(document.editor)
   }
 
+  private func showStatistics() {
+    guard let document = current else { return }
+    let snapshot = document.editor.string
+    let selection = document.editor.selectedRange()
+    let name = document.name
+    let savedBytes = document.originalBytes.map { String($0.count) } ?? "Not saved"
+    statisticsTask?.cancel()
+    statisticsGeneration += 1
+    let generation = statisticsGeneration
+    let work = Task.detached(priority: .userInitiated) {
+      try DocumentStatistics.measure(
+        snapshot, selection: selection, isCancelled: { Task.isCancelled })
+    }
+    statisticsTask = work
+    Task { [weak self] in
+      do {
+        let stats = try await work.value
+        guard let self, !self.preparingToQuit, self.statisticsGeneration == generation else {
+          return
+        }
+        self.statisticsTask = nil
+        let alert = NSAlert()
+        alert.messageText = "Statistics — " + name
+        alert.informativeText =
+          "Snapshot at command invocation\n\nCharacters (graphemes): \(stats.characters)\nUTF-16 units: \(stats.utf16Units)\nUnicode scalars: \(stats.unicodeScalars)\nUTF-8 bytes without BOM: \(stats.utf8Bytes)\nLast loaded/saved file bytes: \(savedBytes)\nLogical lines: \(stats.lines)\nEndings — LF: \(stats.lfEndings), CRLF: \(stats.crlfEndings), CR: \(stats.crEndings)\nSelection: \(stats.selectedCharacters) characters / \(stats.selectedUTF16Units) UTF-16 units"
+        alert.runModal()
+      } catch is CancellationError {} catch { self?.present(error) }
+    }
+  }
+
   private func showTextUtilities() {
     guard let document = current, !document.saving else { return }
     let snapshot = document.editor.string
@@ -649,7 +1152,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     textUtilities?.close()
     let panel = TextUtilitiesController(text: input) { [weak self, weak document] replacement in
       guard let self, let document else { return }
-      guard !self.preparingToQuit, self.current === document, !document.saving,
+      guard !self.preparingToQuit, !self.windowClosed, self.current === document, !document.saving,
         document.editor.string.utf16.elementsEqual(snapshot.utf16)
       else {
         self.present(
@@ -719,25 +1222,36 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func apply(_ transform: LineTransform) {
-    guard let document = current, !document.saving else { return }
-    let editor = document.editor
-    let selection = editor.selectedRange()
-    let range =
-      selection.length == 0
-      ? NSRange(location: 0, length: (editor.string as NSString).length) : selection
-    let before = (editor.string as NSString).substring(with: range)
-    let after = transform.apply(to: before)
-    guard !before.utf16.elementsEqual(after.utf16),
-      editor.shouldChangeText(in: range, replacementString: after)
-    else { return }
-    editor.breakUndoCoalescing()
-    editor.documentUndo.beginUndoGrouping()
-    editor.textStorage?.replaceCharacters(in: range, with: after)
-    editor.didChangeText()
-    editor.documentUndo.endUndoGrouping()
-    editor.documentUndo.setActionName(transform.rawValue)
-    editor.setSelectedRange(NSRange(location: range.location, length: (after as NSString).length))
-    refresh()
+    performDocumentCommand(transform.rawValue) { text, selection in
+      guard text.utf8.count <= 100_000_000 else {
+        throw NSError(
+          domain: "TheOnlyPad", code: 17,
+          userInfo: [
+            NSLocalizedDescriptionKey:
+              "Text transformations are limited to 100 MB of UTF-8 text. Copy a smaller excerpt to another tab."
+          ])
+      }
+      let range = selection.length == 0 ? NSRange(location: 0, length: text.utf16.count) : selection
+      guard let selected = Range(range, in: text) else { throw TextEditError.invalidRange }
+      let replacement = transform.apply(to: String(text[selected]))
+      guard replacement.utf8.count <= 100_000_000 else {
+        throw NSError(
+          domain: "TheOnlyPad", code: 17,
+          userInfo: [
+            NSLocalizedDescriptionKey: "The transformed text exceeds the 100 MB output limit."
+          ])
+      }
+      let result = try TextEdits.apply([TextEdit(range: range, replacement: replacement)], to: text)
+      guard result.utf8.count <= 100_000_000 else {
+        throw NSError(
+          domain: "TheOnlyPad", code: 17,
+          userInfo: [
+            NSLocalizedDescriptionKey: "The transformed document exceeds the 100 MB output limit."
+          ])
+      }
+      return LineCommandResult(
+        text: result, selection: NSRange(location: range.location, length: replacement.utf16.count))
+    }
   }
 
   private func updateLanguage(_ document: EditorDocument) {
@@ -858,6 +1372,44 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.scroll.frame = host.bounds
     document.scroll.autoresizingMask = [.width, .height]
     if !document.settingsApplied { configureSettings(document) }
+    if let ruler = document.scroll.verticalRulerView as? LineNumberRuler {
+      document.editor.onTypingRunEnded = { [weak document] in
+        document?.typingBookmarkNextLocation = nil
+      }
+      document.editor.onCompositionBegan = { [weak document] in
+        guard let document else { return }
+        document.editor.breakUndoCoalescing()
+        document.compositionBookmarks = document.bookmarks
+        // Keep one snapshot per composition so restoring canceled replacement text can restore lost anchors.
+        document.compositionOriginalText =
+          document.bookmarks.offsets.isEmpty ? nil : document.editor.string
+        document.compositionUndoRegistered = false
+      }
+      document.editor.onCompositionEnded = { [weak self, weak document] in
+        guard let self, let document, let before = document.compositionBookmarks else { return }
+        if let originalText = document.compositionOriginalText,
+          document.editor.string.utf16.elementsEqual(originalText.utf16)
+        {
+          document.bookmarks = before
+          (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
+            before.offsets)
+        }
+        document.compositionBookmarks = nil
+        document.compositionOriginalText = nil
+        document.compositionUndoRegistered = false
+        self.refresh()
+      }
+      document.editor.onMarkedTextUpdated = { [weak document] in
+        guard let document, document.pendingBookmarks != nil else { return }
+        document.editor.didChangeText()
+      }
+      ruler.bookmarkOffsets = Set(document.bookmarks.offsets)
+      ruler.onToggleBookmark = { [weak self, weak document] offset in
+        guard let self, let document, self.current === document, !document.saving else { return }
+        document.editor.setSelectedRange(NSRange(location: offset, length: 0))
+        self.performBookmarkCommand("bookmark.toggle")
+      }
+    }
     window?.makeFirstResponder(document.editor)
     updateLanguage(document)
     refresh()
@@ -899,6 +1451,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.hasBOM = old.hasBOM
     document.savedEncoding = old.savedEncoding
     document.savedHasBOM = old.savedHasBOM
+    document.bookmarks = old.bookmarks
     document.editor.string = old.editor.string
     document.language = old.language
     document.manualLanguage = old.manualLanguage
@@ -963,6 +1516,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func windowWillClose(_ notification: Notification) {
+    windowClosed = true
+    markdownPreview?.close()
+    backupManager?.close()
+    outline?.close()
+    comparison?.close()
+    statisticsTask?.cancel()
+    statisticsGeneration += 1
     searchPanel?.close()
     textUtilities?.close()
     folderSearch?.close()
@@ -990,6 +1550,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     if let editor = notification.object as? NSTextView,
       let document = documents.first(where: { $0.editor === editor })
     {
+      if let updated = document.pendingBookmarks {
+        document.pendingBookmarks = nil
+        if document.editor.isComposingText || document.pendingBookmarksHaveUndo {
+          document.bookmarks = updated
+          (document.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = Set(
+            updated.offsets)
+        } else {
+          setBookmarks(document, value: updated)
+        }
+        document.pendingBookmarksHaveUndo = false
+      }
       updateLanguage(document)
     }
     refresh()
@@ -1000,6 +1571,70 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
     replacementString: String?
   ) -> Bool {
+    if let document = documents.first(where: { $0.editor === textView }) {
+      document.pendingBookmarks = nil
+      document.pendingBookmarksHaveUndo = false
+      if document.editor.documentUndo.isUndoing || document.editor.documentUndo.isRedoing {
+        document.typingBookmarkNextLocation = nil
+      }
+      if !document.bookmarks.offsets.isEmpty, let replacementString,
+        !document.editor.documentUndo.isUndoing, !document.editor.documentUndo.isRedoing
+      {
+        do {
+          var updated = document.bookmarks
+          try updated.remap(
+            through: TextEdit(range: affectedCharRange, replacement: replacementString),
+            inUTF16: textView.textStorage!.mutableString)
+          let replacement = replacementString as NSString
+          let nativeText = textView.textStorage!.mutableString
+          let isNoOp =
+            affectedCharRange.length == replacement.length
+            && (0..<replacement.length).allSatisfy {
+              nativeText.character(at: affectedCharRange.location + $0)
+                == replacement.character(at: $0)
+            }
+          if isNoOp {
+            document.pendingBookmarksHaveUndo = true
+          } else if document.editor.isComposingText {
+            // Register before AppKit's first text undo, then let provisional text edits coalesce.
+            if !document.compositionUndoRegistered, let before = document.compositionBookmarks {
+              document.editor.documentUndo.registerUndo(withTarget: self) {
+                [weak document] controller in
+                guard let document else { return }
+                controller.setBookmarks(document, value: before)
+              }
+              document.compositionUndoRegistered = true
+            }
+          } else if document.editor.isOrdinaryTextInsertion, affectedCharRange.length == 0,
+            !replacementString.utf16.contains(where: { $0 == 10 || $0 == 13 })
+          {
+            if document.typingBookmarkNextLocation != affectedCharRange.location
+              || !document.editor.documentUndo.canUndo
+            {
+              document.editor.breakUndoCoalescing()
+              let before = document.bookmarks
+              if before != updated {
+                document.editor.documentUndo.registerUndo(withTarget: self) {
+                  [weak document] controller in
+                  guard let document else { return }
+                  controller.setBookmarks(document, value: before)
+                }
+              }
+            }
+            // Later caret inserts update anchors without inserting actions into native typing coalescence.
+            document.typingBookmarkNextLocation = affectedCharRange.location + replacement.length
+            document.pendingBookmarksHaveUndo = true
+          } else {
+            if document.typingBookmarkNextLocation != nil { document.editor.breakUndoCoalescing() }
+            document.typingBookmarkNextLocation = nil
+          }
+          document.pendingBookmarks = updated
+        } catch {
+          present(error)
+          return false
+        }
+      }
+    }
     guard let id = recordingDocumentID,
       documents.first(where: { $0.id == id })?.editor === textView,
       let replacementString
@@ -1034,6 +1669,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func stopRecording() {
     guard !macroSaving else { return }
+    if let recordingDocumentID,
+      documents.first(where: { $0.id == recordingDocumentID })?.saving == true
+    {
+      let alert = NSAlert()
+      alert.messageText = "An editing command is still running"
+      alert.informativeText = "Wait for it to finish before saving this macro recording."
+      alert.runModal()
+      return
+    }
     recordingDocumentID = nil
     refresh()
     guard !recordedCommands.isEmpty else { return }
@@ -1189,6 +1833,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       "\(document.language.rawValue)  |  \(location)  |  Selected \(selection) UTF-16 units  |  \(document.encoding.rawValue)\(document.hasBOM ? " BOM" : "")  |  \(document.editor.isHorizontallyResizable ? "No Wrap" : "Wrap")"
       + (text.length > 2_000_000 ? "  |  Highlighting disabled: large document" : "")
       + (loadingCount > 0 ? "  |  Loading…" : "")
+      + (document.saving ? "  |  Working…" : "")
       + (recordingDocumentID != nil ? "  |  Recording macro" : "")
   }
 
@@ -1259,13 +1904,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     recoveryWork = Task { [weak self, recovery] in
       await previous?.value
       do {
-        for (id, revision, snapshot) in batch {
-          if let snapshot {
-            try await recovery.persist(snapshot, revision: revision)
-          } else {
-            try await recovery.clear(id: id, revision: revision)
-          }
-        }
+        try await recovery.persistBatch(batch)
       } catch { self?.reportRecoveryFailure(error) }
     }
   }
@@ -1302,7 +1941,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     return true
   }
 
-  func prepareToQuit() async -> Bool {
+  static func persistPreparedRecovery(_ editors: [EditorWindowController]) async throws {
+    try await RecoveryCoordinator.shared.persistBatch(editors.flatMap { $0.recoveryBatch() })
+  }
+
+  func prepareToQuit(persistRecovery: Bool = true) async -> Bool {
     guard allowLeavingUnsavedRecording() else { return false }
     guard loadingCount == 0, !macroSaving, !documents.contains(where: { $0.saving }) else {
       let alert = NSAlert()
@@ -1315,14 +1958,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     for document in documents { document.editor.isEditable = false }
     recoveryDebounce?.cancel()
     await recoveryWork?.value
+    guard persistRecovery else { return true }
     do {
-      for (id, revision, snapshot) in recoveryBatch() {
-        if let snapshot {
-          try await recovery.persist(snapshot, revision: revision)
-        } else {
-          try await recovery.clear(id: id, revision: revision)
-        }
-      }
+      try await recovery.persistBatch(recoveryBatch())
       return true
     } catch {
       cancelPreparedQuit()

@@ -26,8 +26,9 @@ xcrun swift-format lint --strict --recursive Sources Tests Package.swift
 python3 scripts/check-public.py
 python3 scripts/test-package-promotion.py
 scripts/package.sh --ad-hoc-sign
+scripts/test-desktop-ui.sh
 ```
 
-A packaged-executable startup was exercised using an isolated `THEONLYPAD_STATE_DIRECTORY` under ignored `.local/`; the full GUI workflow remains unverified. Launch the local bundle with `open dist/TheOnlyPad.app`. Never use real documents in harnesses. The native harnesses create temporary synthetic files and intentionally SIGKILL their own child to test recovery; they are not XCUITest/VoiceOver/IME acceptance.
+The packaged app passed actual XCUITests for native open/edit/save/Command-Q/relaunch/reopen and scratch-buffer quit/relaunch recovery, using isolated synthetic state. Broader GUI, physical IME and VoiceOver acceptance remain outstanding. Launch the local bundle with `open dist/TheOnlyPad.app`. Never use real documents in harnesses. The native integration harnesses intentionally SIGKILL their own child to test recovery; the separate desktop UI script uses Xcode's actual XCTest runner and keeps raw diagnostics under ignored `.local/desktop-ui`.
 
 SwiftPM and Foundation atomic file writes require an approved unsandboxed toolchain invocation in the current restricted environment. Keep caches in ignored project directories. Tests must not be skipped to mask a permission failure.
