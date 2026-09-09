@@ -55,3 +55,5 @@ scripts/test-disk-conflict-panel.sh
 ```
 
 While GUI access is pending, do not launch visible harnesses or repeat desktop authentication attempts. Continue independent hidden/native and core verification and record the distinction.
+
+Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store-integration` passed361 tests. `scripts/test-shortcut-recorder.sh .build/shortcut-store-integration/arm64-apple-macosx/debug` passed47 hidden checks using the declared Swift5 mode. Unposted native event/menu conversion and injected recorder lifecycle are separate evidence; this runner never shows windows or posts keyboard events and cannot establish physical keyboard acceptance.
