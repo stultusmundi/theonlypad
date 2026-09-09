@@ -2,11 +2,11 @@
 
 ## Latest verified artifact
 
-Source checkpoint `eaf5145` was packaged on2026-09-09 after native monitoring and checked Reload/Copy/Locate passed component and hidden controller verification. `scripts/package.sh --ad-hoc-sign` (session87796) exited0; release compilation took11.79seconds. Independent post-promotion `python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` also passed.
+Source checkpoint `b25a07a` was packaged on2026-09-09 after shortcut customization and the presentation-refresh fixes passed core and hidden integration checks. `scripts/package.sh --ad-hoc-sign` (session65473) exited0; release compilation took21.82seconds. Independent post-promotion `python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` and `codesign --verify --strict dist/TheOnlyPad.app` also passed. Private build log: `.local/shortcut-package.log`.
 
-Executable SHA256: `370926fd82402e7ef4978e54f1907de67dd4f01ac30adb637ae54618216350ce`. App, ZIP and development SBOM are in `dist/`. Checks covered6bundle files, exact archive/bundle contents, executable SBOM hash, safe archive paths and specified ASCII machine-path markers. This is a local ad-hoc ARM64 build, with no DeveloperID/notarization/publication. No external dependency or asset was added.
+Executable SHA256: `93111f08c1cd8ba884aedefa24ed01c2944919217c04815c0560087fb7be8284`. App, ZIP and development SBOM are in `dist/`. Checks covered6bundle files, exact archive/bundle contents, executable SBOM hash, safe archive paths and specified ASCII machine-path markers. This is a local ad-hoc ARM64 build, with no DeveloperID/notarization/publication. No external dependency or asset was added.
 
-Current packaged desktop execution remains blocked by GUI access and macOS UI Automation authentication. Earlier workflow passes apply only to their recorded historical binary hashes; this package has no desktop workflow acceptance claim. Two new Reload/Copy XCUITest sources passed build-for-testing only. See [file-monitoring evidence](external-file-monitoring.md) for the exact core/hidden-native scope. The following sections retain historical packaging development evidence.
+Current packaged desktop execution remains blocked by GUI access and macOS UI Automation authentication. Earlier workflow passes apply only to their recorded historical binary hashes; this package has no desktop workflow acceptance claim. Reload/Copy, Locate and shortcut XCUITest sources passed build-for-testing only. See [shortcut evidence](keyboard-shortcuts.md), [presentation refresh](presentation-refresh.md) and [file monitoring](external-file-monitoring.md) for the exact core/hidden-native scope. Previous package `eaf5145` had executable hash370926fd…; it is historical. The following sections retain earlier packaging development evidence.
 
 ## Implemented
 

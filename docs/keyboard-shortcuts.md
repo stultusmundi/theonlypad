@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-Development status: implemented in source and covered by core and hidden native tests. Physical keyboard delivery, alternate layouts and current packaged desktop acceptance remain unverified; see [verification](verification/keyboard-shortcuts.md).
+Development status: implemented in source and the local b25a07a package, covered by core and hidden native tests. Physical keyboard delivery, alternate layouts and current packaged desktop acceptance remain unverified; see [verification](verification/keyboard-shortcuts.md).
 
 Open **TheOnlyPad → Keyboard Shortcuts…**, or use the link in Settings. Search for a command, select its row and choose **Record**. Press a supported Command-key combination. **Disable** removes a command's shortcut; **Use Default** removes its override. Changes remain a draft until **Apply** confirms a save. Cancel closes the editor without applying draft changes.
 
