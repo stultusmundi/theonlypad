@@ -21,3 +21,10 @@ Strict native geometry/state checks passed only the successful smoke: active/key
 ## Next source-only retention work
 
 Add explicit static-reason gate diagnostics before precondition termination and save initial admission state outside timers. Preserve unchanged strict gates. Retain portable harness/trace and guarded private-copy instrumentation, unique supervised state/evidence directories and source hashes. The source-only retention proposal is under review; no diagnostic rerun has occurred. Repetition failure remains unresolved until actual gate evidence exists.
+
+
+## Retained tool diagnostic
+
+`Tests/NativeIntegration/CheckpointPerformance/` and `scripts/benchmark-checkpoint-edits.sh` retain the protocol with private-source instrumentation, source/tool/linked-object hashes, unique state and evidence directories, and owned-child watchdogs. Shipping sources have no trace hooks. The wrapper performs a real debug build before compiling the optimized native harness; this mixed configuration is recorded rather than labeled a packaged Release measurement.
+
+The retained default command was executed once (root session 90124). Debug build, guarded preparation and native compilation passed. The writer exited with signal 5 after 6.216 seconds; the wrapper correctly returned 1 and skipped restoration. Its explicit diagnostic was `VISIBILITY FAILURE: application inactive`, after bounded activation settling. There were no measured edits. Raw evidence is ignored under `.local/checkpoint-performance/run.zhgCGXW3/private-copy/runs/run.uykokx5f`. This identifies this run's gate; it does not prove the precise cause of the earlier opaque failures. No admission rule was weakened and no further attempt was made.

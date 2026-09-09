@@ -48,5 +48,15 @@
     "MainActor full-text oracle and diagnostic I/O outside edit timers affect spacing/ack delivery",
     "Native window-state and geometry only, not physical input or pixel verification",
     "No general100MB editing, three-pair performance or memory-improvement claim"
-  ]
+  ],
+  "retainedDiagnostic": {
+    "wrapperExit": 1,
+    "buildAndCompilePassed": true,
+    "writerExit": -5,
+    "writerSeconds": 6.216430458000104,
+    "admittedEditSamples": 0,
+    "restoreRun": false,
+    "gate": "application inactive",
+    "run": "run.zhgCGXW3/private-copy/runs/run.uykokx5f"
+  }
 }
