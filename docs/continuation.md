@@ -10,7 +10,7 @@ Final integrated hidden native verification passed against current sources: all 
 
 Exact next actions:
 
-1. Commit updated records/CI after public and formatting checks; package the committed source with `scripts/package.sh --ad-hoc-sign`, verify bundle/archive/SBOM and signature, record actual artifact hash. Do not launch while GUI access is blocked.
+1. Pane records/CI are committed as `6c7fb68`. Its isolated local package completed and passed bundle/archive/SBOM and strict deep signature checks before and after promotion. Continue recovery-close implementation/review; do not launch while GUI access is blocked.
 2. Continue recovery-safe native close integration. Reviewed approach A in `.local/recovery-close-lease-review.md` extends the existing single paired checkpoint publisher with in-memory close leases, capture-time writer epochs, checked deletion and fresh atomic repair. No separate durable journal or arbitrary lifetime close limit. The existing contract permits a closed tab to reappear after a crash before the post-close checkpoint; do not claim a stronger guarantee.
 3. document_core owns core RecoveryCoordinator/RecoveryStore authority, deletion and repair implementation/tests plus new public design/plan. engine_spike owns a design-only native writer/close/quit audit in `.local/native-recovery-close-integration.md`; no native edits yet. requirements remains available for independent review. Root owns packaging/integration and must review exact APIs before native changes.
 4. Continue F02 ownership integration, moves between windows, independent groups and streaming handles. The tested registry alone does not complete F02. Then continue every outstanding requirement in the matrix.
@@ -53,7 +53,7 @@ Coordinate shared scratch builds. Raw logs and synthetic fixtures stay ignored i
 
 An approved read-only console probe on 2026-09-10 confirmed the screen remains locked. The user was asked to unlock and approve UI Automation if prompted; no response yet. Do not run visible apps, benchmarks, posted input or XCUITest until access is confirmed. Hidden AppKit tests and build-for-testing are allowed. Never change credentials/security settings. Earlier UI automation failures do not establish their cause from today's lock state.
 
-Current package before the next packaging step is still source `b25a07a`: `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json`. Executable SHA256 `93111f08c1cd8ba884aedefa24ed01c2944919217c04815c0560087fb7be8284`. Ad-hoc signature and archive/SBOM checks passed, but it predates pane persistence. No Developer ID, notarization, publication or current packaged desktop acceptance. Historical six-test packaged GUI evidence belongs to an older executable and is not current acceptance.
+Current artifacts are source `6c7fb68`: `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json`. Executable SHA-256 `6c818622cdce7c595ddea76183768768ea18f11d42c34b1f0d609cb48328b4b6`. An isolated committed-source release build took 25.23 seconds; ad-hoc signature and all six bundle/archive/SBOM checks passed before and after promotion. Log `.local/pane-package-build.log`. This includes pane persistence, not concurrent recovery-close development. No Developer ID, notarization, publication or current packaged desktop acceptance. Historical six-test packaged GUI evidence belongs to an older executable and is not current acceptance.
 
 ## Remaining acceptance
 
