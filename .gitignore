@@ -1,0 +1,48 @@
+# macOS and editor-local state
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*.swo
+xcuserdata/
+*.xcuserstate
+
+# Build outputs and dependency caches; commit package lockfiles
+.build/
+DerivedData/
+build/
+dist/
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.cache/
+coverage/
+test-results/
+playwright-report/
+*.xcresult/
+*.dmg
+*.app/
+*.dSYM/
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.key
+*.pem
+*.mobileprovision
+*.provisionprofile
+*.keychain
+*.keychain-db
+.claude/settings.local.json
+.serena/
+
+# Local test data, recovery state and unreviewed diagnostics
+.local/
+tmp/
+*.log
+:memory:.ses
