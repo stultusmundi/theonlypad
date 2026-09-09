@@ -22,6 +22,7 @@ enum DocumentIntakeProvenance {
   let originalByteCount: Int
   let provenance: DocumentIntakeProvenance
   let makeHandle: () throws -> any WorkspaceDocumentHandle
+  var resolveSelection: (() throws -> Bool)? = nil
 }
 struct DocumentIntakeStatus {
   let id: DocumentIntakeID

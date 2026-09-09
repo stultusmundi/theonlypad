@@ -7,3 +7,9 @@ ApplicationDocumentIntake owns one payload/model transaction through publisher d
 The final combined case uses actual ApplicationSessionCheckpoints: startup intake owns an inner pause while the outer activation prevents early acknowledgement; after adoption and activation, a real final paired receipt names the exact authority/ID. Fresh SessionStore and RecoveryStore readers reload exact UTF-16 text, encoding and BOM. No injected callback supplies a durability receipt. An initial version of this added fixture used a nonexistent SessionTab argument and failed compilation; it was corrected before the passing run.
 
 Foundation native handles/callbacks remain synthetic. Reload is in the same process. No native controller routing, GUI, force termination, package workflow or endpoint recreation is claimed. Full F02 remains outstanding. Platform: ARM64 macOS 26.6.2/Swift 6.3.3, Swift 5 mode.
+
+## Selection decision at registration
+
+An optional native selection resolver now runs after asynchronous drains and factory creation, before registration. Full provenance/capacity preflight and final model/registry/session checks follow it. Existing callers retain their fixed selection behavior when no resolver is supplied. This supports preserving a newer user selection while a copy opens without blocking process projection.
+
+The expanded suite failed four assertions across 26 tests before implementation and passed all 26 in 0.035 seconds afterward (`.local/intake-selection-red.log`, `.local/intake-selection-green.log`). Tests change selection during a controlled drain and reject resolver callbacks that mutate workspace or model ownership before registration. Independent source review found no material issue. Native production composition must still supply the resolver; this is not a focus/desktop acceptance claim.

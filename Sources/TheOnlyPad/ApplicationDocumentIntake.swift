@@ -171,13 +171,20 @@ import PadCore
           state.authority == nil, state.highestIssuedRevision == 0,
           registry.workspaceRevision == revision, session.capacityRevision == sessionRevision
         else { throw DocumentIntakeError.staleModel }
+        let select = try value.request.resolveSelection?() ?? value.request.select
         let validatedRevision = try preflight(value)
-        guard validatedRevision == revision else { throw DocumentIntakeError.staleDestination }
+        let finalState = try native.readState(model)
+        guard validatedRevision == revision, registry.workspaceRevision == revision,
+          session.capacityRevision == sessionRevision
+        else { throw DocumentIntakeError.staleDestination }
+        guard finalState == state, model.id == value.request.documentID,
+          model.workspaceKind == .editable, model.ownershipGeneration == state.ownershipGeneration
+        else { throw DocumentIntakeError.staleModel }
         value.stage = .registering  // Registry owns the handle during its onChange, before return.
         value.lease = try registry.registerPending(
           model, requestID: value.id.rawValue, expectedRevision: validatedRevision,
           metadata: value.request.metadata, in: value.request.assignment,
-          at: value.request.index, select: value.request.select)
+          at: value.request.index, select: select)
       }
       let model = try requireOwned(value)
       if !value.activated {

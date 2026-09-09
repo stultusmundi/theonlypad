@@ -309,6 +309,66 @@ private enum IntakeFailure: Error { case injected }
     XCTAssertTrue(owner.hasUnsettledTransactions)
     XCTAssertEqual(f.registry.adoptionStatus(documentID: claim.replacementID), .active)
   }
+  func testSelectionResolvesAfterDrainWithoutStealingChangedSelection() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let first = IntakeHandle()
+    let second = IntakeHandle()
+    let incoming = IntakeHandle()
+    let owner = f.owner()
+    imported(try await owner.wait(for: owner.start(f.request(first))), first.id)
+    imported(try await owner.wait(for: owner.start(f.request(second))), second.id)
+    let gate = IntakeGate()
+    f.gate = gate
+    var request = f.request(incoming)
+    var calls = 0
+    request.resolveSelection = {
+      calls += 1
+      return f.registry.window(id: f.assignment.windowID)?.groups.first?.selectedDocumentID
+        == second.id
+    }
+    let id = try owner.start(request)
+    await entered(gate)
+    try f.registry.selectDocument(
+      first.id, in: f.assignment, expectedRevision: f.registry.workspaceRevision)
+    gate.open()
+    imported(try await owner.wait(for: id), incoming.id)
+    XCTAssertEqual(calls, 1)
+    XCTAssertEqual(
+      f.registry.window(id: f.assignment.windowID)?.groups.first?.selectedDocumentID, first.id)
+  }
+  func testReentrantSelectionResolverCannotRegisterAgainstChangedWorkspace() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let owner = f.owner()
+    let model = IntakeHandle()
+    var request = f.request(model)
+    request.resolveSelection = {
+      try f.registry.registerWindow(id: UUID(), initialGroupID: UUID())
+      return true
+    }
+    guard case .refused = try await owner.wait(for: owner.start(request)) else {
+      return XCTFail("Selection callback mutation must refuse before registration")
+    }
+    XCTAssertNil(f.registry.handle(id: model.id))
+    XCTAssertTrue(f.installs.isEmpty)
+  }
+  func testSelectionResolverCannotChangeModelOwnershipBeforeRegistration() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let owner = f.owner()
+    let model = IntakeHandle()
+    var request = f.request(model)
+    request.resolveSelection = {
+      model.advanceOwnershipGeneration()
+      return true
+    }
+    guard case .refused = try await owner.wait(for: owner.start(request)) else {
+      return XCTFail("Changed model must refuse before registration")
+    }
+    XCTAssertNil(f.registry.handle(id: model.id))
+    XCTAssertTrue(f.installs.isEmpty)
+  }
   func testInvalidScalarRefusesWithoutFactoryOrPause() async throws {
     let f = try IntakeFixture(session: await session())
     defer { f.cleanup() }
