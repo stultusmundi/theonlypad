@@ -1,5 +1,13 @@
 # Local packaging verification
 
+## Latest verified artifact
+
+Source checkpoint `fdf0b3c` was packaged on 2026-09-09 after the exact dirty optimization passed the full native suite and the external decoder passed all 263 core tests. `scripts/package.sh --ad-hoc-sign` (local session 13719) exited 0; release compilation took 19.12 seconds. A separate post-promotion `scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` also passed.
+
+Executable SHA-256: `2ce6bc8feb840c2fbfc0d32a3c6c924f668d66ffbdf64e8b24e6e1f24a8bb710`. The app, ZIP and development SBOM are in `dist/`. Verification covered six bundle files, exact archive/bundle contents, executable SBOM hash, safe archive paths and the script's narrow machine-path markers. This remains a local ad-hoc ARM64 build, without Developer ID or notarization. No external dependency or asset was added. The file-monitor service/native actions are not integrated.
+
+Current packaged desktop execution remains blocked by macOS UI Automation authentication. Earlier workflow passes apply only to their recorded historical binary hashes; this package has no packaged workflow acceptance claim. The following sections retain historical packaging development evidence.
+
 ## Implemented
 
 `scripts/package.sh [--ad-hoc-sign]` builds the release configuration, constructs a native `.app`, copies the MIT license and third-party notices, validates its property list, optionally applies and verifies an explicit ad-hoc signature, and produces a ZIP using macOS `ditto`.

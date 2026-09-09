@@ -1,0 +1,52 @@
+{
+  "status": "one_corrected_smoke_passed_three_repetitions_not_admitted",
+  "successfulSmoke": {
+    "run": "run.rs5cnnft",
+    "writerExit": 0,
+    "writerSeconds": 17.6461276250011,
+    "restoreExit": 0,
+    "restoreSeconds": 1.718009375003021,
+    "validatedEditSamples": 8,
+    "actualRecoveryWriteOverlaps": 8,
+    "medianEditMS": 26.61416666705918,
+    "maximumEditMS": 27.285041665891185,
+    "maximumRecordedRSSBytes": 1261109248,
+    "finalAcknowledgedGeneration": 58,
+    "exactOnDiskAndSeparateProcessRestoration": true
+  },
+  "failedRepetitions": [
+    {
+      "pair": "pair-0",
+      "exit": -5,
+      "seconds": 5.778786040998966,
+      "admittedEditSamples": 0,
+      "restoreRun": false,
+      "lastEvidencePhase": "waiting: open failed",
+      "specificGate": "unidentified"
+    },
+    {
+      "pair": "pair-1",
+      "exit": -5,
+      "seconds": 5.872432457999821,
+      "admittedEditSamples": 0,
+      "restoreRun": false,
+      "lastEvidencePhase": "waiting: open failed",
+      "specificGate": "unidentified"
+    },
+    {
+      "pair": "pair-2",
+      "exit": -5,
+      "seconds": 5.770591209002305,
+      "admittedEditSamples": 0,
+      "restoreRun": false,
+      "lastEvidencePhase": "waiting: open failed",
+      "specificGate": "unidentified"
+    }
+  ],
+  "limits": [
+    "Failed repetition gate not identified; no admitted edit samples",
+    "MainActor full-text oracle and diagnostic I/O outside edit timers affect spacing/ack delivery",
+    "Native window-state and geometry only, not physical input or pixel verification",
+    "No general100MB editing, three-pair performance or memory-improvement claim"
+  ]
+}
