@@ -1,0 +1,11 @@
+# Process-owned document closing verification
+
+The process owner serializes document closes, retains handles and exact pause/actor leases across cancellation or endpoint loss, and retries only the failed settlement stage. Actual checked recovery deletion and fresh repair receipts come from RecoveryCoordinator. Native application activation remains outstanding.
+
+`scripts/test-application-document-closing.sh` passed 19 XCTest cases. Root independently rebuilt the frozen candidate with `scripts/swift.sh test --package-path .local/application-document-closing-tests/run.sBFheVH3/Package --scratch-path .build/closing-owner-review`; all 19 passed in 0.046 seconds on ARM64 macOS 26.6.2/Swift 6.3.3, Swift 5 mode. Raw log: `.local/closing-owner-root-review.log`. One test-only compiler warning concerns a deliberately weak lifetime observation variable; no production warning was reported.
+
+Coverage includes retained ownership, reentrant callbacks, cancellation, source loss, actual deletion failure, quota preflight, fresh-epoch repair after refused installation, projection-only retry and serialized multi-document close. The original 18 cases use a stopped actual scheduler to isolate pause ownership. The added integration starts the scheduler, acknowledges a real two-document checkpoint, holds a subsequent preparation step while close drains it, then confirms a real authorized post-close publication containing only the remaining ID. Fresh SessionStore and RecoveryCoordinator instances load the exact remaining UTF-16 content, encoding and BOM; the closed recovery file is absent.
+
+The compiled initial seam failed nine workflows; a separate cancellation regression also failed before its fix. Independent reviews of the implementation and added publication test found no material issues. Source manifests are retained with private run evidence.
+
+Limits: synthetic Foundation native adapters, same-process fresh readers, held preparation rather than a filesystem commit. One explicit owner checkpoint request is not proof of one total scheduler generation or publication. No native mutation gates, window-close behavior, force-termination recovery or packaged desktop validation is established by this suite.
