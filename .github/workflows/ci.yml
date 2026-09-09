@@ -26,6 +26,7 @@ jobs:
           scripts/test-session-presentation-flow.sh
           scripts/test-application-documents.sh
           scripts/test-session-capacity.sh
+          scripts/test-checkpoint-pause.sh
           build_path=$(scripts/swift.sh build --show-bin-path)
           scripts/test-shortcut-recorder.sh "$build_path"
           scripts/test-shortcut-editor.sh "$build_path"

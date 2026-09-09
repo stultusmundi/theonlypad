@@ -1,0 +1,9 @@
+# Checkpoint pause lease verification
+
+Implemented and independently reviewed: opaque owner-bound scheduler pause tokens, synchronous admission, exact drain/release, overlapping pauses, separate legacy pause latch and mutual exclusion with final publication. The existing single writer and recovery-before-session ordering remain unchanged. Native close integration is outstanding.
+
+`scripts/test-checkpoint-pause.sh` freezes actual core, recovery actor, scheduler and test sources into a private Swift 5 package. It runs eight deterministic XCTest cases plus the existing SessionCheckpointSchedulerHarness, with owned-process timeouts. The initial `run.DjS9MdhM` failed compilation because the new API did not yet exist; this is an API red, not a behavioral failure. The first implementation passed eight tests. The expanded final runner passed all eight in 0.006 seconds and the existing scheduler harness exited successfully in `run.YacAJSRz`; status records test exit 0, no timeout and regression exit 0. Raw logs and frozen source hashes remain in `.local/checkpoint-pause-tests/`.
+
+Cases cover acquisition before restoration, two independent tokens, suspended preparation without later capture, admitted publication drainage, foreign/duplicate/undrained tokens, cancellation retaining ownership, legacy pause isolation and final/close exclusion. The old harness also covers startup, coalescing, retry, final sharing and checkpoint receipt validation. No AppKit window or desktop workflow ran.
+
+The recovery actor was concurrently under separate development; this runner proves scheduler behavior, not the new actor API. Managed close adapters must stay outside the legacy pending-close queue awaited by capture preparation to avoid a self-drain cycle. Authorized recovery receipt validation and actual close/quit integration require separate verification before adoption.

@@ -1,7 +1,16 @@
 import Foundation
 
 enum CheckpointDelay: Equatable, Sendable { case debounce, retry }
-enum CheckpointSchedulerError: Error { case notStarted, invalidReceipt, generationExhausted }
+enum CheckpointSchedulerError: Error {
+  case notStarted, invalidReceipt, generationExhausted, invalidPause, pauseNotDrained,
+    closeInProgress,
+    finalInProgress
+}
+
+struct CheckpointPauseToken: Hashable, Sendable {
+  fileprivate let owner: UUID
+  fileprivate let id: UUID
+}
 
 /// Application-owned scheduler. Captures are synchronous MainActor values; commit owns I/O.
 /// This object deliberately knows nothing about AppKit, live documents, or unresolved records.
@@ -20,7 +29,10 @@ enum CheckpointSchedulerError: Error { case notStarted, invalidReceipt, generati
   private var requestedGeneration: UInt64 = 0
   private var attemptedGeneration: UInt64 = 0
   private var started = false
-  private var paused = false
+  private var legacyPaused = false
+  private let pauseOwner = UUID()
+  private var pauseLeases: [UUID: Bool] = [:]
+  private var paused: Bool { legacyPaused || !pauseLeases.isEmpty }
   private var worker: Task<Void, Never>?
   private var finalTask: Task<SessionCheckpointReceipt, Error>?
   var isFinalizing: Bool { finalTask != nil }
@@ -50,32 +62,67 @@ enum CheckpointSchedulerError: Error { case notStarted, invalidReceipt, generati
   func startAfterRestoration() {
     guard !started else { return }
     started = true
-    phase = .idle
+    phase = paused ? .paused : .idle
     if requestedGeneration == 0 { requestCheckpoint() } else { launchIfNeeded() }
   }
+  /// Acquire before registering a close transaction or suspending. Tokens are explicit ownership;
+  /// cancellation of a waiter never releases another operation's pause.
+  func acquirePause() throws -> CheckpointPauseToken {
+    guard finalTask == nil else { throw CheckpointSchedulerError.finalInProgress }
+    let token = CheckpointPauseToken(owner: pauseOwner, id: UUID())
+    pauseLeases[token.id] = false
+    if phase == .waiting { worker?.cancel() }
+    if worker == nil { phase = .paused }
+    return token
+  }
+
+  func drainPause(_ token: CheckpointPauseToken) async throws {
+    try validatePause(token)
+    await worker?.value
+    try validatePause(token)
+    pauseLeases[token.id] = true
+    phase = .paused
+  }
+
+  func releasePause(_ token: CheckpointPauseToken) throws {
+    try validatePause(token)
+    guard pauseLeases[token.id] == true else { throw CheckpointSchedulerError.pauseNotDrained }
+    pauseLeases.removeValue(forKey: token.id)
+    guard !paused else { return }
+    phase = started ? .idle : .stopped
+    requestCheckpoint()
+  }
+
+  private func validatePause(_ token: CheckpointPauseToken) throws {
+    guard token.owner == pauseOwner, pauseLeases[token.id] != nil else {
+      throw CheckpointSchedulerError.invalidPause
+    }
+  }
+
   func pauseAndDrain() async {
     await pauseOrdinaryAndDrain()
     if let finalTask { _ = try? await finalTask.value }
     phase = .paused
   }
   private func pauseOrdinaryAndDrain() async {
-    paused = true
+    legacyPaused = true
     if phase == .waiting { worker?.cancel() }
     await worker?.value
   }
   func resumeAfterVeto() {
     guard finalTask == nil else { return }
-    paused = false
-    phase = started ? .idle : .stopped
+    legacyPaused = false
+    phase = paused ? .paused : (started ? .idle : .stopped)
     requestCheckpoint()  // Resume even when there is no subsequent user edit.
   }
 
   func commitFinal() async throws -> SessionCheckpointReceipt {
     guard started else { throw CheckpointSchedulerError.notStarted }
+    guard pauseLeases.isEmpty else { throw CheckpointSchedulerError.closeInProgress }
     if let finalTask { return try await finalTask.value }
     // Latch the entire operation before the first suspension, including the ordinary drain.
     // Calling public pauseAndDrain from this task would await this same finalTask.
-    paused = true
+    legacyPaused = true
     let task = Task { try await self.performFinal() }
     finalTask = task
     defer {
@@ -108,7 +155,7 @@ enum CheckpointSchedulerError: Error { case notStarted, invalidReceipt, generati
   private func advanceGeneration() -> Bool {
     guard requestedGeneration < UInt64.max else {
       lastError = CheckpointSchedulerError.generationExhausted
-      paused = true
+      legacyPaused = true
       onStateChanged()
       return false
     }
