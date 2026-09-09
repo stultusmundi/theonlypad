@@ -1,6 +1,6 @@
 import Foundation
 
-/// View-free ownership and group metadata. Close, transfer, and native adapters are later stages.
+/// View-free ownership and group metadata. Close leases are view-free; transfer and native adapters are later stages.
 @MainActor final class ApplicationDocuments {
   private struct Record {
     let handle: any WorkspaceDocumentHandle
@@ -15,7 +15,203 @@ import Foundation
   private var mutating = false
   private(set) var workspaceRevision = UUID()
   var onChange: ((UUID) -> Void)?
-  init() {}
+  private let closeServices: DocumentCloseServices?
+  private enum CloseLease {
+    case closing(DocumentCloseTicket)
+    case recovery(UUID)
+    case repairing(DocumentRecoveryAttempt)
+  }
+  private var leases: [UUID: CloseLease] = [:]
+  private var admissionGenerations: [UUID: UUID] = [:]
+  private var history: [UUID: [Record]] = [:]
+  init(closeServices: DocumentCloseServices? = nil) { self.closeServices = closeServices }
+
+  func allows(_ action: DocumentAdmission, documentID: UUID) -> Bool {
+    !mutating && records[documentID] != nil && leases[documentID] == nil
+  }
+  func closeStatus(documentID: UUID) -> DocumentCloseStatus? {
+    guard records[documentID] != nil else { return nil }
+    switch leases[documentID] {
+    case .none: return .open
+    case .closing(let ticket): return .closing(ticketID: ticket.id)
+    case .recovery(let id): return .recoveryRequired(repairID: id)
+    case .repairing(let attempt):
+      return .repairing(repairID: attempt.repairID, attemptID: attempt.id)
+    }
+  }
+  func closedHistoryCount(windowID: UUID) -> Int { history[windowID]?.count ?? 0 }
+  private func ensureGroupOpen(_ group: DocumentGroupSnapshot) throws {
+    guard group.documentIDs.allSatisfy({ leases[$0] == nil }) else {
+      throw DocumentRegistryError.closeBlocked
+    }
+  }
+  private func ensureWindowOpen(_ window: DocumentWindowSnapshot) throws {
+    for group in window.groups { try ensureGroupOpen(group) }
+  }
+  private func state(of record: Record, id: UUID) throws -> DocumentCloseState {
+    guard let closeServices else { throw DocumentRegistryError.closeUnavailable }
+    let state = try closeServices.readState(record.handle)
+    guard record.handle.id == id,
+      record.handle.workspaceKind == state.kind,
+      record.handle.ownershipGeneration == state.ownershipGeneration
+    else { throw DocumentRegistryError.staleClose }
+    return state
+  }
+  private func requireSafeClose(_ state: DocumentCloseState) throws {
+    guard state.operationID == nil, !state.isComposing, !state.hasPendingTextEdits,
+      !state.hasPendingPublication
+    else { throw DocumentRegistryError.closeBlocked }
+  }
+  func requestClose(documentID: UUID) throws -> DocumentCloseRequest {
+    guard closeServices != nil else { throw DocumentRegistryError.closeUnavailable }
+    var result: DocumentCloseRequest!
+    try mutate {
+      guard let record = records[documentID] else { throw DocumentRegistryError.unknownDocument }
+      guard leases[documentID] == nil else { throw DocumentRegistryError.closeBlocked }
+      let state = try state(of: record, id: documentID)
+      try requireSafeClose(state)
+      result = DocumentCloseRequest(
+        admissionGeneration: admissionGenerations[documentID]!, id: UUID(),
+        documentID: documentID, assignment: record.assignment, state: state,
+        metadata: record.metadata)
+      return false
+    }
+    return result
+  }
+  func beginClose(_ request: DocumentCloseRequest, disposition: DocumentCloseDisposition) throws
+    -> DocumentCloseTicket
+  {
+    guard closeServices != nil else { throw DocumentRegistryError.closeUnavailable }
+    var result: DocumentCloseTicket!
+    try mutate {
+      guard let record = records[request.documentID], leases[request.documentID] == nil,
+        admissionGenerations[request.documentID] == request.admissionGeneration,
+        record.assignment == request.assignment, record.metadata == request.metadata
+      else { throw DocumentRegistryError.staleClose }
+      let current = try state(of: record, id: request.documentID)
+      guard current == request.state else { throw DocumentRegistryError.staleClose }
+      try requireSafeClose(current)
+      if disposition == .retainCleanHistory {
+        guard current.kind == .editable, !current.isDirty, current.canRetainCleanHistory else {
+          throw DocumentRegistryError.invalidDisposition
+        }
+      }
+      result = DocumentCloseTicket(id: UUID(), request: request, disposition: disposition)
+      leases[request.documentID] = .closing(result)
+      admissionGenerations[request.documentID] = UUID()
+      return true
+    }
+    return result
+  }
+  func completeClose(_ ticket: DocumentCloseTicket, result: DocumentCleanupResult) throws
+    -> DocumentCloseCompletion
+  {
+    var completion: DocumentCloseCompletion!
+    try mutate {
+      let id = ticket.request.documentID
+      guard case .closing(let active) = leases[id], active == ticket,
+        let record = records[id], record.assignment == ticket.request.assignment
+      else {
+        throw DocumentRegistryError.staleClose
+      }
+      switch result {
+      case .notRemoved(let error):
+        leases[id] = nil
+        completion = .retained(error)
+      case .uncertain(let error):
+        leases[id] = .recovery(UUID())
+        completion = .recoveryRequired(error)
+      case .removed:
+        do {
+          let current = try state(of: record, id: id)
+          guard current == ticket.request.state, record.metadata == ticket.request.metadata else {
+            throw DocumentRegistryError.staleClose
+          }
+        } catch {
+          leases[id] = .recovery(UUID())
+          admissionGenerations[id] = UUID()
+          completion = .recoveryRequired(error)
+          return true
+        }
+        let (window, groupIndex) = try group(record.assignment)
+        let old = window.groups[groupIndex]
+        let removedIndex = old.documentIDs.firstIndex(of: id)!
+        let remaining = old.documentIDs.filter { $0 != id }
+        let selected =
+          old.selectedDocumentID == id
+          ? (remaining.isEmpty ? nil : remaining[min(removedIndex, remaining.count - 1)])
+          : old.selectedDocumentID
+        windows[window.id] = replacingAndInvalidatingGroup(
+          window, groupAt: groupIndex,
+          with: DocumentGroupSnapshot(
+            id: old.id, documentIDs: remaining, selectedDocumentID: selected))
+        records[id] = nil
+        leases[id] = nil
+        // allIDs intentionally retains the retired document UUID for this registry's lifetime.
+        if ticket.disposition == .retainCleanHistory {
+          var entries = history[window.id] ?? []
+          entries.append(record)
+          if entries.count > 10 {
+            let removed = entries.removeFirst()
+            handleIdentities.remove(ObjectIdentifier(removed.handle))
+          }
+          history[window.id] = entries
+        } else {
+          handleIdentities.remove(ObjectIdentifier(record.handle))
+        }
+        completion = .closed
+      }
+      admissionGenerations[id] = records[id] == nil ? nil : UUID()
+      return true
+    }
+    return completion
+  }
+  func beginRecoveryRepair(documentID: UUID) throws -> DocumentRecoveryAttempt {
+    guard closeServices != nil else { throw DocumentRegistryError.closeUnavailable }
+    var result: DocumentRecoveryAttempt!
+    try mutate {
+      guard case .recovery(let repairID) = leases[documentID], let record = records[documentID]
+      else {
+        throw DocumentRegistryError.closeBlocked
+      }
+      let current = try state(of: record, id: documentID)
+      // Repair snapshots cannot acknowledge a still-open edit batch, operation or composition.
+      guard current.operationID == nil, !current.hasPendingTextEdits, !current.isComposing else {
+        throw DocumentRegistryError.closeBlocked
+      }
+      result = DocumentRecoveryAttempt(
+        id: UUID(), repairID: repairID, documentID: documentID,
+        assignment: record.assignment, state: current)
+      leases[documentID] = .repairing(result)
+      admissionGenerations[documentID] = UUID()
+      return true
+    }
+    return result
+  }
+  func completeRecoveryRepair(
+    _ attempt: DocumentRecoveryAttempt, result: Result<DocumentRecoveryReceipt, Error>
+  ) throws -> Bool {
+    var repaired = false
+    try mutate {
+      guard case .repairing(let active) = leases[attempt.documentID], active == attempt,
+        let record = records[attempt.documentID], record.assignment == attempt.assignment
+      else {
+        throw DocumentRegistryError.staleClose
+      }
+      if case .success(let receipt) = result,
+        receipt.attemptID == attempt.id, receipt.repairID == attempt.repairID,
+        receipt.documentID == attempt.documentID,
+        receipt.mutationGeneration == attempt.state.mutationGeneration,
+        let current = try? state(of: record, id: attempt.documentID), current == attempt.state
+      {
+        repaired = true
+      }
+      leases[attempt.documentID] = repaired ? nil : .recovery(attempt.repairID)
+      admissionGenerations[attempt.documentID] = UUID()
+      return true
+    }
+    return repaired
+  }
 
   func handle(id: UUID) -> (any WorkspaceDocumentHandle)? { records[id]?.handle }
   func assignment(of documentID: UUID) -> DocumentAssignment? { records[documentID]?.assignment }
@@ -53,15 +249,22 @@ import Foundation
     }
     return (window, index)
   }
-  private func replacing(
+  private func replacingAndInvalidatingGroup(
     _ window: DocumentWindowSnapshot, groupAt index: Int,
     with group: DocumentGroupSnapshot
   ) -> DocumentWindowSnapshot {
+    advanceAdmission(in: window.groups[index])
     var groups = window.groups
     groups[index] = group
     return DocumentWindowSnapshot(
       id: window.id, groups: groups,
       focusedGroupID: window.focusedGroupID, axis: window.axis)
+  }
+  private func advanceAdmission(in group: DocumentGroupSnapshot) {
+    for id in group.documentIDs { admissionGenerations[id] = UUID() }
+  }
+  private func advanceAdmission(in window: DocumentWindowSnapshot) {
+    for group in window.groups { advanceAdmission(in: group) }
   }
   private func pinnedFirst(_ ids: [UUID]) -> [UUID] {
     ids.filter { records[$0]?.metadata.pinned == true }
@@ -92,6 +295,7 @@ import Foundation
     try mutate {
       let (window, groupIndex) = try group(assignment)
       let group = window.groups[groupIndex]
+      try ensureGroupOpen(group)
       guard index >= 0, index <= group.documentIDs.count else {
         throw DocumentRegistryError.invalidIndex
       }
@@ -106,7 +310,8 @@ import Foundation
       records[id] = Record(handle: handle, assignment: assignment, metadata: metadata)
       allIDs.insert(id)
       handleIdentities.insert(identity)
-      windows[window.id] = replacing(
+      admissionGenerations[id] = UUID()
+      windows[window.id] = replacingAndInvalidatingGroup(
         window, groupAt: groupIndex,
         with: DocumentGroupSnapshot(
           id: group.id, documentIDs: pinnedFirst(ids),
@@ -120,6 +325,7 @@ import Foundation
     try mutate(expected: expectedRevision) {
       let (window, index) = try group(assignment)
       let group = window.groups[index]
+      try ensureGroupOpen(group)
       guard
         group.documentIDs.isEmpty
           ? documentID == nil : documentID.map(group.documentIDs.contains) == true
@@ -127,7 +333,7 @@ import Foundation
         throw DocumentRegistryError.invalidSelection
       }
       guard group.selectedDocumentID != documentID else { return false }
-      windows[window.id] = replacing(
+      windows[window.id] = replacingAndInvalidatingGroup(
         window, groupAt: index,
         with: DocumentGroupSnapshot(
           id: group.id, documentIDs: group.documentIDs, selectedDocumentID: documentID))
@@ -137,7 +343,9 @@ import Foundation
   func focusGroup(_ groupID: UUID, in windowID: UUID, expectedRevision: UUID) throws {
     try mutate(expected: expectedRevision) {
       let (window, _) = try group(DocumentAssignment(windowID: windowID, groupID: groupID))
+      try ensureWindowOpen(window)
       guard window.focusedGroupID != groupID else { return false }
+      advanceAdmission(in: window)
       windows[windowID] = DocumentWindowSnapshot(
         id: windowID, groups: window.groups,
         focusedGroupID: groupID, axis: window.axis)
@@ -149,6 +357,7 @@ import Foundation
       guard let record = records[documentID] else { throw DocumentRegistryError.unknownDocument }
       let (window, groupIndex) = try group(record.assignment)
       let group = window.groups[groupIndex]
+      try ensureGroupOpen(group)
       guard group.documentIDs.indices.contains(index) else {
         throw DocumentRegistryError.invalidIndex
       }
@@ -156,7 +365,7 @@ import Foundation
       ids.insert(documentID, at: index)
       ids = pinnedFirst(ids)
       guard ids != group.documentIDs else { return false }
-      windows[window.id] = replacing(
+      windows[window.id] = replacingAndInvalidatingGroup(
         window, groupAt: groupIndex,
         with: DocumentGroupSnapshot(
           id: group.id, documentIDs: ids, selectedDocumentID: group.selectedDocumentID))
@@ -166,12 +375,15 @@ import Foundation
   func setPinned(_ pinned: Bool, documentID: UUID, expectedRevision: UUID) throws {
     try mutate(expected: expectedRevision) {
       guard var record = records[documentID] else { throw DocumentRegistryError.unknownDocument }
+      let (currentWindow, currentIndex) = try group(record.assignment)
+      try ensureGroupOpen(currentWindow.groups[currentIndex])
       guard record.metadata.pinned != pinned else { return false }
       let (window, index) = try group(record.assignment)
       let group = window.groups[index]
+      try ensureGroupOpen(group)
       record.metadata = WorkspaceDocumentMetadata(pinned: pinned)
       records[documentID] = record
-      windows[window.id] = replacing(
+      windows[window.id] = replacingAndInvalidatingGroup(
         window, groupAt: index,
         with: DocumentGroupSnapshot(
           id: group.id, documentIDs: pinnedFirst(group.documentIDs),
@@ -184,8 +396,10 @@ import Foundation
   {
     try mutate(expected: expectedRevision) {
       guard let window = windows[windowID] else { throw DocumentRegistryError.unknownWindow }
+      try ensureWindowOpen(window)
       guard window.groups.count < 2 else { throw DocumentRegistryError.capacity }
       guard !allIDs.contains(id) else { throw DocumentRegistryError.duplicateID }
+      advanceAdmission(in: window)
       windows[windowID] = DocumentWindowSnapshot(
         id: windowID,
         groups: window.groups + [
@@ -199,7 +413,9 @@ import Foundation
   func setGroupAxis(_ axis: WorkspaceGroupAxis, windowID: UUID, expectedRevision: UUID) throws {
     try mutate(expected: expectedRevision) {
       guard let window = windows[windowID] else { throw DocumentRegistryError.unknownWindow }
+      try ensureWindowOpen(window)
       guard window.axis != axis else { return false }
+      advanceAdmission(in: window)
       windows[windowID] = DocumentWindowSnapshot(
         id: windowID, groups: window.groups,
         focusedGroupID: window.focusedGroupID, axis: axis)
@@ -209,8 +425,10 @@ import Foundation
   func closeEmptyGroup(_ groupID: UUID, in windowID: UUID, expectedRevision: UUID) throws {
     try mutate(expected: expectedRevision) {
       let (window, index) = try group(DocumentAssignment(windowID: windowID, groupID: groupID))
+      try ensureWindowOpen(window)
       guard window.groups[index].documentIDs.isEmpty else { throw DocumentRegistryError.notEmpty }
       guard window.groups.count > 1 else { throw DocumentRegistryError.lastGroup }
+      advanceAdmission(in: window)
       let groups = window.groups.filter { $0.id != groupID }
       windows[windowID] = DocumentWindowSnapshot(
         id: windowID, groups: groups,
@@ -225,6 +443,9 @@ import Foundation
       guard let window = windows[windowID] else { throw DocumentRegistryError.unknownWindow }
       guard window.groups.allSatisfy({ $0.documentIDs.isEmpty }) else {
         throw DocumentRegistryError.notEmpty
+      }
+      for entry in history.removeValue(forKey: windowID) ?? [] {
+        handleIdentities.remove(ObjectIdentifier(entry.handle))
       }
       windows[windowID] = nil
       windowOrder.removeAll { $0 == windowID }

@@ -14,7 +14,7 @@ run=Path(sys.argv[1]); package=run/'Package'
 source=package/'Sources/DocumentRegistry'; tests=package/'Tests/DocumentRegistryTests'
 source.mkdir(parents=True); tests.mkdir(parents=True)
 manifest=[]
-for path,destination in [(Path('Sources/TheOnlyPad')/name,source/name) for name in ['WorkspaceDocumentRegistryTypes.swift','ApplicationDocuments.swift']]+[(Path('Tests/NativeIntegration/ApplicationDocumentsTests.swift'),tests/'ApplicationDocumentsTests.swift')]:
+for path,destination in [(Path('Sources/TheOnlyPad')/name,source/name) for name in ['WorkspaceDocumentRegistryTypes.swift','ApplicationDocuments.swift']]+[(Path('Tests/NativeIntegration')/name,tests/name) for name in ['ApplicationDocumentsTests.swift','ApplicationDocumentCloseTests.swift']]:
     data=path.read_bytes(); destination.write_bytes(data)
     manifest.append({'source':str(path),'sha256':hashlib.sha256(data).hexdigest()})
 (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
