@@ -16,12 +16,33 @@ private final class DeliveryFence: @unchecked Sendable {
     lock.unlock()
   }
 }
+struct FileStateBindingIdentity: Equatable {
+  let documentID: UUID
+  let bindingID: UUID
+  let baselineRevision: UInt64
+  let url: URL?
+  let ownershipGeneration: UUID?
+  init(_ value: FileStateLiveContext) {
+    documentID = value.documentID
+    bindingID = value.bindingID
+    baselineRevision = value.baselineRevision
+    url = value.url
+    ownershipGeneration = value.ownershipGeneration
+  }
+}
+struct FileStateEndpointDetachment {
+  fileprivate let owner: UUID
+  fileprivate let issuance: UUID
+  let binding: FileStateBindingIdentity
+}
+enum FileStateEndpointError: Error { case unavailable, stale }
 @MainActor final class DocumentFileStateController {
   private struct Binding {
     let id: UUID
     let url: URL
     let revision: UInt64
     let bytes: Data
+    let identity: FileStateBindingIdentity
   }
   private struct ManualRequest {
     let id: UUID
@@ -38,8 +59,11 @@ private final class DeliveryFence: @unchecked Sendable {
   }
   private let documentID: UUID
   private let client: any MonitorClient
-  private let liveContext: () -> FileStateLiveContext?
-  private let onChange: () -> Void
+  private var liveContext: (() -> FileStateLiveContext?)?
+  private var onChange: (() -> Void)?
+  private let endpointOwner = UUID()
+  private var detachment: FileStateEndpointDetachment?
+  private var endpointTransition = false
   private let fence: DeliveryFence
   private var binding: Binding?
   private var authorityID = UUID()
@@ -68,14 +92,17 @@ private final class DeliveryFence: @unchecked Sendable {
     fence = DeliveryFence(liveContext()?.deliveryGeneration ?? UUID())
   }
   private func live() -> FileStateLiveContext? {
-    guard !invalidated, let value = liveContext(), value.documentID == documentID,
-      !value.closed, !value.quitting
+    let expectedAuthority = authorityID
+    guard !invalidated, detachment == nil, !endpointTransition, let value = liveContext?(),
+      !invalidated, detachment == nil, !endpointTransition, authorityID == expectedAuthority,
+      value.documentID == documentID, !value.closed, !value.quitting
     else { return nil }
     return value
   }
   private func boundLive() -> FileStateLiveContext? {
     guard let value = live(), let binding, value.bindingID == binding.id,
-      value.url == binding.url, value.baselineRevision == binding.revision
+      value.url == binding.url, value.baselineRevision == binding.revision,
+      value.ownershipGeneration == binding.identity.ownershipGeneration
     else { return nil }
     return value
   }
@@ -113,17 +140,19 @@ private final class DeliveryFence: @unchecked Sendable {
       manualMode = false
       manualNotice = nil
       lastFailure = nil
-      onChange()
+      onChange?()
       return
     }
-    binding = Binding(id: value.bindingID, url: url, revision: value.baselineRevision, bytes: bytes)
+    binding = Binding(
+      id: value.bindingID, url: url, revision: value.baselineRevision, bytes: bytes,
+      identity: FileStateBindingIdentity(value))
     if registration != nil && !manualMode {
       do {
         try client.rebind(
           id: documentID, url: url, baseline: bytes, revision: value.baselineRevision)
         registrationBindingID = binding?.id
         lastFailure = nil
-        onChange()
+        onChange?()
         return
       } catch {
         enterManual(failure: .unavailable)
@@ -132,8 +161,9 @@ private final class DeliveryFence: @unchecked Sendable {
     }
     retryRegistration()
   }
-  func retryRegistration() {
-    guard let value = boundLive(), let binding else { return }
+  func retryRegistration() { _ = registerEndpoint() }
+  private func registerEndpoint() -> UUID? {
+    guard let value = boundLive(), let binding else { return nil }
     authorityID = UUID()
     clearAdmission()
     retireRegistration(retainingContinuity: true)
@@ -159,13 +189,14 @@ private final class DeliveryFence: @unchecked Sendable {
       }
       registrationBindingID = binding.id
     } catch {
-      enterManual(failure: (error as? MonitorFailure) ?? .unavailable)
-      return
+      return enterManual(failure: (error as? MonitorFailure) ?? .unavailable)
     }
-    onChange()
+    onChange?()
+    return authority
   }
-  private func enterManual(failure: MonitorFailure?) {
+  @discardableResult private func enterManual(failure: MonitorFailure?) -> UUID {
     authorityID = UUID()
+    let authority = authorityID
     clearAdmission()
     retireRegistration(retainingContinuity: true)
     manualMode = true
@@ -173,7 +204,8 @@ private final class DeliveryFence: @unchecked Sendable {
     lastFailure = failure
     manualNotice =
       "Automatic monitoring unavailable; Check Again performs one check. Retry Monitoring is available."
-    onChange()
+    onChange?()
+    return authority
   }
   func useManualFallback() {
     guard boundLive() != nil else { return }
@@ -227,11 +259,11 @@ private final class DeliveryFence: @unchecked Sendable {
           self.lastFailure = error
           self.manualRequest = nil
           self.pending = nil
-          self.onChange()
+          self.onChange?()
         }
       }
     }
-    onChange()
+    onChange?()
   }
   private func currentToken(for envelope: Envelope) -> FileObservationToken? {
     guard envelope.authority == authorityID else { return nil }
@@ -262,11 +294,14 @@ private final class DeliveryFence: @unchecked Sendable {
     if state.accept(envelope.observation, token: envelope.token, currentToken: token) {
       requestFloor = nil
       lastFailure = nil
-      onChange()
+      onChange?()
     }
   }
   func reconcileEligibility() {
-    guard !invalidated, let value = liveContext() else { return }
+    let expectedAuthority = authorityID
+    guard !invalidated, detachment == nil, !endpointTransition, let value = liveContext?(),
+      !invalidated, detachment == nil, !endpointTransition, authorityID == expectedAuthority
+    else { return }
     let generationChanged = fence.current != value.deliveryGeneration
     fence.set(value.deliveryGeneration)
     if value.closed {
@@ -282,9 +317,68 @@ private final class DeliveryFence: @unchecked Sendable {
     pending = nil
     if currentToken(for: envelope) == envelope.token { accept(envelope) } else { checkAgain() }
   }
+  /// Must precede terminal invalidation. Retains binding safety while retiring endpoint callbacks.
+  func detachEndpoint() throws -> FileStateEndpointDetachment {
+    guard !invalidated, detachment == nil, !endpointTransition, let binding else {
+      throw FileStateEndpointError.unavailable
+    }
+    endpointTransition = true
+    defer { endpointTransition = false }
+    guard let value = liveContext?(), FileStateBindingIdentity(value) == binding.identity,
+      !invalidated, detachment == nil,
+      self.binding?.identity == binding.identity
+    else { throw FileStateEndpointError.stale }
+    let token = FileStateEndpointDetachment(
+      owner: endpointOwner, issuance: UUID(), binding: binding.identity)
+    detachment = token
+    authorityID = UUID()
+    fence.set(UUID())
+    liveContext = nil
+    onChange = nil
+    pending = nil
+    requestFloor = nil
+    let previous = manualHandle
+    manualHandle = nil
+    manualRequest = nil
+    // Authority and callbacks are retired before callback-capable cancellation.
+    previous?.cancel()
+    retireRegistration(retainingContinuity: true)
+    guard !invalidated, detachment?.issuance == token.issuance else {
+      throw FileStateEndpointError.stale
+    }
+    return token
+  }
+  func reattachEndpoint(
+    _ token: FileStateEndpointDetachment, expectedBinding: FileStateBindingIdentity,
+    liveContext: @escaping () -> FileStateLiveContext?, onChange: @escaping () -> Void
+  ) throws {
+    guard !invalidated, !endpointTransition, token.owner == endpointOwner,
+      detachment?.issuance == token.issuance, token.binding == expectedBinding,
+      binding?.identity == expectedBinding
+    else { throw FileStateEndpointError.stale }
+    endpointTransition = true
+    defer { endpointTransition = false }
+    let value = liveContext()
+    guard !invalidated, detachment?.issuance == token.issuance,
+      binding?.identity == expectedBinding, let value,
+      FileStateBindingIdentity(value) == expectedBinding, !value.closed, !value.quitting
+    else { throw FileStateEndpointError.stale }
+    self.liveContext = liveContext
+    self.onChange = onChange
+    detachment = nil
+    fence.set(value.deliveryGeneration)
+    endpointTransition = false
+    let installedAuthority = registerEndpoint()
+    guard !invalidated, detachment == nil, !endpointTransition,
+      binding?.identity == expectedBinding, installedAuthority == authorityID
+    else { throw FileStateEndpointError.stale }
+  }
   func invalidate() {
     guard !invalidated else { return }
     invalidated = true
+    detachment = nil
+    liveContext = nil
+    onChange = nil
     authorityID = UUID()
     clearAdmission()
     retireRegistration(retainingContinuity: false)
@@ -334,7 +428,7 @@ private final class DeliveryFence: @unchecked Sendable {
   @discardableResult func keepBuffer(_ context: FileStateActionContext) -> Bool {
     guard context.action == .keepBuffer, isCurrent(context) else { return false }
     state.dismiss(token: context.token)
-    onChange()
+    onChange?()
     return true
   }
 

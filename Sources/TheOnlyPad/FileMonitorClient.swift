@@ -31,6 +31,7 @@ enum MonitorFailure: Error, Sendable { case capacity, unavailable, cancelled }
 }
 struct FileStateLiveContext: Equatable {
   let documentID: UUID
+  var ownershipGeneration: UUID? = nil
   var bindingID: UUID
   var baselineRevision: UInt64
   var url: URL?

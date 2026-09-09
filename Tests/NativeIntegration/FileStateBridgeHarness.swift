@@ -113,6 +113,7 @@ let changed = DiskObservation(
 let matching = DiskObservation(
   metadata: metadata, content: .matchesBaseline, locationProblem: nil, readOnlyHint: false,
   movedCandidate: nil)
+@MainActor final class EndpointCallbackLifetime {}
 @main struct Harness {
   @MainActor static func settle() async { for _ in 0..<12 { await Task.yield() } }
   @MainActor static func main() async {
@@ -124,6 +125,150 @@ let matching = DiskObservation(
       }
       checks += 1
     }
+    let detached = Fixture()
+    detached.live.ownershipGeneration = UUID()
+    detached.bridge.adoptBaseline(bytes: Data([1]))
+    detached.send(1)
+    await settle()
+    let staleReceiver = detached.client.receive
+    var cancellationSawNoAuthority = false
+    detached.client.handle.onCancel = {
+      MainActor.assumeIsolated {
+        cancellationSawNoAuthority = detached.bridge.captureAction(.reload) == nil
+        detached.bridge.checkAgain()
+        detached.bridge.reconcileEligibility()
+      }
+    }
+    do {
+      let ticket = try detached.bridge.detachEndpoint()
+      check(cancellationSawNoAuthority, "inline cancel sees endpoint authority already retired")
+      check(detached.client.handle.snapshot.cancelled, "detach cancels actual registration")
+      check(
+        detached.bridge.captureAction(.reload) == nil, "detached endpoint has no action authority")
+      try detached.bridge.reattachEndpoint(
+        ticket, expectedBinding: FileStateBindingIdentity(detached.live),
+        liveContext: { detached.live }, onChange: {})
+      check(
+        detached.client.registeredIdentity == identity,
+        "reattachment retains accepted parent identity")
+      let oldToken = detached.token(1)
+      detached.client.handle.issue(oldToken)
+      staleReceiver?(oldToken, changed)
+      await settle()
+      check(
+        detached.bridge.state.token == nil,
+        "old queued delivery cannot populate new endpoint authority")
+    } catch { check(false, "valid endpoint detach and reattach succeeds") }
+    do {
+      let ticket = try detached.bridge.detachEndpoint()
+      let registrations = detached.client.registrations
+      var wrong = detached.live
+      wrong.baselineRevision += 1
+      do {
+        try detached.bridge.reattachEndpoint(
+          ticket, expectedBinding: FileStateBindingIdentity(wrong),
+          liveContext: { wrong }, onChange: {})
+        check(false, "wrong baseline must refuse reattachment")
+      } catch {}
+      check(
+        detached.client.registrations == registrations, "failed preflight leaves detached state")
+      var wrongOwner = detached.live
+      wrongOwner.ownershipGeneration = UUID()
+      do {
+        try detached.bridge.reattachEndpoint(
+          ticket, expectedBinding: ticket.binding,
+          liveContext: { wrongOwner }, onChange: {})
+        check(false, "different model ownership must refuse")
+      } catch {}
+      detached.client.failRegister = true
+      var newRenders = 0
+      let oldChanges = detached.changes
+      try detached.bridge.reattachEndpoint(
+        ticket, expectedBinding: ticket.binding,
+        liveContext: { detached.live }, onChange: { newRenders += 1 })
+      check(
+        detached.bridge.manualNotice != nil && newRenders > 0,
+        "reattachment registration failure exposes manual fallback on new endpoint")
+      check(detached.changes == oldChanges, "reattachment never invokes old UI callback")
+      detached.bridge.checkAgain()
+      check(
+        detached.client.passedIdentity == identity, "manual reattachment retains parent continuity")
+      do {
+        try detached.bridge.reattachEndpoint(
+          ticket, expectedBinding: ticket.binding,
+          liveContext: { detached.live }, onChange: {})
+        check(false, "consumed detachment cannot attach twice")
+      } catch {}
+      let invalidatingTicket = try detached.bridge.detachEndpoint()
+      do {
+        try detached.bridge.reattachEndpoint(
+          invalidatingTicket, expectedBinding: invalidatingTicket.binding,
+          liveContext: {
+            let lifetime = Fixture()
+            lifetime.bridge.adoptBaseline(bytes: Data([1]))
+            do {
+              let token = try lifetime.bridge.detachEndpoint()
+              var holder: EndpointCallbackLifetime? = EndpointCallbackLifetime()
+              weak var retained = holder
+              try lifetime.bridge.reattachEndpoint(
+                token, expectedBinding: token.binding,
+                liveContext: { [value = holder!] in
+                  withExtendedLifetime(value) { lifetime.live }
+                }, onChange: { [value = holder!] in withExtendedLifetime(value) {} })
+              holder = nil
+              check(retained != nil, "attached endpoint owns its callback context")
+              _ = try lifetime.bridge.detachEndpoint()
+              check(retained == nil, "detachment releases old endpoint callback context")
+            } catch { check(false, "callback lifetime detach protocol succeeds") }
+            lifetime.bridge.invalidate()
+            detached.bridge.invalidate()
+            return detached.live
+          }, onChange: {})
+        check(false, "reentrant invalidation must prevent reattachment")
+      } catch {}
+      check(
+        detached.bridge.captureAction(.reload) == nil,
+        "reentrant terminal invalidation preserves refusal")
+    } catch { check(false, "detachment retry protocol succeeds") }
+    detached.bridge.invalidate()
+    let recursiveClient = Client()
+    var recursiveLive = FileStateLiveContext(
+      documentID: UUID(), bindingID: UUID(), baselineRevision: 1,
+      url: URL(fileURLWithPath: "/synthetic/recursive"))
+    var recurse = false
+    var nestedRefused = false
+    var recursiveBridge: DocumentFileStateController!
+    recursiveBridge = DocumentFileStateController(
+      documentID: recursiveLive.documentID, client: recursiveClient,
+      liveContext: {
+        if recurse {
+          recurse = false
+          do { _ = try recursiveBridge.detachEndpoint() } catch { nestedRefused = true }
+        }
+        return recursiveLive
+      }, onChange: {})
+    recursiveBridge.adoptBaseline(bytes: Data([1]))
+    recurse = true
+    do {
+      let token = try recursiveBridge.detachEndpoint()
+      check(nestedRefused, "detach context callback cannot recursively detach")
+      var changedDuringRender = false
+      do {
+        try recursiveBridge.reattachEndpoint(
+          token, expectedBinding: token.binding,
+          liveContext: { recursiveLive },
+          onChange: {
+            guard !changedDuringRender else { return }
+            changedDuringRender = true
+            recursiveLive.bindingID = UUID()
+            recursiveLive.baselineRevision += 1
+            recursiveBridge.adoptBaseline(bytes: Data([2]))
+          })
+        check(false, "reattach cannot report success after callback replaces baseline")
+      } catch {}
+      check(changedDuringRender, "new endpoint render mutation regression exercised")
+    } catch { check(false, "outer detach survives refused recursive detach") }
+    recursiveBridge.invalidate()
     let f = Fixture()
     f.bridge.adoptBaseline(bytes: Data([1]))
     check(f.client.registrations == 1, "baseline must register once")

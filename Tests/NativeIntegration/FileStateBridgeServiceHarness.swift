@@ -69,6 +69,42 @@ final class CallbackGate: @unchecked Sendable {
       f.bridge.state.observation?.content == .differsFromBaseline
     }
     check(f.live.editRevision == 0 && !f.live.dirty, "monitor cannot dirty logical buffer")
+    let detachParent = directory.appendingPathComponent("detach-parent")
+    try FileManager.default.createDirectory(at: detachParent, withIntermediateDirectories: true)
+    let detachFile = detachParent.appendingPathComponent("same.txt")
+    try original.write(to: detachFile)
+    let reattached = RealFixture(url: detachFile, service: service)
+    reattached.live.ownershipGeneration = UUID()
+    reattached.bridge.adoptBaseline(bytes: original)
+    try await wait("reattach fixture first parent bound") {
+      reattached.bridge.state.observation?.content == .matchesBaseline
+    }
+    let detachment = try reattached.bridge.detachEndpoint()
+    let oldRenders = reattached.renders
+    reattached.live.closed = true
+    reattached.bridge.reconcileEligibility()
+    try FileManager.default.moveItem(
+      at: detachParent, to: directory.appendingPathComponent("detach-old"))
+    try FileManager.default.createDirectory(at: detachParent, withIntermediateDirectories: true)
+    try original.write(to: detachFile)
+    reattached.live.closed = false
+    var newRenders = 0
+    try reattached.bridge.reattachEndpoint(
+      detachment, expectedBinding: FileStateBindingIdentity(reattached.live),
+      liveContext: { reattached.live }, onChange: { newRenders += 1 })
+    try await wait("reattachment refuses equal bytes under retargeted parent") {
+      reattached.bridge.state.observation?.locationProblem == .parentChanged
+    }
+    check(
+      reattached.bridge.captureAction(.reload) == nil,
+      "reattached parent refusal has no reload authority")
+    check(
+      reattached.renders == oldRenders && newRenders > 0,
+      "only replacement endpoint renders new observation")
+    check(
+      reattached.live.editRevision == 0 && !reattached.live.dirty,
+      "reattachment does not alter logical editing state")
+    reattached.bridge.invalidate()
     f.bridge.useManualFallback()
     check(f.bridge.manualNotice != nil, "manual fallback remains explicit")
     // Same file bytes under a different parent must remain a parent-retarget refusal.
