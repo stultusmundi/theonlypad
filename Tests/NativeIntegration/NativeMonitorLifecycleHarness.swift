@@ -115,8 +115,7 @@ import PadCore
     let edited = document.storage.string
     let external = Data("external".utf8)
     try external.write(to: url, options: .atomic)
-    bridge.checkAgain()
-    try await until { bridge.state.observation?.content == .differsFromBaseline }
+    try await checkChanged(bridge)
     let revision = document.baselineRevision
     let notifications = sessionChanges
     controller.monitorHarnessRenderDiskStatus()
@@ -126,7 +125,9 @@ import PadCore
       let buttons = descendants(panel.window!.contentView!).compactMap { $0 as? NSButton }
         .filter { $0.accessibilityIdentifier() == id }
       precondition(
-        buttons.count == 1 && buttons[0].isEnabled, "Expected one admitted actual conflict button")
+        buttons.count == 1 && buttons[0].isEnabled,
+        "Expected one admitted actual conflict button: action=\(id), matches=\(buttons.count), enabled=\(buttons.map(\.isEnabled)), available=\(descendants(panel.window!.contentView!).compactMap { ($0 as? NSButton)?.accessibilityIdentifier() }.sorted()), stateToken=\(String(reflecting: bridge.state.token)), receiptToken=\(String(reflecting: bridge.monitorHarnessReceipt?.currentToken)), observation=\(String(reflecting: bridge.state.observation?.content))"
+      )
       buttons[0].performClick(nil)
       precondition(panel.window?.isVisible == false)
     }
@@ -141,10 +142,11 @@ import PadCore
       actionIDs.contains("document.diskReload") && actionIDs.contains("document.diskCopy"),
       "Actual conflict panel must expose admitted Reload and Open Disk Copy actions; got \(actionIDs.sorted())"
     )
-    let sequence = bridge.monitorHarnessReceipt!.currentToken!.sequence
+    let previousObservation = bridge.state.token
     click(check, "document.checkDisk")
     try await until {
-      (bridge.monitorHarnessReceipt?.currentToken?.sequence ?? 0) > sequence
+      bridge.state.token != previousObservation
+        && bridge.state.token == bridge.monitorHarnessReceipt?.currentToken
         && bridge.state.observation?.content == .differsFromBaseline
     }
     precondition(document.originalBytes == bytes && document.baselineRevision == revision)
