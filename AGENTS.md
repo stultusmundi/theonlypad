@@ -40,3 +40,17 @@ Visible pane adapter smoke: `scripts/benchmark-panes.sh`. The retained runner co
 Local packaging now verifies archive bytes, SBOM hash and specified machine-path markers before promotion. Standalone check: `python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json` (update artifact names when centralized identity/version changes).
 
 Checkpoint/edit interaction diagnostic: `scripts/benchmark-checkpoint-edits.sh` (one writer/restore pair; `--full` requests three). The retained wrapper built and ran; latest writer failed strict admission because the application remained inactive, with no measured edits or restoration. Run only under exclusive CPU/GUI ownership. Raw synthetic evidence is ignored in `.local/checkpoint-performance/`; see `docs/verification/checkpoint-edit-interaction.md`. This is not repeated performance acceptance.
+
+Hidden monitor/ownership integration checks (proven against a built debug directory; these do not replace desktop tests):
+
+```sh
+scripts/swift.sh test --scratch-path .build/native-monitor-integration --filter AppCommandsTests
+scripts/test-file-state-bridge.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-disk-action-coordinator.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-file-state-owner.sh --build-path .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-native-monitor-lifecycle.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-disk-status-view.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+scripts/test-disk-conflict-panel.sh
+```
+
+While GUI access is pending, do not launch visible harnesses or repeat desktop authentication attempts. Continue independent hidden/native and core verification and record the distinction.

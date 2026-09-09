@@ -1,6 +1,6 @@
 # External file monitoring: component verification
 
-Status: the bounded file probe and pure conflict-state reducer are implemented in PadCore and tested. The watcher service, document integration, conflict controls, rename/Locate transactions and packaged desktop workflows are outstanding. A-07/A-08 are not complete. No original-file autosave or automatic reload is introduced.
+Status: the bounded probe, reducer, guarded watcher/action service, native document ownership and status/conflict controls are implemented and have component/hidden-native evidence below. Checked reload/copy integration is active; rename/Locate transactions and packaged desktop workflows remain outstanding. A-07/A-08 are not complete. No original-file autosave or automatic reload is introduced.
 
 ## Probe
 
@@ -80,3 +80,33 @@ Raw service evidence remains ignored in `.local/file-monitor-service`; productio
 The isolated compiling seam failed both initial tests (`run.ipid4w2g`). Final isolated `run.2ue7ej9j` passed49 tests: eight action tests plus the unchanged41 monitor tests. Root reviewed the scheduling delta, copied only the service and new action tests with import/format adaptation, and retained the prior formatted monitor tests. Full production integration72772 passed328 tests, zero failures,14.835 seconds, without compiler warnings. Scoped strict formatting, public-source and diff checks passed.
 
 Coverage includes exact synthetic snapshot read, changed-file revalidation, malformed encoding, typed failures, cancelled blocked worker, queued success after stop, cross-kind duplicate request IDs, mixed bounded admission/fair progress, and retained callback capacity. A small1024-byte fixture tests retention accounting; this is not a100MB memory benchmark. The native process action lease, owner validation, actual reload/copy UI and packaged acceptance remain separate work. No real GUI or source-file write occurs in these scheduling tests. Raw integration log: `.local/file-action-production-integration.log`.
+
+
+## Native ownership and conflict controls (hidden integration verified)
+
+The process owner controls suspension, delivery generation and a single native disk-action lease. Documents retain one bridge across tabs/panes, with exact binding/baseline/edit/publication/operation context checks. Open/save completing during quit suspension records pending adoption; veto adopts the latest coherent baseline. Close invalidates retained history objects. AppDelegate lifetime hooks compile and were source-reviewed; actual app quit/activation delivery still needs desktop validation.
+
+The real status row renders observations without filesystem access or session writes. Its nonmodal conflict panel captures the document at creation. Keep Buffer dismisses the current full observation token without adopting disk bytes; Save As validates that capture before asking for a destination and writes the captured document after tab switching. Check/retry/manual actions remain explicit. No proactive modal presentation or automatic reload is introduced.
+
+Fresh hidden verification against production source: bridge105 semantic +18 real-service +26 process-owner assertions (`run.SILVC6Wl`); owner20 model +36 actual-controller checks (`run.khoeUOtB`); lifecycle/action phases (`run.pxlu_bxv`); and existing SaveFailure/WindowCheckpoint/ApplicationCheckpoint harnesses (`run.4ru_iv6f`) all passed. Lifecycle tests exercise real temporary files, split/tab registration continuity, equal-byte baseline acknowledgement, dirty/undo preservation, quit-veto adoption, retained-close fencing, Check, Keep Buffer, stale Save As refusal, and captured-document Save As without moving unrelated focus. A genuine suspended-open and suspended-save adoption failure preceded the pending-adoption fix. Coordinator/component test details are distinct from this native integration evidence.
+
+These harnesses instantiate actual AppKit controllers but do not show windows, activate the application or display native dialogs. Actual conflict-panel interaction, physical IME, accessibility and packaged desktop acceptance remain unverified. The complete native suite includes visible harnesses and has not been rerun while the screen is locked. The current local package does not yet contain this integration.
+
+
+## Checked native reload and disk copy
+
+`DocumentDiskActionCoordinator` sequences the shared service read, optional discard confirmation, bounded off-main selection preparation, final exact disk revalidation and synchronous owner adoption. It shares one process action lease with other native disk actions. Request IDs are installed before calls that may refuse inline. Exact operation and delivery generation checks fence every MainActor completion. Cancellation does not claim to interrupt a blocked kernel call. The single CPU preparation permit remains reserved until a canceled running conversion actually returns.
+
+A reproduced terminal-predicate reentrancy finding was fixed and independently reviewed: after calling an external owner predicate, reporting rechecks lifecycle/generation and whether a replacement transaction was admitted, even if that replacement already finished. The retained coordinator harness passed57 assertions (`run.yEWHlxz5`) with no compiler warnings. It covers controlled races and real service reads; it does not prove GUI behavior or peak memory.
+
+Actual controller integration first failed because the conflict panel lacked the actions (`run.x9jzorc0`). After wiring, hidden real-file tests passed (`run.9t6nldqt`): a UTF16BE+BOM disk copy creates an exact URL-less scratch while source dirty state, baseline, undo and unrelated focus remain unchanged; clean reload targets the captured document after tab switching, adopts exact bytes/encoding/BOM, resets undo/redo and preserves both panes/selections and unrelated focus. Dirty Cancel, confirmation-time disk replacement, stale panel and close during confirmation all preserve the prior buffer and authority. A later regression types and undoes/redoes in both surviving panes after reload; no prior coalesced edit reappeared.
+
+Review required clearer uncertain-save confirmation. A real injected directory-sync failure first produced published bytes plus retained uncertainty evidence; the generic warning then failed its behavioral assertion (`run.kqdlp8t7`). The dedicated confirmation now states that the save may already have written the file and that Reload discards buffer changes and retained retry state, with Cancel as the default. Final formatted hidden integration run.lvkfdn7z passed every phase with no compiler warnings. Pending publication identity/bytes, original baseline/revision, dirty text and undo survive Cancel and confirmation-time disk replacement. Cancel-first native alert ordering was source-reviewed; actual modal/default-key behavior remains untested. Fresh full core/native build91188 passed328 tests with zero failures in14.538 seconds; strict repository formatting, public-source patterns and diff checks passed. Explicit Locate and real desktop interaction remain outstanding.
+
+Proven retained coordinator command:
+
+```sh
+scripts/test-disk-action-coordinator.sh .build/native-monitor-integration/arm64-apple-macosx/debug
+```
+
+Final neighboring compatibility run.5setnkt3 also passed SaveFailureHarness, WindowCheckpointHarness and ApplicationCheckpointHarness against the frozen integrated action sources. Independent lifecycle/script review found no further material issue.

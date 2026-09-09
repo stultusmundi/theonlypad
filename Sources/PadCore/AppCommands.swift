@@ -22,6 +22,8 @@ public enum AppCommands {
       .init(id: "file.previousTab", title: "Previous Tab", shortcut: "cmd+shift+["),
       .init(id: "file.duplicate", title: "Duplicate Document"),
       .init(id: "file.revert", title: "Revert to Saved…"),
+      .init(id: "file.checkDisk", title: "Check File on Disk"),
+      .init(id: "file.resolveDiskChange", title: "Resolve File Change…"),
       .init(id: "edit.undo", title: "Undo", shortcut: "cmd+z"),
       .init(id: "edit.redo", title: "Redo", shortcut: "cmd+shift+z"),
       .init(id: "edit.cut", title: "Cut", shortcut: "cmd+x"),

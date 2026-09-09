@@ -10,7 +10,7 @@
 
 **Spec:** [external-file-monitoring.md](../specs/external-file-monitoring.md).
 
-**Status:** Tasks1/2 implemented and tested in production PadCore (30 probe +24 reducer tests; full258 passed). Task3 service is in isolated test/seam preparation; native integration/actions/desktop acceptance remain outstanding. See [component evidence](../../verification/external-file-monitoring.md).
+**Status:** Tasks1/2/3 production components are implemented and tested (full328 core tests). Task4 native ownership/status and Task5 checked reload/copy have hidden AppKit integration evidence; explicit Locate and full desktop acceptance remain outstanding. The original detailed checklists below are retained as acceptance obligations; their unchecked entries must not be interpreted as evidence of absence or completion. Current implementation/test records are in [component and native evidence](../../verification/external-file-monitoring.md) and the action execution plan.
 
 ## Global constraints
 
@@ -122,7 +122,7 @@ public enum FileActionAdmission: Equatable, Sendable {
 **Interface:** `FileMonitorService` owns queue state. Registration request has document UUID, URL, shared baseline Data and baselineRevision. A token offers thread-safe `cancel()` and invalidates callbacks immediately; source cancellation transfers its descriptor lease to worker cleanup; actual close is off the control queue and completes once all borrowers release it. Native consumers receive a Sendable `FileObservationToken` plus DiskObservation, never a pane reference. Injection accepts a Probe closure, event-source factory and monotonic clock for tests.
 
 ```swift
-// Native service API to implement, not a production declaration today:
+// Original planning sketch; consult FileMonitorService.swift for the implemented API.
 func register(documentID: UUID, url: URL, baseline: Data, baselineRevision: UInt64,
   receive: @escaping @Sendable (FileObservationToken, DiskObservation) -> Void)
   throws -> FileMonitorRegistration
@@ -140,7 +140,7 @@ func resumeAndReconcile()
 
 - [ ] Write first behavioral red: real atomic replacement must trigger a changed observation, then a second replacement must still be detected after rearming. Wait for semantic results with an external watchdog, not exact native event counts. Assert splitting is not involved in service API.
 - [ ] Implement in-memory control-queue source configuration/rearm with file+parent descriptors prepared on workers. ALL resolution (including resolvingSymlinksInPath), volume, access, open/stat/read/F_GETPATH/revalidation and close work stays off the control queue and MainActor. Probe descriptor used to initialize watch identity must be revalidated; descriptor registration cannot silently bind a later file whose bytes were never checked. Resume every newly created source exactly once. Cancel handler transfers its FD lease to worker cleanup, enqueued only when its in-memory borrower count is zero (never block a worker waiting for borrowers), before exactly-once close; callbacks use weak service/token and immutable epoch. A weak token cannot be resurrected by an event.
-- [ ] Implement two-worker dispatcher, one queued bit per registration, fair scheduling, 250 ms debounce/two-second max and 30-second metadata reconciliation. Manual/activation/file hints force bytes. At capacity or registration failure, emit explicit unavailable state and maintain manual check access. Never spin retry on a failed source or blocked probe.
+- [ ] Implement two-worker dispatcher, one queued bit per registration, fair scheduling, 250 ms debounce/two-second max and 30-second exact-byte reconciliation (metadata-only reuse was rejected during tests). Manual/activation/file hints force bytes. At capacity or registration failure, emit explicit unavailable state and maintain manual check access. Never spin retry on a failed source or blocked probe.
 - [ ] Test using a gated probe: 100 events produce at most one running and one queued reconciliation, a new epoch rejects both old completions, different documents are not starved, the two-worker limit holds, suspend/resume does not emit during quit, cancelled registrations produce no callback, repeated rebind waits/accounting keep descriptor count bounded including pending cancellation.
 - [ ] Add exact descriptor reservations: at most 256 watch leases covering pending preparation, installation, retirement and cancellation; six transient slots per worker for primary parent/file, revalidation parent/file, candidate parent/file. Volume checks reuse FDs. Reserve before open, release only after close, no uncounted dup. If preparation lacks slots, defer it and expose delayed monitoring. Assert live plus reserved counts during failed setup, rebind storms, cancellation and deliberately stalled cleanup; max 268 monitor-owned descriptors, not a process-wide claim.
 - [ ] Gate path resolution, volume lookup and open in separate tests while both worker slots are occupied. Cancellation and in-memory epoch invalidation on the control queue must still complete without waiting; new work stays bounded, no substitute worker is spawned, and stale results cannot deliver. Cleanup has priority once a worker becomes free; do not claim a hard deadline for the blocked syscall.

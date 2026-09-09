@@ -101,6 +101,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   private func refreshInteractivity(_ document: EditorDocument) {
     for pane in document.panePool { pane.editor.isEditable = mayMutate(pane) }
+    renderDiskStatus()
   }
   func focusPane(id: UUID) throws {
     guard !windowClosed, !preparingToQuit,
@@ -229,6 +230,350 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var loadingCount = 0
   private var preparingToQuit = false
   private var windowClosed = false
+  private var fileMonitoring: ApplicationFileMonitoring?
+  private var diskActions: DocumentDiskActionCoordinator?
+  var confirmDiskReload: ((EditorDocument) -> Bool)?
+  private var pendingFileStateAdoptions: Set<UUID> = []
+  private var onDiskStateChange: (() -> Void)?
+  private var diskConflict: DocumentDiskConflictController?
+  private var diskConflictDocumentID: UUID?
+  private lazy var diskStatusRow = DocumentDiskStatusView { [weak self] action in
+    self?.performDiskStatusAction(action)
+  }
+  func configureFileMonitoring(_ owner: ApplicationFileMonitoring) {
+    guard fileMonitoring == nil, !windowClosed else { return }
+    fileMonitoring = owner
+    diskActions = DocumentDiskActionCoordinator(application: owner)
+    onDiskStateChange = { [weak self] in self?.renderDiskStatus() }
+    for document in documents { adoptFileState(document) }
+    renderDiskStatus()
+  }
+  func reconcileFileMonitoring() {
+    if fileMonitoring?.isSuspended == true || preparingToQuit {
+      diskConflict?.close()
+      diskConflict = nil
+      diskConflictDocumentID = nil
+    }
+    for document in documents {
+      if pendingFileStateAdoptions.contains(document.id) { adoptFileState(document) }
+      document.fileState?.reconcileEligibility()
+    }
+    onDiskStateChange?()
+  }
+  private func fileStateContext(_ document: EditorDocument) -> FileStateLiveContext? {
+    guard let owner = fileMonitoring else { return nil }
+    return FileStateLiveContext(
+      documentID: document.id, bindingID: document.fileBindingID,
+      baselineRevision: document.baselineRevision, url: document.url,
+      editRevision: document.editRevision, encoding: document.encoding, hasBOM: document.hasBOM,
+      dirty: document.dirty, pendingPublicationID: document.pendingPublication?.id,
+      operationID: document.operationID, composing: document.composingPaneID != nil,
+      recording: isRecordingMacro,
+      closed: windowClosed || !documents.contains(where: { $0 === document }),
+      quitting: preparingToQuit || owner.isSuspended,
+      deliveryGeneration: owner.deliveryGeneration)
+  }
+  private func adoptFileState(_ document: EditorDocument) {
+    guard let owner = fileMonitoring, !windowClosed,
+      documents.contains(where: { $0 === document }), document.url != nil,
+      let bytes = document.originalBytes
+    else { return }
+    guard !owner.isSuspended, !preparingToQuit else {
+      pendingFileStateAdoptions.insert(document.id)
+      return
+    }
+    if document.fileState == nil {
+      document.fileState = DocumentFileStateController(
+        documentID: document.id, client: owner.client,
+        liveContext: { [weak self, weak document] in
+          guard let self, let document else { return nil }
+          return self.fileStateContext(document)
+        }, onChange: { [weak self] in self?.onDiskStateChange?() })
+    }
+    document.fileState?.adoptBaseline(bytes: bytes)
+    pendingFileStateAdoptions.remove(document.id)
+  }
+  private func invalidateFileState(_ document: EditorDocument) {
+    if diskConflictDocumentID == document.id {
+      diskConflict?.close()
+      diskConflict = nil
+      diskConflictDocumentID = nil
+    }
+    pendingFileStateAdoptions.remove(document.id)
+    document.fileState?.invalidate()
+    fileMonitoring?.cancelAction(documentID: document.id)
+  }
+  private func renderDiskStatus() {
+    let document = current
+    let bridge = document?.fileState
+    diskStatusRow.render(
+      state: bridge?.state ?? ObservedFileState(), manualNotice: bridge?.manualNotice,
+      failure: bridge?.lastFailure,
+      hasSource: fileMonitoring != nil && document?.url != nil,
+      enabled: !windowClosed && !preparingToQuit && fileMonitoring?.isSuspended != true
+        && document?.saving == false && document?.composingPaneID == nil)
+  }
+  private func performDiskStatusAction(_ action: DocumentDiskStatusView.Action) {
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
+      let document = current, !document.saving, document.composingPaneID == nil,
+      let bridge = document.fileState
+    else { return }
+    switch action {
+    case .checkAgain: bridge.checkAgain()
+    case .retryMonitoring: bridge.retryRegistration()
+    case .resolve:
+      guard let panel = makeDiskConflict(document) else { return }
+      diskConflict?.close()
+      diskConflict = panel
+      diskConflictDocumentID = document.id
+      panel.showWindow(nil)
+    }
+  }
+  private func makeDiskConflict(_ document: EditorDocument) -> DocumentDiskConflictController? {
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
+      documents.contains(where: { $0 === document }), let bridge = document.fileState,
+      bridge.state.observation != nil
+    else { return nil }
+    var actions: [DocumentDiskConflictController.Action] = []
+    if let context = bridge.captureAction(.keepBuffer) {
+      actions.append(
+        .init(title: "Keep Buffer", accessibilityID: "document.keepBuffer") {
+          [weak self, weak document] in
+          guard let self, let document, self.documents.contains(where: { $0 === document }) else {
+            return
+          }
+          guard bridge.keepBuffer(context) else {
+            self.reportStaleDiskAction()
+            return
+          }
+        })
+    }
+    if let context = bridge.captureAction(.saveAs) {
+      actions.append(
+        .init(title: "Save As…", accessibilityID: "document.diskSaveAs") {
+          [weak self, weak document] in
+          guard let self, let document, self.documents.contains(where: { $0 === document }) else {
+            return
+          }
+          guard bridge.isCurrent(context) else {
+            self.reportStaleDiskAction()
+            return
+          }
+          self.save(document, saveAs: true)
+        })
+    }
+    for (action, title, identifier) in [
+      (FileConflictAction.reload, "Reload from Disk…", "document.diskReload"),
+      (.openDiskCopy, "Open Disk Copy", "document.diskCopy"),
+    ] {
+      if let context = bridge.captureAction(action) {
+        actions.append(
+          .init(title: title, accessibilityID: identifier) { [weak self, weak document] in
+            guard let self, let document else { return }
+            self.performCheckedDiskAction(document, context: context)
+          })
+      }
+    }
+    actions.append(
+      .init(title: "Check Again", accessibilityID: "document.checkDisk") {
+        [weak self, weak document] in
+        guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+          self.fileMonitoring?.isSuspended == false,
+          self.documents.contains(where: { $0 === document })
+        else { return }
+        bridge.checkAgain()
+      })
+    actions.append(
+      .init(title: "Retry Monitoring", accessibilityID: "document.retryMonitoring") {
+        [weak self, weak document] in
+        guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+          self.fileMonitoring?.isSuspended == false,
+          self.documents.contains(where: { $0 === document })
+        else { return }
+        bridge.retryRegistration()
+      })
+    actions.append(
+      .init(title: "Use Manual Checks", accessibilityID: "document.manualChecks") {
+        [weak self, weak document] in
+        guard let self, let document, !self.windowClosed, !self.preparingToQuit,
+          self.fileMonitoring?.isSuspended == false,
+          self.documents.contains(where: { $0 === document })
+        else { return }
+        bridge.useManualFallback()
+      })
+    return DocumentDiskConflictController(
+      documentName: document.name,
+      explanation:
+        "The buffer is preserved. Keeping it does not authorize overwriting a changed file. Save As writes to a new filename."
+        + (bridge.state.observation?.movedCandidate.map { " Suggested location: " + $0.path } ?? ""),
+      actions: actions)
+  }
+  private func performCheckedDiskAction(
+    _ document: EditorDocument, context: FileStateActionContext
+  ) {
+    guard let bridge = document.fileState, bridge.isCurrent(context),
+      let url = document.url, let observation = bridge.state.observation,
+      let coordinator = diskActions,
+      context.action == .reload || context.action == .openDiskCopy
+    else {
+      reportStaleDiskAction()
+      return
+    }
+    let reload = context.action == .reload
+    let panes = document.panePool
+    let ranges = Dictionary(uniqueKeysWithValues: panes.map { ($0.id, $0.editor.selectedRange()) })
+    let attached = panes.map(\.isAttached)
+    let axis = document.splitAxis
+    let input = DocumentDiskActionInput(
+      documentID: document.id, url: url, observation: observation,
+      savedEncoding: document.savedEncoding, action: reload ? .reload : .copy,
+      requiresDiscard: document.dirty || document.pendingPublication != nil,
+      selections: reload ? ranges : [:])
+    let admitted = coordinator.start(
+      input,
+      callbacks: DocumentDiskActionCallbacks(
+        beginOperation: { [weak self, weak document] in
+          guard let self, let document, bridge.isCurrent(context), !document.saving else {
+            return nil
+          }
+          let operation = document.beginFileOperation()
+          document.saving = true
+          self.refreshInteractivity(document)
+          return operation
+        },
+        isCurrent: { [weak document] operation in
+          guard let document, bridge.isCurrent(context, owningOperation: operation) else {
+            return false
+          }
+          guard reload else { return true }
+          return document.panePool.map(\.id) == panes.map(\.id)
+            && document.panePool.map(\.isAttached) == attached && document.splitAxis == axis
+            && panes.allSatisfy { $0.editor.selectedRange() == ranges[$0.id] }
+        },
+        confirmDiscard: { [weak self, weak document] _ in
+          guard let self, let document else { return false }
+          return self.confirmDiskReload?(document) ?? self.confirmCheckedDiskReload(document)
+        },
+        apply: { [weak self, weak document] snapshot, selections, operation in
+          guard let self, let document, document.operationID == operation else {
+            throw CancellationError()
+          }
+          if reload {
+            self.applyCheckedDiskReload(document, snapshot: snapshot, selections: selections)
+          } else {
+            self.openCheckedDiskCopy(document, snapshot: snapshot)
+          }
+        },
+        finish: { [weak self, weak document] operation in
+          Self.completeFileOperation(document, id: operation, controller: self)
+          guard let self, !self.windowClosed, !self.preparingToQuit else { return }
+          self.renderDiskStatus()
+        },
+        reportError: { [weak self] error in self?.reportDiskActionError(error) }))
+    if !admitted, bridge.isCurrent(context) {
+      reportDiskActionError(FileActionError.capacity)
+    }
+  }
+  /// All validation/preparation precedes this nonthrowing, coherent owner adoption.
+  private func applyCheckedDiskReload(
+    _ document: EditorDocument, snapshot: ExternalFileActionSnapshot, selections: [UUID: NSRange]
+  ) {
+    document.storage.mutableString.setString(snapshot.document.text)
+    document.bookmarks.removeAll()
+    document.pendingBookmarks = nil
+    document.compositionBookmarks = nil
+    document.compositionOriginalText = nil
+    document.compositionUndoRegistered = false
+    document.typingBookmarkNextLocation = nil
+    document.pendingBookmarksHaveUndo = false
+    for pane in document.panePool {
+      (pane.scroll.verticalRulerView as? LineNumberRuler)?.bookmarkOffsets = []
+      if let range = selections[pane.id] { pane.editor.setSelectedRange(range) }
+    }
+    document.savedText = snapshot.document.text
+    document.originalBytes = snapshot.bytes
+    document.pendingPublication = nil
+    document.encoding = snapshot.document.encoding
+    document.hasBOM = snapshot.document.hasBOM
+    document.savedEncoding = snapshot.document.encoding
+    document.savedHasBOM = snapshot.document.hasBOM
+    document.undoManager.removeAllActions()
+    document.acknowledgeFileBaseline()
+    adoptFileState(document)
+    updateLanguage(document)
+    refresh()
+    scheduleRecovery()
+  }
+  private func openCheckedDiskCopy(
+    _ source: EditorDocument, snapshot: ExternalFileActionSnapshot
+  ) {
+    let copy = EditorDocument()
+    copy.storage.mutableString.setString(snapshot.document.text)
+    copy.encoding = snapshot.document.encoding
+    copy.hasBOM = snapshot.document.hasBOM
+    copy.recoveredName = "Disk Copy — " + source.name
+    copy.onCharactersChanged = { [weak self] in self?.notifySessionChange() }
+    for pane in copy.panePool { installCallbacks(for: pane) }
+    documents.append(copy)
+    if current === source {
+      display(copy)
+    } else {
+      refresh()
+    }
+    scheduleRecovery()
+  }
+  static func diskReloadConfirmationText(_ document: EditorDocument) -> String {
+    if document.pendingPublication != nil {
+      return document.name
+        + " has an unconfirmed save that may already have written the file on disk. Reload discards your buffer changes and the retained save retry state. Cancel to keep your edits and verify or retry the save first."
+    }
+    return document.name
+      + " has unsaved changes. Reload discards them. Cancel to save your work first."
+  }
+  private func confirmCheckedDiskReload(_ document: EditorDocument) -> Bool {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Reload from disk and discard retained changes?"
+    alert.informativeText = Self.diskReloadConfirmationText(document)
+    alert.addButton(withTitle: "Cancel")
+    alert.addButton(withTitle: "Reload from Disk")
+    return alert.runModal() == .alertSecondButtonReturn
+  }
+  private func reportDiskActionError(_ error: Error) {
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
+      !(error is CancellationError), (error as? FileActionError) != .cancelled
+    else { return }
+    let message: String
+    switch error as? FileActionError {
+    case .capacity:
+      message = "Another disk action is still finishing. Try this action again shortly."
+    case .observationChanged:
+      message =
+        "The file changed again. Your buffer is preserved. Check the file again before reloading."
+    case .decoding:
+      message =
+        "The disk copy cannot be decoded safely with this encoding. Your buffer is preserved. Use Open or Reopen with Encoding to choose an interpretation."
+    case .notDownloaded:
+      message = "Download the file explicitly, then check it again. Your buffer is preserved."
+    case .policy:
+      message =
+        "The system could not safely check this file without downloading it. Your buffer is preserved."
+    default:
+      message =
+        "The disk action could not finish. Your buffer is preserved. Check the file and its permissions, then try again."
+    }
+    present(NSError(domain: "TheOnlyPad", code: 25, userInfo: [NSLocalizedDescriptionKey: message]))
+  }
+  private func reportStaleDiskAction() {
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false else { return }
+    present(
+      NSError(
+        domain: "TheOnlyPad", code: 24,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "The document or file status changed. Check the file again before choosing an action."
+        ]))
+  }
   private var recoveryDebounce: Task<Void, Never>?
   private var recoveryWork: Task<Void, Never>?
   private var recoveryPeriodic: Task<Void, Never>?
@@ -307,7 +652,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     checkpointStatusRow.spacing = 8
     checkpointStatusRow.isHidden = true
     let stack = NSStackView(views: [
-      tabBar, tabs, languagePicker, workspaceSplit, status, checkpointStatusRow,
+      tabBar, tabs, languagePicker, diskStatusRow, workspaceSplit, status, checkpointStatusRow,
     ])
     stack.orientation = .vertical
     stack.alignment = .leading
@@ -425,6 +770,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       document.savedText = decoded.text
       document.savedEncoding = decoded.encoding
       document.savedHasBOM = decoded.hasBOM
+      document.acknowledgeFileBaseline()
     } else {
       document.recoveredName =
         "Recovered "
@@ -432,6 +778,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.insert(document, at: index)
+    adoptFileState(document)
     display(document)
     document.panePool[0].editor.setSelectedRange(viewState.selection)
     refresh()
@@ -587,6 +934,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
         document.storage.mutableString.setString(loaded.1.text)
+        document.acknowledgeFileBaseline()
         document.bookmarks.removeAll()
         document.pendingBookmarks = nil
         for pane in document.panePool {
@@ -596,6 +944,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           filename: url.lastPathComponent, text: loaded.1.text)
         for pane in document.panePool { self.installCallbacks(for: pane) }
         self.documents.append(document)
+        self.adoptFileState(document)
         self.display(document)
         finish(nil, false)
       }
@@ -632,6 +981,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     switch id {
+    case "file.checkDisk": performDiskStatusAction(.checkAgain)
+    case "file.resolveDiskChange": performDiskStatusAction(.resolve)
     case "file.openFolder":
       let panel = NSOpenPanel()
       panel.canChooseDirectories = true
@@ -861,6 +1212,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     if id.hasPrefix("bookmark.") { return current != nil && current?.saving == false }
     switch id {
+    case "file.checkDisk", "file.resolveDiskChange":
+      guard fileMonitoring?.isSuspended == false, current?.saving == false,
+        let bridge = current?.fileState
+      else { return false }
+      return id == "file.checkDisk" || bridge.state.noticeIsProminent
     case "view.splitVertical", "view.splitHorizontal":
       guard let document = current, !document.saving else { return false }
       return visiblePanes.count == 2 || document.storage.length <= 2_000_000
@@ -890,6 +1246,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
   }
 
+  /// Finalize only this operation; keep its identity until all synchronous mutations finish.
+  private static func completeFileOperation(
+    _ document: EditorDocument?, id: UUID, controller: EditorWindowController?
+  ) {
+    guard let document, document.finishFileOperation(id) else { return }
+    document.saving = false
+    controller?.refreshInteractivity(document)
+    document.fileState?.reconcileEligibility()
+  }
+
   private func save(_ document: EditorDocument, saveAs: Bool) {
     guard !document.saving, !windowClosed, !preparingToQuit else { return }
     let retry = saveAs ? nil : document.pendingPublication
@@ -917,10 +1283,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let services = saveServices
     let snapshot = DecodedDocument(
       text: document.storage.string, encoding: document.encoding, hasBOM: document.hasBOM)
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self] in
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
       do {
         let bytes = try await Task.detached(priority: .userInitiated) {
           let bytes = try DocumentCodec.encode(snapshot)
@@ -952,6 +1320,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           }
           return bytes
         }.value
+        guard document.operationID == operationID else { return }
         document.saving = false
         guard let self, !self.windowClosed,
           self.documents.contains(where: { $0 === document })
@@ -962,11 +1331,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = snapshot.encoding
         document.savedHasBOM = snapshot.hasBOM
         document.pendingPublication = nil
+        document.acknowledgeFileBaseline()
+        self.adoptFileState(document)
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self.refreshInteractivity(document)
         self.refresh()
         self.updateLanguage(document)
         self.scheduleRecovery()
       } catch {
+        guard document.operationID == operationID else { return }
         document.saving = false
         if case EditorSaveFailure.uncertain(let pending) = error {
           document.pendingPublication = pending
@@ -977,6 +1350,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           for pane in document.panePool { pane.editor.isEditable = false }
           return
         }
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self.refreshInteractivity(document)
         if case EditorSaveFailure.uncertain = error { self.scheduleRecovery() }
         self.refresh()
@@ -1020,40 +1394,53 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           ]))
       return
     }
-    guard let document = current, let url = document.url, !document.saving else {
+    guard let document = current, let url = document.url, !document.saving,
+      document.composingPaneID == nil
+    else {
       fail(CancellationError())
       return
     }
-    guard confirmDiscard([document]), !windowClosed, !preparingToQuit,
+    guard confirmDiscard([document]), !windowClosed, !preparingToQuit, !isRecordingMacro,
+      document.composingPaneID == nil, !document.saving,
       documents.contains(where: { $0 === document }), shouldAccept?() != false
     else {
       fail(CancellationError())
       return
     }
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self] in
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
       let result = await Task.detached(priority: .userInitiated) {
         Result { try Self.read(url, encoding: encoding) }
       }.value
-      document.saving = false
-      guard let self else {
-        for pane in document.panePool { pane.editor.isEditable = false }
+      guard document.operationID == operationID else {
         fail(CancellationError())
         return
       }
-      guard !self.windowClosed, !self.preparingToQuit,
+      document.saving = false
+      guard let self else {
+        for pane in document.panePool { pane.editor.isEditable = false }
+        Self.completeFileOperation(document, id: operationID, controller: self)
+        fail(CancellationError())
+        return
+      }
+      guard !self.windowClosed, !self.preparingToQuit, !self.isRecordingMacro,
+        document.composingPaneID == nil,
         self.documents.contains(where: { $0 === document }), shouldAccept?() != false
       else {
         self.refreshInteractivity(document)
         if !self.windowClosed { self.refresh() }
+        Self.completeFileOperation(document, id: operationID, controller: self)
         fail(CancellationError())
         return
       }
       refreshInteractivity(document)
       switch result {
       case .failure(let error):
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self.refresh()
         fail(error)
       case .success(let loaded):
@@ -1071,6 +1458,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
         document.undoManager.removeAllActions()
+        document.acknowledgeFileBaseline()
+        self.adoptFileState(document)
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self.refresh()
         self.updateLanguage(document)
         self.scheduleRecovery()
@@ -1111,21 +1501,34 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           document.composingPaneID == nil, source.isAttached,
           self.documents.contains(where: { $0 === document })
         else { return }
-        let snapshot = document.storage.string
-        document.saving = true
-        self.refreshInteractivity(document)
-        self.refresh()
-        Task {
-          let replacement = await Task.detached { LineEndings.convert(snapshot, to: ending) }.value
-          document.saving = false
-          self.refreshInteractivity(document)
-          self.replaceDocumentText(
-            document, source: source, expected: snapshot, replacement: replacement,
-            action: "Convert Line Endings")
-        }
+        self.convertLineEndings(document, source: source, to: ending)
       })
     encodingPanel = panel
     panel.present(for: window)
+  }
+
+  private func convertLineEndings(
+    _ document: EditorDocument, source: EditorPane, to ending: LineEnding
+  ) {
+    guard !document.saving, !windowClosed, !preparingToQuit,
+      document.composingPaneID == nil, source.isAttached,
+      documents.contains(where: { $0 === document })
+    else { return }
+    let snapshot = document.storage.string
+    let operationID = document.beginFileOperation()
+    document.saving = true
+    refreshInteractivity(document)
+    refresh()
+    Task {
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
+      let replacement = await Task.detached { LineEndings.convert(snapshot, to: ending) }.value
+      guard document.operationID == operationID else { return }
+      document.saving = false
+      refreshInteractivity(document)
+      replaceDocumentText(
+        document, source: source, expected: snapshot, replacement: replacement,
+        action: "Convert Line Endings")
+    }
   }
 
   private func convertEncoding(
@@ -1139,13 +1542,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       documents.contains(where: { $0 === document })
     else { return }
     let snapshot = DecodedDocument(text: document.storage.string, encoding: encoding, hasBOM: bom)
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self] in
-      defer { onFinish?() }
+      defer {
+        Self.completeFileOperation(document, id: operationID, controller: self)
+        onFinish?()
+      }
       do {
         try await Task.detached { try validate(snapshot) }.value
+        guard document.operationID == operationID else { return }
         document.saving = false
         self?.refreshInteractivity(document)
         guard let self, !self.windowClosed, !self.preparingToQuit,
@@ -1153,9 +1561,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         else { return }
         self.setEncoding(document, encoding: encoding, bom: bom)
       } catch {
+        guard document.operationID == operationID else { return }
         document.saving = false
         self?.refreshInteractivity(document)
         self?.refresh()
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self?.present(error)
       }
     }
@@ -1248,10 +1658,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let snapshot = document.storage.string
     let selection = source.editor.selectedRange()
     let original = document.bookmarks
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self, weak document] in
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
       do {
         let result = try await Task.detached { () throws -> (DocumentBookmarks, Int?, String?) in
           var marks = original
@@ -1271,6 +1683,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           return (marks, nil, nil)
         }.value
         guard let self, let document else { return }
+        guard document.operationID == operationID else { return }
         document.saving = false
         self.refreshInteractivity(document)
         self.refresh()
@@ -1302,9 +1715,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             text, replacementRange: NSRange(location: 0, length: 0))
         }
       } catch {
+        guard document?.operationID == operationID else { return }
         document?.saving = false
         if let document { self?.refreshInteractivity(document) }
         self?.refresh()
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self?.present(error)
       }
     }
@@ -1320,16 +1735,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
     let snapshot = document.storage.string
     let selection = source.editor.selectedRange()
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self, weak document] in
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
       do {
         let (result, edit) = try await Task.detached(priority: .userInitiated) {
           let result = try operation(snapshot, selection)
           return (result, try TextDifference.singleEdit(from: snapshot, to: result.text))
         }.value
         guard let self, let document else { return }
+        guard document.operationID == operationID else { return }
         document.saving = false
         self.refreshInteractivity(document)
         self.refresh()
@@ -1353,9 +1771,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           source.editor.scrollRangeToVisible(result.selection)
         }
       } catch {
+        guard document?.operationID == operationID else { return }
         document?.saving = false
         if let document { self?.refreshInteractivity(document) }
         self?.refresh()
+        Self.completeFileOperation(document, id: operationID, controller: self)
         self?.present(error)
       }
     }
@@ -1731,6 +2151,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       document.compositionOriginalText = nil
       document.compositionUndoRegistered = false
       self.refreshInteractivity(document)
+      document.fileState?.reconcileEligibility()
       self.refresh()
     }
     editor.onMarkedTextUpdated = { [weak document, weak pane] in
@@ -1771,6 +2192,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     window?.makeFirstResponder(preferredPane(in: document).editor)
     updateLanguage(document)
     refresh()
+    renderDiskStatus()
   }
 
   private func closeDocument() {
@@ -1790,6 +2212,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     for document in closing {
+      invalidateFileState(document)
       if !document.dirty { closedDocuments.append(document) }
       discardRecovery(document.id)
     }
@@ -1819,8 +2242,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.storage.mutableString.setString(old.storage.string)
     document.language = old.language
     document.manualLanguage = old.manualLanguage
+    if document.url != nil && document.originalBytes != nil { document.acknowledgeFileBaseline() }
     for pane in document.panePool { self.installCallbacks(for: pane) }
     documents.append(document)
+    adoptFileState(document)
     display(document)
     scheduleRecovery()
   }
@@ -1891,6 +2316,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func windowWillClose(_ notification: Notification) {
     windowClosed = true
+    diskActions?.cancel()
+    diskConflict?.close()
+    diskConflict = nil
+    for document in documents { invalidateFileState(document) }
     markdownPreview?.close()
     backupManager?.close()
     outline?.close()
@@ -2126,17 +2555,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let snapshot = document.storage.string
     let cancellation = MacroCancellation()
     replayCancellation = cancellation
+    let operationID = document.beginFileOperation()
     document.saving = true
     refreshInteractivity(document)
     refresh()
     Task { [weak self] in
+      defer {
+        if document.operationID == operationID, self?.replayCancellation === cancellation {
+          self?.replayCancellation = nil
+        }
+        Self.completeFileOperation(document, id: operationID, controller: self)
+      }
       do {
         let replacement = try await Task.detached(priority: .userInitiated) {
           try MacroPlayer.replay(
             macro, on: snapshot, repeatCount: repeatCount, isCancelled: { cancellation.isCancelled }
           )
         }.value
-        guard let self else { return }
+        guard let self, document.operationID == operationID,
+          self.replayCancellation === cancellation
+        else { return }
         self.replayCancellation = nil
         document.saving = false
         self.refreshInteractivity(document)
@@ -2157,10 +2595,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         self.refresh()
       } catch {
+        guard document.operationID == operationID, self?.replayCancellation === cancellation else {
+          return
+        }
         self?.replayCancellation = nil
         document.saving = false
         self?.refreshInteractivity(document)
         self?.refresh()
+        Self.completeFileOperation(document, id: operationID, controller: self)
         if !cancellation.isCancelled { self?.present(error) }
       }
     }
@@ -2421,6 +2863,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         pane.selectableBeforeQuit = nil
       }
     }
+    reconcileFileMonitoring()
   }
 
   private func reportRecoveryFailure(_ error: Error, always: Bool = false) {

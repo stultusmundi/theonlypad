@@ -4,12 +4,44 @@ import PadCore
 enum EditorPaneError: Error { case limit }
 
 struct PendingDocumentPublication: Sendable {
+  let id: UUID
+  init(evidence: FilePublicationEvidence, bytes: Data) {
+    id = UUID()
+    self.evidence = evidence
+    self.bytes = bytes
+  }
   let evidence: FilePublicationEvidence
   let bytes: Data
 }
 @MainActor
 final class EditorDocument {
   let id: UUID
+  var fileState: DocumentFileStateController?
+  private(set) var fileBindingID = UUID()
+  private(set) var baselineRevision: UInt64 = 0
+  private(set) var operationID: UUID?
+  /// Call after coherent saved-state adoption, before notifying the file-state bridge.
+  /// Equality of bytes does not make an acknowledgement the same authority event.
+  func acknowledgeFileBaseline() {
+    if baselineRevision == .max {
+      fileBindingID = UUID()
+      baselineRevision = 0
+    } else {
+      baselineRevision += 1
+    }
+  }
+  /// Independent of compatibility `saving`; controllers must migrate all callbacks together.
+  func beginFileOperation() -> UUID {
+    let id = UUID()
+    operationID = id
+    return id
+  }
+  /// A completion must establish ownership before applying any saved-state mutation.
+  @discardableResult func finishFileOperation(_ id: UUID) -> Bool {
+    guard operationID == id else { return false }
+    operationID = nil
+    return true
+  }
   let storage = NSTextStorage()
   let undoManager = UndoManager()
   private(set) var panePool: [EditorPane] = []

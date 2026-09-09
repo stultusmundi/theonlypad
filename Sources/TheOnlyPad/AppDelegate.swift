@@ -24,6 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var sessionPanel: SessionRestorationController?
   private var repairTargets: [UUID: EditorWindowController] = [:]
   private var recentFiles: RecentFilesController?
+  private lazy var fileMonitoring: ApplicationFileMonitoring = {
+    let owner = ApplicationFileMonitoring()
+    owner.onStateChange = { [weak self] in
+      for editor in self?.editors ?? [] { editor.reconcileFileMonitoring() }
+    }
+    return owner
+  }()
+  private var fileMonitoringNotifications: [NSObjectProtocol] = []
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     do { registry = try AppCommands.registry() } catch {
@@ -32,6 +40,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return
     }
     buildMenus()
+    for name in [
+      NSWorkspace.didWakeNotification, NSWorkspace.didMountNotification,
+      NSWorkspace.didUnmountNotification,
+    ] {
+      fileMonitoringNotifications.append(
+        NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main)
+        {
+          [weak self] _ in
+          Task { @MainActor [weak self] in self?.fileMonitoring.reconcile() }
+        })
+    }
     refreshExtensionCommands()
     session.onSessionChange = { [weak self] in self?.checkpoints.requestCheckpoint() }
     restoreStartupSession()
@@ -58,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     let editor = EditorWindowController(
       id: id, restoreStartup: false,
       onSessionChange: { [weak self] in self?.checkpoints.requestCheckpoint() })
+    editor.configureFileMonitoring(fileMonitoring)
     if createDocument { editor.newDocument() }
     editor.applySettings(settings)
     editors.append(editor)
@@ -290,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !preparingQuit else { return .terminateLater }
     preparingQuit = true
+    fileMonitoring.suspend()
     recentFiles?.setSuspended(true)
     Task {
       await startupTask?.value
@@ -300,6 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard await editor.prepareToQuit(persistRecovery: false) else {
           for editor in editors { editor.cancelPreparedQuit() }
           preparingQuit = false
+          fileMonitoring.resume()
           recentFiles?.setSuspended(false)
           checkpoints.resumeAfterVeto()
           NSApp.reply(toApplicationShouldTerminate: false)
@@ -311,6 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       } catch {
         for editor in editors { editor.cancelPreparedQuit() }
         preparingQuit = false
+        fileMonitoring.resume()
         recentFiles?.setSuspended(false)
         checkpoints.resumeAfterVeto()
         NSAlert(error: error).runModal()
@@ -321,6 +344,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       NSApp.reply(toApplicationShouldTerminate: true)
     }
     return .terminateLater
+  }
+
+  func applicationDidBecomeActive(_ notification: Notification) {
+    fileMonitoring.reconcile()
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    fileMonitoring.stop()
+    for observer in fileMonitoringNotifications {
+      NSWorkspace.shared.notificationCenter.removeObserver(observer)
+    }
+    fileMonitoringNotifications.removeAll()
   }
 
   @objc private func command(_ sender: NSMenuItem) {
