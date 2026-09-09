@@ -11,6 +11,13 @@ private enum IntakeFailure: Error { case injected }
   var workspaceKind: WorkspaceDocumentKind { .editable }
   private(set) var authority: RecoveryWriteAuthority?
   private(set) var highest: UInt64 = 0
+  var mutation = UUID()
+  var closeState: DocumentCloseState {
+    .init(
+      kind: .editable, ownershipGeneration: ownershipGeneration, mutationGeneration: mutation,
+      operationID: nil, isDirty: false, hasPendingPublication: false, hasPendingTextEdits: false,
+      isComposing: false, canRetainCleanHistory: true)
+  }
   let text = "synthetic 👩🏽‍💻e\u{301}\r\n"
   func capture() throws -> RecoveryCheckpointItem {
     guard let authority else { throw IntakeFailure.injected }
@@ -70,6 +77,7 @@ private enum IntakeFailure: Error { case injected }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     recovery = RecoveryCoordinator(directory: directory)
     registry = ApplicationDocuments(
+      closeServices: .init { ($0 as! IntakeHandle).closeState },
       adoptionServices: .init(
         coordinatorID: recovery.coordinatorID, readState: { ($0 as! IntakeHandle).state }))
     assignment = .init(windowID: windowID, groupID: UUID())
@@ -155,6 +163,151 @@ private enum IntakeFailure: Error { case injected }
   private func imported(_ result: DocumentIntakeResult, _ id: UUID) {
     guard case .imported(let actual) = result else { return XCTFail("Expected imported result") }
     XCTAssertEqual(actual, id)
+  }
+  private func closeToHistory(_ f: IntakeFixture, _ source: IntakeHandle) async throws
+    -> DocumentHistoryClaim
+  {
+    let intake = f.owner()
+    imported(try await intake.wait(for: intake.start(f.request(source))), source.id)
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: source.id), disposition: .retainCleanHistory)
+    let lease = try await f.recovery.prepareClose(
+      authority: XCTUnwrap(source.authority),
+      minimumRevision: source.highest, registryTicketID: ticket.id)
+    let receipt = try await f.recovery.finalizeClose(lease)
+    guard case .closed = try f.registry.completeClose(ticket, result: .removed) else {
+      throw IntakeFailure.injected
+    }
+    try await f.recovery.retireClose(receipt)
+    return try XCTUnwrap(
+      f.registry.peekHistory(windowID: f.assignment.windowID, replacementID: UUID()))
+  }
+  func testHistoryCloseReopenConsumesAfterRealActorActivation() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let source = IntakeHandle()
+    let claim = try await closeToHistory(f, source)
+    let replacement = IntakeHandle(id: claim.replacementID)
+    let owner = f.owner()
+    imported(
+      try await owner.wait(for: owner.start(f.request(replacement, provenance: .history(claim)))),
+      replacement.id)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 0)
+    XCTAssertEqual(f.registry.adoptionStatus(documentID: replacement.id), .active)
+    XCTAssertNotEqual(replacement.authority, source.authority)
+  }
+  func testHistoryMutationRefusesBeforeFactory() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let source = IntakeHandle()
+    let claim = try await closeToHistory(f, source)
+    source.mutation = UUID()
+    let before = f.factories
+    let owner = f.owner()
+    let result = try await owner.wait(
+      for: owner.start(
+        f.request(IntakeHandle(id: claim.replacementID), provenance: .history(claim))))
+    guard case .refused = result else { return XCTFail("Stale history must refuse") }
+    XCTAssertEqual(f.factories, before)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+  }
+  func testHistoryFailedInstallationDoesNotConsumeAndProjectionRetryConsumesOnce() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let claim = try await closeToHistory(f, IntakeHandle())
+    f.rejectInstall = true
+    let owner = f.owner()
+    let replacement = IntakeHandle(id: claim.replacementID)
+    let id = try owner.start(f.request(replacement, provenance: .history(claim)))
+    guard case .retained = try await owner.wait(for: id) else {
+      return XCTFail("Failed install retained")
+    }
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+    f.rejectInstall = false
+    f.rejectProjection = true
+    try owner.retry(id)
+    guard case .retained = try await owner.wait(for: id) else {
+      return XCTFail("Failed projection retained")
+    }
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 0)
+    let installs = f.installs.count
+    f.rejectProjection = false
+    try owner.retry(id)
+    imported(try await owner.wait(for: id), replacement.id)
+    XCTAssertEqual(f.installs.count, installs)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 0)
+  }
+  func testHistoryReplacementIdentityMismatchRefusesFactory() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let claim = try await closeToHistory(f, IntakeHandle())
+    let before = f.factories
+    let owner = f.owner()
+    let result = try await owner.wait(for: owner.start(f.request(provenance: .history(claim))))
+    guard case .refused = result else { return XCTFail("Wrong replacement must refuse") }
+    XCTAssertEqual(f.factories, before)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+  }
+  func testEvictedHistoryRefusesBeforeFactory() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let claim = try await closeToHistory(f, IntakeHandle())
+    for _ in 0..<10 { _ = try await closeToHistory(f, IntakeHandle()) }
+    let before = f.factories
+    let owner = f.owner()
+    let result = try await owner.wait(
+      for: owner.start(
+        f.request(IntakeHandle(id: claim.replacementID), provenance: .history(claim))))
+    guard case .refused = result else { return XCTFail("Evicted history must refuse") }
+    XCTAssertEqual(f.factories, before)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 10)
+  }
+  func testHistoryUsesFreshAggregateCapacityNotUnresolvedReservation() async throws {
+    let tabs = (0..<128).map { _ in SessionTab(originalPath: "/synthetic/missing.txt") }
+    let f = try IntakeFixture(session: await session(tabs: tabs))
+    defer { f.cleanup() }
+    let source = IntakeHandle()
+    try f.registry.registerDocument(
+      source, metadata: .init(pinned: false), in: f.assignment, at: 0, select: true)
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: source.id), disposition: .retainCleanHistory)
+    guard case .closed = try f.registry.completeClose(ticket, result: .removed) else {
+      return XCTFail("History close")
+    }
+    let claim = try XCTUnwrap(
+      f.registry.peekHistory(windowID: f.assignment.windowID, replacementID: UUID()))
+    let owner = f.owner()
+    let result = try await owner.wait(
+      for: owner.start(
+        f.request(IntakeHandle(id: claim.replacementID), provenance: .history(claim))))
+    guard case .refused = result else {
+      return XCTFail("Aggregate capacity must refuse fresh replacement")
+    }
+    XCTAssertEqual(f.factories, 0)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+  }
+  func testHistoryChangedAtActivationRemainsRetainedBeforeProjection() async throws {
+    let f = try IntakeFixture(session: await session())
+    defer { f.cleanup() }
+    let source = IntakeHandle()
+    let claim = try await closeToHistory(f, source)
+    let beforeProjects = f.projects
+    f.registry.onChange = { _ in
+      if f.registry.adoptionStatus(documentID: claim.replacementID) == .active {
+        source.mutation = UUID()
+      }
+    }
+    let owner = f.owner()
+    let result = try await owner.wait(
+      for: owner.start(
+        f.request(IntakeHandle(id: claim.replacementID), provenance: .history(claim))))
+    guard case .retained = result else {
+      return XCTFail("Changed source after adoption must retain exact transaction")
+    }
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+    XCTAssertEqual(f.projects, beforeProjects)
+    XCTAssertTrue(owner.hasUnsettledTransactions)
+    XCTAssertEqual(f.registry.adoptionStatus(documentID: claim.replacementID), .active)
   }
   func testInvalidScalarRefusesWithoutFactoryOrPause() async throws {
     let f = try IntakeFixture(session: await session())

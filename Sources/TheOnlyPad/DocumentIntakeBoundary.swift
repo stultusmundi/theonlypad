@@ -8,6 +8,7 @@ enum DocumentIntakeStage {
 }
 enum DocumentIntakeProvenance {
   case fresh
+  case history(DocumentHistoryClaim)
   case session(SessionImportClaim)
   case recovery(SessionRecoveryImportClaim)
 }

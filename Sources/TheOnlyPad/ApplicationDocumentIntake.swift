@@ -101,8 +101,14 @@ import PadCore
       uniqueKeysWithValues: windows.map {
         ($0.id, Set($0.groups.flatMap(\.documentIDs)))
       })
+    if case .history(let claim) = request.provenance {
+      guard claim.replacementID == request.documentID,
+        claim.windowID == request.assignment.windowID
+      else { throw DocumentIntakeError.invalidRequest }
+      try registry.validateHistory(claim)
+    }
     switch request.provenance {
-    case .fresh:
+    case .fresh, .history:
       let capacity = try session.transferCapacity(liveWindows: live)
       guard !capacity.documentIDs.contains(request.documentID),
         !capacity.windowIDs.contains(request.documentID),
@@ -206,12 +212,18 @@ import PadCore
         value.stage = .resolving
         switch value.request.provenance {
         case .fresh: break
+        case .history(let claim):
+          try registry.consumeHistory(claim, replacementID: model.id)
         case .session(let original):
           try session.resolveImport(session.renewImportClaim(original))
         case .recovery(let original):
           try session.resolveRecoveryImport(session.renewImportClaim(original))
         }
         value.resolved = true
+      }
+      _ = try requireOwned(value)
+      guard registry.adoptionStatus(documentID: model.id) == .active else {
+        throw DocumentIntakeError.staleModel
       }
       if !value.projected {
         value.stage = .projecting
