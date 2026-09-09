@@ -59,6 +59,8 @@ import PadCore
       """
     scroll.documentView = text
     window.contentView = scroll
+    window.minSize = NSSize(width: 400, height: 320)
+    window.setContentSize(NSSize(width: 700, height: 600))
     window.center()
   }
   required init?(coder: NSCoder) { nil }

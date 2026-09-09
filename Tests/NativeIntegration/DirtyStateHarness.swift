@@ -84,6 +84,19 @@ import PadCore
     equalLength.string = originalOrder
     expect(false, "exact combining-mark order restores clean state")
 
+    for (original, changed) in [
+      ("\0a", "\0b"), ("a\r\nb", "a\n\rb"),
+      ("\u{202A}abc\u{202C}", "\u{202B}abc\u{202C}"),
+      ("👩🏽‍💻", "👩🏼‍💻"),
+    ] {
+      precondition(original.utf16.count == changed.utf16.count)
+      let (exact, _) = open(original)
+      exact.string = changed
+      expect(true, "same-length control, ending, bidi and emoji changes remain dirty")
+      exact.string = original
+      expect(false, "exact original code units restore clean state")
+    }
+
     let (batch, _) = open("abc")
     batch.textStorage!.beginEditing()
     batch.textStorage!.replaceCharacters(in: NSRange(location: 1, length: 1), with: "z")

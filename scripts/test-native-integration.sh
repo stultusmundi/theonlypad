@@ -75,6 +75,11 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Sources/TheOnlyPad/LineNumberRuler.swift Tests/NativeIntegration/BookmarkRulerHarness.swift \
   -o .local/native-integration/bookmark-ruler-test
 .local/native-integration/bookmark-ruler-test
+swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
+  -I "$build_path/Modules" Sources/TheOnlyPad/HelpController.swift \
+  Tests/NativeIntegration/HelpHarness.swift "$build_path"/PadCore.build/*.o \
+  -o .local/native-integration/help-test
+.local/native-integration/help-test
 native_sources=()
 for source in Sources/TheOnlyPad/*.swift; do
   if [ "$source" != "Sources/TheOnlyPad/TheOnlyPadApplication.swift" ]; then native_sources+=("$source"); fi
@@ -89,7 +94,7 @@ swiftc -module-cache-path .local/native-integration/module-cache -parse-as-libra
   Tests/NativeIntegration/DirtyStateHarness.swift "$build_path"/PadCore.build/*.o \
   -o .local/native-integration/dirty-state-test
 .local/native-integration/dirty-state-test
-for harness in NativeLifetime SessionWindow SessionIntegration ScrollExtent TabAccessibility; do
+for harness in NativeLifetime SessionWindow SessionIntegration ScrollExtent TabAccessibility RecentFiles RecentFilesEditor; do
   swiftc -module-cache-path .local/native-integration/module-cache -parse-as-library \
     -I "$build_path/Modules" "${native_sources[@]}" \
     "Tests/NativeIntegration/${harness}Harness.swift" "$build_path"/PadCore.build/*.o \

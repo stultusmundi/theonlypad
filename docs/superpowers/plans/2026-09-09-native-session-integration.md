@@ -1,6 +1,6 @@
 # Native session integration
 
-Status: planned. Core storage and merge planning are implemented and pass the combined 184-test suite; native session restoration is outstanding.
+Status: partial implementation. Core storage, bounded native startup restoration, unresolved-file repair and quit persistence are integrated. Packaged tests verify scratch and multiwindow restoration plus a failed-quit recovery workflow. Periodic session metadata checkpoints and optional original-file autosave remain outstanding; see session-checkpoint-ordering.md for the proposed ordering design.
 
 Design: `docs/superpowers/specs/session-restoration.md`. Preserve all unresolved records and recovery content. No file path authorizes overwriting the file.
 
@@ -35,4 +35,4 @@ Capacity: startup admission checks 100 million UTF-16 units and a 400 MB retaine
 
 Tested: expected missing types/command and the older-disk recovery Retry bug were reproduced before fixes. Final isolated all-native-source compile passed. SessionIntegrationHarness passed two-window ordering, pinned/saved and scratch imports, missing-path retention across persistence, exact recovery Retry, invalid metadata preserving valid orphan recovery, recovery deletion failure/success, canceled late startup, write-failure propagation, and capacity arithmetic including a single 100 MB ASCII file without allocating that fixture. SessionRestorationHarness passed native Locate/Remove sheets, recovered-text replacement confirmation and confirmed deletion completion after panel close. No original files were written by recovery restoration tests.
 
-Remaining: debounced session autosave and recent-file commands are not implemented in this slice. Packaged restart, real application termination reply/quit-veto UI and early external-open event sequences still require parent integration checks. The coordinator write-failure test establishes error propagation; it does not by itself prove the AppDelegate termination reply. Corrupt/future session protection currently requires external repair/restart before metadata can be persisted; no reset/overwrite UI is claimed.
+Remaining: debounced session autosave and recent-file commands are not implemented in this slice. Packaged restart and real application quit-veto UI subsequently passed; see docs/verification/xcuitest-feasibility.md. Early external-open event sequences still need broader desktop acceptance. The coordinator write-failure test establishes error propagation; it does not by itself prove the AppDelegate termination reply. Corrupt/future session protection currently requires external repair/restart before metadata can be persisted; no reset/overwrite UI is claimed.

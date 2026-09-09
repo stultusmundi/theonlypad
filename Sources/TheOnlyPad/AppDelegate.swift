@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var startupTask: Task<Void, Never>?
   private var sessionPanel: SessionRestorationController?
   private var repairTargets: [UUID: EditorWindowController] = [:]
+  private var recentFiles: RecentFilesController?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     do { registry = try AppCommands.registry() } catch {
@@ -54,6 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     if createDocument { editor.newDocument() }
     editor.applySettings(settings)
     editors.append(editor)
+    editor.onOpenedURL = { [weak self] url in
+      guard let self else { return }
+      do {
+        try self.session.recordRecentOpen(url)
+        self.recentFiles?.update(
+          paths: self.session.recentPaths, openedPath: url.standardizedFileURL.path)
+      } catch { NSAlert(error: error).runModal() }
+    }
     editor.onClose = { [weak self, weak editor] in
       self?.editors.removeAll { $0 === editor }
     }
@@ -173,6 +182,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     controller.showWindow(nil)
   }
 
+  private func showRecentFiles() {
+    guard session.restorationComplete else { return }
+    if let recentFiles {
+      recentFiles.update(paths: session.recentPaths)
+      recentFiles.showWindow(nil)
+      return
+    }
+    let target = activeEditor ?? newWindow()
+    let controller = RecentFilesController(
+      paths: session.recentPaths,
+      onOpen: { [weak self, weak target] url, isCurrent in
+        guard let self, !self.preparingQuit, isCurrent() else { throw CancellationError() }
+        guard let target, self.editors.contains(where: { $0 === target }) else {
+          throw Self.recentTargetClosedError()
+        }
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, Error>) in
+          target.open(
+            url,
+            shouldAccept: { [weak self, weak target] in
+              guard let self, let target else { return false }
+              return !self.preparingQuit && self.editors.contains(where: { $0 === target })
+                && isCurrent()
+            },
+            onFailure: { [weak self, weak target] error in
+              guard let self, let target, self.editors.contains(where: { $0 === target }) else {
+                continuation.resume(throwing: Self.recentTargetClosedError())
+                return
+              }
+              continuation.resume(throwing: error)
+            }, onOpened: { continuation.resume() }
+          )
+        }
+      },
+      onRemove: { [weak self] path in
+        guard let self, !self.preparingQuit else { return }
+        self.session.removeRecent(path)
+      },
+      onClear: { [weak self] in
+        guard let self, !self.preparingQuit else { return }
+        self.session.clearRecent()
+      })
+    controller.onClose = { [weak self] in self?.recentFiles = nil }
+    recentFiles = controller
+    controller.showWindow(nil)
+  }
+
+  private static func recentTargetClosedError() -> NSError {
+    NSError(
+      domain: "TheOnlyPad.RecentFiles", code: 1,
+      userInfo: [
+        NSLocalizedDescriptionKey:
+          "The target editor window is closed. Reopen Recent Files from another editor window."
+      ])
+  }
+
   private var activeEditor: EditorWindowController? {
     editors.first { $0.window === NSApp.keyWindow }
       ?? editors.first { $0.window === NSApp.mainWindow }
@@ -199,9 +264,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   private func open(_ request: LaunchRequest) {
     let editor = activeEditor ?? newWindow()
-    editor.open(request.url) { [weak editor] in
-      editor?.navigate(line: request.line, column: request.column)
-    }
+    editor.open(
+      request.url,
+      onOpened: { [weak editor] in
+        editor?.navigate(line: request.line, column: request.column)
+      })
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
@@ -214,6 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !preparingQuit else { return .terminateLater }
     preparingQuit = true
+    recentFiles?.setSuspended(true)
     Task {
       await startupTask?.value
       // Invalidate pending repair callbacks before capturing the frozen session.
@@ -222,6 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard await editor.prepareToQuit(persistRecovery: false) else {
           for editor in editors { editor.cancelPreparedQuit() }
           preparingQuit = false
+          recentFiles?.setSuspended(false)
           NSApp.reply(toApplicationShouldTerminate: false)
           return
         }
@@ -229,6 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard await EditorWindowController.finishPendingCloses() else {
         for editor in editors { editor.cancelPreparedQuit() }
         preparingQuit = false
+        recentFiles?.setSuspended(false)
         NSApp.reply(toApplicationShouldTerminate: false)
         return
       }
@@ -238,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       } catch {
         for editor in editors { editor.cancelPreparedQuit() }
         preparingQuit = false
+        recentFiles?.setSuspended(false)
         NSAlert(error: error).runModal()
         NSApp.reply(toApplicationShouldTerminate: false)
         return
@@ -272,6 +343,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return
     }
     switch id {
+    case "file.recent":
+      Task { [weak self] in
+        await self?.startupTask?.value
+        guard let self, !self.preparingQuit else { return }
+        self.showRecentFiles()
+      }
     case "file.restoreSession": showUnresolvedSession()
     case "app.help":
       help?.close()
@@ -371,13 +448,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   private static let largeViewerCommands: Set<String> = [
-    "file.close", "file.new", "file.newWindow", "file.open", "file.restoreSession",
+    "file.close", "file.new", "file.newWindow", "file.open", "file.restoreSession", "file.recent",
     "app.preferences", "edit.copy",
     "edit.selectAll",
   ]
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     guard let id = menuItem.representedObject as? String else { return true }
     if preparingQuit { return false }
+    if id == "file.recent" { return true }
     if id == "file.restoreSession" { return !session.unresolved.isEmpty }
     if NSApp.keyWindow?.windowController is LargeFileWindowController {
       return Self.largeViewerCommands.contains(id)

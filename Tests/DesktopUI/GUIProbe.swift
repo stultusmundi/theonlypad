@@ -18,6 +18,9 @@ final class GUIProbe: XCTestCase {
       at: state, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     let app = XCUIApplication(url: URL(fileURLWithPath: path))
     app.launchEnvironment["THEONLYPAD_STATE_DIRECTORY"] = state.path
+    addTeardownBlock {
+      await MainActor.run { self.closeFixture(app) }
+    }
     app.launch()
     XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
     return (app, state)
@@ -57,9 +60,17 @@ final class GUIProbe: XCTestCase {
   }
 
   @MainActor
+  private func closeFixture(_ app: XCUIApplication) {
+    guard app.state != .notRunning else { return }
+    // Normal application termination handles asynchronous recovery/session writes.
+    // XCTest's terminate() alone can leave this app alive after its timeout.
+    app.typeKey("q", modifierFlags: .command)
+    if !app.wait(for: .notRunning, timeout: 15) { app.terminate() }
+  }
+
+  @MainActor
   func testOpenEditSaveQuitRelaunch() throws {
     let (app, state) = try fixture()
-    defer { app.terminate() }
     let input = state.appendingPathComponent("synthetic-input.txt")
     try Data("synthetic before\n".utf8).write(to: input)
     app.menuBars.menuBarItems["File"].click()
@@ -71,7 +82,16 @@ final class GUIProbe: XCTestCase {
     assertText("synthetic before\n", in: app)
     app.textViews["Document text"].firstMatch.click()
     app.typeKey("a", modifierFlags: .command)
+    let selectedStatus = app.staticTexts.matching(
+      NSPredicate(
+        format: "value CONTAINS %@ OR label CONTAINS %@",
+        "Selected 17 UTF-16 units", "Selected 17 UTF-16 units")
+    ).firstMatch
+    XCTAssertTrue(
+      selectedStatus.waitForExistence(timeout: 5),
+      "Command-A must select the complete original document before replacement")
     app.typeText("synthetic after\n")
+    assertText("synthetic after\n", in: app)
     app.typeKey("s", modifierFlags: .command)
     let deadline = Date().addingTimeInterval(10)
     while Date() < deadline && (try? Data(contentsOf: input)) != Data("synthetic after\n".utf8) {
@@ -87,7 +107,6 @@ final class GUIProbe: XCTestCase {
   @MainActor
   func testScratchRecoveryAfterCommandQuit() throws {
     let (app, _) = try fixture()
-    defer { app.terminate() }
     let editor = app.textViews["Document text"].firstMatch
     XCTAssertTrue(editor.waitForExistence(timeout: 10))
     editor.click()
@@ -99,7 +118,6 @@ final class GUIProbe: XCTestCase {
   @MainActor
   func testUndoRedoTabIsolationAndAppearanceReset() throws {
     let (app, state) = try fixture()
-    defer { app.terminate() }
     let editor = app.textViews["Document text"].firstMatch
     XCTAssertTrue(editor.waitForExistence(timeout: 10))
     editor.click()
@@ -206,9 +224,140 @@ final class GUIProbe: XCTestCase {
   }
 
   @MainActor
+  func testMultipleWindowsAndPinnedTabsRestore() throws {
+    let (app, _) = try fixture()
+    let tabPredicate = NSPredicate(format: "identifier BEGINSWITH %@", "tab.select.")
+    func selectedTabID() throws -> String {
+      let selected = app.windows.descendants(matching: .any).matching(tabPredicate).matching(
+        NSPredicate(format: "label CONTAINS %@", ", selected"))
+      return try XCTUnwrap(selected.allElementsBoundByIndex.last?.identifier)
+    }
+    let firstEditor = app.textViews["Document text"].firstMatch
+    XCTAssertTrue(firstEditor.waitForExistence(timeout: 10))
+    firstEditor.click()
+    app.typeText("synthetic first window pinned")
+    let firstID = try selectedTabID()
+    let firstTab = app.descendants(matching: .any).matching(identifier: firstID).firstMatch
+    firstTab.rightClick()
+    let pin = app.menuItems["Pin Tab"]
+    XCTAssertTrue(pin.waitForExistence(timeout: 5))
+    pin.click()
+    XCTAssertTrue(firstTab.label.contains(", pinned"))
+    app.typeKey("n", modifierFlags: .command)
+    firstEditor.click()
+    app.typeText("synthetic first window second")
+    let secondID = try selectedTabID()
+    XCTAssertNotEqual(firstID, secondID)
+    app.typeKey("n", modifierFlags: [.command, .shift])
+    XCTAssertEqual(app.windows.count, 2)
+    let newWindow = try XCTUnwrap(
+      app.windows.allElementsBoundByIndex.first {
+        !$0.descendants(matching: .any).matching(tabPredicate).allElementsBoundByIndex
+          .map(\.identifier).contains(firstID)
+      })
+    let thirdEditor = newWindow.textViews["Document text"]
+    XCTAssertTrue(thirdEditor.waitForExistence(timeout: 10))
+    thirdEditor.click()
+    app.typeText("synthetic second window")
+    let thirdTab = newWindow.descendants(matching: .any).matching(tabPredicate).firstMatch
+    let thirdID = thirdTab.identifier
+    XCTAssertFalse(thirdID.isEmpty)
+    XCTAssertNotEqual(thirdID, firstID)
+    XCTAssertNotEqual(thirdID, secondID)
+
+    quitAndRelaunch(app)
+    let restoredTabs = app.windows.descendants(matching: .any).matching(tabPredicate)
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "count == 3"), object: restoredTabs)
+        ], timeout: 10),
+      .completed)
+    XCTAssertEqual(app.windows.count, 2)
+    XCTAssertEqual(
+      Set(restoredTabs.allElementsBoundByIndex.map(\.identifier)),
+      Set([firstID, secondID, thirdID]))
+    // Window indexes change when focus changes; bind through the persistent tab ID.
+    let restoredFirst = app.windows.containing(.any, identifier: firstID).firstMatch
+    XCTAssertTrue(restoredFirst.waitForExistence(timeout: 5))
+    let windowTabs = restoredFirst.descendants(matching: .any).matching(tabPredicate)
+    XCTAssertEqual(windowTabs.allElementsBoundByIndex.map(\.identifier), [firstID, secondID])
+    XCTAssertTrue(windowTabs.element(boundBy: 0).label.contains(", pinned"))
+    XCTAssertTrue(windowTabs.element(boundBy: 1).label.contains(", selected"))
+    XCTAssertEqual(
+      restoredFirst.textViews["Document text"].value as? String,
+      "synthetic first window second")
+    // Both scratch windows share a title and the default centered frame.
+    // Select through the native Window menu before clicking the covered tab.
+    if !windowTabs.element(boundBy: 0).isHittable {
+      let menu = app.menuBars.menuBarItems["Window"]
+      menu.click()
+      let entries = menu.menus.menuItems.matching(
+        NSPredicate(format: "title == %@", restoredFirst.title))
+      XCTAssertEqual(entries.count, 2)
+      entries.element(boundBy: 0).click()
+      if !windowTabs.element(boundBy: 0).isHittable {
+        menu.click()
+        entries.element(boundBy: 1).click()
+      }
+    }
+    XCTAssertTrue(windowTabs.element(boundBy: 0).isHittable)
+    windowTabs.element(boundBy: 0).click()
+    XCTAssertEqual(
+      restoredFirst.textViews["Document text"].value as? String,
+      "synthetic first window pinned")
+    let restoredSecond = app.windows.containing(.any, identifier: thirdID).firstMatch
+    XCTAssertTrue(restoredSecond.waitForExistence(timeout: 5))
+    XCTAssertEqual(
+      restoredSecond.textViews["Document text"].value as? String,
+      "synthetic second window")
+  }
+
+  @MainActor
+  func testRecentFilesOpenClearAndPersistence() throws {
+    let (app, state) = try fixture()
+    let input = state.appendingPathComponent("synthetic-recent.txt")
+    let bytes = Data("synthetic recent contents\n".utf8)
+    try bytes.write(to: input)
+    open(input, in: app)
+    assertText("synthetic recent contents\n", in: app)
+    app.typeKey("w", modifierFlags: .command)
+    assertText("", in: app)
+
+    func showRecentFiles() -> XCUIElement {
+      let file = app.menuBars.menuBarItems["File"]
+      file.click()
+      let command = file.menus.menuItems["Recent Files…"]
+      XCTAssertTrue(command.waitForExistence(timeout: 5))
+      command.click()
+      let panel = app.dialogs["Recent Files"]
+      XCTAssertTrue(panel.waitForExistence(timeout: 5))
+      return panel
+    }
+    let panel = showRecentFiles()
+    let rows = panel.tables["recents.files"].descendants(matching: .tableRow)
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertTrue(panel.buttons["recents.open"].isEnabled)
+    app.typeKey(.return, modifierFlags: [])
+    assertText("synthetic recent contents\n", in: app)
+    XCTAssertEqual(try Data(contentsOf: input), bytes)
+
+    let reopened = showRecentFiles()
+    XCTAssertEqual(reopened.tables["recents.files"].descendants(matching: .tableRow).count, 1)
+    reopened.buttons["recents.clear"].click()
+    XCTAssertEqual(reopened.tables["recents.files"].descendants(matching: .tableRow).count, 0)
+    XCTAssertEqual(try Data(contentsOf: input), bytes)
+    quitAndRelaunch(app)
+    let restored = showRecentFiles()
+    XCTAssertEqual(restored.tables["recents.files"].descendants(matching: .tableRow).count, 0)
+    XCTAssertFalse(restored.buttons["recents.open"].isEnabled)
+    XCTAssertEqual(try Data(contentsOf: input), bytes)
+  }
+
+  @MainActor
   func testSessionWriteFailureVetoesQuitAndPreservesEditing() throws {
     let (app, state) = try fixture()
-    defer { app.terminate() }
     let editor = app.textViews["Document text"].firstMatch
     XCTAssertTrue(editor.waitForExistence(timeout: 10))
     editor.click()

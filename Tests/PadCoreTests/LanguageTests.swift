@@ -3,6 +3,28 @@ import XCTest
 @testable import PadCore
 
 final class LanguageTests: XCTestCase {
+  func testCSSURLSlashesAreNotLineComments() throws {
+    let source = "a { background: url(https://example.invalid/a.png); } /* actual comment */"
+    let comments = try LanguageService.tokens(in: source, language: .css)
+      .filter { $0.kind == .comment }
+      .map { (source as NSString).substring(with: $0.range) }
+    XCTAssertEqual(comments, ["/* actual comment */"])
+  }
+
+  func testCSSBlockCommentsAndSwiftCommentFormsRemainRecognized() throws {
+    for language in [DocumentLanguage.css, .swift] {
+      let source = "/* first\nsecond */"
+      let tokens = try LanguageService.tokens(in: source, language: language)
+      XCTAssertEqual(
+        tokens, [.init(range: NSRange(location: 0, length: source.utf16.count), kind: .comment)])
+    }
+    let source = "// first\n/* second */"
+    let comments = try LanguageService.tokens(in: source, language: .swift)
+      .filter { $0.kind == .comment }
+      .map { (source as NSString).substring(with: $0.range) }
+    XCTAssertEqual(comments, ["// first", "/* second */"])
+  }
+
   func testDetectionAndPlainText() {
     XCTAssertEqual(LanguageService.detect(filename: "a.swift", text: ""), .swift)
     XCTAssertEqual(

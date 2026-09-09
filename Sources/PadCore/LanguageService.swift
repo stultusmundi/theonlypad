@@ -37,9 +37,10 @@ public enum LanguageService {
     guard text.utf16.count <= 2_000_000 else { throw LanguageError.analysisLimit }
     guard language != .plainText else { return [] }
     let hashComments: Set<DocumentLanguage> = [.python, .shell, .yaml, .toml]
-    let slashComments: Set<DocumentLanguage> = [
-      .swift, .javascript, .typescript, .c, .cpp, .java, .rust, .go, .css,
+    let slashLineComments: Set<DocumentLanguage> = [
+      .swift, .javascript, .typescript, .c, .cpp, .java, .rust, .go,
     ]
+    let slashBlockComments = slashLineComments.union([.css])
     let words: String
     switch language {
     case .swift:
@@ -78,11 +79,11 @@ public enum LanguageService {
       let start = index
       let value = units[index]
       if (hashComments.contains(language) && value == 35)
-        || (slashComments.contains(language) && value == 47 && at(index + 1, 47))
+        || (slashLineComments.contains(language) && value == 47 && at(index + 1, 47))
       {
         while index < units.count && units[index] != 10 && units[index] != 13 { index += 1 }
         emit(start, index, .comment)
-      } else if slashComments.contains(language) && value == 47 && at(index + 1, 42) {
+      } else if slashBlockComments.contains(language) && value == 47 && at(index + 1, 42) {
         index += 2
         while index < units.count && !(at(index, 42) && at(index + 1, 47)) { index += 1 }
         index = min(units.count, index + 2)

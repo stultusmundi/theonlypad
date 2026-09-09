@@ -14,6 +14,7 @@ public enum AppCommands {
       .init(id: "file.saveAs", title: "Save As…", shortcut: "cmd+shift+s"),
       .init(id: "file.print", title: "Print…", shortcut: "cmd+p"),
       .init(id: "file.close", title: "Close Tab", shortcut: "cmd+w"),
+      .init(id: "file.recent", title: "Recent Files…"),
       .init(id: "file.restoreSession", title: "Unresolved Session Tabs…"),
       .init(id: "file.reopenClosed", title: "Reopen Closed Tab", shortcut: "cmd+shift+t"),
       .init(id: "file.nextTab", title: "Next Tab", shortcut: "cmd+shift+]"),

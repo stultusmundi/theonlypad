@@ -1,0 +1,17 @@
+# Multiwindow desktop session verification
+
+Scope: A-03, A-05 and A-06 acceptance expansion against the packaged app. Existing core/native session assertions and one-buffer restart evidence do not establish multiwindow desktop behavior.
+
+Plan: create two scratch tabs in the first real window, pin the first through its context menu and select the second; create a second real window with a third scratch buffer. Capture accessible tab identities. Quit through Command-Q and relaunch the same isolated state. Verify both windows, all three exact texts, unchanged tab identities, first-window order, pin state and selected tab. No test-only application behavior or direct session metadata construction is permitted.
+
+Implementation: added `GUIProbe.testMultipleWindowsAndPinnedTabsRestore` in `Tests/DesktopUI/GUIProbe.swift`. It uses real keyboard input, a native context menu and application termination/relaunch. The ordinary full runner remains `scripts/test-desktop-ui.sh`; a focused `xcodebuild test -only-testing:GUIProbe/GUIProbe/testMultipleWindowsAndPinnedTabsRestore` runs the same test while diagnosing it.
+
+Validation: in progress. Tests must keep identity/order/content assertions if a failure appears; diagnose the application or test query instead of removing coverage. This test does not establish physical tab dragging, window geometry persistence or force-termination restoration.
+
+First focused run failed with the two-minute execution timeout while evaluating a missing descendant through `firstMatch.exists` inside a window-selection predicate, after creating two real windows. A post-timeout sample found the application main thread idle in its normal event loop. The next diagnostic changes only membership lookup to enumerate existing accessible tab IDs; all count, identity, order, pin and content assertions remain. This is a test-query hypothesis, not yet a confirmed application fix. Raw results remain ignored under `.local/desktop-ui/run.pr52pi/`.
+
+Second focused run (`.local/desktop-ui/run.jmRzV0`) passed window/tab counts, stable IDs, order, pin state and selected text after relaunch. It then failed when clicking a tab in the fully covered first window. The next change uses native Command-backtick to cycle to that window before the click, with an explicit hittable assertion; no restoration assertions were removed. Window geometry persistence is not implemented by this test.
+
+Further diagnosis: the launch-only failure in `run.w1nT1g` was caused by a prior synthetic app surviving an assertion failure; its owned PID was stopped. `run.PYJQRj` reached restoration but the focus assertion still used an index-bound window reference, which can resolve to another window when window ordering changes. The revised test binds restored windows through their persistent descendant tab IDs and selects through the native Window menu. Cleanup is registered using XCTest teardown blocks rather than relying on Swift defer after framework assertion failures. These are harness corrections; native window shortcut behavior is not classified as broken on this evidence. All original restoration assertions remain.
+
+Final focused validation: all assertions passed against packaged executable SHA-256 `4654c5fc0744d6b4e094c2f7cd35b3257656866db91f34eab3ca15cc01fe18cf`, one test/zero failures,39.700 seconds. Ignored results: `.local/desktop-ui/run.gDhAX0/results.xcresult`. This validates the new test on that package; later Recent/CSS/Help/comparator source changes still require a regenerated package and full desktop run.

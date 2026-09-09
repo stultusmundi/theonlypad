@@ -104,7 +104,7 @@ private final class EditorDocument {
     if let cachedTextDirty { return cachedTextDirty }
     let changed =
       storage.length != savedUTF16Length
-      || !storage.string.utf16.elementsEqual(savedText.utf16)
+      || !storage.mutableString.isEqual(to: savedText)
     cachedTextDirty = changed
     return changed
   }
@@ -177,6 +177,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   let sessionID: UUID
   var onClose: (() -> Void)?
   var onOpenLargeFile: ((URL) -> Void)?
+  var onOpenedURL: ((URL) -> Void)?
   private static var pendingCloses: [UUID: (RecoveryCoordinator, Task<Error?, Never>)] = [:]
   private var documents: [EditorDocument] = []
   private var selectedID: UUID?
@@ -367,54 +368,113 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     scheduleRecovery()
   }
 
-  func open(_ url: URL, encoding: DocumentEncoding? = nil, onOpened: (() -> Void)? = nil) {
-    guard !preparingToQuit else { return }
+  func open(
+    _ url: URL, encoding: DocumentEncoding? = nil, shouldAccept: (() -> Bool)? = nil,
+    onFailure: ((Error) -> Void)? = nil, onOpened: (() -> Void)? = nil
+  ) {
+    // Completion owns exactly one outcome, even when a window disappears during its read.
+    var completed = false
+    let finish: (Error?, Bool) -> Void = { [weak self] error, showDefaultError in
+      guard !completed else { return }
+      completed = true
+      if let error {
+        if let onFailure {
+          onFailure(error)
+        } else if showDefaultError, !(error is CancellationError) {
+          self?.present(error)
+        }
+      } else {
+        self?.onOpenedURL?(url)
+        onOpened?()
+      }
+    }
+    guard !preparingToQuit, !windowClosed, shouldAccept?() != false else {
+      finish(CancellationError(), false)
+      return
+    }
     if let existing = documents.first(where: {
       $0.url?.standardizedFileURL == url.standardizedFileURL
     }) {
       display(existing)
-      if let encoding { reload(encoding: encoding, onReload: onOpened) } else { onOpened?() }
+      if let encoding {
+        reload(
+          encoding: encoding, shouldAccept: shouldAccept,
+          onFailure: { finish($0, true) },
+          onReload: {
+            self.display(existing)
+            finish(nil, false)
+          })
+      } else {
+        finish(nil, false)
+      }
       return
     }
     loadingCount += 1
     refresh()
     Task { [weak self] in
-      do {
-        let loaded = try await Task.detached(priority: .userInitiated) {
-          () throws -> (Data, DecodedDocument)? in
+      let result = await Task.detached(priority: .userInitiated) {
+        Result<(Data, DecodedDocument)?, Error> {
           let values = try url.resourceValues(forKeys: [.fileSizeKey])
           if (values.fileSize ?? 0) > 100_000_000 { return nil }
           return try Self.read(url, encoding: encoding)
-        }.value
-        guard let self else { return }
-        self.loadingCount -= 1
+        }
+      }.value
+      guard let self else {
+        finish(CancellationError(), false)
+        return
+      }
+      self.loadingCount -= 1
+      guard !self.windowClosed, !self.preparingToQuit, shouldAccept?() != false else {
+        if !self.windowClosed { self.refresh() }
+        finish(CancellationError(), false)
+        return
+      }
+      switch result {
+      case .failure(let error):
+        self.refresh()
+        finish(error, true)
+      case .success(let loaded):
         guard let loaded else {
           self.refresh()
-          if let onOpenLargeFile = self.onOpenLargeFile {
-            onOpenLargeFile(url)
+          // The byte viewer has no successful-load completion yet. Never report a text open
+          // or update recent history merely because its window was constructed.
+          if onFailure != nil {
+            finish(Self.largeFileError(), true)
+            return
+          }
+          if let viewer = self.onOpenLargeFile {
+            viewer(url)
             if onOpened != nil {
-              self.present(
+              finish(
                 NSError(
                   domain: "TheOnlyPad", code: 13,
                   userInfo: [
                     NSLocalizedDescriptionKey:
                       "Opened the read-only byte viewer. Text-position navigation is unavailable above 100 MB."
-                  ]))
+                  ]), true)
+            } else {
+              finish(Self.largeFileError(), false)
             }
           } else {
-            self.present(Self.largeFileError())
+            finish(Self.largeFileError(), true)
           }
           return
         }
-        // Another asynchronous open may already have completed for this path.
+        // An overlapping open may have finished first. Select it without replacing dirty text.
         if let existing = self.documents.first(where: {
           $0.url?.standardizedFileURL == url.standardizedFileURL
         }) {
           self.display(existing)
           if let encoding {
-            self.reload(encoding: encoding, onReload: onOpened)
+            self.reload(
+              encoding: encoding, shouldAccept: shouldAccept,
+              onFailure: { finish($0, true) },
+              onReload: {
+                self.display(existing)
+                finish(nil, false)
+              })
           } else {
-            onOpened?()
+            finish(nil, false)
           }
           return
         }
@@ -435,12 +495,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.editor.delegate = self
         self.documents.append(document)
         self.display(document)
-        onOpened?()
-      } catch {
-        guard let self else { return }
-        self.loadingCount -= 1
-        self.refresh()
-        self.present(error)
+        finish(nil, false)
       }
     }
   }
@@ -464,7 +519,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       domain: "TheOnlyPad", code: 1,
       userInfo: [
         NSLocalizedDescriptionKey:
-          "Files larger than 100 MB cannot be opened yet. Use a smaller excerpt; bounded large-file viewing is not available in this build."
+          "This action supports editable text up to 100 MB. Use File > Open for the read-only byte viewer, or open a smaller excerpt."
       ])
   }
 
@@ -662,7 +717,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       folderSearch?.close()
       let panel = FolderSearchController(root: workspace.rootURL) {
         [weak self] url, range, snapshot in
-        self?.open(url) { [weak self] in self?.selectSearchResult(range, snapshot: snapshot) }
+        self?.open(
+          url, onOpened: { [weak self] in self?.selectSearchResult(range, snapshot: snapshot) })
       }
       folderSearch = panel
       panel.showWindow(nil)
@@ -773,25 +829,68 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
   }
 
-  private func reload(encoding: DocumentEncoding? = nil, onReload: (() -> Void)? = nil) {
-    guard !isRecordingMacro else {
-      let alert = NSAlert()
-      alert.messageText = "Stop macro recording before reloading"
-      alert.informativeText = "Reload replaces file bytes outside the recorded text-edit sequence."
-      alert.runModal()
+  private func reload(
+    encoding: DocumentEncoding? = nil, shouldAccept: (() -> Bool)? = nil,
+    onFailure: ((Error) -> Void)? = nil, onReload: (() -> Void)? = nil
+  ) {
+    let fail: (Error) -> Void = { [weak self] error in
+      if let onFailure {
+        onFailure(error)
+      } else if !(error is CancellationError) {
+        self?.present(error)
+      }
+    }
+    guard !windowClosed, !preparingToQuit, shouldAccept?() != false else {
+      fail(CancellationError())
       return
     }
-    guard let document = current, let url = document.url, !document.saving,
-      confirmDiscard([document])
-    else { return }
+    guard !isRecordingMacro else {
+      fail(
+        NSError(
+          domain: "TheOnlyPad", code: 14,
+          userInfo: [
+            NSLocalizedDescriptionKey:
+              "Stop macro recording before reloading. Reload replaces file bytes outside the recorded text-edit sequence."
+          ]))
+      return
+    }
+    guard let document = current, let url = document.url, !document.saving else {
+      fail(CancellationError())
+      return
+    }
+    guard confirmDiscard([document]), !windowClosed, !preparingToQuit,
+      documents.contains(where: { $0 === document }), shouldAccept?() != false
+    else {
+      fail(CancellationError())
+      return
+    }
     document.saving = true
     document.editor.isEditable = false
     refresh()
     Task { [weak self] in
-      do {
-        let loaded = try await Task.detached(priority: .userInitiated) {
-          try Self.read(url, encoding: encoding)
-        }.value
+      let result = await Task.detached(priority: .userInitiated) {
+        Result { try Self.read(url, encoding: encoding) }
+      }.value
+      document.saving = false
+      guard let self else {
+        document.editor.isEditable = true
+        fail(CancellationError())
+        return
+      }
+      guard !self.windowClosed, !self.preparingToQuit,
+        self.documents.contains(where: { $0 === document }), shouldAccept?() != false
+      else {
+        document.editor.isEditable = !self.windowClosed && !self.preparingToQuit
+        if !self.windowClosed { self.refresh() }
+        fail(CancellationError())
+        return
+      }
+      document.editor.isEditable = true
+      switch result {
+      case .failure(let error):
+        self.refresh()
+        fail(error)
+      case .success(let loaded):
         document.editor.string = loaded.1.text
         document.bookmarks.removeAll()
         document.pendingBookmarks = nil
@@ -803,17 +902,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         document.savedEncoding = loaded.1.encoding
         document.savedHasBOM = loaded.1.hasBOM
         document.editor.documentUndo.removeAllActions()
-        document.saving = false
-        document.editor.isEditable = true
-        self?.refresh()
-        self?.updateLanguage(document)
-        self?.scheduleRecovery()
+        self.refresh()
+        self.updateLanguage(document)
+        self.scheduleRecovery()
         onReload?()
-      } catch {
-        document.saving = false
-        document.editor.isEditable = true
-        self?.refresh()
-        self?.present(error)
       }
     }
   }

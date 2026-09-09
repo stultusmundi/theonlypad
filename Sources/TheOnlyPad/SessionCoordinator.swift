@@ -44,7 +44,7 @@ struct SessionStartupBudget {
   private(set) var restorationComplete = false
   private var preservationError: Error?
   private var originalWindows: [SessionWindow] = []
-  private var recentPaths: [String] = []
+  private(set) var recentPaths: [String] = []
   private var generation = 0
   private var started = false
   private var recoveryIDs = Set<UUID>()
@@ -130,7 +130,7 @@ struct SessionStartupBudget {
         // Invalid metadata must not hide otherwise valid recovery buffers.
         plan = try SessionRestoration.plan(session: nil, recoveries: snapshots)
       }
-      recentPaths = plan.recentPaths
+      recentPaths = Self.uniqueRecentPaths(recentPaths + plan.recentPaths)
       originalWindows = plan.windows.map {
         SessionWindow(id: $0.id, tabs: $0.tabs.map(\.metadata), selectedTabID: $0.selectedTabID)
       }
@@ -256,6 +256,21 @@ struct SessionStartupBudget {
       }
       throw error
     }
+  }
+
+  func recordRecentOpen(_ url: URL) throws {
+    let path = url.standardizedFileURL.path
+    guard url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost",
+      path.hasPrefix("/"), !path.hasPrefix("//"), path.utf8.count <= 4096,
+      !path.utf8.contains(0)
+    else { throw SessionStoreError.invalidMetadata }
+    recentPaths = Self.uniqueRecentPaths([path] + recentPaths)
+  }
+  func removeRecent(_ path: String) { recentPaths.removeAll { $0 == path } }
+  func clearRecent() { recentPaths.removeAll() }
+  private static func uniqueRecentPaths(_ paths: [String]) -> [String] {
+    var seen = Set<String>()
+    return Array(paths.filter { seen.insert($0).inserted }.prefix(50))
   }
 
   func persist(windows: [SessionWindow]) async throws {
