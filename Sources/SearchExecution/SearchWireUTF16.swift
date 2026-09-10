@@ -315,7 +315,6 @@ public final class SearchWireBoundaryIndex {
   public func validate(_ range: NSRange, within scope: NSRange?) throws {
     switch state {
     case .active:
-      state = .failed
       throw SearchWireError.invalidPhase
     case .finished:
       break

@@ -163,6 +163,28 @@ final class SearchWireUTF16Tests: XCTestCase {
     assertError(.poisoned) { try decoder.finish() }
   }
 
+  func testDecoderNormalCallbackReturnAfterCaughtReentryStopsLaterChunks() throws {
+    let scalarCount = 32_768
+    let decoder = try SearchWireUTF16Decoder(expectedUTF16: scalarCount)
+    let input = repeatingBytes([0xAC, 0x20], count: scalarCount)
+    var nestedError: SearchWireError?
+    var emittedChunks = 0
+
+    assertError(.poisoned) {
+      try decoder.consume(input) { _ in
+        emittedChunks += 1
+        do {
+          try decoder.finish()
+        } catch {
+          nestedError = error as? SearchWireError
+        }
+      }
+    }
+    XCTAssertEqual(nestedError, .reentrantUse)
+    XCTAssertEqual(emittedChunks, 1)
+    assertError(.poisoned) { try decoder.finish() }
+  }
+
   func testEncoderProducesLiteralUTF16LEWithoutNormalization() throws {
     let encoder = try SearchWireUTF16Encoder(text: "A\0\u{FEFF}€😀e\u{0301}", expectedUTF16: 8)
     var chunks: [Data] = []
@@ -285,6 +307,9 @@ final class SearchWireUTF16Tests: XCTestCase {
     let short = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 2)
     try short.append(Data([0x41, 0x00]))
     assertError(.lengthMismatch) { try short.finish() }
+    assertError(.poisoned) {
+      try short.validate(NSRange(location: 0, length: 1), within: nil)
+    }
 
     let long = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 1)
     assertError(.lengthMismatch) { try long.append(Data([0x41, 0x00, 0x42, 0x00])) }
@@ -335,12 +360,20 @@ final class SearchWireUTF16Tests: XCTestCase {
     try index.validate(NSRange(location: 0, length: 1), within: nil)
   }
 
-  func testBoundaryIndexLifecycleMisusePoisonsButInvalidRangeDoesNot() throws {
-    let unfinished = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 0)
+  func testBoundaryIndexValidateBeforeFinishDoesNotPreventContinuedConstruction() throws {
+    let unfinished = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 1)
     assertError(.invalidPhase) {
       try unfinished.validate(NSRange(location: 0, length: 0), within: nil)
     }
-    assertError(.poisoned) { try unfinished.finish() }
+    try unfinished.append(Data([0x41, 0x00]))
+    try unfinished.finish()
+    try unfinished.validate(NSRange(location: 0, length: 1), within: nil)
+
+    let failedAppend = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 1)
+    assertError(.lengthMismatch) { try failedAppend.append(Data([0x41])) }
+    assertError(.poisoned) {
+      try failedAppend.validate(NSRange(location: 0, length: 0), within: nil)
+    }
 
     let finished = try SearchWireBoundaryIndex(identity: identity, expectedUTF16: 0)
     try finished.finish()
