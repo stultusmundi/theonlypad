@@ -4563,12 +4563,23 @@ extension EditorWindowController {
     model: EditorDocument
   ) -> NativeDocumentTransferViewReceipt {
     let panes = view.panes.map { value -> NativeTransferPaneReceipt in
-      guard let pane = model.panePool.first(where: { $0.id == value.id }), pane.isAttached else {
+      // Storage attachment survives a move's temporary removal from its native host. Such
+      // unhosted panes retain the original origin until an endpoint actually lays them out.
+      guard let pane = model.panePool.first(where: { $0.id == value.id }), pane.isAttached,
+        pane.scroll.superview != nil
+      else {
         return value
       }
       var proposed = pane.scroll.contentView.bounds
       proposed.origin = value.origin
-      let origin = pane.scroll.contentView.constrainBoundsRect(proposed).origin
+      let clip = pane.scroll.contentView
+      let constrained = clip.constrainBoundsRect(proposed)
+      // NSClipView's setter aligns to backing pixels, including fractional split-view frames.
+      // Derive that exact framework postcondition from the original receipt, never live origins.
+      let origin = clip.backingAlignedRect(
+        constrained,
+        options: [.alignMinXNearest, .alignMinYNearest, .alignWidthNearest, .alignHeightNearest]
+      ).origin
       return .init(
         id: value.id, object: value.object, attached: value.attached, selection: value.selection,
         origin: origin)

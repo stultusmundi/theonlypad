@@ -251,6 +251,62 @@ private enum TransferProcessFailure: Error { case injected }
     try await fixture.prepare(actor: actor)
     try await body(fixture)
   }
+  func testTerminalReceiptPrecedesSettlementCallbackABAAndSurvivesCleanupRetry() async throws {
+    try await withFixture { fixture in
+      fixture.rejectTargetOnce = true
+      fixture.rejectRefreshOnce = true
+      let owner = fixture.owner()
+      let request = fixture.request
+      var settlement: UUID?
+      var callbackMutation = false
+      fixture.registry.onChange = { revision in
+        guard (try? fixture.registry.captureWindows()) != nil,
+          fixture.registry.assignment(of: fixture.handle.id) == fixture.source,
+          fixture.handle.rotationCount == 2
+        else { return }
+        fixture.registry.onChange = nil
+        settlement = revision
+        let temporary = UUID()
+        do {
+          try fixture.registry.registerWindow(id: temporary, initialGroupID: UUID())
+          try fixture.registry.unregisterEmptyWindow(
+            temporary, expectedRevision: fixture.registry.workspaceRevision)
+          callbackMutation = true
+        } catch { XCTFail("Callback fixture failed: \(error)") }
+      }
+      let id = try owner.start(request)
+      guard case .retained = try await owner.wait(for: id) else {
+        return XCTFail("Refresh must retain")
+      }
+      let receipt = try owner.terminalReceipt(for: id)
+      XCTAssertTrue(callbackMutation)
+      XCTAssertEqual(receipt.request, request)
+      XCTAssertFalse(receipt.moved)
+      XCTAssertEqual(receipt.workspaceRevision, settlement)
+      XCTAssertNotEqual(receipt.workspaceRevision, fixture.registry.workspaceRevision)
+      XCTAssertThrowsError(try owner.terminalReceipt(for: .init(rawValue: UUID())))
+      try owner.retryLayout(id)
+      guard case .restored = try await owner.wait(for: id) else {
+        return XCTFail("Retry must restore")
+      }
+      XCTAssertEqual(try owner.terminalReceipt(for: id).workspaceRevision, settlement)
+    }
+  }
+  func testUnstagedTerminalReceiptNeverBlessesChangedRequestRevision() async throws {
+    try await withFixture { fixture in
+      let owner = fixture.owner()
+      let request = fixture.request
+      try fixture.registry.registerWindow(id: UUID(), initialGroupID: UUID())
+      let id = try owner.start(request)
+      guard case .restored = try await owner.wait(for: id) else {
+        return XCTFail("Stale request must restore")
+      }
+      let receipt = try owner.terminalReceipt(for: id)
+      XCTAssertEqual(receipt.workspaceRevision, request.workspaceRevision)
+      XCTAssertNotEqual(receipt.workspaceRevision, fixture.registry.workspaceRevision)
+      XCTAssertFalse(receipt.moved)
+    }
+  }
   func testCaptureRefusalReleasesReservationAndPause() async throws {
     try await withFixture { fixture in
       fixture.rejectCapture = true

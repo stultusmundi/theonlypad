@@ -12,6 +12,7 @@ import Foundation
     var task: Task<ApplicationDocumentTransferResult, Never>?
     var result: ApplicationDocumentTransferResult?
     var outcome: ApplicationDocumentTransferResult?
+    var terminal: ApplicationDocumentTransferTerminalReceipt?
     var failure: Error?
     var resume = Resume.move
     var inFlight = false
@@ -24,7 +25,11 @@ import Foundation
   private let publication: ApplicationDocumentTransferPublication
   private let native: ApplicationDocumentTransferNative
   private var active: Transaction?
-  private var last: (ApplicationDocumentTransferID, ApplicationDocumentTransferResult)?
+  private var last:
+    (
+      ApplicationDocumentTransferID, ApplicationDocumentTransferResult,
+      ApplicationDocumentTransferTerminalReceipt
+    )?
   init(
     registry: ApplicationDocuments, publication: ApplicationDocumentTransferPublication,
     native: ApplicationDocumentTransferNative
@@ -48,6 +53,13 @@ import Foundation
   {
     if let value = active, value.id == id, let task = value.task { return await task.value }
     if let last, last.0 == id { return last.1 }
+    throw ApplicationDocumentTransferError.expired
+  }
+  func terminalReceipt(for id: ApplicationDocumentTransferID) throws
+    -> ApplicationDocumentTransferTerminalReceipt
+  {
+    if let value = active, value.id == id, let terminal = value.terminal { return terminal }
+    if let last, last.0 == id { return last.2 }
     throw ApplicationDocumentTransferError.expired
   }
   func retryLayout(_ id: ApplicationDocumentTransferID) throws {
@@ -129,6 +141,8 @@ import Foundation
     let failure = value.failure ?? ApplicationDocumentTransferError.pendingLayout
     guard let lease = value.lease else {
       value.outcome = .restored(failure)
+      value.terminal = .init(
+        request: value.request, workspaceRevision: value.request.workspaceRevision, moved: false)
       value.resume = .cleanup
       return
     }
@@ -149,6 +163,8 @@ import Foundation
       try registry.cancelUnstagedTransfer(lease)
       value.lease = nil
       value.outcome = .restored(failure)
+      value.terminal = .init(
+        request: value.request, workspaceRevision: value.request.workspaceRevision, moved: false)
       value.resume = .cleanup
       return
     }
@@ -193,6 +209,8 @@ import Foundation
       moved
       ? .moved : .restored(value.failure ?? ApplicationDocumentTransferError.pendingLayout)
     let willNotify = {
+      value.terminal = .init(
+        request: value.request, workspaceRevision: self.registry.workspaceRevision, moved: moved)
       value.outcome = result
       value.lease = nil
       value.resume = .cleanup
@@ -205,7 +223,9 @@ import Foundation
   }
 
   private func cleanup(_ value: Transaction) async throws -> ApplicationDocumentTransferResult {
-    guard let result = value.outcome else { throw ApplicationDocumentTransferError.pendingLayout }
+    guard let result = value.outcome, let terminal = value.terminal else {
+      throw ApplicationDocumentTransferError.pendingLayout
+    }
     if let pause = value.pause {
       if !value.drained {
         try await publication.drainPause(pause)
@@ -216,7 +236,7 @@ import Foundation
     }
     if let receipt = value.receipt { try native.refreshAdmission(receipt) }
     value.result = result
-    last = (value.id, result)
+    last = (value.id, result, terminal)
     active = nil
     publication.requestCheckpoint()
     // No cleanup after callbacks: a new transaction may already own active.

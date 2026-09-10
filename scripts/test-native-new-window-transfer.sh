@@ -27,18 +27,44 @@ text=text.replace(needle, 'try await checkpoints.drainPause(pause)\n      try aw
 needle='if let task = value.task { _ = await task.value }\n    do {'
 if text.count(needle)!=1: raise SystemExit('Expected one owned cleanup interception')
 text=text.replace(needle, 'if let task = value.task { _ = await task.value }\n    do {\n      try await newWindowCleanupHook?()')
+needle='      return await finishNewWindowMove(value)'
+if text.count(needle)!=1: raise SystemExit('Expected terminal wrapper boundary')
+text=text.replace(needle, '      await newWindowFinishHook?()\n'+needle)
+needle='      let controller = try EditorWindowController(\n        id: windowID, application: routing, onError: onError)'
+if text.count(needle)!=1: raise SystemExit('Expected construction boundary')
+text=text.replace(needle, '      try newWindowConstructionHook?()\n'+needle)
+needle='        case .prepared: break'
+if text.count(needle)!=1: raise SystemExit('Expected handoff boundary')
+text=text.replace(needle, '        case .prepared: try newWindowHandoffHook?()')
+access=Path('Tests/NativeIntegration/NativeApplicationDocumentTransferAccess.swift')
+manifest.append({'source':str(access),'sha256':hashlib.sha256(access.read_bytes()).hexdigest()})
+needle='native: makeTransferNative())'
+if text.count(needle)!=1: raise SystemExit('Expected native transfer interception')
+text=text.replace(needle,'native: interceptTransferNative(makeTransferNative()))')+'\n'+access.read_text()
 owner.write_text(text+"""
 @MainActor var newWindowDrainHook: (() async throws -> Void)?
 @MainActor var newWindowCleanupHook: (() async throws -> Void)?
+@MainActor var newWindowFinishHook: (() async -> Void)?
+@MainActor var newWindowConstructionHook: (() throws -> Void)?
+@MainActor var newWindowHandoffHook: (() throws -> Void)?
 extension NativeApplicationDocuments {
   func testPreparePublisher() async throws { try await checkpoints.testPreparePublisher() }
+  func testRequestCheckpoint() { checkpoints.requestCheckpoint() }
+  var testPauseCount: Int { checkpoints.testPauseCount }
   func testAcquirePause() throws -> CheckpointPauseToken { try checkpoints.acquirePause() }
   func testDrainPause(_ token: CheckpointPauseToken) async throws { try await checkpoints.drainPause(token) }
   func testReleasePause(_ token: CheckpointPauseToken) throws { try checkpoints.releasePause(token) }
+  var testInnerMoveID: ApplicationDocumentTransferID? { preparingNewWindow?.innerID }
+  var testNewWindowID: UUID? { preparingNewWindow?.assignment.windowID }
   var testPreparationPending: Bool { preparingNewWindow != nil }
   var testExternalRequestID: UUID? { externalOpens.currentID }
   var testCleanupRunning: Bool { preparingNewWindow?.cleanupRunning == true }
   func testProject(_ windowID: UUID) throws { try project(windowID: windowID) }
+  func testReplaceProvisionalEndpoint() throws {
+    guard let wrapper = preparingNewWindow else { throw NativeWorkspaceError.notReady }
+    endpoints[wrapper.assignment.windowID] = nil
+    _ = try constructEndpoint(Endpoint(wrapper.assignment), forTransfer: true, provisional: true)
+  }
   func testStartClose(_ documentID: UUID) throws {
     guard let assignment = registry.assignment(of: documentID) else { throw NativeWorkspaceError.staleEndpoint }
     _ = try closing.start(documentIDs: [documentID], sourceWindowID: assignment.windowID)
@@ -46,15 +72,30 @@ extension NativeApplicationDocuments {
 }
 """)
 checkpoints=package/'Sources/NativeRouting/ApplicationSessionCheckpoints.swift'
-checkpoints.write_text(checkpoints.read_text().replace('  private func renderStatus() {', '  private func renderStatus() {\n    newWindowStatusHook?()')+"""
+checkpointText=checkpoints.read_text()
+checkpointText=checkpointText.replace('      commit: { value in', '      commit: { value in\n        await newWindowCommitHook?(value)')
+checkpointText=checkpointText.replace('      prepareCapture: { [weak self] in', '      prepareCapture: { [weak self] in\n        await newWindowPublisherPrepareHook?()')
+checkpointText=checkpointText.replace('        return try self.capture(generation)', '        let result = try self.capture(generation)\n        newWindowCaptureHook?(result)\n        return result')
+checkpoints.write_text(checkpointText.replace('  private func renderStatus() {', '  private func renderStatus() {\n    newWindowStatusHook?()')+"""
 @MainActor var newWindowStatusHook: (() -> Void)?
+@MainActor var newWindowPublisherPrepareHook: (() async -> Void)?
+@MainActor var newWindowCommitHook: ((SessionCheckpointCapture) async -> Void)?
+@MainActor var newWindowCaptureHook: ((SessionCheckpointCapture) -> Void)?
 extension ApplicationSessionCheckpoints {
   func testPreparePublisher() async throws { try await scheduler.testPreparePublisher() }
+  var testPauseCount: Int { scheduler.testPauseCount }
 }
 """)
 scheduler=package/'Sources/NativeRouting/SessionCheckpointCoordinator.swift'
-scheduler.write_text(scheduler.read_text()+"""
+schedulerText=scheduler.read_text()
+schedulerText=schedulerText.replace('    pauseLeases[token.id] = false', '    newWindowPauseAcquires += 1\n    pauseLeases[token.id] = false')
+schedulerText=schedulerText.replace('    pauseLeases.removeValue(forKey: token.id)', '    try newWindowReleaseHook?()\n    newWindowPauseReleases += 1\n    pauseLeases.removeValue(forKey: token.id)')
+scheduler.write_text(schedulerText+"""
+@MainActor var newWindowPauseAcquires = 0
+@MainActor var newWindowPauseReleases = 0
+@MainActor var newWindowReleaseHook: (() throws -> Void)?
 extension SessionCheckpointCoordinator {
+  var testPauseCount: Int { pauseLeases.count }
   func testPreparePublisher() async throws { try await prepareCapture() }
 }
 """)

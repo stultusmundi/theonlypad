@@ -43,3 +43,11 @@ enum ApplicationDocumentTransferError: Error, LocalizedError {
   let finishMonitor:
     (DocumentTransferSnapshot, any ApplicationDocumentTransferReceipt) throws -> Void
 }
+
+/// Terminal placement provenance captured before public settlement notifications. It is not
+/// authority to project models or to ignore later workspace changes.
+struct ApplicationDocumentTransferTerminalReceipt {
+  let request: DocumentTransferRequest
+  let workspaceRevision: UUID
+  let moved: Bool
+}

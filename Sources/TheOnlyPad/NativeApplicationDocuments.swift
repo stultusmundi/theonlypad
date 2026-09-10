@@ -32,7 +32,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private var ready = false
   private var quitting = false
   private var preparingHistory = false
-  /// Internal preparation only. The existing transfer state machine owns the later handoff.
+  /// Owns provisional lifetime and cleanup; the existing transfer state machine owns the move.
   private final class NewWindowPreparation {
     let id = NativeNewWindowMoveID()
     let choices: NativeDocumentMoveChoices
@@ -49,6 +49,12 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     var task: Task<NativeNewWindowPreparationResult, Never>?
     var cleanupRunning = false
     var cleanupTask: Task<NativeNewWindowPreparationResult, Never>?
+    var moveTask: Task<NativeNewWindowMoveResult, Never>?
+    var innerID: ApplicationDocumentTransferID?
+    var innerOutcome: ApplicationDocumentTransferResult?
+    var handoffRequest: DocumentTransferRequest?
+    var committed = false
+    var endpointLost = false
     init(_ choices: NativeDocumentMoveChoices, capacity: SessionCapacitySnapshot) {
       self.choices = choices
       self.capacity = capacity
@@ -65,6 +71,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
   }
   private var preparingNewWindow: NewWindowPreparation?
+  private var lastNewWindowMove: (NativeNewWindowMoveID, NativeNewWindowMoveResult)?
   private func requireNewWindowSettled() throws {
     guard preparingNewWindow == nil else { throw NativeNewWindowPreparationError.busy }
   }
@@ -108,6 +115,165 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     _ = try controller.captureTransferPreparation()
     guard registry.workspaceRevision == revision else {
       throw NativeNewWindowPreparationError.changed
+    }
+  }
+  func startMoveToNewWindow(_ choices: NativeDocumentMoveChoices) throws -> NativeNewWindowMoveID {
+    let id = try startNewWindowPreparation(choices)
+    let value = preparingNewWindow!
+    value.moveTask = Task { await self.performNewWindowMove(value) }
+    return id
+  }
+  func waitForNewWindowMove(_ id: NativeNewWindowMoveID) async throws -> NativeNewWindowMoveResult {
+    if let value = preparingNewWindow, value.id == id, let task = value.moveTask {
+      return await task.value
+    }
+    if let last = lastNewWindowMove, last.0 == id { return last.1 }
+    throw NativeNewWindowPreparationError.expired
+  }
+  private func performNewWindowMove(_ value: NewWindowPreparation) async
+    -> NativeNewWindowMoveResult
+  {
+    do {
+      guard preparingNewWindow === value else { throw NativeNewWindowPreparationError.expired }
+      if value.innerID == nil, value.innerOutcome == nil {
+        guard let preparation = value.task else { throw NativeNewWindowPreparationError.expired }
+        switch await preparation.value {
+        case .prepared: break
+        case .retained(let error): throw error
+        case .cancelled: throw CancellationError()
+        }
+        guard let revision = value.registeredRevision else {
+          throw NativeNewWindowPreparationError.changed
+        }
+        try validateNewWindowSource(value, revision: revision)
+        try validateNewWindowCapacity(value)
+        guard let target = value.endpoint, !value.endpointLost else {
+          throw NativeWorkspaceError.staleEndpoint
+        }
+        _ = try validateTransferEndpoint(target)
+        guard let source = registry.assignment(of: value.choices.documentID) else {
+          throw NativeWorkspaceError.staleEndpoint
+        }
+        let request = DocumentTransferRequest(
+          documentID: value.choices.documentID, source: source, target: value.assignment,
+          targetIndex: 0, workspaceRevision: revision,
+          ownershipGeneration: value.choices.ownershipGeneration)
+        // Only this synchronous start can consume this exact handoff admission. All public entry
+        // points keep their ordinary wrapper gate; callbacks cannot borrow this capability.
+        value.handoffRequest = request
+        defer { value.handoffRequest = nil }
+        let inner = try transferring.start(request)
+        value.innerID = inner
+        transferID = inner
+      }
+      if value.innerOutcome == nil, let inner = value.innerID {
+        let outcome = try await transferring.wait(for: inner)
+        switch outcome {
+        case .retained(let error):
+          value.failure = error
+          return .retained(error)
+        case .moved, .restored: value.innerOutcome = outcome
+        }
+      }
+      return await finishNewWindowMove(value)
+    } catch {
+      value.failure = error
+      // A failed start has no inner transaction. Its original preparation receipt still owns
+      // exact unused cleanup; active or retained inner transactions are never cancelled here.
+      if value.innerID == nil { return await finishNewWindowMove(value) }
+      return .retained(error)
+    }
+  }
+  private func finishNewWindowMove(_ value: NewWindowPreparation) async -> NativeNewWindowMoveResult
+  {
+    guard preparingNewWindow === value, !value.cleanupRunning else {
+      return .retained(NativeNewWindowPreparationError.busy)
+    }
+    value.cleanupRunning = true
+    defer { value.cleanupRunning = false }
+    do {
+      let result: NativeNewWindowMoveResult
+      switch value.innerOutcome {
+      case .moved?:
+        value.committed = true
+        let destination = try settledNewWindowDestination(value)
+        result = .moved(destination)
+      case .restored(let error)?:
+        guard let inner = value.innerID else { throw NativeNewWindowPreparationError.expired }
+        let terminal = try transferring.terminalReceipt(for: inner)
+        guard terminal.request.documentID == value.choices.documentID,
+          terminal.request.target == value.assignment, !terminal.moved
+        else { throw NativeNewWindowPreparationError.cleanupChanged }
+        try removeUnusedNewWindow(value, revision: terminal.workspaceRevision)
+        result = .restored(error)
+      case nil:
+        if !value.pauseDrained, let pause = value.pause {
+          try await checkpoints.drainPause(pause)
+          value.pauseDrained = true
+        }
+        try removeUnusedNewWindow(value, revision: value.registeredRevision)
+        result = .restored(value.failure ?? NativeNewWindowPreparationError.changed)
+      case .retained?: throw NativeNewWindowPreparationError.busy
+      }
+      if let pause = value.pause {
+        try checkpoints.releasePause(pause)
+        value.pause = nil
+      }
+      // Renderer callbacks during release can retire an endpoint. Preserve the committed move
+      // and retry its presentation; never restore an earlier dirty buffer or ownership receipt.
+      if value.committed { _ = try settledNewWindowDestination(value) }
+      if transferID == value.innerID {
+        transferID = nil
+        transferPresentation = nil
+      }
+      value.failure = nil
+      lastNewWindowMove = (value.id, result)
+      preparingNewWindow = nil
+      checkpoints.requestCheckpoint()
+      return result
+    } catch {
+      value.failure = error
+      return .retained(error)
+    }
+  }
+  private func settledNewWindowDestination(_ value: NewWindowPreparation) throws
+    -> NativeDocumentMoveDestination
+  {
+    guard let endpoint = value.endpoint, !value.endpointLost,
+      endpoints[value.assignment.windowID] === endpoint,
+      registry.assignment(of: value.choices.documentID) == value.assignment,
+      registry.window(id: value.assignment.windowID)?.groups.first?.selectedDocumentID
+        == value.choices.documentID,
+      registry.handle(id: value.choices.documentID) is EditorDocument
+    else { throw NativeWorkspaceError.staleEndpoint }
+    _ = try validateTransferEndpoint(endpoint)
+    return .init(windowID: value.assignment.windowID, endpointID: endpoint.id, title: "New Window")
+  }
+  private func removeUnusedNewWindow(_ value: NewWindowPreparation, revision: UUID?) throws {
+    guard !value.committed else { throw NativeNewWindowPreparationError.cleanupChanged }
+    if let revision, !value.unregistered {
+      guard registry.workspaceRevision == revision,
+        registry.closedHistoryCount(windowID: value.assignment.windowID) == 0,
+        registry.window(id: value.assignment.windowID)?.groups == [
+          DocumentGroupSnapshot(
+            id: value.assignment.groupID, documentIDs: [], selectedDocumentID: nil)
+        ],
+        value.endpoint.map({
+          (endpoints[value.assignment.windowID] === $0
+            || (value.endpointLost && endpoints[value.assignment.windowID] == nil)) && !$0.announced
+        })
+          ?? (endpoints[value.assignment.windowID] == nil)
+      else { throw NativeNewWindowPreparationError.cleanupChanged }
+      let controller = value.endpoint?.controller
+      try registry.unregisterEmptyWindow(
+        value.assignment.windowID, expectedRevision: revision,
+        willNotify: { _ in
+          value.unregistered = true
+          if let endpoint = value.endpoint, self.endpoints[value.assignment.windowID] === endpoint {
+            self.endpoints[value.assignment.windowID] = nil
+          }
+        })
+      controller?.window?.close()
     }
   }
   func startNewWindowPreparation(_ choices: NativeDocumentMoveChoices) throws
@@ -197,7 +363,9 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     return result
   }
   func cancelNewWindowPreparation(_ id: NativeNewWindowMoveID) async throws {
-    guard let value = preparingNewWindow, value.id == id, !value.cleanupRunning else {
+    guard let value = preparingNewWindow, value.id == id, !value.cleanupRunning,
+      value.moveTask == nil
+    else {
       throw NativeNewWindowPreparationError.expired
     }
     value.cancellationRequested = true
@@ -222,27 +390,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         try await checkpoints.drainPause(pause)
         value.pauseDrained = true
       }
-      if let revision = value.registeredRevision, !value.unregistered {
-        guard registry.workspaceRevision == revision,
-          registry.closedHistoryCount(windowID: value.assignment.windowID) == 0,
-          registry.window(id: value.assignment.windowID)?.groups == [
-            DocumentGroupSnapshot(
-              id: value.assignment.groupID, documentIDs: [], selectedDocumentID: nil)
-          ],
-          value.endpoint.map({ endpoints[value.assignment.windowID] === $0 && !$0.announced })
-            ?? (endpoints[value.assignment.windowID] == nil)
-        else { throw NativeNewWindowPreparationError.cleanupChanged }
-        try registry.unregisterEmptyWindow(
-          value.assignment.windowID, expectedRevision: revision,
-          willNotify: { _ in
-            value.unregistered = true
-            if let endpoint = value.endpoint, self.endpoints[value.assignment.windowID] === endpoint
-            {
-              self.endpoints[value.assignment.windowID] = nil
-            }
-          })
-        value.endpoint?.controller?.window?.close()
-      }
+      try removeUnusedNewWindow(value, revision: value.registeredRevision)
       if let pause = value.pause {
         try checkpoints.releasePause(pause)
         value.pause = nil
@@ -293,7 +441,15 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     registry: registry,
     publication: .init(
       requireAdmission: {
-        try self.requireNewWindowSettled()
+        if let wrapper = self.preparingNewWindow {
+          guard let request = wrapper.handoffRequest, wrapper.innerID == nil,
+            request.documentID == wrapper.choices.documentID,
+            request.target == wrapper.assignment,
+            request.source.windowID == wrapper.choices.sourceWindowID,
+            request.workspaceRevision == wrapper.registeredRevision,
+            self.registry.workspaceRevision == request.workspaceRevision
+          else { throw NativeNewWindowPreparationError.busy }
+        }
         guard self.ready, !self.quitting, !self.preparingHistory,
           self.externalOpens.pendingCount == 0
         else { throw NativeWorkspaceError.notReady }
@@ -561,7 +717,8 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         }
         do { try self.refreshAdmission() } catch { if failure == nil { failure = error } }
         if let failure { throw failure }
-        for endpoint in [value.source, value.target] where !endpoint.announced {
+        for endpoint in [value.source, value.target]
+        where !endpoint.announced && self.preparingNewWindow?.endpoint !== endpoint {
           let controller = try self.validateTransferEndpoint(endpoint)
           endpoint.announced = true
           self.onWindowCreated(controller)
@@ -822,6 +979,16 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       throw NativeWorkspaceError.notReady
     }
   }
+  private func requireNativeAdmission() throws {
+    if let value = preparingNewWindow {
+      guard value.innerID != nil, transferring.allowsNativeAdmission else {
+        throw NativeNewWindowPreparationError.busy
+      }
+      guard ready, !quitting else { throw NativeWorkspaceError.notReady }
+    } else {
+      try requireUserAdmission()
+    }
+  }
   private func endpoint(windowID: UUID) throws -> Endpoint {
     guard let value = endpoints[windowID], value.controller != nil else {
       throw NativeWorkspaceError.staleEndpoint
@@ -853,7 +1020,21 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       try registry.registerWindow(id: windowID, initialGroupID: assignment.groupID)
     }
     let value = Endpoint(assignment)
-    return try constructEndpoint(value, forTransfer: forTransfer)
+    if forTransfer, let wrapper = preparingNewWindow, wrapper.assignment == assignment {
+      guard wrapper.endpointLost, wrapper.innerID != nil else {
+        throw NativeWorkspaceError.staleEndpoint
+      }
+      wrapper.endpoint = value
+      wrapper.endpointLost = false
+    }
+    do { return try constructEndpoint(value, forTransfer: forTransfer) } catch {
+      if let wrapper = preparingNewWindow, wrapper.endpoint === value, endpoints[windowID] == nil {
+        // Construction may fail before returning a controller. Its exact recorded successor
+        // remains owned, and only the same transfer may replace this absent incarnation again.
+        wrapper.endpointLost = true
+      }
+      throw error
+    }
   }
   /// Registration, endpoint installation/configuration, and visible announcement are distinct effects.
   private func constructEndpoint(
@@ -873,7 +1054,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       requireEndpointCurrent: current,
       requireUserAdmission: { [weak self] in
         guard let self else { throw NativeWorkspaceError.notReady }
-        try self.requireUserAdmission()
+        try self.requireNativeAdmission()
       },
       submit: { [weak self] submission in
         guard let self else { throw NativeWorkspaceError.notReady }
@@ -920,8 +1101,11 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         guard let self, let value, value.id == id, self.endpoints[windowID] === value else {
           return
         }
-        if self.preparingNewWindow?.endpoint === value {
-          // The preparation record alone owns unused provisional removal.
+        if let wrapper = self.preparingNewWindow, wrapper.endpoint === value {
+          // Record loss of the exact incarnation, retaining cleanup/inner ownership. Only the
+          // recorded transfer retry may create and accept a successor for this assignment.
+          wrapper.endpointLost = true
+          self.endpoints[windowID] = nil
           return
         }
         self.endpoints[windowID] = nil
@@ -1209,7 +1393,30 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     guard !quitting else { throw NativeWorkspaceError.notReady }
     if let value = preparingNewWindow {
       guard value.failure != nil else { throw NativeNewWindowPreparationError.busy }
-      try await cancelNewWindowPreparation(value.id)
+      if value.moveTask != nil {
+        guard !value.cleanupRunning else { throw NativeNewWindowPreparationError.busy }
+        if let id = value.innerID, value.innerOutcome == nil {
+          let lease = try transferring.retryLease(for: id)
+          if let presentation = transferPresentation,
+            lease != nil || transferring.allowsNativeAdmission
+          {
+            try reconcileTransferEndpoints(presentation, lease: lease)
+          }
+          try transferring.retryLayout(id)
+        } else if value.committed, let presentation = transferPresentation {
+          try reconcileTransferEndpoints(presentation, lease: nil)
+          try makeTransferNative().refreshAdmission(presentation)
+        }
+        value.failure = nil
+        let task = Task { await self.performNewWindowMove(value) }
+        value.moveTask = task
+        switch await task.value {
+        case .moved, .restored: return
+        case .retained(let error): throw error
+        }
+      } else {
+        try await cancelNewWindowPreparation(value.id)
+      }
       return
     }
     if let id = transferID, transferring.hasUnsettledTransactions {

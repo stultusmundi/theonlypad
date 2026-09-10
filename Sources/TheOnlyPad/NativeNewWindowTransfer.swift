@@ -28,3 +28,9 @@ enum NativeNewWindowPreparationError: Error, LocalizedError {
     }
   }
 }
+
+enum NativeNewWindowMoveResult {
+  case moved(NativeDocumentMoveDestination)
+  case restored(Error)
+  case retained(Error)
+}

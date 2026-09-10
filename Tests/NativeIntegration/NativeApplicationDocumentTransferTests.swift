@@ -5,6 +5,73 @@ import XCTest
 @testable import NativeRouting
 
 @MainActor final class NativeApplicationDocumentTransferTests: XCTestCase {
+  func testSplitDocumentLeavesNeighborAndPreservesBothPaneSelections() async throws {
+    _ = NSApplication.shared
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appendingPathComponent("split.txt")
+    let neighborFile = directory.appendingPathComponent("neighbor.txt")
+    let text = "original 👩🏽‍💻 e\u{301}\r\nsecond line\r\n"
+    let bytes = try DocumentCodec.encode(.init(text: text, encoding: .utf16LE, hasBOM: true))
+    try bytes.write(to: file)
+    try Data("neighbor".utf8).write(to: neighborFile)
+    let presentation = SessionPresentation(
+      axis: .stacked,
+      panes: [
+        .init(selection: NSRange(location: 0, length: 0), scrollOrigin: .init(x: 0, y: 0)),
+        .init(selection: NSRange(location: 3, length: 2), scrollOrigin: .init(x: 0, y: 0)),
+      ], focusedPaneIndex: 1)
+    let tab = SessionTab(
+      originalPath: file.path, pinned: true, encoding: .utf16LE, presentation: presentation)
+    let neighbor = SessionTab(originalPath: neighborFile.path)
+    let initial = EditorSession(windows: [.init(tabs: [tab, neighbor], selectedTabID: tab.id)])
+    let store = SessionStore(directory: directory.appendingPathComponent("session"))
+    let recovery = RecoveryCoordinator(
+      directory: directory.appendingPathComponent("recovery"),
+      saveCheckpointSession: { try store.save($0) }, readCheckpointSession: { try store.load() })
+    let session = SessionCoordinator(
+      loadSession: { initial }, claimRecovery: { try await recovery.claimStartup() })
+    let owner = try NativeApplicationDocuments(
+      session: session, recovery: recovery,
+      monitoring: ApplicationFileMonitoring(), onWindowCreated: { _ in }, onError: { _ in })
+    try await owner.start()
+    let source = try XCTUnwrap(owner.windows.first)
+    let target = try owner.createWindow(createDocument: false)
+    let model = try XCTUnwrap(owner.registry.handle(id: tab.id) as? EditorDocument)
+    let panes = model.panePool
+    let undo = model.undoManager
+    source.focusedPane?.editor.insertText(
+      "local ", replacementRange: NSRange(location: model.storage.length, length: 0))
+    let before = try model.captureTransferView(preparation: source.captureTransferPreparation())
+    let move = try owner.moveDocument(tab.id, toWindowID: target.sessionMetadata.id)
+    switch try await owner.waitForTransfer(move) {
+    case .moved: break
+    case .restored(let error), .retained(let error):
+      return XCTFail("Split transfer failed: \(error)")
+    }
+    XCTAssertEqual(source.selectedDocumentID, neighbor.id)
+    XCTAssertEqual(target.selectedDocumentID, tab.id)
+    XCTAssertTrue(zip(model.panePool, panes).allSatisfy { $0 === $1 })
+    XCTAssertEqual(model.panePool.count, 2)
+    let after = try model.captureTransferView(preparation: target.captureTransferPreparation())
+    XCTAssertEqual(after.panes.map(\.selection), before.panes.map(\.selection))
+    XCTAssertEqual(after.preferredPaneID, before.preferredPaneID)
+    XCTAssertEqual(after.axis, before.axis)
+    XCTAssertEqual(model.storage.string, text + "local ")
+    XCTAssertTrue(model.undoManager === undo)
+    undo.undo()
+    XCTAssertEqual(model.storage.string, text)
+    undo.redo()
+    XCTAssertEqual(model.storage.string, text + "local ")
+    XCTAssertEqual(try Data(contentsOf: file), bytes)
+    _ = try await owner.prepareQuit()
+    XCTAssertEqual(
+      try store.load()?.windows.first { $0.id == target.sessionMetadata.id }?.tabs.first?.id, tab.id
+    )
+    for window in owner.windows { window.window?.close() }
+  }
+
   func testDirtyScratchMovesWithNativeUndoAndOneFinalRecoveryOwner() async throws {
     _ = NSApplication.shared
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
