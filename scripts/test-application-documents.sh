@@ -14,7 +14,7 @@ run=Path(sys.argv[1]); package=run/'Package'
 source=package/'Sources/DocumentRegistry'; tests=package/'Tests/DocumentRegistryTests'
 source.mkdir(parents=True); tests.mkdir(parents=True)
 manifest=[]
-for path,destination in [(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]+[(Path('Sources/TheOnlyPad')/name,source/name) for name in ['WorkspaceDocumentRegistryTypes.swift','ApplicationDocuments.swift']]+[(Path('Tests/NativeIntegration')/name,tests/name) for name in ['ApplicationDocumentsTests.swift','ApplicationDocumentCloseTests.swift']]:
+for path,destination in [(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]+[(Path('Sources/TheOnlyPad')/name,source/name) for name in ['WorkspaceDocumentRegistryTypes.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift']]+[(Path('Tests/NativeIntegration')/name,tests/name) for name in ['ApplicationDocumentsTests.swift','ApplicationDocumentCloseTests.swift']]:
     destination.parent.mkdir(parents=True,exist_ok=True)
     data=path.read_bytes(); destination.write_bytes(data)
     manifest.append({'source':str(path),'sha256':hashlib.sha256(data).hexdigest()})

@@ -1,6 +1,15 @@
 import Foundation
 import PadCore
 
+struct DocumentTransferLease: Equatable {
+  let registryID: UUID
+  let requestID: UUID
+  fileprivate init(registryID: UUID, requestID: UUID) {
+    self.registryID = registryID
+    self.requestID = requestID
+  }
+}
+
 @MainActor struct DocumentHistoryClaim {
   fileprivate let registryID: UUID
   fileprivate let entryID: UUID
@@ -89,12 +98,258 @@ struct DocumentAdoptionState: Equatable {
   private var history: [UUID: [HistoryEntry]] = [:]
   private let registryID = UUID()
   private var adoptionRequests = Set<UUID>()
+  private let transferServices: DocumentTransferServices?
   private let adoptionServices: DocumentAdoptionServices?
   init(
-    closeServices: DocumentCloseServices? = nil, adoptionServices: DocumentAdoptionServices? = nil
+    closeServices: DocumentCloseServices? = nil, adoptionServices: DocumentAdoptionServices? = nil,
+    transferServices: DocumentTransferServices? = nil
   ) {
+    self.transferServices = transferServices
     self.closeServices = closeServices
     self.adoptionServices = adoptionServices
+  }
+
+  private final class Transfer {
+    let lease: DocumentTransferLease
+    let request: DocumentTransferRequest
+    let record: Record
+    let source: DocumentWindowSnapshot
+    let target: DocumentWindowSnapshot
+    var state: DocumentTransferState?
+    var phase: DocumentTransferPhase = .reserved
+    var effects = false
+    var requiresReconciliation = false
+    var failure: Error?
+    init(
+      lease: DocumentTransferLease, request: DocumentTransferRequest, record: Record,
+      source: DocumentWindowSnapshot, target: DocumentWindowSnapshot
+    ) {
+      self.lease = lease
+      self.request = request
+      self.record = record
+      self.source = source
+      self.target = target
+    }
+  }
+  private var transfer: Transfer?
+  private func transferRead(_ value: Transfer) throws -> DocumentTransferState {
+    guard let services = transferServices,
+      records[value.request.documentID]?.handle === value.record.handle,
+      value.record.handle.id == value.request.documentID,
+      value.record.handle.workspaceKind == .editable
+    else { throw DocumentTransferError.stale }
+    let state = try services.readState(value.record.handle)
+    guard state.documentID == value.request.documentID, state.kind == .editable,
+      state.ownershipGeneration == value.record.handle.ownershipGeneration,
+      value.record.handle.id == value.request.documentID,
+      value.record.handle.workspaceKind == .editable,
+      state.operationID == nil, state.pendingPublicationID == nil,
+      !state.isBusy, !state.hasPendingTextEdits, !state.isComposing,
+      state.recoveryAuthority?.documentID == state.documentID
+    else {
+      throw DocumentTransferError.unsafeState
+    }
+    return state
+  }
+  private func withTransfer<T>(_ lease: DocumentTransferLease, _ body: (Transfer) throws -> T)
+    throws -> T
+  {
+    guard !mutating else { throw DocumentRegistryError.busy }
+    guard let value = transfer, value.lease == lease else { throw DocumentTransferError.stale }
+    mutating = true
+    defer { mutating = false }
+    return try body(value)
+  }
+  private func validateTransfer(_ value: Transfer) throws -> DocumentTransferState {
+    guard !value.requiresReconciliation else { throw DocumentTransferError.unsafeState }
+    let state = try transferRead(value)
+    guard state == value.state else { throw DocumentTransferError.stale }
+    return state
+  }
+  func reserveTransfer(_ request: DocumentTransferRequest) throws -> DocumentTransferLease {
+    guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
+    guard transferServices != nil else { throw DocumentTransferError.unavailable }
+    guard request.workspaceRevision == workspaceRevision,
+      request.source.windowID != request.target.windowID,
+      let record = records[request.documentID], record.assignment == request.source,
+      record.adoption == .active, leases.isEmpty,
+      !records.values.contains(where: { $0.adoption.blocksAdmission }),
+      let source = windows[request.source.windowID], let target = windows[request.target.windowID],
+      source.groups.count == 1, target.groups.count == 1,
+      source.groups[0].id == request.source.groupID, target.groups[0].id == request.target.groupID,
+      source.groups[0].selectedDocumentID == request.documentID,
+      source.groups[0].documentIDs.contains(request.documentID),
+      !target.groups[0].documentIDs.contains(request.documentID),
+      request.targetIndex >= 0, request.targetIndex <= target.groups[0].documentIDs.count
+    else {
+      throw DocumentTransferError.invalidRequest
+    }
+    let pinCount = target.groups[0].documentIDs.filter { records[$0]?.metadata.pinned == true }
+      .count
+    guard record.metadata.pinned ? request.targetIndex <= pinCount : request.targetIndex >= pinCount
+    else {
+      throw DocumentTransferError.invalidRequest
+    }
+    let lease = DocumentTransferLease(registryID: registryID, requestID: UUID())
+    let value = Transfer(
+      lease: lease, request: request, record: record, source: source, target: target)
+    transfer = value  // Gate exists before any handle getter or supplied scalar callback.
+    do {
+      try withTransfer(lease) { value in
+        let state = try transferRead(value)
+        guard state.ownershipGeneration == request.ownershipGeneration else {
+          throw DocumentTransferError.stale
+        }
+        value.state = state
+      }
+      return lease
+    } catch {
+      transfer = nil  // Reservation has performed no model/placement effect.
+      throw error
+    }
+  }
+  private func snapshot(_ value: Transfer) throws -> DocumentTransferSnapshot {
+    guard let state = value.state, let source = windows[value.source.id],
+      let target = windows[value.target.id]
+    else {
+      throw DocumentTransferError.stale
+    }
+    return .init(
+      lease: value.lease, request: value.request, handle: value.record.handle,
+      originalSource: value.source, originalTarget: value.target, source: source, target: target,
+      expectedState: state, phase: value.phase, effectsStarted: value.effects,
+      requiresReconciliation: value.requiresReconciliation, failure: value.failure)
+  }
+  func transferSnapshot(_ lease: DocumentTransferLease) throws -> DocumentTransferSnapshot {
+    try withTransfer(lease) { try snapshot($0) }
+  }
+  func validateTransferSnapshot(_ lease: DocumentTransferLease) throws -> DocumentTransferSnapshot {
+    try withTransfer(lease) { value in
+      guard !value.requiresReconciliation else { throw DocumentTransferError.unsafeState }
+      _ = try validateTransfer(value)
+      return try snapshot(value)
+    }
+  }
+  private func rotateTransfer(_ value: Transfer) throws {
+    let old = try validateTransfer(value)
+    value.effects = true
+    let minted = transferServices!.rotateOwnership(value.record.handle)
+    // Expected tokens originate in the nonthrowing mint operation, never in a later model read.
+    value.state = .init(
+      documentID: old.documentID, kind: old.kind,
+      ownershipGeneration: minted.ownershipGeneration,
+      mutationGeneration: minted.mutationGeneration,
+      editRevision: old.editRevision, baselineRevision: old.baselineRevision,
+      operationID: old.operationID, pendingPublicationID: old.pendingPublicationID,
+      isBusy: old.isBusy, hasPendingTextEdits: old.hasPendingTextEdits,
+      isComposing: old.isComposing,
+      recoveryAuthority: old.recoveryAuthority, highestIssuedRevision: old.highestIssuedRevision)
+    guard minted.ownershipGeneration != old.ownershipGeneration,
+      minted.mutationGeneration != old.mutationGeneration
+    else {
+      value.requiresReconciliation = true
+      throw DocumentTransferError.unsafeState
+    }
+  }
+  private func validateRotatedTransfer(_ value: Transfer) throws {
+    guard !value.requiresReconciliation else { throw DocumentTransferError.unsafeState }
+    let actual = try transferRead(value)
+    guard actual == value.state else {
+      value.requiresReconciliation = true
+      throw DocumentTransferError.stale
+    }
+  }
+  func stageTransfer(_ lease: DocumentTransferLease) throws {
+    try withTransfer(lease) { value in
+      guard (value.phase == .reserved && !value.effects) || value.phase == .rotated else {
+        throw DocumentTransferError.invalidPhase
+      }
+      do {
+        if value.phase == .reserved {
+          try rotateTransfer(value)
+          value.phase = .rotated
+        }
+        try validateRotatedTransfer(value)
+        let request = value.request
+        var sourceIDs = value.source.groups[0].documentIDs
+        let index = sourceIDs.firstIndex(of: request.documentID)!
+        sourceIDs.remove(at: index)
+        var targetIDs = value.target.groups[0].documentIDs
+        targetIDs.insert(request.documentID, at: request.targetIndex)
+        windows[value.source.id] = replacingAndInvalidatingGroup(
+          value.source, groupAt: 0,
+          with: .init(
+            id: request.source.groupID, documentIDs: sourceIDs,
+            selectedDocumentID: sourceIDs.isEmpty ? nil : sourceIDs[min(index, sourceIDs.count - 1)]
+          ))
+        windows[value.target.id] = replacingAndInvalidatingGroup(
+          value.target, groupAt: 0,
+          with: .init(
+            id: request.target.groupID, documentIDs: targetIDs,
+            selectedDocumentID: request.documentID))
+        records[request.documentID] = Record(
+          handle: value.record.handle, assignment: request.target,
+          metadata: value.record.metadata, adoption: value.record.adoption)
+        admissionGenerations[request.documentID] = UUID()
+        value.phase = .staged
+      } catch {
+        value.failure = error
+        throw error
+      }
+    }
+  }
+  func restoreTransferAssignment(_ lease: DocumentTransferLease) throws {
+    try withTransfer(lease) { value in
+      guard value.effects, value.phase != .restored else {
+        throw DocumentTransferError.invalidPhase
+      }
+      do {
+        try rotateTransfer(value)
+        windows[value.source.id] = value.source
+        windows[value.target.id] = value.target
+        records[value.request.documentID] = value.record
+        advanceAdmission(in: value.source)
+        advanceAdmission(in: value.target)
+        value.phase = .restored
+        try validateRotatedTransfer(value)
+      } catch {
+        value.failure = error
+        throw error
+      }
+    }
+  }
+  func cancelUnstagedTransfer(_ lease: DocumentTransferLease) throws {
+    try withTransfer(lease) { value in
+      guard value.phase == .reserved, !value.effects else {
+        throw DocumentTransferError.invalidPhase
+      }
+      // No registry/model effects occurred; preserve unrelated changes rather than strand admission.
+      transfer = nil
+    }
+  }
+  private func finishTransfer(
+    _ lease: DocumentTransferLease, phase: DocumentTransferPhase,
+    willNotify: () -> Void
+  ) throws {
+    try withTransfer(lease) { value in
+      guard value.phase == phase else { throw DocumentTransferError.invalidPhase }
+      _ = try validateTransfer(value)
+      workspaceRevision = UUID()
+      transfer = nil
+      willNotify()  // Trusted process assignment only; public reentry remains fenced.
+    }
+    let revision = workspaceRevision
+    onChange?(revision)
+    // No cleanup after notification; it may have reserved the next transfer.
+  }
+  func completeTransfer(_ lease: DocumentTransferLease, willNotify: () -> Void) throws {
+    try finishTransfer(lease, phase: .staged, willNotify: willNotify)
+  }
+  func settleRestoredTransfer(_ lease: DocumentTransferLease, willNotify: () -> Void) throws {
+    try finishTransfer(lease, phase: .restored, willNotify: willNotify)
+  }
+  func retainTransferFailure(_ lease: DocumentTransferLease, error: Error) throws {
+    try withTransfer(lease) { $0.failure = error }
   }
 
   func registerPending(
@@ -214,7 +469,7 @@ struct DocumentAdoptionState: Equatable {
   }
 
   func captureReadyWindows() throws -> [DocumentWindowSnapshot] {
-    guard !mutating else { throw DocumentRegistryError.busy }
+    guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     guard !records.values.contains(where: { $0.adoption.blocksAdmission }) else {
       throw DocumentRegistryError.adoptionBlocked
     }
@@ -223,7 +478,7 @@ struct DocumentAdoptionState: Equatable {
   }
 
   func allows(_ action: DocumentAdmission, documentID: UUID) -> Bool {
-    guard !mutating, let record = records[documentID], leases[documentID] == nil,
+    guard !mutating, transfer == nil, let record = records[documentID], leases[documentID] == nil,
       !record.adoption.blocksAdmission
     else { return false }
     if action == .select {
@@ -293,7 +548,7 @@ struct DocumentAdoptionState: Equatable {
     }
   }
   private func readHistory<T>(_ body: () throws -> T) throws -> T {
-    guard !mutating else { throw DocumentRegistryError.busy }
+    guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     mutating = true
     defer { mutating = false }
     return try body()
@@ -498,13 +753,13 @@ struct DocumentAdoptionState: Equatable {
   func metadata(id: UUID) -> WorkspaceDocumentMetadata? { records[id]?.metadata }
   func window(id: UUID) -> DocumentWindowSnapshot? { windows[id] }
   func captureWindows() throws -> [DocumentWindowSnapshot] {
-    guard !mutating else { throw DocumentRegistryError.busy }
+    guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     return windowOrder.compactMap { windows[$0] }
   }
 
   /// Calls no user code until admission is held. Notifications see stable state and may reenter.
   private func mutate(expected: UUID? = nil, _ body: () throws -> Bool) throws {
-    guard !mutating else { throw DocumentRegistryError.busy }
+    guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     mutating = true
     let changed: Bool
     do {

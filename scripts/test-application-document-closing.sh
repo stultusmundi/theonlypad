@@ -12,7 +12,7 @@ from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]);package=run/'Package'
 items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
-items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/ClosingOwner'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','WorkspaceDocumentRegistryTypes.swift','DocumentClosingBoundary.swift','ApplicationDocumentClosing.swift']]
+items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/ClosingOwner'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','WorkspaceDocumentRegistryTypes.swift','DocumentClosingBoundary.swift','ApplicationDocumentClosing.swift']]
 items += [(Path('Tests/NativeIntegration/ApplicationDocumentClosingTests.swift'),package/'Tests/ClosingOwnerTests/ApplicationDocumentClosingTests.swift')]
 manifest=[]
 for source,target in items:
