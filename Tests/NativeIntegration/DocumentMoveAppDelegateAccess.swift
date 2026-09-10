@@ -5,8 +5,12 @@ extension AppDelegate {
     registry = try AppCommands.registry()
     shortcutRegistryReady = true
   }
-  var moveOwnerTest: NativeApplicationDocuments? { documentOwner }
+  var moveOwnerTest: NativeApplicationDocuments? {
+    get { documentOwner }
+    set { documentOwner = newValue }
+  }
   func dispatchMoveTest() { dispatch("file.moveToWindow") }
+  func dispatchMoveRetryTest() { dispatch("file.retrySession") }
   var movePresentationGenerationTest: UUID { movePresentationGeneration }
   var movePreparingQuitTest: Bool { preparingQuit }
   func completeMovePresentationTest(

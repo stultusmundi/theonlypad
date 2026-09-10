@@ -19,7 +19,19 @@ for source,target in items:
  target.parent.mkdir(parents=True,exist_ok=True);data=source.read_bytes();target.write_bytes(data);manifest.append({'source':str(source),'sha256':hashlib.sha256(data).hexdigest()})
 access=Path('Tests/NativeIntegration/DocumentMoveAppDelegateAccess.swift')
 target=package/'Sources/NativeRouting/AppDelegate.swift'
-target.write_text(target.read_text()+'\n'+access.read_text())
+appText=target.read_text()
+needle='\n    guard !preparingQuit, documentOwner === owner, movePresentationGeneration == generation else {'
+# Observe entry to the actual terminal presentation path without replacing transfer behavior.
+if appText.count(needle)!=1: raise SystemExit('Expected one terminal presentation entry')
+appText=appText.replace(needle,'\n    movePresentationAttempts += 1'+needle)
+target.write_text(appText+'\n'+access.read_text()+'\n@MainActor var movePresentationAttempts = 0\n')
+factory=package/'Sources/NativeRouting/EditorDocumentFactory.swift'
+factoryText=factory.read_text()
+needle='    let document = EditorDocument(id: seed.id)'
+if factoryText.count(needle)!=1: raise SystemExit('Expected one document factory observation')
+factory.write_text(factoryText.replace(needle,'    moveFactoryCalls += 1\n'+needle)+'\n@MainActor var moveFactoryCalls = 0\n')
+manifest.append({'source':'scripts/test-document-move-destination.sh','sha256':hashlib.sha256(Path('scripts/test-document-move-destination.sh').read_bytes()).hexdigest()})
+(run/'frozen-sources.json').write_text(json.dumps([{'source':str(p.relative_to(package)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(package.rglob('*.swift'))],indent=2)+'\n')
 manifest.append({'source':str(access),'sha256':hashlib.sha256(access.read_bytes()).hexdigest()})
 (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"NativeRouting",dependencies:["PadCore"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')

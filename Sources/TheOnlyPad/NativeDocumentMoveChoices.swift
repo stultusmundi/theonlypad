@@ -13,6 +13,9 @@ struct NativeDocumentMoveChoices: Equatable {
   let sourceEndpointID: UUID
   let destinations: [NativeDocumentMoveDestination]
   let sourceWorkspaceRevision: UUID?
+  /// Display hint only. Unknown availability must not enable a new destination.
+  var newWindowRefusalReason: String? =
+    "Choose Move Document to Window again to check new-window availability."
   init(
     documentID: UUID, ownershipGeneration: UUID, sourceWindowID: UUID, sourceEndpointID: UUID,
     destinations: [NativeDocumentMoveDestination], sourceWorkspaceRevision: UUID? = nil

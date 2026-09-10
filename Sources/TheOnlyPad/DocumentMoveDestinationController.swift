@@ -3,16 +3,19 @@ import AppKit
 /// One captured choice, consumed before callbacks. Owner validates all endpoint identities.
 @MainActor final class DocumentMoveDestinationController: NSWindowController, NSWindowDelegate {
   private let choices: NativeDocumentMoveChoices
-  private let onChoose: (NativeDocumentMoveDestination) -> Void
+  private let onChoose: (NativeDocumentMoveTarget) -> Void
   private let onCancel: () -> Void
   private let destinations = NSPopUpButton()
   private var completed = false
+  private let targets: [NativeDocumentMoveTarget]
+  private let move = NSButton(title: "Move", target: nil, action: nil)
   init(
     choices: NativeDocumentMoveChoices,
-    onChoose: @escaping (NativeDocumentMoveDestination) -> Void,
+    onChoose: @escaping (NativeDocumentMoveTarget) -> Void,
     onCancel: @escaping () -> Void
   ) {
     self.choices = choices
+    targets = choices.destinations.map { .existing($0) } + [.newWindow]
     self.onChoose = onChoose
     self.onCancel = onCancel
     let panel = NSPanel(
@@ -22,18 +25,24 @@ import AppKit
     panel.title = "Move Document to Window"
     panel.isReleasedWhenClosed = false
     panel.delegate = self
+    let explanation =
+      "Choose a window. The document and its undo history move together. This action is not recorded in macros."
     let message = NSTextField(
-      wrappingLabelWithString: choices.destinations.isEmpty
-        ? "Open another window, then choose Move Document to Window again."
-        : "Choose an existing window. The document and its undo history move together. This action is not recorded in macros."
-    )
+      wrappingLabelWithString: explanation
+        + (choices.newWindowRefusalReason.map { " New Window is unavailable: " + $0 } ?? ""))
     destinations.setAccessibilityIdentifier("document.move.destinations")
     destinations.setAccessibilityLabel("Destination window")
+    destinations.menu?.autoenablesItems = false
     for destination in choices.destinations { destinations.addItem(withTitle: destination.title) }
-    destinations.isEnabled = !choices.destinations.isEmpty
-    let move = NSButton(title: "Move", target: self, action: #selector(confirm))
+    destinations.addItem(withTitle: "New Window")
+    destinations.lastItem?.isEnabled = choices.newWindowRefusalReason == nil
+    destinations.target = self
+    destinations.action = #selector(selectionChanged)
+    destinations.isEnabled = choices.newWindowRefusalReason == nil || !choices.destinations.isEmpty
+    move.target = self
+    move.action = #selector(confirm)
     move.setAccessibilityIdentifier("document.move.confirm")
-    move.isEnabled = !choices.destinations.isEmpty
+    selectionChanged()
     let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelChoice))
     cancel.setAccessibilityIdentifier("document.move.cancel")
     cancel.keyEquivalent = "\u{1b}"
@@ -55,14 +64,18 @@ import AppKit
     ])
   }
   required init?(coder: NSCoder) { nil }
+  @objc private func selectionChanged() {
+    move.isEnabled = !completed && destinations.selectedItem?.isEnabled == true
+  }
   @objc private func confirm() {
-    guard !completed, choices.destinations.indices.contains(destinations.indexOfSelectedItem) else {
-      return
-    }
-    let destination = choices.destinations[destinations.indexOfSelectedItem]
+    guard !completed, targets.indices.contains(destinations.indexOfSelectedItem),
+      destinations.selectedItem?.isEnabled == true
+    else { return }
+    let target = targets[destinations.indexOfSelectedItem]
+    if target == .newWindow && choices.newWindowRefusalReason != nil { return }
     completed = true
     close()
-    onChoose(destination)
+    onChoose(target)
   }
   @objc private func cancelChoice() { close() }
   func windowWillClose(_ notification: Notification) {

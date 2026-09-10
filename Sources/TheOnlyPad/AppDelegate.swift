@@ -609,30 +609,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard let owner = documentOwner, let documentID = activeEditor?.selectedDocumentID else {
         throw Self.documentFlowError("Select an editable document to move.")
       }
-      let choices = try owner.prepareMove(documentID: documentID)
+      var choices = try owner.prepareMove(documentID: documentID)
+      choices.newWindowRefusalReason = owner.newWindowMoveRefusalReason()
       weak var originating: DocumentMoveDestinationController?
       let chooser = DocumentMoveDestinationController(
         choices: choices,
-        onChoose: { [weak self, weak owner] destination in
-          guard let self, let owner, !self.preparingQuit,
+        onChoose: { [weak self, weak owner] target in
+          guard let self, let owner, self.documentOwner === owner, !self.preparingQuit,
             let originating, self.moveDestination === originating
           else { return }
           self.moveDestination = nil
           do {
             let generation = UUID()
             self.movePresentationGeneration = generation
-            let id = try owner.moveDocument(choices, to: destination)
-            Task { [weak self] in
-              do {
+            let waitForDestination: () async throws -> NativeDocumentMoveDestination
+            switch target {
+            case .existing(let destination):
+              let id = try owner.moveDocument(choices, to: destination)
+              waitForDestination = {
                 switch try await owner.waitForTransfer(id) {
-                case .moved:
-                  self?.presentMovedDocument(
-                    choices.documentID, destination: destination,
-                    owner: owner, generation: generation)
+                case .moved: return destination
                 case .restored(let error), .retained(let error): throw error
                 }
+              }
+            case .newWindow:
+              let id = try owner.startMoveToNewWindow(choices)
+              waitForDestination = {
+                switch try await owner.waitForNewWindowMove(id) {
+                case .moved(let destination): return destination
+                case .restored(let error), .retained(let error): throw error
+                }
+              }
+            }
+            Task { [weak self] in
+              do {
+                let destination = try await waitForDestination()
+                self?.presentMovedDocument(
+                  choices.documentID, destination: destination,
+                  owner: owner, generation: generation)
               } catch {
-                guard let self, !self.preparingQuit else { return }
+                guard let self, !self.preparingQuit, self.documentOwner === owner,
+                  self.movePresentationGeneration == generation
+                else { return }
                 self.reportDocumentError(error)
               }
             }
