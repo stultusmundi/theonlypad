@@ -764,7 +764,9 @@ struct DocumentAdoptionState: Equatable {
   }
 
   /// Calls no user code until admission is held. Notifications see stable state and may reenter.
-  private func mutate(expected: UUID? = nil, _ body: () throws -> Bool) throws {
+  private func mutate(
+    expected: UUID? = nil, willNotify: ((UUID) -> Void)? = nil, _ body: () throws -> Bool
+  ) throws {
     guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     mutating = true
     let changed: Bool
@@ -777,6 +779,7 @@ struct DocumentAdoptionState: Equatable {
     }
     if changed { workspaceRevision = UUID() }
     let publishedRevision = workspaceRevision
+    if changed { willNotify?(publishedRevision) }
     mutating = false
     if changed { onChange?(publishedRevision) }
     // No state cleanup after notification: a callback may have completed a newer operation.
@@ -812,8 +815,11 @@ struct DocumentAdoptionState: Equatable {
       + ids.filter { records[$0]?.metadata.pinned != true }
   }
 
-  func registerWindow(id: UUID, initialGroupID: UUID) throws {
-    try mutate {
+  /// Trusted process bookkeeping runs under the mutation fence, before public notification.
+  func registerWindow(
+    id: UUID, initialGroupID: UUID, willNotify: ((UUID) -> Void)? = nil
+  ) throws {
+    try mutate(willNotify: willNotify) {
       guard windows.count < 32 else { throw DocumentRegistryError.capacity }
       guard id != initialGroupID, !allIDs.contains(id), !allIDs.contains(initialGroupID) else {
         throw DocumentRegistryError.duplicateID
@@ -979,8 +985,10 @@ struct DocumentAdoptionState: Equatable {
       return true
     }
   }
-  func unregisterEmptyWindow(_ windowID: UUID, expectedRevision: UUID) throws {
-    try mutate(expected: expectedRevision) {
+  func unregisterEmptyWindow(
+    _ windowID: UUID, expectedRevision: UUID, willNotify: ((UUID) -> Void)? = nil
+  ) throws {
+    try mutate(expected: expectedRevision, willNotify: willNotify) {
       guard let window = windows[windowID] else { throw DocumentRegistryError.unknownWindow }
       guard window.groups.allSatisfy({ $0.documentIDs.isEmpty }) else {
         throw DocumentRegistryError.notEmpty

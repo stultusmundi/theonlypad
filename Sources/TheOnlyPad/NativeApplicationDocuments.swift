@@ -18,6 +18,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private let monitoring: ApplicationFileMonitoring
   private let bindings: NativeDocumentEndpointBindings
   private let onWindowCreated: (EditorWindowController) -> Void
+  private let configureWindow: (EditorWindowController) -> Void
   private let onError: (Error) -> Void
   private let openLargeFile: (LaunchRequest) async throws -> Void
   private var endpoints: [UUID: Endpoint] = [:]
@@ -31,6 +32,214 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private var ready = false
   private var quitting = false
   private var preparingHistory = false
+  /// Internal preparation only. The existing transfer state machine owns the later handoff.
+  private final class NewWindowPreparation {
+    let id = NativeNewWindowMoveID()
+    let choices: NativeDocumentMoveChoices
+    let assignment: DocumentAssignment
+    let capacity: SessionCapacitySnapshot
+    let sourceRevision: UUID
+    var registeredRevision: UUID?
+    var endpoint: Endpoint?
+    var unregistered = false
+    var pause: CheckpointPauseToken?
+    var pauseDrained = false
+    var cancelled = false
+    var failure: Error?
+    var task: Task<NativeNewWindowPreparationResult, Never>?
+    var cleanupRunning = false
+    init(_ choices: NativeDocumentMoveChoices, capacity: SessionCapacitySnapshot) {
+      self.choices = choices
+      self.capacity = capacity
+      sourceRevision = choices.sourceWorkspaceRevision!
+      var windowID = UUID()
+      while capacity.windowIDs.contains(windowID) || capacity.documentIDs.contains(windowID) {
+        windowID = UUID()
+      }
+      var groupID = UUID()
+      while groupID == windowID || capacity.windowIDs.contains(groupID)
+        || capacity.documentIDs.contains(groupID)
+      { groupID = UUID() }
+      assignment = .init(windowID: windowID, groupID: groupID)
+    }
+  }
+  private var preparingNewWindow: NewWindowPreparation?
+  private func requireNewWindowSettled() throws {
+    guard preparingNewWindow == nil else { throw NativeNewWindowPreparationError.busy }
+  }
+  private func newWindowCapacity() throws -> SessionCapacitySnapshot {
+    let windows = try registry.captureWindows()
+    return try session.transferCapacity(
+      liveWindows: Dictionary(
+        uniqueKeysWithValues: windows.map {
+          ($0.id, Set($0.groups.flatMap(\.documentIDs)))
+        }))
+  }
+  /// A display hint only: start always repeats authoritative admission and captures fresh receipts.
+  func newWindowMoveRefusalReason() -> String? {
+    do {
+      try requireUserAdmission()
+      try transferring.requireSettled()
+      try intake.requireSettled()
+      try closing.requireSettled()
+      guard !preparingHistory, externalOpens.pendingCount == 0 else {
+        throw NativeWorkspaceError.notReady
+      }
+      guard try newWindowCapacity().windowIDs.count < 32 else { throw SessionStoreError.limit }
+      return nil
+    } catch { return error.localizedDescription }
+  }
+  private func validateNewWindowSource(_ value: NewWindowPreparation, revision: UUID) throws {
+    guard preparingNewWindow === value, ready, !quitting, !preparingHistory,
+      externalOpens.pendingCount == 0, registry.workspaceRevision == revision,
+      let model = registry.handle(id: value.choices.documentID) as? EditorDocument,
+      model.ownershipGeneration == value.choices.ownershipGeneration,
+      registry.assignment(of: model.id)?.windowID == value.choices.sourceWindowID,
+      registry.window(id: value.choices.sourceWindowID)?.groups.first?.selectedDocumentID
+        == model.id,
+      let source = endpoints[value.choices.sourceWindowID],
+      source.id == value.choices.sourceEndpointID
+    else { throw NativeNewWindowPreparationError.changed }
+    try transferring.requireSettled()
+    try intake.requireSettled()
+    try closing.requireSettled()
+    let controller = try validateTransferEndpoint(source)
+    _ = try controller.captureTransferPreparation()
+    guard registry.workspaceRevision == revision else {
+      throw NativeNewWindowPreparationError.changed
+    }
+  }
+  func startNewWindowPreparation(_ choices: NativeDocumentMoveChoices) throws
+    -> NativeNewWindowMoveID
+  {
+    guard choices.sourceWorkspaceRevision != nil else {
+      throw NativeNewWindowPreparationError.changed
+    }
+    try requireNewWindowSettled()
+    // Scalar capacity capture invokes no collaborator. Install ownership before native admission.
+    let capacity = try newWindowCapacity()
+    let value = NewWindowPreparation(choices, capacity: capacity)
+    preparingNewWindow = value
+    do {
+      try validateNewWindowSource(value, revision: value.sourceRevision)
+      guard capacity.windowIDs.union([value.assignment.windowID]).count <= 32,
+        !registry.containsReservedID(value.assignment.windowID),
+        !registry.containsReservedID(value.assignment.groupID)
+      else { throw SessionStoreError.limit }
+      value.pause = try checkpoints.acquirePause()
+      value.task = Task { await self.prepareNewWindow(value) }
+      return value.id
+    } catch {
+      // Acquisition performs no callbacks after issuing its token. A issued token is always tracked.
+      if value.pause == nil { preparingNewWindow = nil }
+      throw error
+    }
+  }
+  private func prepareNewWindow(_ value: NewWindowPreparation) async
+    -> NativeNewWindowPreparationResult
+  {
+    do {
+      guard let pause = value.pause else { throw NativeNewWindowPreparationError.expired }
+      try await checkpoints.drainPause(pause)
+      value.pauseDrained = true
+      try validateNewWindowSource(value, revision: value.sourceRevision)
+      guard try newWindowCapacity() == value.capacity, !value.cancelled else {
+        throw NativeNewWindowPreparationError.changed
+      }
+      try await drainLegacy()
+      try validateNewWindowSource(value, revision: value.sourceRevision)
+      guard try newWindowCapacity() == value.capacity, !value.cancelled else {
+        throw NativeNewWindowPreparationError.changed
+      }
+      try registry.registerWindow(
+        id: value.assignment.windowID, initialGroupID: value.assignment.groupID,
+        willNotify: { value.registeredRevision = $0 })
+      let registered = value.registeredRevision!
+      try validateNewWindowSource(value, revision: registered)
+      try validateNewWindowCapacity(value)
+      let endpoint = Endpoint(value.assignment)
+      value.endpoint = endpoint
+      _ = try constructEndpoint(endpoint, provisional: true)
+      try validateNewWindowSource(value, revision: registered)
+      try validateNewWindowCapacity(value)
+      guard !value.cancelled else { throw CancellationError() }
+      return .prepared(
+        .init(windowID: value.assignment.windowID, endpointID: endpoint.id, title: "New Window"))
+    } catch {
+      value.failure = error
+      // Failed preparation remains explicitly owned until cancellation/recovery cleans its effects.
+      return .retained(error)
+    }
+  }
+  private func validateNewWindowCapacity(_ value: NewWindowPreparation) throws {
+    let current = try newWindowCapacity()
+    guard current.sessionRevision == value.capacity.sessionRevision,
+      current.windowIDs == value.capacity.windowIDs.union([value.assignment.windowID]),
+      current.documentIDs == value.capacity.documentIDs,
+      registry.window(id: value.assignment.windowID)?.groups == [
+        DocumentGroupSnapshot(
+          id: value.assignment.groupID, documentIDs: [], selectedDocumentID: nil)
+      ]
+    else { throw NativeNewWindowPreparationError.changed }
+  }
+  func waitForNewWindowPreparation(_ id: NativeNewWindowMoveID) async throws
+    -> NativeNewWindowPreparationResult
+  {
+    guard let value = preparingNewWindow, value.id == id, let task = value.task else {
+      throw NativeNewWindowPreparationError.expired
+    }
+    // The owner's task deliberately outlives cancellation of any one waiter.
+    let result = await task.value
+    guard preparingNewWindow === value, !value.cancelled else { return .cancelled }
+    return result
+  }
+  func cancelNewWindowPreparation(_ id: NativeNewWindowMoveID) async throws {
+    guard let value = preparingNewWindow, value.id == id, !value.cleanupRunning else {
+      throw NativeNewWindowPreparationError.expired
+    }
+    value.cancelled = true
+    value.cleanupRunning = true
+    defer { value.cleanupRunning = false }
+    if let task = value.task { _ = await task.value }
+    do {
+      guard preparingNewWindow === value else { throw NativeNewWindowPreparationError.expired }
+      if !value.pauseDrained, let pause = value.pause {
+        try await checkpoints.drainPause(pause)
+        value.pauseDrained = true
+      }
+      if let revision = value.registeredRevision, !value.unregistered {
+        guard registry.workspaceRevision == revision,
+          registry.closedHistoryCount(windowID: value.assignment.windowID) == 0,
+          registry.window(id: value.assignment.windowID)?.groups == [
+            DocumentGroupSnapshot(
+              id: value.assignment.groupID, documentIDs: [], selectedDocumentID: nil)
+          ],
+          value.endpoint.map({ endpoints[value.assignment.windowID] === $0 && !$0.announced })
+            ?? (endpoints[value.assignment.windowID] == nil)
+        else { throw NativeNewWindowPreparationError.cleanupChanged }
+        try registry.unregisterEmptyWindow(
+          value.assignment.windowID, expectedRevision: revision,
+          willNotify: { _ in
+            value.unregistered = true
+            if let endpoint = value.endpoint, self.endpoints[value.assignment.windowID] === endpoint
+            {
+              self.endpoints[value.assignment.windowID] = nil
+            }
+          })
+        value.endpoint?.controller?.window?.close()
+      }
+      if let pause = value.pause {
+        try checkpoints.releasePause(pause)
+        value.pause = nil
+      }
+      preparingNewWindow = nil
+      checkpoints.requestCheckpoint()
+    } catch {
+      value.failure = error
+      throw error
+    }
+  }
+
   var windows: [EditorWindowController] {
     registry.windowIDs.compactMap { endpoints[$0]?.controller }
   }
@@ -68,6 +277,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     registry: registry,
     publication: .init(
       requireAdmission: {
+        try self.requireNewWindowSettled()
         guard self.ready, !self.quitting, !self.preparingHistory,
           self.externalOpens.pendingCount == 0
         else { throw NativeWorkspaceError.notReady }
@@ -103,7 +313,8 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
     return .init(
       documentID: documentID, ownershipGeneration: model.ownershipGeneration,
-      sourceWindowID: assignment.windowID, sourceEndpointID: source.id, destinations: destinations)
+      sourceWindowID: assignment.windowID, sourceEndpointID: source.id, destinations: destinations,
+      sourceWorkspaceRevision: registry.workspaceRevision)
   }
   func moveDocument(
     _ choices: NativeDocumentMoveChoices, to destination: NativeDocumentMoveDestination
@@ -356,6 +567,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     managed: .init(
       registry: registry,
       requireIntakeSettled: {
+        try self.requireNewWindowSettled()
         try self.intake.requireSettled()
         try self.transferring.requireSettled()
       },
@@ -404,6 +616,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       requestCheckpoint: { self.checkpoints.requestCheckpoint() }),
     destinations: .init(
       requireAdmission: {
+        try self.requireNewWindowSettled()
         guard self.activation != nil || self.ready else { throw NativeWorkspaceError.notReady }
         try self.closing.requireSettled()
         try self.transferring.requireSettled()
@@ -446,6 +659,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private lazy var externalOpens: NativeApplicationOpenCoordinator = .init(
     ports: .init(
       chooseDestination: { _ in
+        try self.requireNewWindowSettled()
         guard self.ready else { throw NativeWorkspaceError.notReady }
         try self.intake.requireSettled()
         try self.closing.requireSettled()
@@ -532,6 +746,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     session: SessionCoordinator, recovery: RecoveryCoordinator,
     monitoring: ApplicationFileMonitoring,
     onWindowCreated: @escaping (EditorWindowController) -> Void,
+    configureWindow: @escaping (EditorWindowController) -> Void = { _ in },
     onError: @escaping (Error) -> Void,
     openLargeFile: @escaping (LaunchRequest) async throws -> Void = { _ in
       throw NativeApplicationOpenError.tooLarge
@@ -541,6 +756,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     self.recovery = recovery
     self.monitoring = monitoring
     self.onWindowCreated = onWindowCreated
+    self.configureWindow = configureWindow
     self.onError = onError
     self.openLargeFile = openLargeFile
     bindings = try NativeDocumentEndpointBindings()
@@ -583,6 +799,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     transferOwner.owner = self
   }
   private func requireUserAdmission() throws {
+    try requireNewWindowSettled()
     guard ready, !quitting, transferring.allowsNativeAdmission else {
       throw NativeWorkspaceError.notReady
     }
@@ -618,6 +835,15 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       try registry.registerWindow(id: windowID, initialGroupID: assignment.groupID)
     }
     let value = Endpoint(assignment)
+    return try constructEndpoint(value, forTransfer: forTransfer)
+  }
+  /// Registration, endpoint installation/configuration, and visible announcement are distinct effects.
+  private func constructEndpoint(
+    _ value: Endpoint, forTransfer: Bool = false, provisional: Bool = false
+  ) throws -> Endpoint {
+    let assignment = value.assignment
+    let windowID = assignment.windowID
+    guard endpoints[windowID] == nil else { throw NativeWorkspaceError.staleEndpoint }
     endpoints[windowID] = value
     let current: () throws -> Void = { [weak self, weak value] in
       guard let self, let value, self.endpoints[windowID] === value else {
@@ -676,6 +902,10 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         guard let self, let value, value.id == id, self.endpoints[windowID] === value else {
           return
         }
+        if self.preparingNewWindow?.endpoint === value {
+          // The preparation record alone owns unused provisional removal.
+          return
+        }
         self.endpoints[windowID] = nil
         self.closing.endpointClosed(windowID: windowID)
         if !self.transferring.hasUnsettledTransactions,
@@ -693,19 +923,21 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         id: windowID, application: routing, onError: onError)
       value.controller = controller
       controller.configureFileMonitoring(monitoring)
+      configureWindow(controller)
+      try current()
       if !forTransfer,
         registry.window(id: windowID)?.groups.allSatisfy({ $0.documentIDs.isEmpty }) == true
       {
         try project(windowID: windowID)
       }
-      if !forTransfer {
+      if !forTransfer, !provisional {
         value.announced = true
         onWindowCreated(controller)
       }
       try current()
       return value
     } catch {
-      if endpoints[windowID] === value { endpoints[windowID] = nil }
+      if !provisional, endpoints[windowID] === value { endpoints[windowID] = nil }
       throw error
     }
   }
@@ -756,6 +988,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
   }
   func start() async throws {
+    try requireNewWindowSettled()
     if let startupTask { return try await startupTask.value }
     startupInFlight = true
     let task = Task {
@@ -887,6 +1120,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
   /// Explicitly reconstruct a lost endpoint without replacing its registry-owned models.
   func recreateEndpoint(windowID: UUID) throws {
+    try requireNewWindowSettled()
     guard !quitting, endpoints[windowID] == nil, registry.window(id: windowID) != nil else {
       throw NativeWorkspaceError.staleEndpoint
     }
@@ -947,13 +1181,19 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
 
   var canRetryRecovery: Bool {
-    (transferID != nil && transferring.hasUnsettledTransactions) || activation != nil
+    preparingNewWindow?.failure != nil
+      || (transferID != nil && transferring.hasUnsettledTransactions) || activation != nil
       || admissionRefreshPending || externalOpens.hasRetainedRequest
       || intake.status?.stage == .failed || closing.status?.stage == .failed
       || checkpoints.lastError != nil
   }
   func retryRecovery() async throws {
     guard !quitting else { throw NativeWorkspaceError.notReady }
+    if let value = preparingNewWindow {
+      guard value.failure != nil else { throw NativeNewWindowPreparationError.busy }
+      try await cancelNewWindowPreparation(value.id)
+      return
+    }
     if let id = transferID, transferring.hasUnsettledTransactions {
       let lease = try transferring.retryLease(for: id)
       if let value = transferPresentation, lease != nil || transferring.allowsNativeAdmission {
@@ -1048,6 +1288,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
 
   func prepareQuit() async throws -> SessionCheckpointReceipt {
+    try requireNewWindowSettled()
     try transferring.requireSettled()
     guard !quitting else { throw NativeWorkspaceError.notReady }
     quitting = true

@@ -66,7 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     if let documentOwner { return documentOwner }
     let owner = try NativeApplicationDocuments(
       session: session, recovery: documentRecovery, monitoring: fileMonitoring,
-      onWindowCreated: { [weak self] in self?.decorateEditor($0) },
+      onWindowCreated: { [weak self] in self?.presentEditorWindow($0) },
+      configureWindow: { [weak self] in self?.configureEditor($0) },
       onError: { [weak self] in self?.reportDocumentError($0) },
       openLargeFile: { [weak self] request in
         guard let self else { throw CancellationError() }
@@ -177,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return nil
     }
   }
-  private func decorateEditor(_ editor: EditorWindowController) {
+  private func configureEditor(_ editor: EditorWindowController) {
     editor.applySettings(settings)
     editor.onOpenedURL = { [weak self] url in
       guard let self else { return }
@@ -191,7 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard let self else { return }
       do { try self.openLargeFile(.init(url: url)) } catch { self.reportDocumentError(error) }
     }
-    presentEditorWindow(editor)
   }
   private func openLargeFile(_ request: LaunchRequest) throws {
     guard !preparingQuit else { throw CancellationError() }

@@ -12,4 +12,16 @@ struct NativeDocumentMoveChoices: Equatable {
   let sourceWindowID: UUID
   let sourceEndpointID: UUID
   let destinations: [NativeDocumentMoveDestination]
+  let sourceWorkspaceRevision: UUID?
+  init(
+    documentID: UUID, ownershipGeneration: UUID, sourceWindowID: UUID, sourceEndpointID: UUID,
+    destinations: [NativeDocumentMoveDestination], sourceWorkspaceRevision: UUID? = nil
+  ) {
+    self.documentID = documentID
+    self.ownershipGeneration = ownershipGeneration
+    self.sourceWindowID = sourceWindowID
+    self.sourceEndpointID = sourceEndpointID
+    self.destinations = destinations
+    self.sourceWorkspaceRevision = sourceWorkspaceRevision
+  }
 }
