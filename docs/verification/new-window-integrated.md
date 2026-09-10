@@ -35,3 +35,10 @@ To launch when an interactive desktop is available: `open dist/TheOnlyPad.app`. 
 The locked console prevents current packaged clean-launch/open/edit/save/quit/reopen testing, visible chooser/focus, physical keyboard/menu, VoiceOver, IME and display-scale validation. Earlier desktop and Intel-build results refer to older binaries. Local build/package success does not satisfy these tests or the full performance targets. Independent groups, streaming transfers and other outstanding requirements remain tracked in the matrix.
 
 Raw command logs, status records and synthetic native snapshots remain private under `.local/new-window-integrated-evidence` and its isolated worktree. Public evidence contains no user document or signing credential.
+
+
+## Packaged desktop access restored — 2026-09-10
+
+After the user authorized the native UI Automation prompt, the unchanged55a7b1b package passed the real `GUIProbe/testOpenEditSaveQuitRelaunch` XCUITest: **1 test,0 failures**,61.302 seconds. The isolated app copy has executable SHA256 `f02db4960212814ea8cbf38b351f466081f310a4ec1db7135a2f6a62f70525eb`. The test used a private synthetic state directory, opened a synthetic file through the native dialog, selected and replaced text, saved and checked exact disk bytes, quit normally, relaunched and checked persisted content. Raw logs, result bundle and six test/project source hashes remain ignored locally.
+
+This resolves the earlier access blocker for this session and verifies this primary packaged workflow. It does not establish all desktop, pane, transfer, IME, VoiceOver, performance or later search-code requirements. The remaining desktop suite is running; its result is not yet claimed. No credentials were read, authentication-bypass setting changed, package rebuilt or remote artifact published.
