@@ -23,10 +23,30 @@ public struct FolderSearchReport: Sendable {
 }
 public enum FolderSearchError: Error { case invalidLimit, invalidGlob, snapshotLimit, cancelled }
 public enum FolderSearch {
+  typealias SearchExecutor = (
+    SearchQuery, String, Int, Int, @escaping () -> Bool
+  ) throws -> [NSRange]
+
   public static func search(
     root: URL, query: SearchQuery, includes: [String] = ["*"], excludes: [String] = [],
     limits: FolderSearchLimits = .init(), isCancelled: @escaping () -> Bool = { false },
     onProgress: (FolderSearchProgress) -> Void = { _ in }
+  ) throws -> FolderSearchReport {
+    try search(
+      root: root, query: query, includes: includes, excludes: excludes, limits: limits,
+      isCancelled: isCancelled, onProgress: onProgress,
+      searchExecutor: { query, text, maxTextUTF16, maxMatches, isCancelled in
+        try SearchService(
+          maxTextUTF16: maxTextUTF16, maxMatches: maxMatches, isCancelled: isCancelled
+        ).matches(query, in: text)
+      })
+  }
+
+  static func search(
+    root: URL, query: SearchQuery, includes: [String] = ["*"], excludes: [String] = [],
+    limits: FolderSearchLimits = .init(), isCancelled: @escaping () -> Bool = { false },
+    onProgress: (FolderSearchProgress) -> Void = { _ in },
+    searchExecutor: SearchExecutor
   ) throws -> FolderSearchReport {
     guard (0...50_000).contains(limits.maxFiles), (0...10_000_000).contains(limits.maxFileBytes),
       (0...10_000).contains(limits.maxMatches), (0...100_000_000).contains(limits.maxSnapshotBytes)
@@ -38,7 +58,8 @@ public enum FolderSearch {
     else { throw FolderSearchError.invalidGlob }
     func check() throws { if isCancelled() { throw FolderSearchError.cancelled } }
     try check()
-    _ = try SearchService(isCancelled: isCancelled).matches(query, in: "")
+    // Preserve the existing default service limits used only to validate the query.
+    _ = try searchExecutor(query, "", 10_000_000, 100_000, isCancelled)
     let entries = try WorkspaceIndex.scan(
       root: root, limit: limits.maxFiles, isCancelled: isCancelled)
     var report = FolderSearchReport()
@@ -91,10 +112,8 @@ public enum FolderSearch {
         report.skippedBinary += 1
         continue
       }
-      let ranges = try SearchService(
-        maxTextUTF16: limits.maxFileBytes, maxMatches: limits.maxMatches - report.hits.count,
-        isCancelled: isCancelled
-      ).matches(query, in: text)
+      let ranges = try searchExecutor(
+        query, text, limits.maxFileBytes, limits.maxMatches - report.hits.count, isCancelled)
       if !ranges.isEmpty {
         guard bytes.count <= limits.maxSnapshotBytes - snapshotBytes else {
           throw FolderSearchError.snapshotLimit

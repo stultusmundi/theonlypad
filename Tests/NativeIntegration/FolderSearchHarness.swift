@@ -3,6 +3,25 @@ import PadCore
 
 @main struct FolderSearchHarness {
   enum Failure: Error { case failed(String) }
+  private final class ScriptedFolderSearch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callCount = 0
+
+    func run(
+      _ root: URL, _ query: SearchQuery, _ includes: [String], _ excludes: [String]
+    ) throws -> FolderSearchReport {
+      lock.lock()
+      callCount += 1
+      let call = callCount
+      lock.unlock()
+      if call == 1 {
+        return try FolderSearch.search(
+          root: root, query: query, includes: includes, excludes: excludes)
+      }
+      throw SearchError.engineFailure
+    }
+  }
+
   @MainActor static func main() async throws {
     _ = NSApplication.shared
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -69,6 +88,52 @@ import PadCore
     try find("folder.cancel", NSButton.self).performClick(nil)
     try await wait { status.stringValue.contains("cancelled") }
     controller.close()
-    print("PASS: native folder search result, snapshot callback and cancellation")
+
+    let failureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+      UUID().uuidString)
+    try FileManager.default.createDirectory(at: failureRoot, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: failureRoot) }
+    try Data("a".utf8).write(to: failureRoot.appendingPathComponent("a.txt"))
+    var failureOpened = 0
+    let scriptedSearch = ScriptedFolderSearch()
+    let failureController = FolderSearchController(
+      root: failureRoot, onOpen: { _, _, _ in failureOpened += 1 },
+      search: { root, query, includes, excludes in
+        try scriptedSearch.run(root, query, includes, excludes)
+      })
+    guard let failureContent = failureController.window?.contentView else {
+      throw Failure.failed("Missing failure window")
+    }
+    func findFailure<T: NSView>(_ id: String, _ type: T.Type) throws -> T {
+      func walk(_ view: NSView) -> T? {
+        if view.identifier?.rawValue == id { return view as? T }
+        return view.subviews.lazy.compactMap { walk($0) }.first
+      }
+      guard let result = walk(failureContent) else {
+        throw Failure.failed("Missing failure control " + id)
+      }
+      return result
+    }
+    let failureQuery = try findFailure("folder.query", NSSearchField.self)
+    let failureRun = try findFailure("folder.run", NSButton.self)
+    let failureCancel = try findFailure("folder.cancel", NSButton.self)
+    let failureTable = try findFailure("folder.results", NSTableView.self)
+    let failureStatus = try findFailure("folder.status", NSTextField.self)
+    failureQuery.stringValue = "a"
+    failureRun.performClick(nil)
+    try await wait { failureTable.numberOfRows == 1 }
+    guard failureTable.numberOfRows == 1 else {
+      throw Failure.failed("Control search did not publish its result")
+    }
+    failureRun.performClick(nil)
+    try await wait { failureStatus.stringValue.contains("The search engine could not finish") }
+    guard
+      failureStatus.stringValue
+        == "Search failed; no complete results. The search engine could not finish. Narrow the pattern and try again.",
+      failureTable.numberOfRows == 0, failureOpened == 0, failureRun.isEnabled,
+      !failureCancel.isEnabled
+    else { throw Failure.failed("Engine failure published results or left the controller busy") }
+    failureController.close()
+    print("PASS: native folder search result, cancellation, and engine failure state reset")
   }
 }

@@ -17,27 +17,50 @@ public struct SearchQuery: Sendable {
 }
 public enum SearchError: Error, Equatable {
   case invalidScope, invalidEscape, invalidPattern, invalidReplacement, textLimit, matchLimit,
-    outputLimit, cancelled, timedOut
+    outputLimit, cancelled, timedOut, engineFailure
 }
 /// Synchronous bounded search. Call from a worker, never from the UI thread.
 /// Time limits are cooperative ICU progress checks, not process-isolated deadlines.
 public struct SearchService {
+  typealias MatchCallback = (
+    NSTextCheckingResult?, NSRegularExpression.MatchingFlags, UnsafeMutablePointer<ObjCBool>
+  ) -> Void
+  typealias MatchEnumerator = (
+    NSRegularExpression, String, NSRegularExpression.MatchingOptions, NSRange, MatchCallback
+  ) -> Void
+
   private let maxTextUTF16: Int
   private let maxMatches: Int
   private let maxOutputUTF16: Int
   private let timeLimit: TimeInterval
   private let isCancelled: () -> Bool
+  private let enumerateMatches: MatchEnumerator
 
   public init(
     maxTextUTF16: Int = 10_000_000, maxMatches: Int = 100_000,
     maxOutputUTF16: Int = 20_000_000, timeLimit: TimeInterval = 1,
     isCancelled: @escaping () -> Bool = { false }
   ) {
+    self.init(
+      maxTextUTF16: maxTextUTF16, maxMatches: maxMatches, maxOutputUTF16: maxOutputUTF16,
+      timeLimit: timeLimit, isCancelled: isCancelled,
+      enumerateMatches: { expression, text, options, range, callback in
+        expression.enumerateMatches(in: text, options: options, range: range, using: callback)
+      })
+  }
+
+  init(
+    maxTextUTF16: Int = 10_000_000, maxMatches: Int = 100_000,
+    maxOutputUTF16: Int = 20_000_000, timeLimit: TimeInterval = 1,
+    isCancelled: @escaping () -> Bool = { false },
+    enumerateMatches: @escaping MatchEnumerator
+  ) {
     self.maxTextUTF16 = max(0, maxTextUTF16)
     self.maxMatches = max(0, maxMatches)
     self.maxOutputUTF16 = max(0, maxOutputUTF16)
     self.timeLimit = timeLimit.isFinite ? max(0, timeLimit) : 0
     self.isCancelled = isCancelled
+    self.enumerateMatches = enumerateMatches
   }
 
   public func matches(_ query: SearchQuery, in text: String, scope: NSRange? = nil) throws
@@ -174,11 +197,16 @@ public struct SearchService {
     var results: [NSTextCheckingResult] = []
     var failure: Error?
     // Transparent bounds prevent the edge of a selection becoming a fake word boundary.
-    regex.enumerateMatches(
-      in: text, options: [.reportProgress, .withTransparentBounds, .withoutAnchoringBounds],
-      range: range
-    ) { result, _, stop in
+    enumerateMatches(
+      regex, text,
+      [.reportProgress, .reportCompletion, .withTransparentBounds, .withoutAnchoringBounds], range
+    ) { result, flags, stop in
+      guard failure == nil else {
+        stop.pointee = true
+        return
+      }
       do {
+        if flags.contains(.internalError) { throw SearchError.engineFailure }
         try check(deadline)
         if let result {
           guard results.count < maxMatches else { throw SearchError.matchLimit }

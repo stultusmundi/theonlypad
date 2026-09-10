@@ -28,8 +28,14 @@ private final class FolderResultsTable: NSTableView {
 final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTableViewDataSource,
   NSTableViewDelegate
 {
+  typealias SearchOperation =
+    @Sendable (
+      URL, SearchQuery, [String], [String]
+    ) throws -> FolderSearchReport
+
   var onClose: (() -> Void)?
   private let onOpen: (URL, NSRange, String) -> Void
+  private let search: SearchOperation?
   private var root: URL?
   private var token: FolderSearchCancellation?
   private var generation = UUID()
@@ -48,9 +54,13 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   private let table = FolderResultsTable()
   private let status = NSTextField(wrappingLabelWithString: "Ready")
 
-  init(root: URL? = nil, onOpen: @escaping (URL, NSRange, String) -> Void) {
+  init(
+    root: URL? = nil, onOpen: @escaping (URL, NSRange, String) -> Void,
+    search: SearchOperation? = nil
+  ) {
     self.root = root
     self.onOpen = onOpen
+    self.search = search
     let panel = NSPanel(
       contentRect: NSRect(x: 0, y: 0, width: 740, height: 530),
       styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -204,6 +214,7 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     }
     let include = globs(includes)
     let exclude = globs(excludes)
+    let search = search
     let cancellation = FolderSearchCancellation()
     token = cancellation
     let id = UUID()
@@ -218,20 +229,25 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
       do {
         let (report, searchedRoot) = try await Task.detached {
           let searchedRoot = root.resolvingSymlinksInPath().standardizedFileURL
-          let report = try FolderSearch.search(
-            root: root, query: request, includes: include, excludes: exclude,
-            isCancelled: { cancellation.cancelled },
-            onProgress: { progress in
-              if progress.filesProcessed.isMultiple(of: 32)
-                || progress.filesProcessed == progress.filesTotal
-              {
-                Task { @MainActor [weak self] in
-                  guard let self, self.generation == id, self.token != nil else { return }
-                  self.status.stringValue =
-                    "Searched \(progress.filesProcessed) of \(progress.filesTotal) files"
+          let report: FolderSearchReport
+          if let search {
+            report = try search(root, request, include, exclude)
+          } else {
+            report = try FolderSearch.search(
+              root: root, query: request, includes: include, excludes: exclude,
+              isCancelled: { cancellation.cancelled },
+              onProgress: { progress in
+                if progress.filesProcessed.isMultiple(of: 32)
+                  || progress.filesProcessed == progress.filesTotal
+                {
+                  Task { @MainActor [weak self] in
+                    guard let self, self.generation == id, self.token != nil else { return }
+                    self.status.stringValue =
+                      "Searched \(progress.filesProcessed) of \(progress.filesTotal) files"
+                  }
                 }
-              }
-            })
+              })
+          }
           return (report, searchedRoot)
         }.value
         guard let self, self.generation == id else { return }
@@ -246,7 +262,12 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
         guard let self, self.generation == id else { return }
         self.token = nil
         self.busy(false)
-        self.status.stringValue = "Search failed; no complete results: \(error)"
+        if error as? SearchError == .engineFailure {
+          self.status.stringValue =
+            "Search failed; no complete results. The search engine could not finish. Narrow the pattern and try again."
+        } else {
+          self.status.stringValue = "Search failed; no complete results: \(error)"
+        }
       }
     }
   }

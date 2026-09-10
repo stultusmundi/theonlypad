@@ -71,4 +71,25 @@ final class FolderSearchTests: XCTestCase {
       XCTAssertEqual(counts.last, 1)
     }
   }
+
+  func testEngineFailureOnSecondFileDoesNotReturnPartialReport() throws {
+    try fixture { root in
+      try Data("a".utf8).write(to: root.appendingPathComponent("a-first.txt"))
+      try Data("a".utf8).write(to: root.appendingPathComponent("b-second.txt"))
+      var searchedTexts: [String] = []
+
+      XCTAssertThrowsError(
+        try FolderSearch.search(
+          root: root, query: .init(pattern: "a", mode: .regex),
+          searchExecutor: { query, text, maxTextUTF16, maxMatches, isCancelled in
+            searchedTexts.append(text)
+            if searchedTexts.count == 3 { throw SearchError.engineFailure }
+            return try SearchService(
+              maxTextUTF16: maxTextUTF16, maxMatches: maxMatches, isCancelled: isCancelled
+            ).matches(query, in: text)
+          })
+      ) { XCTAssertEqual($0 as? SearchError, .engineFailure) }
+      XCTAssertEqual(searchedTexts, ["", "a", "a"])
+    }
+  }
 }
