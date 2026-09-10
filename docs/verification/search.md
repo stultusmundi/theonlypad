@@ -49,3 +49,23 @@ Verified commands/evidence:
 - Root committed-source integration at the same commit: 412 core tests, zero failures, 15.436 seconds suite. The clean detached worktree has 587 tracked-file hashes in `.local/regex-errors-integrated-evidence/source-provenance.json`; its outer watchdog did not expire.
 
 Existing adversarial tests were run only beneath an owned-process watchdog. Historical commands above describe their original runs, not hard-deadline guarantees. The application still uses cooperative in-process regex execution and still enumerates twice for native Replace All. Supervised execution, bounded shared admission, single-enumeration integration and remaining native scopes remain outstanding. The packaged app is still the earlier `55a7b1b` new-window build; this record does not claim packaged or physical GUI validation for the error fix.
+
+
+## Single-enumeration semantic operation — 2026-09-10
+
+Source `28e2a9fbcf3daaa2c5087559d02e07143ad18235` adds `SearchService.execute` producing match ranges and optional replacement from one accepted Foundation enumeration. Existing APIs remain wrappers; scoped replacement preserves full-document UTF-16 coordinates and unchanged prefix/suffix. Direct validation order, first terminal failure, and the shared deadline are preserved. Independent specification and quality review approved the three-file change without findings.
+
+Focused execution tests passed12/0, engine-failure tests8/0, search/folder substring tests15/0. The full core suite passed425/0 under an owned outer watchdog (command15.663 seconds, no timeout); the actual application builds. Exact source hashes were checked against the report. Unicode preservation includes exact UTF-16 units, not only canonically equivalent String equality. Initial missing-API compile failure and a temporary empty-output TDD stub were setup/new-API reds, not evidence of a previous production defect.
+
+Commands used:
+
+```sh
+scripts/swift.sh test --scratch-path .build/search-single-enumeration --filter SearchExecutionTests
+scripts/swift.sh test --scratch-path .build/search-single-enumeration --filter SearchEngineFailureTests
+scripts/swift.sh build --scratch-path .build/search-single-enumeration
+scripts/test-search-engine-error-panels.sh .build/search-single-enumeration/arm64-apple-macosx/debug
+```
+
+The last command passed both hidden actual native panel scenarios against the updated core. Scoped strict formatting, public-source scan and whitespace checks passed. The full core suite contains adversarial fixtures and was run under a private owned-child watchdog; do not run it unguarded to infer hard regex safety.
+
+Native Replace All still calls the compatible wrappers separately and therefore enumerates twice. The supervised helper, hard cancellation, bounded allocation, and production routing remain outstanding. No desktop, packaged-runtime, performance or process-containment acceptance is implied. Current distributed local artifacts still contain source55a7b1b.
