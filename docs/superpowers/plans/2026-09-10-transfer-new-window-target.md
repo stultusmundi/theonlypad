@@ -10,7 +10,7 @@
 
 **Spec:** [native-document-transfer.md](../specs/native-document-transfer.md), extending its explicitly deferred new-window stage only. [document-transfer.md](../specs/document-transfer.md) remains the full F-02 scope.
 
-**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented and independently approved after review fixes, with 23 preparation and 10 native-open tests passing; Task 2 handoff is also implemented and independently approved (44 new-window tests plus matching compatibility); Task 3 chooser/presentation is in progress. Existing-window evidence does not certify this stage.
+**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented and independently approved after review fixes, with 23 preparation and 10 native-open tests passing; Task 2 handoff is also implemented and independently approved (44 new-window tests plus matching compatibility); Task 3 chooser/presentation is independently approved (15 chooser and 12 transfer tests pass). Final committed-source core 404, managed 71 and new-window 44 tests pass; local package refresh is verified. See `docs/verification/new-window-integrated.md`. Physical desktop acceptance remains blocked. Existing-window evidence does not certify this stage.
 
 ## Constraints and current source mapping
 
@@ -107,11 +107,11 @@ Under the owner preparation gate, validate emptiness/identity, unregister the ex
 
 **Files:** `NativeDocumentMoveChoices.swift`, `DocumentMoveDestinationController.swift`, `AppDelegate.swift`, `DocumentMoveDestinationTests.swift` and its test-only access. Canonical `file.moveToWindow` remains the sole command; no new shortcut or macro action.
 
-- [ ] Write an actual-control red for the typed New Window option. It must work when no other window exists; show a clear capacity/restoration refusal when unavailable, not a fake destination or silent no-op. Existing destination selection/cancel behavior remains unchanged.
-- [ ] AppDelegate branches on the exact typed target: existing uses current APIs; new starts/waits the new-window operation. Keep exact chooser identity, source ownership, quit and presentation-generation fences. Route retained outcomes to existing Retry Recovery status.
-- [ ] Test actual hidden dispatch through chooser New Window into real owner; Cancel makes no controller/window/model; stale chooser refuses; capacity changes while chooser open are caught at acceptance; newer chooser/quit invalidates late presentation.
-- [ ] Announce/show only the settled real destination once. Show failure never reverses a committed move. Hidden injected presenter verifies the exact controller and selected moved document; it is not desktop-focus evidence.
-- [ ] Run formatter, shell syntax, diff checks and independent source review. Preserve red/green logs privately and record verified runner commands only after they actually work.
+- [x] Write an actual-control red for the typed New Window option. It must work when no other window exists; show a clear capacity/restoration refusal when unavailable, not a fake destination or silent no-op. Existing destination selection/cancel behavior remains unchanged.
+- [x] AppDelegate branches on the exact typed target: existing uses current APIs; new starts/waits the new-window operation. Keep exact chooser identity, source ownership, quit and presentation-generation fences. Route retained outcomes to existing Retry Recovery status.
+- [x] Test actual hidden dispatch through chooser New Window into real owner; Cancel makes no controller/window/model; stale chooser refuses; capacity changes while chooser open are caught at acceptance; newer chooser/quit invalidates late presentation.
+- [x] Announce/show only the settled real destination once. Show failure never reverses a committed move. Hidden injected presenter verifies the exact controller and selected moved document; it is not desktop-focus evidence.
+- [x] Run formatter, shell syntax, diff checks and independent source review. Preserve red/green logs privately and record verified runner commands only after they actually work.
 
 ## Validation and completion boundaries
 

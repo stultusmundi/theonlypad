@@ -10,7 +10,7 @@
 
 **Spec:** [regex execution review](../../verification/regex-execution-review.md), source-confirmed failure handling finding and proposed narrow fix. The supervised-helper architecture described there is separate outstanding work.
 
-**Status:** Planned only. No production implementation or test results for this fix. Root reviewed this scope against C-02/C-07/C-08; execute after currently owned window work or in a separately authorized nonconflicting workstream.
+**Status:** In progress with a dedicated worker after independently approved new-window tasks. Root reviewed this scope against C-02/C-07/C-08. No final implementation or verification claim yet.
 
 ## Global constraints
 
