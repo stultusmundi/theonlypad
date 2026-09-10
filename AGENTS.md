@@ -115,3 +115,5 @@ Regex error verification at `9d54295`: build with `scripts/swift.sh build --scra
 Search framing at `aa3aa82`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireFrameTests` passes19 tests; `scripts/swift.sh build --scratch-path .build/search-wire --target SearchExecution` builds the module. These benign codec tests do not launch a helper or establish regex containment. See `docs/verification/search-wire.md`.
 
 UTF-16 codec at `10c4dd4`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireUTF16Tests` passes20 tests, and the framing filter above still passes19. These are bounded Unicode/index correctness tests, not desktop or memory benchmarks.
+
+Request codec at `2a76168`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireRequestTests` passes30 tests after independent review fixes. These tests validate protocol/Unicode/phase behavior only; the app is not yet routed through a helper.

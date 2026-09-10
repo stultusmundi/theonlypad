@@ -52,9 +52,9 @@ The full test command was supervised by a private owned-process watchdog because
 
 ## Sequential request path — 2026-09-10
 
-Task3A source `f59522219c5698c66ec53045343bb8eef8a51e2c` implements bounded request metadata, hello/request writing and the sequential request reader. Independent specification/quality review found one error-precedence defect; correction and re-review are pending. The writer builds and returns the exact identity-bound index from its emitted UTF-16 chunks, validates scope before execute, and returns only after execute emission succeeds. The reader validates identity/ordinal, metadata, UTF-16, scope and acknowledgement phases before accepting another request.
+Task3A source `f59522219c5698c66ec53045343bb8eef8a51e2c`, corrected by `2a7616829180bd55d437f57f245a459639343d30`, implements bounded request metadata, hello/request writing and the sequential request reader. Independent specification/quality re-review approved the correction with no remaining findings. The writer builds and returns the exact identity-bound index from its emitted UTF-16 chunks, validates scope before execute, and returns only after execute emission succeeds. The reader validates identity/ordinal, metadata, UTF-16, scope and acknowledgement phases before accepting another request.
 
-Fresh checks pass: **28 request tests,19 framing regressions and20 UTF-16 regressions**, all with0 failures. The SearchExecution target build, strict scoped formatting, public-source pattern and whitespace checks pass. Root independently checked all three final source hashes against the implementation report.
+Initial checks pass: **28 request tests,19 framing regressions and20 UTF-16 regressions**, all with0 failures. The SearchExecution target build, strict scoped formatting, public-source pattern and whitespace checks pass. Root independently checked all three final source hashes against the implementation report.
 
 ```sh
 scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireRequestTests
@@ -68,7 +68,9 @@ Tests cover independent metadata bytes, bounded chunk writes, wrong lengths, mal
 Final SHA256 values:
 
 - Types: `e7be9b26c5fa3d110d45d623529392acd6038815d6587bad2af975f1893757f8`.
-- Request codec: `2b99e84c46cb1bbcb7628f2a2b4e3a3a0fdecf3b968a75431861535d204d7860`.
-- Request tests: `b7ebce4cf5ce3c0a24bcdc4463989c537959322d3af62542b864cf02f65983e4`.
+- Request codec: `c7132e4740ecc00b5ddc390bc04284ae488685a067e768434d95b3480177477a`.
+- Request tests: `d2c9529b9a41d15661321f44715b116921e1386dfca669b257947ecec7f8e081`.
 
 Missing-API compilation was recorded separately from behavioral red. Raw check output remains in tool transcripts; no separate logfiles were retained for this task. Response/terminal codecs, helper execution, containment, allocation policy, native/folder routing and packaged acceptance remain outstanding. The earlier464-test integration snapshot does not include this request implementation.
+
+Independent review found that input callbacks reentering the request reader could be normalized by the UTF16 decoder to sinkRejected, which incorrectly took precedence over the reader’s own failed state. Two new regressions first failed with exactly that mismatch, then passed after the containing failed state was checked first. Final request suite: **30 tests,0 failures**; strict scoped formatting/public-source/whitespace checks pass. Unchanged framing/UTF16 suites were not repeated for this ordering-only fix. Root verified final source and retained red/green log hashes and inspected their result summaries. The correction logs remain ignored locally, and scoped re-review approved I1 with no new findings.
