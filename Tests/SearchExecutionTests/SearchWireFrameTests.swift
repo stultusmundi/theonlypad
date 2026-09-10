@@ -349,6 +349,32 @@ final class SearchWireFrameTests: XCTestCase {
     assertPoisoned(decoder)
   }
 
+  func testCallbackErrorCannotOverrideCaughtReentryOrDeliverLaterFrame() throws {
+    enum Refusal: Error { case stop }
+    let decoder = SearchWireFrameDecoder()
+    var nestedError: SearchWireError?
+    var emittedKinds: [SearchWireKind] = []
+    var bytes = literalFrame(kind: 18, payload: [])
+    bytes.append(contentsOf: literalFrame(kind: 17, payload: [0x41, 0x00]))
+
+    XCTAssertThrowsError(
+      try consume(bytes, with: decoder) { frame in
+        emittedKinds.append(frame.kind)
+        do {
+          try decoder.finish()
+        } catch {
+          nestedError = error as? SearchWireError
+        }
+        throw Refusal.stop
+      }
+    ) {
+      XCTAssertEqual($0 as? SearchWireError, .poisoned)
+    }
+    XCTAssertEqual(nestedError, .reentrantUse)
+    XCTAssertEqual(emittedKinds, [.execute])
+    assertPoisoned(decoder)
+  }
+
   private func literalFrame(
     kind: UInt16,
     payload: [UInt8],

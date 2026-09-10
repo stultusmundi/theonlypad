@@ -163,12 +163,13 @@ public final class SearchWireFrameDecoder {
 
     do {
       try onFrame(frame)
-    } catch let error as SearchWireError where state == .failed {
-      if error == .reentrantUse {
-        throw error
-      }
-      throw SearchWireError.poisoned
     } catch {
+      if state == .failed {
+        if let wireError = error as? SearchWireError, wireError == .reentrantUse {
+          throw wireError
+        }
+        throw SearchWireError.poisoned
+      }
       state = .failed
       throw SearchWireError.sinkRejected
     }
