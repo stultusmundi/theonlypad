@@ -32,6 +32,9 @@ class Runtime:
         self.wait_error = None
         self.group_error = None
         self.read_sizes = []
+        self.group_query = {'processGroup': Child.pid, 'returnedBytes': 0,
+                            'bufferBytes': 1024, 'members': [], 'errorNumber': None}
+        self.group_query_error = None
 
     def now(self):
         return self.time
@@ -75,6 +78,12 @@ class Runtime:
         if self.group_error:
             raise self.group_error
 
+    def group_members(self, pid):
+        self.calls.append(('group_members', pid))
+        if self.group_query_error:
+            raise self.group_query_error
+        return self.group_query
+
     def wait(self, child, timeout):
         self.calls.append(('wait', child.pid, timeout))
         if self.wait_error:
@@ -115,6 +124,8 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(result['exit'], 17)
         self.assertTrue(result['exitObserved'])
         self.assertTrue(result['waitCompleted'])
+        self.assertIsNone(result['groupQuery'])
+        self.assertFalse(any(c[0] == 'group_members' for c in runtime.calls))
 
     def test_timeout_uses_kill_and_fails_without_early_wait(self):
         runtime = Runtime(events=[], returncode=-signal.SIGKILL)
@@ -176,6 +187,8 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(result['groupSignalError'], errno.ESRCH)
         self.assertTrue(result['waitCompleted'])
         self.assertEqual(result['exit'], 0)
+        self.assertIsNone(result['groupQuery'])
+        self.assertFalse(any(c[0] == 'group_members' for c in runtime.calls))
 
     def test_unconfirmed_group_cleanup_is_failure(self):
         import errno
@@ -185,6 +198,114 @@ class WatchdogTests(unittest.TestCase):
         self.assert_cleanup_order(runtime)
         self.assertEqual(result['exit'], 125)
         self.assertEqual(result['groupCleanup'], 'unconfirmed')
+
+    def test_eperm_with_observed_exit_and_singleton_receipt_precedes_wait(self):
+        import errno
+        runtime = Runtime(returncode=17)
+        runtime.group_error = PermissionError(errno.EPERM, 'synthetic')
+        runtime.group_query.update(returnedBytes=4, members=[Child.pid])
+        result = self.run_case(runtime)
+        self.assertEqual(result['exit'], 17)
+        self.assertEqual(result['groupSignalError'], errno.EPERM)
+        self.assertEqual(result['groupCleanup'], 'exitedLeaderOnly')
+        self.assertEqual(result['groupQuery'], runtime.group_query)
+        self.assertTrue(result['waitCompleted'])
+        self.assert_cleanup_order(runtime)
+        calls = [c[0] for c in runtime.calls]
+        self.assertEqual(calls.count('group_members'), 1)
+        self.assertLess(calls.index('kill_group'), calls.index('group_members'))
+        self.assertLess(calls.index('group_members'), calls.index('wait'))
+        self.assertEqual(next(c[1] for c in runtime.calls if c[0] == 'group_members'), Child.pid)
+
+    def test_singleton_exception_refuses_incomplete_malformed_or_extra_members(self):
+        import errno
+        invalid = [dict(returnedBytes=0, members=[]),
+                   dict(returnedBytes=8, members=[Child.pid, Child.pid + 1]),
+                   dict(returnedBytes=1024, members=[Child.pid] * 256),
+                   dict(returnedBytes=1028, members=[Child.pid]),
+                   dict(returnedBytes=3, members=[Child.pid]),
+                   dict(returnedBytes=8, members=[Child.pid]),
+                   dict(returnedBytes=4, members=[Child.pid], bufferBytes=2048),
+                   dict(returnedBytes=-1, members=[]),
+                   dict(returnedBytes=4, members=[Child.pid + 1]),
+                   dict(returnedBytes=4, members=[Child.pid], errorNumber=errno.EACCES),
+                   dict(returnedBytes=4, members=[Child.pid], processGroup=Child.pid + 1)]
+        for values in invalid:
+            with self.subTest(values=values):
+                runtime = Runtime()
+                runtime.group_error = PermissionError(errno.EPERM, 'synthetic')
+                runtime.group_query.update(values)
+                result = self.run_case(runtime)
+                self.assertEqual(result['exit'], 125)
+                self.assertEqual(result['groupCleanup'], 'unconfirmed')
+                self.assertEqual(result['groupQuery'], runtime.group_query)
+                self.assert_cleanup_order(runtime)
+
+    def test_singleton_query_error_still_waits_and_fails(self):
+        import errno
+        runtime = Runtime()
+        runtime.group_error = PermissionError(errno.EPERM, 'synthetic')
+        runtime.group_query_error = OSError(errno.EIO, 'synthetic')
+        result = self.run_case(runtime)
+        self.assertEqual(result['exit'], 125)
+        self.assertEqual(result['groupQuery']['errorNumber'], errno.EIO)
+        self.assertEqual(result['groupCleanup'], 'unconfirmed')
+        self.assert_cleanup_order(runtime)
+
+    def test_eperm_without_note_exit_never_queries_even_with_wait_success(self):
+        import errno
+        runtime = Runtime(observe_error=ProcessLookupError(errno.ESRCH, 'synthetic'))
+        runtime.group_error = PermissionError(errno.EPERM, 'synthetic')
+        runtime.group_query.update(returnedBytes=4, members=[Child.pid])
+        result = self.run_case(runtime)
+        self.assertEqual(result['exit'], 125)
+        self.assertIsNone(result['groupQuery'])
+        self.assertFalse(any(c[0] == 'group_members' for c in runtime.calls))
+        self.assert_cleanup_order(runtime)
+
+    def test_singleton_receipt_cannot_substitute_for_actual_wait(self):
+        import errno
+        import subprocess
+        runtime = Runtime()
+        runtime.group_error = PermissionError(errno.EPERM, 'synthetic')
+        runtime.group_query.update(returnedBytes=4, members=[Child.pid])
+        runtime.wait_error = subprocess.TimeoutExpired('synthetic', 5)
+        result = self.run_case(runtime)
+        self.assertEqual(result['groupCleanup'], 'exitedLeaderOnly')
+        self.assertFalse(result['waitCompleted'])
+        self.assertEqual(result['exit'], 125)
+        calls = [c[0] for c in runtime.calls]
+        self.assertNotIn('group_members', calls[calls.index('wait') + 1:])
+        self.assert_cleanup_order(runtime)
+
+    def test_group_query_adapter_uses_fixed_group_filter_and_bounded_abi(self):
+        import ctypes
+        import errno
+        from unittest.mock import Mock, patch
+        adapter = watchdog.Runtime.__new__(watchdog.Runtime)
+        for returned, error_number in [(4, 0), (0, errno.EACCES), (-1, errno.EIO),
+                                       (3, 0), (1024, 0), (1028, 0)]:
+            with self.subTest(returned=returned):
+                libc = Mock()
+                def query(kind, group, buffer, size):
+                    self.assertEqual((kind, group, size), (2, Child.pid, 1024))
+                    self.assertEqual(ctypes.sizeof(buffer), 1024)
+                    buffer[0] = Child.pid
+                    ctypes.set_errno(error_number)
+                    return returned
+                libc.proc_listpids.side_effect = query
+                with patch.object(watchdog.ctypes, 'CDLL', return_value=libc):
+                    receipt = adapter.group_members(Child.pid)
+                self.assertEqual(receipt['processGroup'], Child.pid)
+                self.assertEqual(receipt['returnedBytes'], returned)
+                self.assertEqual(receipt['bufferBytes'], 1024)
+                self.assertEqual(receipt['errorNumber'], error_number or None)
+                self.assertLessEqual(len(receipt['members']), 256)
+                if returned == 4:
+                    self.assertEqual(receipt['members'], [Child.pid])
+                self.assertEqual(libc.proc_listpids.argtypes,
+                                 [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int])
+                self.assertEqual(libc.proc_listpids.restype, ctypes.c_int)
 
     def test_incomplete_pipe_tail_is_bounded_and_fails(self):
         runtime = Runtime()

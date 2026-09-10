@@ -26,6 +26,7 @@ EVENT_LIMIT = 8
 POLL_SECONDS = 0.05
 TAIL_SECONDS = 0.25
 WAIT_SECONDS = 5.0
+GROUP_MEMBER_CAPACITY = 256
 
 
 class StopRequest:
@@ -137,6 +138,24 @@ class Runtime:
         # Never use Popen.send_signal/kill/terminate: they can poll before signaling.
         os.killpg(pid, signal.SIGKILL)
 
+    def group_members(self, pid):
+        # Darwin libproc.h: int proc_listpids(uint32_t, uint32_t, void *, int).
+        # PROC_PGRP_ONLY filters both active and zombie members. A fixed buffer
+        # avoids an unbounded sizing/retry loop or any all-process query.
+        libc = ctypes.CDLL(None, use_errno=True)
+        query = libc.proc_listpids
+        query.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
+        query.restype = ctypes.c_int
+        members = (ctypes.c_int32 * GROUP_MEMBER_CAPACITY)()
+        capacity_bytes = ctypes.sizeof(members)
+        ctypes.set_errno(0)
+        returned = query(2, pid, members, capacity_bytes)
+        error_number = ctypes.get_errno() or None
+        count = min(GROUP_MEMBER_CAPACITY, max(0, returned // ctypes.sizeof(ctypes.c_int32)))
+        return {'processGroup': pid, 'returnedBytes': returned,
+                'bufferBytes': capacity_bytes, 'members': list(members)[:count],
+                'errorNumber': error_number}
+
     def wait(self, child, timeout):
         return child.wait(timeout=timeout)
 
@@ -211,7 +230,8 @@ def run(command, timeout, output, *, runtime=None, stop=None):
         'command': list(command), 'pid': None, 'processGroup': None,
         'exitObserved': False, 'registrationError': None,
         'groupSignalAttempted': False, 'groupSignalError': None,
-        'groupCleanup': 'notStarted', 'waitCompleted': False, 'returnCode': None,
+        'groupCleanup': 'notStarted', 'groupQuery': None,
+        'waitCompleted': False, 'returnCode': None,
         'waitError': None, 'timedOut': False, 'interruptedSignal': None,
         'truncated': False, 'captureComplete': False, 'captured': captured,
         'failure': None, 'exit': 125,
@@ -276,6 +296,28 @@ def run(command, timeout, output, *, runtime=None, stop=None):
             except OSError as error:
                 result['groupSignalError'] = error.errno
                 result['groupCleanup'] = 'absent' if error.errno == errno.ESRCH else 'unconfirmed'
+                if error.errno == errno.EPERM and result['exitObserved']:
+                    # Darwin can return EPERM when only the exited leader is
+                    # left: group signaling excludes zombies. EPERM alone is
+                    # never proof. Before releasing the leader's identity,
+                    # require a complete singleton snapshot of this exact group.
+                    try:
+                        receipt = runtime.group_members(child.pid)
+                        result['groupQuery'] = receipt
+                        if (receipt['processGroup'] == child.pid
+                                and receipt['errorNumber'] is None
+                                and receipt['bufferBytes'] == GROUP_MEMBER_CAPACITY * 4
+                                and 0 < receipt['returnedBytes'] < receipt['bufferBytes']
+                                and receipt['returnedBytes'] % 4 == 0
+                                and receipt['returnedBytes'] == len(receipt['members']) * 4
+                                and receipt['members'] == [child.pid]):
+                            result['groupCleanup'] = 'exitedLeaderOnly'
+                    except BaseException as query_error:
+                        result['groupQuery'] = {
+                            'processGroup': child.pid,
+                            'errorNumber': getattr(query_error, 'errno', None),
+                            'errorType': type(query_error).__name__,
+                        }
             except BaseException:
                 result['groupCleanup'] = 'unconfirmed'
             try:
