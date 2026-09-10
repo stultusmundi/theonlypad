@@ -34,3 +34,9 @@ Launch was deliberately left to the main integration work using isolated applica
 ## Later integrated artifact
 
 The current app/ZIP rebuilt successfully after CLI, extensions, folder search, conversions and macro-safety integration. CFBundleURLTypes contains the centralized local-file scheme and codesign strict verification passed. A LaunchServices smoke is recorded in packaged-launch.md. Review found promotion ordering could leave mixed artifacts after an SBOM failure; the packaging worker is implementing staged generation and failure-consistent promotion. Reverify the packaging script after that change; artifact existence is not full acceptance.
+
+## Current local artifact — shortcut integration
+
+Current `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip` and `dist/TheOnlyPad.sbom.json` come from clean commit `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0`. Executable SHA256 is `8f5fe6c898b4c60ceff367fefc3ccdd2ad67ef3b89e1b0ce9ea414d5057613de`. Packaging took 37.976426 seconds; bundle/archive/SBOM integrity and strict ad-hoc signature checks passed before and after promotion.
+
+The exact packaged app passed actual open/edit/save/quit/reopen, shortcut reset/persistence and modifier-held menu controls. Direct AXPress skipped for missing runner permission. See keyboard-shortcuts.md for exact results and `.local/shortcut-modifier-integrated-evidence/` for private source hashes and receipts. This ARM64 development artifact is not Developer-ID signed, notarized or published, and the application remains incomplete. Launch locally with `open dist/TheOnlyPad.app`.

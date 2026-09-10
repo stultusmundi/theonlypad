@@ -68,3 +68,11 @@ The generic modifier policy and principal-class wiring are integrated into produ
 The actual integrated `scripts/test-shortcut-application.sh` passed all 20 tests under the reviewed owned-process watchdog (16.865383 seconds including its 14.91-second build). It includes the native Quit Command-mask assertion added during review. Its coordinator directly invokes the frozen watchdog, validates cleanup/capture receipts and rejects missing suites or zero-test output. Evidence: `.local/shortcut-application-tests/run.NFDHSJPF/`.
 
 The production application build passed in 10.49 seconds; the full core/search suite passed 563 tests with no failures in 15.732 seconds. Both commands completed their owned-child cleanup and capture without timeout or truncation. Evidence: `.local/shortcut-modifier-production-build/` and `.local/shortcut-modifier-production-core/`. These fresh source checks do not replace the pending uninstrumented packaged desktop run or unavailable AX invocation.
+
+## Clean packaged desktop verification
+
+A clean detached checkout of `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0` records 618 tracked input hashes. Local packaging completed in 37.976426 seconds, including a 32.13-second release build. Bundle/archive/SBOM checks and the ad-hoc signature passed. Executable SHA256: `8f5fe6c898b4c60ceff367fefc3ccdd2ad67ef3b89e1b0ce9ea414d5057613de`.
+
+Actual desktop run `.local/desktop-ui/shortcut-production-5aq_v27w/` completed with three passes: original customization/persistence/reset (61.702 seconds), open/edit/save/quit/reopen (60.103 seconds), and Option-held File → New Tab (27.860 seconds). The exact-app AXPress control explicitly skipped because runner Accessibility trust remained unavailable. The original regression body is unchanged; the additional controls contain no private tracing or automatic permission prompt.
+
+The verified app, archive and SBOM are promoted to `dist/` and pass integrity/signature checks there. This resolves the observed reset regression for the tested package; it does not establish arbitrary keyboard layouts, AX dispatch, full accessibility or all shortcut/macro workflows. Ad-hoc signing is local only: no Developer ID, notarization, remote publication or release claim.

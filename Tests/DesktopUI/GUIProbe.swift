@@ -1,3 +1,5 @@
+import AppKit
+import ApplicationServices
 import Foundation
 import XCTest
 
@@ -692,5 +694,138 @@ final class GUIProbe: XCTestCase {
             predicate: NSPredicate { _, _ in tabCount() == resetCount + 1 }, object: nil)
         ],
         timeout: 10), .completed)
+  }
+}
+
+// Desktop controls require actual event/AX access; unavailable permission is explicit.
+@MainActor
+extension GUIProbe {
+  private func controlTabs(_ app: XCUIApplication) -> XCUIElementQuery {
+    app.windows.descendants(matching: .any).matching(
+      NSPredicate(format: "identifier BEGINSWITH %@", "tab.select."))
+  }
+
+  private func assertExactlyOneNewTab(_ app: XCUIApplication, before: Set<String>) {
+    let tabs = controlTabs(app)
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "count == %d", before.count + 1), object: tabs)
+        ],
+        timeout: 10), .completed)
+    let after = Set(tabs.allElementsBoundByIndex.map(\.identifier))
+    XCTAssertTrue(before.isSubset(of: after))
+    XCTAssertEqual(after.subtracting(before).count, 1)
+    let changed = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in tabs.count != before.count + 1 }, object: nil)
+    changed.isInverted = true
+    XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 1), .completed)
+    XCTAssertEqual(tabs.count, before.count + 1)
+  }
+
+  func testOptionHeldFileNewMenuClickAddsExactlyOneTab() throws {
+    let (app, _) = try fixture()
+    let tabs = controlTabs(app)
+    XCTAssertEqual(tabs.count, 1)
+    let before = Set(tabs.allElementsBoundByIndex.map(\.identifier))
+    let file = app.menuBars.menuBarItems["File"]
+    XCTAssertTrue(file.waitForExistence(timeout: 5))
+    XCUIElement.perform(withKeyModifiers: .option) {
+      file.click()
+      let new = file.menus.menuItems.matching(NSPredicate(format: "title == %@", "New Tab"))
+        .firstMatch
+      XCTAssertTrue(new.waitForExistence(timeout: 5))
+      XCTAssertTrue(new.isEnabled)
+      new.click()
+    }
+    assertExactlyOneNewTab(app, before: before)
+  }
+
+  func testExactOwnedApplicationAXPressFileNewAddsExactlyOneTab() throws {
+    guard AXIsProcessTrusted() else {
+      throw XCTSkip(
+        "MISSING ACCESS: AX API is not trusted for this XCTest runner; AXPress untested")
+    }
+    let (app, _) = try fixture()
+    let path = try XCTUnwrap(ProcessInfo.processInfo.environment["GUI_PROBE_APP_PATH"])
+    let expected = URL(fileURLWithPath: path).standardizedFileURL
+    let matches = NSWorkspace.shared.runningApplications.filter {
+      !$0.isTerminated && $0.bundleURL?.standardizedFileURL == expected
+    }
+    XCTAssertEqual(matches.count, 1, "AX control requires exactly this run's app URL")
+    let owned = try XCTUnwrap(matches.first)
+    let pid = owned.processIdentifier
+    func requireOwned() throws {
+      guard !owned.isTerminated, owned.bundleURL?.standardizedFileURL == expected,
+        NSRunningApplication(processIdentifier: pid)?.bundleURL?.standardizedFileURL == expected
+      else {
+        throw NSError(
+          domain: "OwnedAXControl", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "Exact test app ownership changed"])
+      }
+    }
+    func checked(_ status: AXError, _ operation: String) throws {
+      if status == .apiDisabled {
+        throw XCTSkip("MISSING ACCESS: AX apiDisabled during \(operation); AXPress untested")
+      }
+      guard status == .success else {
+        throw NSError(
+          domain: "OwnedAXControl", code: Int(status.rawValue),
+          userInfo: [NSLocalizedDescriptionKey: "AX \(operation) failed: \(status.rawValue)"])
+      }
+    }
+    func attribute(_ element: AXUIElement, _ name: String) throws -> CFTypeRef {
+      try requireOwned()
+      var value: CFTypeRef?
+      try checked(AXUIElementCopyAttributeValue(element, name as CFString, &value), name)
+      return try XCTUnwrap(value)
+    }
+    func children(_ element: AXUIElement) throws -> [AXUIElement] {
+      try XCTUnwrap(try attribute(element, kAXChildrenAttribute) as? [AXUIElement])
+    }
+    func exactChild(_ element: AXUIElement, title: String) throws -> AXUIElement {
+      let values = try children(element).filter { child in
+        try requireOwned()
+        var value: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(child, kAXTitleAttribute as CFString, &value)
+        if status == .noValue || status == .attributeUnsupported { return false }
+        try checked(status, "child title")
+        return value as? String == title
+      }
+      XCTAssertEqual(values.count, 1, "AX requires one exact \(title) child")
+      return try XCTUnwrap(values.first)
+    }
+    func press(_ element: AXUIElement) throws {
+      try requireOwned()
+      var names: CFArray?
+      try checked(AXUIElementCopyActionNames(element, &names), "copy action names")
+      let actions = try XCTUnwrap(names as? [String])
+      XCTAssertTrue(actions.contains(kAXPressAction), "AXPress must be advertised")
+      try requireOwned()
+      try checked(AXUIElementPerformAction(element, kAXPressAction as CFString), "AXPress")
+    }
+    let tabs = controlTabs(app)
+    XCTAssertEqual(tabs.count, 1)
+    let before = Set(tabs.allElementsBoundByIndex.map(\.identifier))
+    try requireOwned()
+    let axApp = AXUIElementCreateApplication(pid)
+    try checked(AXUIElementSetMessagingTimeout(axApp, 3), "set messaging timeout")
+    let menuBarValue = try attribute(axApp, kAXMenuBarAttribute)
+    guard CFGetTypeID(menuBarValue) == AXUIElementGetTypeID() else {
+      throw NSError(
+        domain: "OwnedAXControl", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Owned application's menu bar is not an AX element"])
+    }
+    let menuBar = unsafeBitCast(menuBarValue, to: AXUIElement.self)
+    let file = try exactChild(menuBar, title: "File")
+    try press(file)
+    let menus = try children(file)
+    XCTAssertEqual(menus.count, 1, "File must expose exactly its own menu")
+    let menu = try XCTUnwrap(menus.first)
+    let new = try exactChild(menu, title: "New Tab")
+    XCTAssertEqual(try attribute(new, kAXEnabledAttribute) as? Bool, true)
+    try press(new)
+    assertExactlyOneNewTab(app, before: before)
   }
 }
