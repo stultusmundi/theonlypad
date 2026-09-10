@@ -35,3 +35,17 @@ Independent review found that a premature validate query incorrectly poisoned an
 Root verified final source SHA256 `9020acf3edc9ec5e9806054b7da4a8ef83b3b6e3bd85761df961f381d6e289ff` and test SHA256 `3f97d979e485f238cec209dffe46312aae9641f3c10816bf6de990d786b0e7e5`. Missing-API setup failures and the corrected no-op-seam behavioral red are recorded separately in private evidence; an initial test trap from indexing an absent chunk was corrected to XCTUnwrap before retaining behavioral-red evidence.
 
 No helper, process containment, allocation ledger, native routing or packaged runtime acceptance is implemented by this stage.
+
+
+## Committed-source integration
+
+A clean detached snapshot at `05cab519c138da94bd20acaec9864f81906dc850` records598 tracked-file SHA256 values and passes the complete **464-test suite with0 failures**. XCTest elapsed16.023 seconds; guarded build/test command28.169 seconds, no timeout. An explicit actual application build on the same scratch source passes (incremental command0.475 seconds, no timeout). These command durations are verification timings, not launch or editing benchmarks.
+
+Commands inside that source snapshot:
+
+```sh
+scripts/swift.sh test --scratch-path .build/integrated
+scripts/swift.sh build --scratch-path .build/integrated
+```
+
+The full test command was supervised by a private owned-process watchdog because it includes adversarial regex. Source provenance and raw watchdog results remain ignored locally. This does not establish an in-app regex deadline or substitute for the planned checked-in helper lifecycle harness. Request/response implementation, desktop acceptance and the packaged helper remain outstanding. No package was promoted during this verification.
