@@ -105,6 +105,48 @@ final class CallbackGate: @unchecked Sendable {
       reattached.live.editRevision == 0 && !reattached.live.dirty,
       "reattachment does not alter logical editing state")
     reattached.bridge.invalidate()
+    let transferParent = directory.appendingPathComponent("transfer-parent")
+    try FileManager.default.createDirectory(at: transferParent, withIntermediateDirectories: true)
+    let transferFile = transferParent.appendingPathComponent("same.txt")
+    try original.write(to: transferFile)
+    let transferred = RealFixture(url: transferFile, service: service)
+    transferred.live.ownershipGeneration = UUID()
+    transferred.bridge.adoptBaseline(bytes: original)
+    try await wait("transfer starts with real bound parent") {
+      transferred.bridge.state.observation?.metadata != nil
+    }
+    let originalEpoch = transferred.bridge.state.token!.epoch
+    let oldOwnership = transferred.live.ownershipGeneration!
+    let receipt = try transferred.bridge.reserveOwnershipTransfer(
+      transactionID: UUID(), expectedOwnership: oldOwnership)
+    try transferred.bridge.suspendOwnershipTransfer(receipt, validateLease: {})
+    try FileManager.default.moveItem(
+      at: transferParent, to: directory.appendingPathComponent("transfer-old"))
+    try FileManager.default.createDirectory(at: transferParent, withIntermediateDirectories: true)
+    try original.write(to: transferFile)
+    transferred.live.ownershipGeneration = UUID()
+    let targetOwnership = transferred.live.ownershipGeneration!
+    try transferred.bridge.attachOwnershipTransfer(
+      receipt, expectedPreviousOwnership: oldOwnership, newOwnership: targetOwnership,
+      liveContext: { transferred.live }, onChange: {}, validateLease: {})
+    try transferred.bridge.suspendOwnershipTransfer(receipt, validateLease: {})
+    transferred.live.ownershipGeneration = UUID()
+    try transferred.bridge.attachOwnershipTransfer(
+      receipt, expectedPreviousOwnership: targetOwnership,
+      newOwnership: transferred.live.ownershipGeneration!, liveContext: { transferred.live },
+      onChange: {}, validateLease: {})
+    try transferred.bridge.finishOwnershipTransfer(receipt, validateLease: {})
+    transferred.bridge.checkAgain()
+    try await wait("move and rollback preserve equal-byte parent retarget refusal") {
+      transferred.bridge.state.observation?.locationProblem == .parentChanged
+    }
+    check(
+      transferred.bridge.state.token?.epoch == originalEpoch,
+      "transfer retains actual process registration epoch")
+    check(
+      transferred.bridge.captureAction(.reload) == nil,
+      "transferred parent retarget never grants reload authority")
+    transferred.bridge.invalidate()
     f.bridge.useManualFallback()
     check(f.bridge.manualNotice != nil, "manual fallback remains explicit")
     // Same file bytes under a different parent must remain a parent-retarget refusal.

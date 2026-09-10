@@ -35,8 +35,30 @@ struct FileStateEndpointDetachment {
   fileprivate let issuance: UUID
   let binding: FileStateBindingIdentity
 }
+struct FileStateOwnershipTransferReceipt {
+  fileprivate let owner: UUID
+  fileprivate let issuance: UUID
+  let transactionID: UUID
+  let binding: FileStateBindingIdentity
+}
 enum FileStateEndpointError: Error { case unavailable, stale }
 @MainActor final class DocumentFileStateController {
+  private enum OwnershipPhase { case reserved, suspended, attached }
+  private final class OwnershipMove {
+    let receipt: FileStateOwnershipTransferReceipt
+    var ownership: UUID
+    var used: Set<UUID>
+    var phase = OwnershipPhase.reserved
+    var invalidationRequest: UUID?
+    init(_ receipt: FileStateOwnershipTransferReceipt, ownership: UUID) {
+      self.receipt = receipt
+      self.ownership = ownership
+      used = [ownership]
+    }
+  }
+  private var ownershipMove: OwnershipMove?
+  private let endpointDelivery = DeliveryFence(UUID())
+  var ownershipTransferInvalidationRequested: Bool { ownershipMove?.invalidationRequest != nil }
   private struct Binding {
     let id: UUID
     let url: URL
@@ -52,6 +74,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
   }
   private struct Envelope {
     let observation: DiskObservation
+    let endpointGeneration: UUID
     let token: FileObservationToken
     let authority: UUID
     let bindingID: UUID
@@ -66,7 +89,8 @@ enum FileStateEndpointError: Error { case unavailable, stale }
   private var endpointTransition = false
   private let fence: DeliveryFence
   private var binding: Binding?
-  private var authorityID = UUID()
+  private var actionAuthorityID = UUID()
+  private var authorityID = UUID() { didSet { actionAuthorityID = UUID() } }
   private var registration: (any MonitorHandle)?
   private var registrationBindingID: UUID?
   private var manualHandle: (any ManualHandle)?
@@ -128,6 +152,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     if boundIdentity == nil { boundIdentity = receipt.boundIdentity }
   }
   func adoptBaseline(bytes: Data, validatedIdentity: FileTargetIdentity? = nil) {
+    guard ownershipMove == nil else { return }
     guard let value = live() else { return }
     clearAdmission()
     if validatedIdentity != nil { retireRegistration(retainingContinuity: false) }
@@ -161,7 +186,10 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     }
     retryRegistration()
   }
-  func retryRegistration() { _ = registerEndpoint() }
+  func retryRegistration() {
+    guard ownershipMove == nil else { return }
+    _ = registerEndpoint()
+  }
   private func registerEndpoint() -> UUID? {
     guard let value = boundLive(), let binding else { return nil }
     authorityID = UUID()
@@ -172,6 +200,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     lastFailure = nil
     let authority = authorityID
     let fence = fence
+    let endpointDelivery = endpointDelivery
     fence.set(value.deliveryGeneration)
     do {
       registration = try client.register(
@@ -179,11 +208,13 @@ enum FileStateEndpointError: Error { case unavailable, stale }
         baseline: binding.bytes, revision: binding.revision, boundIdentity: boundIdentity
       ) { [weak self] token, observation in
         let generation = fence.current
+        let endpointGeneration = endpointDelivery.current
         Task { @MainActor [weak self] in
           guard let self, let binding = self.binding else { return }
           self.accept(
             Envelope(
-              observation: observation, token: token, authority: authority,
+              observation: observation, endpointGeneration: endpointGeneration, token: token,
+              authority: authority,
               bindingID: binding.id, generation: generation))
         }
       }
@@ -208,10 +239,12 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     return authority
   }
   func useManualFallback() {
+    guard ownershipMove == nil else { return }
     guard boundLive() != nil else { return }
     enterManual(failure: nil)
   }
   func checkAgain() {
+    guard ownershipMove == nil else { return }
     guard let value = boundLive(), let binding else { return }
     if !manualMode, let registration {
       requestFloor = registration.snapshot.currentToken
@@ -253,7 +286,8 @@ enum FileStateEndpointError: Error { case unavailable, stale }
         case .success(let observation):
           self.accept(
             Envelope(
-              observation: observation, token: request.token, authority: authority,
+              observation: observation, endpointGeneration: self.endpointDelivery.current,
+              token: request.token, authority: authority,
               bindingID: request.bindingID, generation: request.generation))
         case .failure(let error):
           self.lastFailure = error
@@ -277,7 +311,8 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     return token
   }
   private func accept(_ envelope: Envelope) {
-    guard let value = boundLive(), value.bindingID == envelope.bindingID,
+    guard envelope.endpointGeneration == endpointDelivery.current, let value = boundLive(),
+      value.bindingID == envelope.bindingID,
       value.deliveryGeneration == envelope.generation,
       envelope.token.documentID == documentID,
       envelope.token.baselineRevision == value.baselineRevision,
@@ -286,7 +321,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     // Continuity is binding authority, not deferred notice presentation.
     // Preserve it once this live envelope is validated, including while busy.
     if boundIdentity == nil { boundIdentity = envelope.observation.metadata?.identity }
-    if value.operationID != nil || value.composing {
+    if ownershipMove != nil || value.operationID != nil || value.composing {
       pending = envelope
       return
     }
@@ -298,6 +333,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     }
   }
   func reconcileEligibility() {
+    guard ownershipMove == nil else { return }
     let expectedAuthority = authorityID
     guard !invalidated, detachment == nil, !endpointTransition, let value = liveContext?(),
       !invalidated, detachment == nil, !endpointTransition, authorityID == expectedAuthority
@@ -319,7 +355,8 @@ enum FileStateEndpointError: Error { case unavailable, stale }
   }
   /// Must precede terminal invalidation. Retains binding safety while retiring endpoint callbacks.
   func detachEndpoint() throws -> FileStateEndpointDetachment {
-    guard !invalidated, detachment == nil, !endpointTransition, let binding else {
+    guard ownershipMove == nil, !invalidated, detachment == nil, !endpointTransition, let binding
+    else {
       throw FileStateEndpointError.unavailable
     }
     endpointTransition = true
@@ -352,7 +389,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     _ token: FileStateEndpointDetachment, expectedBinding: FileStateBindingIdentity,
     liveContext: @escaping () -> FileStateLiveContext?, onChange: @escaping () -> Void
   ) throws {
-    guard !invalidated, !endpointTransition, token.owner == endpointOwner,
+    guard ownershipMove == nil, !invalidated, !endpointTransition, token.owner == endpointOwner,
       detachment?.issuance == token.issuance, token.binding == expectedBinding,
       binding?.identity == expectedBinding
     else { throw FileStateEndpointError.stale }
@@ -373,7 +410,176 @@ enum FileStateEndpointError: Error { case unavailable, stale }
       binding?.identity == expectedBinding, installedAuthority == authorityID
     else { throw FileStateEndpointError.stale }
   }
+  func reserveOwnershipTransfer(transactionID: UUID, expectedOwnership: UUID) throws
+    -> FileStateOwnershipTransferReceipt
+  {
+    guard !invalidated, !endpointTransition, detachment == nil, ownershipMove == nil,
+      let binding, binding.identity.ownershipGeneration == expectedOwnership
+    else { throw FileStateEndpointError.stale }
+    let receipt = FileStateOwnershipTransferReceipt(
+      owner: endpointOwner, issuance: UUID(), transactionID: transactionID,
+      binding: binding.identity)
+    ownershipMove = OwnershipMove(receipt, ownership: expectedOwnership)
+    return receipt
+  }
+  private func ownership(_ receipt: FileStateOwnershipTransferReceipt) throws -> OwnershipMove {
+    guard !invalidated, !endpointTransition, receipt.owner == endpointOwner,
+      let move = ownershipMove, move.receipt.issuance == receipt.issuance,
+      move.receipt.transactionID == receipt.transactionID
+    else { throw FileStateEndpointError.stale }
+    return move
+  }
+  func currentTransferOwnership(_ receipt: FileStateOwnershipTransferReceipt) throws -> UUID {
+    try ownership(receipt).ownership
+  }
+  func suspendOwnershipTransfer(
+    _ receipt: FileStateOwnershipTransferReceipt, validateLease: () throws -> Void
+  ) throws {
+    let move = try ownership(receipt)
+    endpointTransition = true
+    defer { endpointTransition = false }
+    try validateLease()
+    guard ownershipMove === move else { throw FileStateEndpointError.stale }
+    move.phase = .suspended
+    actionAuthorityID = UUID()
+    endpointDelivery.set(UUID())
+    liveContext = nil
+    onChange = nil
+    pending = nil
+    if let handle = manualHandle {
+      manualHandle = nil
+      manualRequest = nil
+      handle.cancel()
+    }
+    try validateLease()
+    guard ownershipMove === move else { throw FileStateEndpointError.stale }
+  }
+  private func sameBaseline(_ first: FileStateBindingIdentity, _ second: FileStateBindingIdentity)
+    -> Bool
+  {
+    let sameURL: Bool
+    switch (first.url?.absoluteString, second.url?.absoluteString) {
+    case (nil, nil): sameURL = true
+    case (let a?, let b?): sameURL = a.utf8.elementsEqual(b.utf8)
+    default: sameURL = false
+    }
+    return first.documentID == second.documentID && first.bindingID == second.bindingID
+      && first.baselineRevision == second.baselineRevision && sameURL
+  }
+  func attachOwnershipTransfer(
+    _ receipt: FileStateOwnershipTransferReceipt, expectedPreviousOwnership: UUID,
+    newOwnership: UUID, liveContext: @escaping () -> FileStateLiveContext?,
+    onChange: @escaping () -> Void, validateLease: () throws -> Void
+  ) throws {
+    let move = try ownership(receipt)
+    // A pre-stage validation failure may leave only the pure reservation. Explicit restoration
+    // first retires its source callbacks under the now-valid lease, without rotating ownership.
+    if move.phase == .reserved, expectedPreviousOwnership == move.ownership,
+      newOwnership == expectedPreviousOwnership
+    {
+      try suspendOwnershipTransfer(receipt, validateLease: validateLease)
+    }
+
+    guard move.phase == .suspended, move.ownership == expectedPreviousOwnership,
+      newOwnership == expectedPreviousOwnership || !move.used.contains(newOwnership),
+      let old = binding
+    else { throw FileStateEndpointError.stale }
+    endpointTransition = true
+    defer { endpointTransition = false }
+    try validateLease()
+    guard let value = liveContext(), !value.closed, !value.quitting, value.operationID == nil,
+      !value.composing,
+      value.ownershipGeneration == newOwnership,
+      sameBaseline(old.identity, FileStateBindingIdentity(value))
+    else { throw FileStateEndpointError.stale }
+    try validateLease()
+    guard ownershipMove === move, move.phase == .suspended, binding?.identity == old.identity else {
+      throw FileStateEndpointError.stale
+    }
+    binding = Binding(
+      id: old.id, url: old.url, revision: old.revision, bytes: old.bytes,
+      identity: FileStateBindingIdentity(value))
+    move.ownership = newOwnership
+    move.used.insert(newOwnership)
+    move.phase = .attached
+    self.liveContext = liveContext
+    self.onChange = onChange
+    fence.set(value.deliveryGeneration)
+    endpointDelivery.set(UUID())
+    onChange()
+    try validateLease()
+    guard ownershipMove === move, move.phase == .attached, let final = liveContext(),
+      FileStateBindingIdentity(final) == binding?.identity, !final.closed, !final.quitting
+    else { throw FileStateEndpointError.stale }
+    try validateLease()
+  }
+  func finishOwnershipTransfer(
+    _ receipt: FileStateOwnershipTransferReceipt, validateLease: () throws -> Void
+  ) throws {
+    let move = try ownership(receipt)
+    guard move.phase == .attached, move.invalidationRequest == nil else {
+      throw FileStateEndpointError.stale
+    }
+    endpointTransition = true
+    do {
+      try validateLease()
+      guard let value = liveContext?(), FileStateBindingIdentity(value) == binding?.identity,
+        !value.closed, !value.quitting
+      else { throw FileStateEndpointError.stale }
+      try validateLease()
+      guard ownershipMove === move, move.invalidationRequest == nil else {
+        throw FileStateEndpointError.stale
+      }
+      ownershipMove = nil
+      endpointTransition = false
+    } catch {
+      endpointTransition = false
+      throw error
+    }
+    onChange?()
+  }
+  /// Explicit owner decision after validating the attached destination; never silently discard a close request.
+  func resolveOwnershipTransferInvalidation(
+    _ receipt: FileStateOwnershipTransferReceipt, validateLease: () throws -> Void
+  ) throws {
+    let move = try ownership(receipt)
+    guard move.phase == .attached, let invalidationRequest = move.invalidationRequest else {
+      throw FileStateEndpointError.stale
+    }
+    endpointTransition = true
+    defer { endpointTransition = false }
+    try validateLease()
+    guard let value = liveContext?(), !value.closed, !value.quitting,
+      FileStateBindingIdentity(value) == binding?.identity
+    else { throw FileStateEndpointError.stale }
+    try validateLease()
+    guard ownershipMove === move, move.invalidationRequest == invalidationRequest else {
+      throw FileStateEndpointError.stale
+    }
+    move.invalidationRequest = nil
+  }
+  /// Terminal cleanup only when the process has separately authorized bridge disposal.
+  func invalidateOwnershipTransfer(
+    _ receipt: FileStateOwnershipTransferReceipt, validateDisposal: () throws -> Void
+  ) throws {
+    let move = try ownership(receipt)
+    endpointTransition = true
+    do {
+      try validateDisposal()
+      guard ownershipMove === move else { throw FileStateEndpointError.stale }
+      ownershipMove = nil
+      endpointTransition = false
+    } catch {
+      endpointTransition = false
+      throw error
+    }
+    invalidate()
+  }
   func invalidate() {
+    if let move = ownershipMove {
+      move.invalidationRequest = UUID()
+      return
+    }
     guard !invalidated else { return }
     invalidated = true
     detachment = nil
@@ -385,6 +591,7 @@ enum FileStateEndpointError: Error { case unavailable, stale }
     binding = nil
   }
   func captureAction(_ action: FileConflictAction) -> FileStateActionContext? {
+    guard ownershipMove == nil else { return nil }
     guard let value = boundLive(), let token = state.token,
       state.admission(
         for: action, dirty: value.dirty, pendingPublication: value.pendingPublicationID != nil,
@@ -392,12 +599,13 @@ enum FileStateEndpointError: Error { case unavailable, stale }
         quitting: value.quitting, closed: value.closed) != .refused,
       currentToken(
         for: Envelope(
-          observation: state.observation!, token: token,
+          observation: state.observation!, endpointGeneration: endpointDelivery.current,
+          token: token,
           authority: authorityID, bindingID: value.bindingID, generation: value.deliveryGeneration))
         == token
     else { return nil }
     return FileStateActionContext(
-      live: value, authorityID: authorityID, token: token, action: action)
+      live: value, authorityID: actionAuthorityID, token: token, action: action)
   }
   func isCurrent(_ context: FileStateActionContext) -> Bool {
     guard let current = captureAction(context.action) else { return false }
@@ -405,12 +613,14 @@ enum FileStateEndpointError: Error { case unavailable, stale }
       && current.token == context.token
   }
   func isCurrent(_ context: FileStateActionContext, owningOperation: UUID) -> Bool {
+    guard ownershipMove == nil else { return false }
     guard context.live.operationID == nil, let value = boundLive(),
-      value.operationID == owningOperation, context.authorityID == authorityID,
+      value.operationID == owningOperation, context.authorityID == actionAuthorityID,
       state.token == context.token, let observation = state.observation,
       currentToken(
         for: Envelope(
-          observation: observation, token: context.token,
+          observation: observation, endpointGeneration: endpointDelivery.current,
+          token: context.token,
           authority: authorityID, bindingID: value.bindingID, generation: value.deliveryGeneration))
         == context.token
     else { return false }

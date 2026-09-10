@@ -47,6 +47,96 @@ import PadCore
       bridge.adoptBaseline(bytes: bytes)
       return (doc, box)
     }
+    let movingStore = try NativeDocumentEndpointBindings()
+    let movingDocument = try model()
+    let movingModel = movingDocument.0
+    let movingBridge = movingModel.fileState!
+    do {
+      let receipt = try movingStore.reserveTransfer(movingModel, transactionID: UUID())!
+      check(
+        movingStore.retainedCount == 1,
+        "file-backed model reserves exact ownership transfer receipt")
+      refuses("ordinary endpoint detach cannot consume transfer") {
+        try movingStore.detach(movingModel)
+      }
+      let firstOwnership = movingModel.ownershipGeneration
+      try movingStore.suspendTransfer(receipt, validateLease: {})
+      movingModel.advanceOwnershipGeneration()
+      let targetOwnership = movingModel.ownershipGeneration
+      var deliveries = 0
+      try movingStore.attachTransfer(
+        receipt, expectedPreviousOwnership: firstOwnership, newOwnership: targetOwnership,
+        liveContext: { context(movingModel) }, onChange: { deliveries += 1 }, validateLease: {})
+      check(deliveries == 0, "transfer buffers endpoint rendering until exact finish")
+      try movingStore.suspendTransfer(receipt, validateLease: {})
+      movingModel.advanceOwnershipGeneration()
+      try movingStore.attachTransfer(
+        receipt, expectedPreviousOwnership: targetOwnership,
+        newOwnership: movingModel.ownershipGeneration, liveContext: { context(movingModel) },
+        onChange: { deliveries += 1 }, validateLease: {})
+      try movingStore.finishTransfer(receipt, validateLease: {})
+      check(
+        movingStore.retainedCount == 0 && movingModel.fileState === movingBridge,
+        "rollback second rotation preserves same bridge and consumes exact receipt")
+      check(deliveries == 1, "only settled endpoint renders")
+      refuses("finished transfer receipt cannot replay") {
+        try movingStore.finishTransfer(receipt, validateLease: {})
+      }
+      try movingStore.detach(movingModel)
+      try movingStore.reattach(movingModel, liveContext: { context(movingModel) }, onChange: {})
+      check(true, "ordinary endpoint lifecycle resumes after transfer")
+      movingModel.acknowledgeFileBaseline()
+      movingBridge.adoptBaseline(bytes: movingModel.originalBytes!)
+      let updated = try movingBridge.detachEndpoint()
+      check(
+        updated.binding.baselineRevision == movingModel.baselineRevision,
+        "future baseline adoption uses new live endpoint after transfer")
+      try movingBridge.reattachEndpoint(
+        updated, expectedBinding: FileStateBindingIdentity(context(movingModel)),
+        liveContext: { context(movingModel) }, onChange: {})
+
+    } catch { check(false, "native ownership transfer succeeds: \(error)") }
+    let reentrantStore = try NativeDocumentEndpointBindings()
+    let reentrantModel = try model().0
+    let reentrantReceipt = try reentrantStore.reserveTransfer(
+      reentrantModel, transactionID: UUID())!
+    try reentrantStore.suspendTransfer(reentrantReceipt, validateLease: {})
+    let originalOwnership = reentrantModel.ownershipGeneration
+    reentrantModel.advanceOwnershipGeneration()
+    var nestedRefused = false
+    var nextReceipt: NativeEndpointOwnershipTransferReceipt?
+    try reentrantStore.attachTransfer(
+      reentrantReceipt, expectedPreviousOwnership: originalOwnership,
+      newOwnership: reentrantModel.ownershipGeneration,
+      liveContext: {
+        do { try reentrantStore.suspendTransfer(reentrantReceipt, validateLease: {}) } catch {
+          nestedRefused = true
+        }
+        return context(reentrantModel)
+      },
+      onChange: {
+        nextReceipt = try? reentrantStore.reserveTransfer(reentrantModel, transactionID: UUID())
+      }, validateLease: {})
+    check(nestedRefused, "live context callback cannot reenter transfer phase")
+    try reentrantStore.finishTransfer(reentrantReceipt, validateLease: {})
+    check(
+      nextReceipt != nil && reentrantStore.retainedCount == 1,
+      "settled render can reserve new transaction without old cleanup erasing it")
+    try reentrantStore.invalidateTransfer(nextReceipt!, validateDisposal: {})
+    check(
+      reentrantStore.retainedCount == 0,
+      "explicit terminal disposal consumes only exact new receipt")
+    let releasedStore = try NativeDocumentEndpointBindings()
+    var releasedTransfer: (EditorDocument, ContextBox)? = try model()
+    weak var releasedModel = releasedTransfer!.0
+    let heldBridge = releasedTransfer!.0.fileState!
+    _ = try releasedStore.reserveTransfer(releasedTransfer!.0, transactionID: UUID())
+    releasedTransfer = nil
+    check(releasedModel == nil, "transfer store never becomes model owner")
+    releasedStore.purgeReleasedModels()
+    check(
+      releasedStore.retainedCount == 0 && heldBridge.captureAction(.reload) == nil,
+      "released model purge explicitly disposes process registration")
     let store = try NativeDocumentEndpointBindings()
     var first: (EditorDocument, ContextBox)? = try model()
     let doc = first!.0

@@ -125,6 +125,162 @@ let matching = DiskObservation(
       }
       checks += 1
     }
+    let refusedSuspend = Fixture()
+    refusedSuspend.live.ownershipGeneration = UUID()
+    refusedSuspend.bridge.adoptBaseline(bytes: Data([1]))
+    do {
+      let old = refusedSuspend.live.ownershipGeneration!
+      let token = try refusedSuspend.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: old)
+      do {
+        try refusedSuspend.bridge.suspendOwnershipTransfer(
+          token, validateLease: { throw FileStateEndpointError.stale })
+        check(false, "lease refusal must throw")
+      } catch {}
+      try refusedSuspend.bridge.attachOwnershipTransfer(
+        token, expectedPreviousOwnership: old, newOwnership: old,
+        liveContext: { refusedSuspend.live }, onChange: {}, validateLease: {})
+      try refusedSuspend.bridge.finishOwnershipTransfer(token, validateLease: {})
+      check(
+        true,
+        "explicit prestage restoration recovers reservation whose suspend refused before effects")
+    } catch { check(false, "prestage suspend refusal remains recoverable under exact valid lease") }
+    refusedSuspend.bridge.invalidate()
+    let cancelledMove = Fixture()
+    cancelledMove.live.ownershipGeneration = UUID()
+    cancelledMove.bridge.adoptBaseline(bytes: Data([1]))
+    cancelledMove.send(1)
+    await settle()
+    let cancelledAction = cancelledMove.bridge.captureAction(.reload)!
+    do {
+      let original = cancelledMove.live.ownershipGeneration!
+      let receipt = try cancelledMove.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: original)
+      try cancelledMove.bridge.suspendOwnershipTransfer(receipt, validateLease: {})
+      try cancelledMove.bridge.suspendOwnershipTransfer(receipt, validateLease: {})
+      try cancelledMove.bridge.attachOwnershipTransfer(
+        receipt, expectedPreviousOwnership: original, newOwnership: original,
+        liveContext: { cancelledMove.live }, onChange: {}, validateLease: {})
+      try cancelledMove.bridge.finishOwnershipTransfer(receipt, validateLease: {})
+      check(
+        !cancelledMove.bridge.isCurrent(cancelledAction),
+        "cancelled prestage move cannot revive old action")
+      check(
+        cancelledMove.bridge.captureAction(.reload) != nil,
+        "same ownership cancellation restores current endpoint admission")
+    } catch {
+      check(false, "prestage suspended transfer safely cancels without ownership rotation")
+    }
+    cancelledMove.bridge.invalidate()
+    let moving = Fixture()
+    moving.live.ownershipGeneration = UUID()
+    moving.bridge.adoptBaseline(bytes: Data([1]))
+    moving.send(1)
+    await settle()
+    let originalStateToken = moving.bridge.state.token
+    let oldAction = moving.bridge.captureAction(.reload)!
+    _ = moving.bridge.keepBuffer(moving.bridge.captureAction(.keepBuffer)!)
+    do {
+      let old = moving.live.ownershipGeneration!
+      let token = try moving.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: old)
+      // Queued before suspend; current registration token remains 2.
+      moving.send(2, observation: matching)
+      try moving.bridge.suspendOwnershipTransfer(token, validateLease: {})
+      let target = UUID()
+      moving.live.ownershipGeneration = target
+      try moving.bridge.attachOwnershipTransfer(
+        token, expectedPreviousOwnership: old, newOwnership: target, liveContext: { moving.live },
+        onChange: { moving.changes += 1 }, validateLease: {})
+      check(
+        moving.bridge.captureAction(.reload) == nil,
+        "active ownership transfer blocks action capture")
+      check(!moving.bridge.isCurrent(oldAction), "old endpoint action cannot act during transfer")
+      // A second rotation after target attachment exercises rollback without replaying an old receipt.
+      try moving.bridge.suspendOwnershipTransfer(token, validateLease: {})
+      let rollback = UUID()
+      moving.live.ownershipGeneration = rollback
+      // Delivered while suspended, before rollback attachment.
+      moving.send(3, observation: matching)
+      try moving.bridge.attachOwnershipTransfer(
+        token, expectedPreviousOwnership: target, newOwnership: rollback,
+        liveContext: { moving.live }, onChange: { moving.changes += 1 }, validateLease: {})
+      try moving.bridge.finishOwnershipTransfer(token, validateLease: {})
+      await settle()
+      check(moving.client.registrations == 1, "ownership move preserves process registration")
+      check(
+        moving.bridge.state.token == originalStateToken,
+        "old and suspended queued generations cannot replace observed state")
+      check(!moving.bridge.state.noticeIsProminent, "ownership move preserves dismissed facet")
+      check(
+        !moving.bridge.isCurrent(oldAction), "old ownership action remains stale after rollback")
+      moving.send(4)
+      await settle()
+      check(
+        moving.bridge.state.token == moving.token(4),
+        "fresh generation observation accepts after finish")
+      check(
+        !moving.bridge.state.noticeIsProminent,
+        "same service epoch preserves dismissal on unchanged fresh observation")
+      let invalidation = try moving.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: rollback)
+      try moving.bridge.suspendOwnershipTransfer(invalidation, validateLease: {})
+      moving.live.ownershipGeneration = UUID()
+      try moving.bridge.attachOwnershipTransfer(
+        invalidation, expectedPreviousOwnership: rollback,
+        newOwnership: moving.live.ownershipGeneration!, liveContext: { moving.live }, onChange: {},
+        validateLease: {})
+      moving.bridge.invalidate()
+      check(
+        moving.bridge.ownershipTransferInvalidationRequested,
+        "ordinary invalidation is explicit deferred state")
+      do {
+        try moving.bridge.finishOwnershipTransfer(invalidation, validateLease: {})
+        check(false, "unresolved invalidation blocks finish")
+      } catch { check(true, "unresolved invalidation blocks finish") }
+      do {
+        try moving.bridge.resolveOwnershipTransferInvalidation(
+          invalidation, validateLease: { moving.bridge.invalidate() })
+        check(false, "reentrant newer invalidation cannot be erased by resolving older request")
+      } catch { check(true, "reentrant newer invalidation remains retained") }
+      try moving.bridge.resolveOwnershipTransferInvalidation(invalidation, validateLease: {})
+      try moving.bridge.finishOwnershipTransfer(invalidation, validateLease: {})
+    } catch { check(false, "ownership transition must complete with exact lease: \(error)") }
+    moving.bridge.invalidate()
+    let manualMove = Fixture()
+    manualMove.live.ownershipGeneration = UUID()
+    manualMove.client.failRegister = true
+    manualMove.bridge.adoptBaseline(bytes: Data([1]))
+    manualMove.bridge.checkAgain()
+    let manualRequest = manualMove.client.latestID!
+    let notice = manualMove.bridge.manualNotice
+    let failureBeforeMove = manualMove.bridge.lastFailure
+    do {
+      let old = manualMove.live.ownershipGeneration!
+      let receipt = try manualMove.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: old)
+      try manualMove.bridge.suspendOwnershipTransfer(receipt, validateLease: {})
+      manualMove.live.ownershipGeneration = UUID()
+      try manualMove.bridge.attachOwnershipTransfer(
+        receipt, expectedPreviousOwnership: old, newOwnership: manualMove.live.ownershipGeneration!,
+        liveContext: { manualMove.live }, onChange: {}, validateLease: {})
+      try manualMove.bridge.finishOwnershipTransfer(receipt, validateLease: {})
+      manualMove.client.manuals[manualRequest]?(manualRequest, .success(changed))
+      await settle()
+      check(
+        manualMove.bridge.state.observation == nil,
+        "cancelled manual request cannot deliver across ownership move")
+      check(
+        manualMove.bridge.manualNotice == notice
+          && manualMove.bridge.lastFailure == failureBeforeMove,
+        "manual mode and failure survive without automatic registration retry")
+      let disposal = try manualMove.bridge.reserveOwnershipTransfer(
+        transactionID: UUID(), expectedOwnership: manualMove.live.ownershipGeneration!)
+      try manualMove.bridge.invalidateOwnershipTransfer(disposal, validateDisposal: {})
+      check(
+        manualMove.bridge.captureAction(.reload) == nil, "explicit transfer disposal retires bridge"
+      )
+    } catch { check(false, "manual ownership transition succeeds") }
     let detached = Fixture()
     detached.live.ownershipGeneration = UUID()
     detached.bridge.adoptBaseline(bytes: Data([1]))
