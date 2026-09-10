@@ -13,6 +13,10 @@ jobs:
           persist-credentials: false
       - name: Unit and temporary-file tests
         run: scripts/swift.sh test
+      - name: Owned search test infrastructure
+        run: |
+          python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'
+          scripts/test-search-child-lifecycle.sh
       - name: Public-source checks
         run: python3 scripts/check-public.py
       - name: Source formatting
