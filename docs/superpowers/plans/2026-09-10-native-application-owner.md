@@ -7,8 +7,8 @@ Design: compose existing tested ownership components rather than introducing ano
 3. Reopen clean history with detached preparation and new model/recovery identity. Implemented; native command integration passes.
 4. Fence concurrent startup retries and preserve retained operations through endpoint recreation. Implemented; concurrency regression passes; more failure-path tests remain.
 5. Freeze actual native windows and commit one final paired checkpoint; preserve gates on veto. Implemented on tested success paths; complete fault/veto coverage outstanding.
-6. Connect launch FIFO, asynchronous session-panel intake, and every AppDelegate window/quit route. Outstanding; do not activate partially.
-7. Frozen integrated build, core and native suites, independent review, public checks and local commit. In progress.
+6. Connect launch FIFO, asynchronous session-panel intake, and every AppDelegate window/quit route. Implemented; nine hidden AppDelegate tests pass.
+7. Frozen integrated build/core404, combined native71, monitor compatibility and independent reviews pass. Public checks pass; scoped local integration commit follows.
 8. Actual desktop and packaged validation. Blocked by console access.
 
 Verification commands: `scripts/test-native-application-documents.sh`,

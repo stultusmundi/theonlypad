@@ -58,7 +58,8 @@ application verification follow separately.
 
 A combined managed-document runner is being prepared to run the AppDelegate, process owner,
 controller routing, intake, external-open and close suites against one frozen native source set.
-Its result and CI adoption remain pending until execution.
+The frozen runner passed all 71 tests in 5.750 seconds and is now included in CI; see the managed
+AppDelegate verification record for the per-suite counts.
 
 ## Lost native endpoint recovery
 
