@@ -45,3 +45,16 @@ No dependency, public helper executable, package, GUI routing or release changed
 Commit `17f57cd` adds the checked-in outer watchdog and 21 passing pure tests. Independent source review approved four fixed self-controls, with group cleanup before the direct leader is reaped, bounded capture and conservative SIGCHLD policy refusal.
 
 The first actual benign control failed safely: kqueue reported leader exit, the owned process-group SIGKILL returned `EPERM`, direct wait returned exit 0, and capture reached EOF. The watchdog returned 125 with cleanup unconfirmed. No hanging, ignored-TERM or lingering-descendant controls ran after that failure. Darwin zombie-group behavior is under investigation; `EPERM` is not being treated as success or as a request to change permissions. Real watchdog acceptance and the later launcher/channel tests remain outstanding.
+
+## Reviewed watchdog controls
+
+The conservative singleton refinement is committed at `5587d43`, with27 pure tests passing and independent review approved. The original benign failure remains preserved. A fresh serial run of all four fixed controls completed successfully:
+
+| Control | Watchdog exit | Cleanup receipt | Direct wait | Seconds |
+| --- | --- | --- | --- | --- |
+| Benign | 0 | Exited leader alone, EPERM retained | 0 | 0.021312 |
+| Loop | 124, expected timeout | Owned group signaled | -9 | 1.002668 |
+| Ignore TERM | 124, expected timeout | Owned group signaled | -9 | 1.007106 |
+| Leader exits with one same-group child | 0 | Owned group signaled | 0 | 0.019947 |
+
+Every control completed output capture without truncation, recorded successful direct-child wait, and allowed the next serial command to run. The benign singleton result does not claim signal delivery. The descendant control establishes group signaling plus pipe EOF, not a direct wait receipt for a nonchild descendant. Raw receipts remain in `.local/search-child-lifecycle-task-2/watchdog-controls-_dok7tss/`; independent review is in the same private task directory. These are watchdog self-controls, not real search-launcher/channel/helper acceptance. Production search routing remains unchanged.
