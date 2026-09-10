@@ -10,8 +10,10 @@ import PadCore
   let submit: (EditorPreparedSubmission) throws -> DocumentIntakeID
   let wait: (DocumentIntakeID) async throws -> DocumentIntakeResult
   let requestClose: (Set<UUID>) throws -> DocumentClosingID
-  let requestReopen: () throws -> DocumentIntakeID
+  let requestReopen: () async throws -> DocumentIntakeID
   let detachDocumentEndpoint: (EditorDocument) throws -> Void
+  let reattachDocumentEndpoint:
+    (EditorDocument, @escaping () -> FileStateLiveContext?, @escaping () -> Void) throws -> Void
   let endpointClosed: (UUID) -> Void
   let requestCheckpoint: () -> Void
 }

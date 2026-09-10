@@ -7,3 +7,13 @@ Controller tests cover lease/global admission, direct setters/UndoManager, choos
 Behavioral evidence includes initial ten-test/seven-failure admission red, eleven-test/three-failure adapter red, twenty-test/two-failure callback red, one registry-history availability failure, and one real-focus failure. Narrowing the target predicate alone did not prevent AppKit resignation; the window preflight fixed the preserved assertion. Fixture compile errors and an unapplied patch attempt remain separately retained, not passing evidence. Independent review findings were reproduced and resolved. Final controller source passed strict formatting and diff checks.
 
 No window was shown or activated. Native alert keyboard behavior, arbitrary impure focus-predicate rollback, process endpoint recreation/monitor reattachment, actual AppDelegate close/quit integration and packaged desktop acceptance are not claimed. The existing legacy initializer remains active.
+
+## Endpoint recreation and asynchronous reopen
+
+A subsequent hidden controller suite passed 26 tests. It covers asynchronous history preparation
+before issuing a real intake ID, reattachment through the actual process binding store, explicit
+intake destination reconciliation to a replacement controller, and legitimate closing of an empty
+registry window. Independent review exposed a consumed reattachment receipt being retried after
+later projection validation failed. Its behavioral regression failed before the fix; attachment
+success is now recorded before the next external validation callback. Final 26-test run passed in
+1.754 seconds. These are controller tests, not AppDelegate or visible desktop acceptance.

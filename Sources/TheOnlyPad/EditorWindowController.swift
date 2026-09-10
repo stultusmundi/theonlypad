@@ -65,6 +65,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var projectionFocus: (token: UUID, paneID: UUID)?
   private var projectionValid = false
   private var applicationPreparation: UUID?
+  private var pendingEndpointAttachments = Set<UUID>()
   private var emptyWindowClosePermit: (id: UUID, revision: UUID)?
   private var recoveryWorkGeneration = UUID()
   private var recoveryWorkError: Error?
@@ -301,7 +302,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     diskActions = DocumentDiskActionCoordinator(application: owner)
     locateActions = DocumentLocateCoordinator(application: owner)
     onDiskStateChange = { [weak self] in self?.renderDiskStatus() }
-    for document in documents { adoptFileState(document) }
+    for document in documents {
+      if applicationRouting != nil {
+        do {
+          try attachDocumentEndpoint(document)
+          pendingEndpointAttachments.remove(document.id)
+        } catch {
+          pendingEndpointAttachments.insert(document.id)
+          errorHandler?(error)
+        }
+      } else {
+        adoptFileState(document)
+      }
+    }
     renderDiskStatus()
   }
   func reconcileFileMonitoring() {
@@ -329,6 +342,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       closed: windowClosed || !documents.contains(where: { $0 === document }),
       quitting: preparingToQuit || owner.isSuspended,
       deliveryGeneration: owner.deliveryGeneration)
+  }
+  private func attachDocumentEndpoint(_ document: EditorDocument) throws {
+    guard let routing = applicationRouting, document.fileState != nil else {
+      adoptFileState(document)
+      return
+    }
+    try routing.reattachDocumentEndpoint(
+      document,
+      { [weak self, weak document] in
+        guard let self, let document else { return nil }
+        return self.fileStateContext(document)
+      }, { [weak self] in self?.onDiskStateChange?() })
   }
   private func adoptFileState(
     _ document: EditorDocument, validatedIdentity: FileTargetIdentity? = nil
@@ -2887,10 +2912,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func reopenClosed() {
     if let routing = applicationRouting {
-      do {
-        try routing.requireEndpointCurrent()
-        observeApplicationIntake(try routing.requestReopen())
-      } catch { present(error) }
+      Task { [weak self] in
+        do {
+          guard (try self?.requireApplicationEndpoint()) != nil else { throw CancellationError() }
+          let id = try await routing.requestReopen()
+          guard let self, !self.windowClosed else { return }
+          self.observeApplicationIntake(id)
+        } catch { self?.present(error) }
+      }
       return
     }
     guard let old = closedDocuments.popLast() else { return }
@@ -2990,6 +3019,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       do {
         _ = try requireApplicationEndpoint()
+        if documents.isEmpty {
+          let revision = routing.registry.workspaceRevision
+          guard sender === window, let expected = routing.registry.window(id: sessionID),
+            expected.groups.allSatisfy({ $0.documentIDs.isEmpty })
+          else { throw NativeManagedCloseError.opening }
+          try validateRegistryProjection(
+            expected, revision: revision, endpointID: routing.endpointID)
+          _ = try requireApplicationEndpoint()
+          guard !windowClosed, documents.isEmpty, routing.registry.workspaceRevision == revision
+          else { throw NativeManagedCloseError.stale }
+          return true
+        }
         _ = try routing.requestClose(Set(documents.map(\.id)))
       } catch { present(error) }
       return false
@@ -3969,6 +4010,7 @@ extension EditorWindowController {
     for removed in old where !next.contains(where: { $0 === removed }) {
       try applicationRouting!.detachDocumentEndpoint(removed)
       _ = try registryModels(expected, revision: revision, endpointID: endpointID)
+      pendingEndpointAttachments.remove(removed.id)
     }
     documents = next
     selectedID = selection
@@ -3980,7 +4022,13 @@ extension EditorWindowController {
       }
       if !old.contains(where: { $0 === document }) {
         for pane in document.panePool { installCallbacks(for: pane) }
-        if document.fileState == nil { adoptFileState(document) }
+        pendingEndpointAttachments.insert(document.id)
+      }
+      if pendingEndpointAttachments.contains(document.id) {
+        try attachDocumentEndpoint(document)
+        // Successful reattachment consumed its receipt; later projection refusal must not repeat it.
+        pendingEndpointAttachments.remove(document.id)
+        _ = try registryModels(expected, revision: revision, endpointID: endpointID)
       }
     }
     if let selected {
@@ -4053,10 +4101,11 @@ extension EditorWindowController {
 
 // Native adapters for the process-owned close transaction. No filesystem authority is created here.
 enum NativeManagedCloseError: LocalizedError {
-  case stale, busy, pendingPublication, drainFailed
+  case stale, busy, pendingPublication, drainFailed, opening
   var errorDescription: String? {
     switch self {
     case .stale: return "Document ownership changed. Keep it open and retry closing."
+    case .opening: return "Finish opening or recovering this window’s documents before closing it."
     case .busy: return "Finish composition, file operations, and macro recording before closing."
     case .pendingPublication:
       return

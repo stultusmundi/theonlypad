@@ -24,17 +24,22 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
   let recovery: RecoveryCoordinator
   let registry: ApplicationDocuments
   let assignment: DocumentAssignment
-  let endpointID = UUID()
+  var endpointID = UUID()
+  let endpointBindings = try! NativeDocumentEndpointBindings()
+  var attached: [UUID: (EditorDocument, DocumentFileStateController, UUID)] = [:]
+  var reopen: (() async throws -> DocumentIntakeID)?
+  var projectionFailure = false
+  var reattachCalls = 0
+  var allowAttachedProof = true
   var controller: EditorWindowController!
   var publisher: ApplicationSessionCheckpoints!
   var intake: ApplicationDocumentIntake!
+  var nativeAdapter: NativeDocumentIntakeController?
   var lastIntake: DocumentIntakeID?
   var gate: RoutingGate?
   var endpointLive = true
   var userAdmission = true
   var chooseSave: ((URL?, String) -> URL?)?
-  var detached: [UUID: (EditorDocument, DocumentFileStateController, FileStateEndpointDetachment)] =
-    [:]
   var submissions: [UUID: EditorPreparedSubmission] = [:]
   var errors: [Error] = []
   var characterEvents = 0
@@ -80,7 +85,14 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     publisher = ApplicationSessionCheckpoints(
       session: session, recovery: recovery,
       managed: .init(
-        registry: registry, requireIntakeSettled: { try self.intake?.requireSettled() },
+        registry: registry,
+        requireIntakeSettled: {
+          if let adapter = self.nativeAdapter {
+            try adapter.requireSettled()
+          } else {
+            try self.intake?.requireSettled()
+          }
+        },
         requireCloseSettled: {},
         validateProjection: { windows in
           for w in windows {
@@ -121,16 +133,63 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
             self?.characterEvents += 1
             self?.publisher.requestCheckpoint()
           }
-        }, project: { _ in try self.project() }))
+        },
+        project: { _ in
+          if self.projectionFailure { throw RoutingFixtureFailure.stale }
+          try self.project()
+        }))
+    try makeEndpoint()
+    try project()
+    let a = try publisher.beginManagedActivation()
+    try await publisher.drainManagedActivation(a)
+    try publisher.finishManagedActivation(a)
+  }
+  func enableNativeAdapter() {
+    nativeAdapter = NativeDocumentIntakeController(
+      registry: registry, session: session, recovery: recovery,
+      publication: .init(
+        acquirePause: { try self.publisher.acquirePause() },
+        drainPause: { try await self.publisher.drainPause($0) },
+        releasePause: { try self.publisher.releasePause($0) },
+        requestCheckpoint: { self.publisher.requestCheckpoint() }),
+      destinations: .init(
+        requireAdmission: { if !self.endpointLive { throw RoutingFixtureFailure.stale } },
+        validate: { endpoint, assignment in
+          if !self.endpointLive || endpoint != self.endpointID || assignment != self.assignment {
+            throw RoutingFixtureFailure.stale
+          }
+        }, exists: { self.endpointLive && $0 == self.endpointID },
+        resolveSelection: { _, _, intent in
+          switch intent {
+          case .select: return true
+          case .preserve: return false
+          case .selectIfStillSelected(let id, _):
+            return self.controller.sessionMetadata.selectedTabID == id
+          }
+        }, drainLegacyWrites: { await self.gate?.wait() },
+        project: { _, _ in
+          if self.projectionFailure { throw RoutingFixtureFailure.stale }
+          try self.project()
+        }))
+  }
+  func makeEndpoint(monitor: ApplicationFileMonitoring? = nil) throws {
+    let incarnation = endpointID
     let routing = EditorApplicationRouting(
       endpointID: endpointID, assignment: assignment, registry: registry,
       requireEndpointCurrent: {
-        if !self.endpointLive { throw RoutingFixtureFailure.stale }
+        if !self.endpointLive || self.endpointID != incarnation {
+          throw RoutingFixtureFailure.stale
+        }
         try self.endpointCheck?()
       },
       requireUserAdmission: { if !self.userAdmission { throw RoutingFixtureFailure.stale } },
       submit: { submission in
         self.submissions[submission.seed.id] = submission
+        if let adapter = self.nativeAdapter {
+          let id = try adapter.submit(submission)
+          self.lastIntake = id
+          return id
+        }
         let selected: Bool
         switch submission.selection {
         case .select: selected = true
@@ -149,28 +208,54 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
             makeHandle: { try EditorDocumentFactory.make(submission.seed) }))
         self.lastIntake = id
         return id
-      }, wait: { try await self.intake.wait(for: $0) },
+      },
+      wait: { id in
+        if let adapter = self.nativeAdapter { return try await adapter.wait(for: id) }
+        return try await self.intake.wait(for: id)
+      },
       requestClose: { _ in throw RoutingFixtureFailure.unsupportedDependency },
-      requestReopen: { throw RoutingFixtureFailure.unsupportedDependency },
+      requestReopen: {
+        guard let reopen = self.reopen else { throw RoutingFixtureFailure.unsupportedDependency }
+        return try await reopen()
+      },
       detachDocumentEndpoint: { model in
-        guard let bridge = model.fileState else { return }
-        if let retained = self.detached[model.id] {
-          guard retained.0 === model, retained.1 === bridge else {
-            throw RoutingFixtureFailure.stale
-          }
+        try self.endpointBindings.detach(model)
+        self.attached.removeValue(forKey: model.id)
+      },
+      reattachDocumentEndpoint: { model, context, changed in
+        if self.allowAttachedProof, let active = self.attached[model.id], active.0 === model,
+          active.1 === model.fileState,
+          active.2 == incarnation
+        {
           return
         }
-        self.detached[model.id] = (model, bridge, try bridge.detachEndpoint())
+        try self.endpointBindings.reattach(model, liveContext: context, onChange: changed)
+        self.reattachCalls += 1
+        self.attached[model.id] = (model, model.fileState!, incarnation)
       },
-      endpointClosed: { _ in self.endpointLive = false },
+      endpointClosed: { id in if id == self.endpointID { self.endpointLive = false } },
       requestCheckpoint: { self.publisher.requestCheckpoint() })
     controller = try EditorWindowController(
       id: assignment.windowID, application: routing,
       chooseSaveDestination: { self.chooseSave?($0, $1) }, onError: { self.errors.append($0) })
-    try project()
-    let a = try publisher.beginManagedActivation()
-    try await publisher.drainManagedActivation(a)
-    try publisher.finishManagedActivation(a)
+    if let monitor { controller.configureFileMonitoring(monitor) }
+  }
+  func recreateEndpoint(monitor: ApplicationFileMonitoring? = nil) throws {
+    endpointID = UUID()
+    endpointLive = true
+    try makeEndpoint(monitor: monitor)
+  }
+  func reconcileSubmission(_ id: UUID) throws {
+    guard let old = submissions[id] else { throw RoutingFixtureFailure.stale }
+    let incarnation = endpointID
+    submissions[id] = .init(
+      endpointID: incarnation, assignment: assignment, seed: old.seed,
+      provenance: old.provenance, selection: old.selection,
+      requireDestinationCurrent: {
+        if !self.endpointLive || self.endpointID != incarnation {
+          throw RoutingFixtureFailure.stale
+        }
+      }, insertionIndex: old.insertionIndex)
   }
   func project() throws {
     try controller.applyRegistryProjection(
@@ -796,6 +881,222 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     XCTAssertTrue(f.controller.window?.firstResponder === current.editor)
     XCTAssertEqual(current.document.preferredPaneID, current.id)
     f.endpointCheck = nil
+    await f.stop()
+  }
+
+  func testRecreatedEndpointReattachesSameModelMonitorAndParentContinuity() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    let monitor = ApplicationFileMonitoring()
+    defer { monitor.stop() }
+    f.controller.configureFileMonitoring(monitor)
+    let parent = f.directory.appendingPathComponent("documents")
+    try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+    let url = parent.appendingPathComponent("file.txt")
+    let bytes = Data("saved baseline".utf8)
+    try bytes.write(to: url)
+    var opened = false
+    f.controller.open(url, onFailure: { _ in XCTFail("open") }, onOpened: { opened = true })
+    let loaded = await f.wait { opened }
+    XCTAssertTrue(loaded)
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let bridge = try XCTUnwrap(f.controller.focusedPane?.document.fileState)
+    let observed = await f.wait { bridge.state.observation?.content == .matchesBaseline }
+    XCTAssertTrue(observed)
+    let binding = model.fileBindingID
+    let revision = model.baselineRevision
+    let ownership = model.ownershipGeneration
+    model.undoManager.beginUndoGrouping()
+    model.panePool[0].editor.insertText("local", replacementRange: NSRange(location: 0, length: 0))
+    model.undoManager.endUndoGrouping()
+    let text = model.storage.string
+    let old = f.controller!
+    old.close()
+    XCTAssertEqual(f.endpointBindings.retainedCount, 1)
+    let moved = f.directory.appendingPathComponent("original-documents")
+    try FileManager.default.moveItem(at: parent, to: moved)
+    try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+    try bytes.write(to: url)
+    try f.recreateEndpoint(monitor: monitor)
+    try f.project()
+    XCTAssertTrue(f.controller.focusedPane?.document === model)
+    XCTAssertTrue(model.fileState === bridge)
+    XCTAssertEqual(f.reattachCalls, 1)
+    XCTAssertEqual(f.endpointBindings.retainedCount, 0)
+    XCTAssertEqual(model.storage.string, text)
+    XCTAssertEqual(model.fileBindingID, binding)
+    XCTAssertEqual(model.baselineRevision, revision)
+    XCTAssertEqual(model.ownershipGeneration, ownership)
+    XCTAssertEqual(model.originalBytes, bytes)
+    bridge.checkAgain()
+    let changed = await f.wait { bridge.state.observation?.locationProblem == .parentChanged }
+    XCTAssertTrue(changed)
+    model.undoManager.undo()
+    XCTAssertEqual(model.storage.string, "saved baseline")
+    try f.project()
+    XCTAssertEqual(f.reattachCalls, 1)
+    await f.stop()
+  }
+
+  func testUserCanCloseOnlyAnActuallyEmptyRegistryWindow() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.userAdmission = false
+    XCTAssertFalse(f.controller.windowShouldClose(try XCTUnwrap(f.controller.window)))
+    f.userAdmission = true
+    XCTAssertTrue(f.controller.windowShouldClose(try XCTUnwrap(f.controller.window)))
+    f.projectionFailure = true
+    f.controller.newDocument()
+    guard case .retained(let id, _) = try await f.intake.wait(for: XCTUnwrap(f.lastIntake)) else {
+      return XCTFail("held projection")
+    }
+    XCTAssertTrue(f.controller.sessionMetadata.tabs.isEmpty)
+    XCTAssertNotNil(f.registry.handle(id: id))
+    XCTAssertFalse(f.controller.windowShouldClose(try XCTUnwrap(f.controller.window)))
+    XCTAssertNotNil(f.registry.handle(id: id))
+    await f.stop()
+  }
+
+  func testAsyncReopenWaitsForWorkerPreparationBeforeRealIntakeID() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    f.enableNativeAdapter()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    let adapter = try XCTUnwrap(f.nativeAdapter)
+    let url = f.directory.appendingPathComponent("history.txt")
+    let bytes = Data("history😀\r\n".utf8)
+    try bytes.write(to: url)
+    var opened = false
+    f.controller.open(url, onFailure: { _ in XCTFail("open") }, onOpened: { opened = true })
+    let loaded = await f.wait { opened }
+    XCTAssertTrue(loaded)
+    let source = try XCTUnwrap(f.controller.focusedPane?.document)
+    let previousID = f.lastIntake
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: source.id), disposition: .retainCleanHistory)
+    _ = try f.registry.completeClose(ticket, result: .removed)
+    try f.project()
+    let gate = RoutingGate()
+    f.reopen = {
+      let replacement = UUID()
+      let incarnation = f.endpointID
+      let claim = try XCTUnwrap(
+        f.registry.peekHistory(windowID: f.assignment.windowID, replacementID: replacement))
+      let value = try f.registry.withHistorySource(claim) { handle in
+        let model = handle as! EditorDocument
+        return (
+          model.storage.string, model.url, model.originalBytes, model.encoding, model.hasBOM,
+          DecodedDocument(
+            text: model.savedText, encoding: model.savedEncoding, hasBOM: model.savedHasBOM),
+          model.bookmarks, model.language, model.manualLanguage
+        )
+      }
+      await gate.wait()
+      let seed = try await Task.detached {
+        try NativeDocumentSeed.reopened(
+          id: replacement, text: value.0, url: value.1, originalBytes: value.2,
+          encoding: value.3, hasBOM: value.4, saved: value.5, bookmarks: value.6, language: value.7,
+          manualLanguage: value.8)
+      }.value
+      try f.registry.validateHistory(claim)
+      let id = try adapter.submit(
+        .init(
+          endpointID: incarnation, assignment: f.assignment, seed: seed,
+          provenance: .history(claim), selection: .select,
+          requireDestinationCurrent: {
+            if !f.endpointLive || f.endpointID != incarnation { throw RoutingFixtureFailure.stale }
+          }))
+      f.lastIntake = id
+      return id
+    }
+    f.controller.execute("file.reopenClosed")
+    let entered = await f.wait { gate.entered }
+    XCTAssertTrue(entered)
+    XCTAssertEqual(f.lastIntake, previousID)
+    XCTAssertTrue(f.controller.sessionMetadata.tabs.isEmpty)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 1)
+    gate.release()
+    let submitted = await f.wait { f.lastIntake != previousID }
+    XCTAssertTrue(submitted)
+    guard case .imported(let id) = try await adapter.wait(for: XCTUnwrap(f.lastIntake)) else {
+      return XCTFail("reopen")
+    }
+    let replacement = try XCTUnwrap(f.registry.handle(id: id) as? EditorDocument)
+    XCTAssertNotEqual(replacement.id, source.id)
+    XCTAssertFalse(replacement === source)
+    XCTAssertEqual(replacement.originalBytes, bytes)
+    XCTAssertEqual(replacement.storage.string, source.storage.string)
+    XCTAssertEqual(f.registry.closedHistoryCount(windowID: f.assignment.windowID), 0)
+    XCTAssertTrue(f.controller.focusedPane?.document === replacement)
+    await f.stop()
+  }
+  func testRetainedNativeIntakeNeedsExplicitNewEndpointReconciliation() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    f.enableNativeAdapter()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    let adapter = try XCTUnwrap(f.nativeAdapter)
+    f.projectionFailure = true
+    f.controller.newDocument()
+    let transaction = try XCTUnwrap(f.lastIntake)
+    guard case .retained(let documentID, _) = try await adapter.wait(for: transaction) else {
+      return XCTFail("retained")
+    }
+    let model = try XCTUnwrap(f.registry.handle(id: documentID) as? EditorDocument)
+    let authority = model.recoveryAuthority
+    f.controller.close()
+    try f.recreateEndpoint()
+    f.projectionFailure = false
+    try adapter.retry(transaction)
+    guard case .retained = try await adapter.wait(for: transaction) else {
+      return XCTFail("old endpoint must refuse")
+    }
+    XCTAssertTrue(f.registry.handle(id: documentID) === model)
+    XCTAssertTrue(f.controller.sessionMetadata.tabs.isEmpty)
+    try adapter.reconcileDestination(transaction, endpointID: f.endpointID)
+    try adapter.retry(transaction)
+    guard case .imported(let id) = try await adapter.wait(for: transaction) else {
+      return XCTFail("reconciled")
+    }
+    XCTAssertEqual(id, documentID)
+    XCTAssertEqual(model.recoveryAuthority, authority)
+    XCTAssertTrue(f.controller.focusedPane?.document === model)
+    await f.stop()
+  }
+
+  func testSuccessfulReattachIsNotRepeatedAfterLaterProjectionValidationFails() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    let monitor = ApplicationFileMonitoring()
+    defer { monitor.stop() }
+    f.controller.configureFileMonitoring(monitor)
+    let url = f.directory.appendingPathComponent("reattach-retry.txt")
+    try Data("baseline".utf8).write(to: url)
+    var opened = false
+    f.controller.open(url, onFailure: { _ in XCTFail("open") }, onOpened: { opened = true })
+    let loaded = await f.wait { opened }
+    XCTAssertTrue(loaded)
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let bridge = try XCTUnwrap(f.controller.focusedPane?.document.fileState)
+    let observed = await f.wait { bridge.state.observation?.content == .matchesBaseline }
+    XCTAssertTrue(observed)
+    f.controller.close()
+    try f.recreateEndpoint(monitor: monitor)
+    f.allowAttachedProof = false
+    f.endpointCheck = { if f.reattachCalls == 1 { throw RoutingFixtureFailure.stale } }
+    XCTAssertThrowsError(try f.project())
+    XCTAssertEqual(f.reattachCalls, 1)
+    XCTAssertEqual(f.endpointBindings.retainedCount, 0)
+    f.endpointCheck = nil
+    do { try f.project() } catch {
+      XCTFail("Retry repeated completed attachment: \(type(of: error)): \(error)")
+    }
+    XCTAssertEqual(f.reattachCalls, 1)
+    XCTAssertTrue(f.controller.focusedPane?.document === model)
+    XCTAssertTrue(model.fileState === bridge)
     await f.stop()
   }
 
