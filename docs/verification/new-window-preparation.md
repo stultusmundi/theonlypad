@@ -6,7 +6,7 @@ Implementation commit: `f5b27f14cc530423da28c651435490db15b6fea1`. Independent s
 
 The owner retains one preparation operation, its captured source identity, exact provisional window/endpoint and additional checkpoint pause. Admission counts the union of live and unresolved windows against 32, without rejecting zero document growth at 128 existing document IDs. No factory or adoption operation creates another document. Source/capacity revisions are revalidated after drain and configuration callbacks. Settings/callback configuration is separated from showing a window.
 
-Cancellation removes only the original empty unannounced destination. Trusted registry hooks record completed registration/removal before public callbacks; a recreated window survives old cleanup. Changed workspace revisions conservatively retain cleanup and veto quit rather than guessing which window is safe to remove. Cancellation of an observing task does not abandon operation ownership. Queued external-open intent remains bounded and preserved while execution is refused.
+Cancellation removes only the original empty unannounced destination. Trusted registry hooks record completed registration/removal before public callbacks; a recreated window survives old cleanup. Changed workspace revisions conservatively retain cleanup and veto quit rather than guessing which window is safe to remove. Cancellation of an observing task does not abandon operation ownership. Review exposed an additional gap: a request accepted while preparation blocked destination selection was discarded as refused. Same-request retry retention is under correction; explicit re-enqueue is not accepted as evidence of preserved intent.
 
 ## Tested
 

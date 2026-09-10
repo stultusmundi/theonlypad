@@ -71,6 +71,8 @@ Native projection/admission is not the same gate. While the wrapper has handed o
 
 Use explicit private phase predicates, not temporarily clearing the record or setting callbacks to nil. Add tests for this distinction before accepting the handoff implementation.
 
+A file-open request accepted into the bounded FIFO during preparation must retain its original envelope when destination admission is temporarily unavailable. Explicit retry after cleanup must import that same request once, preserving FIFO order and creating no extra endpoint. Re-enqueueing the request is not evidence of retryability. Classify only this transient no-side-effect admission failure as retained; malformed and permanent failures retain their existing treatment.
+
 ### Exact unused-window cleanup
 
 Cleanup requires the same owner operation, original provisional window/group, current endpoint incarnation or a separately recorded owner recreation successor, empty document membership, no closed history, and no external commitment/announcement. A changed or used window is retained with an actionable error; do not silently claim rollback completed. Endpoint loss alone does not authorize removal of a different replacement endpoint.
