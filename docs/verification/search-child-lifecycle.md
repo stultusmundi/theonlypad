@@ -83,3 +83,11 @@ scripts/test-search-child-lifecycle.sh
 Raw synthetic results remain ignored in `.local/search-child-integration/run.mxcjoh6i/` and `run.kbnxa014/`; reviews/negative control are under `.local/search-child-lifecycle-task-2/channels-cancellation-review/`. Production source SHA256 is `5a2770fa001e914c3c7b10b634bfe9d4c9d10ee429d7e13862c9cf54f63fd754`; test source is `534351a0e4db585952d571056f83f0c57ff2cd34ad502d2a93f854a31452e63e`.
 
 These are injected syscall/source tests. Concrete Darwin/Dispatch adapters, actual pipe backpressure/EOF/NOSIGPIPE/descriptor reuse, launcher/helper/reap containment and application routing remain outstanding. There is no fake-backed default or public production constructor. Adoption preconditions remain caller obligations; this slice does not establish flags, kernel ownership, physical cancellation or whole-search memory bounds.
+
+## Frozen-input and receipt correction
+
+The harness now compares the entire SwiftPM input-tree membership against its manifest before and after each stage, rejecting unexpected files, directories, alternate package manifests and symlinks. It also requires complete, strictly typed process receipts; missing nullable fields and boolean/float aliases cannot authorize success. Same-process watchdog ownership and the lifecycle filter remain unchanged.
+
+Pure regression evidence: the initial16-test run reproduced13 behavioral failures; final18 harness tests plus27 existing watchdog tests passed. A fresh actual lifecycle run passed32/0 with all three complete process receipts and exact source membership independently verified. Private run `.local/search-child-integration/run.iqiqcfbd` uses manifest `e296078d20369b0d636185de02bf248c8aa152c3634ef24b1d1a4148350248a1`. Independent specification and code-quality review approved the two-file correction. This protects locally owned test-evidence capture against accidental changes; it is not an atomic filesystem sandbox against a hostile writer.
+
+Real pipe fixture, helper launch and application routing remain unverified. The separate legacy shortcut runner's provenance validation gap is recorded and outstanding; this correction does not repair that runner.

@@ -120,57 +120,81 @@ def freeze(root, run):
 
 
 def verify_frozen(run, manifest):
+    # SwiftPM discovers the complete package tree, including versioned manifests.
+    # Validate membership as well as bytes before/after every owned stage.
+    expected = set()
+    for item in manifest['sources'] + manifest['generated']:
+        name = Path(item['frozen'])
+        if not name.is_relative_to('Package'):
+            continue
+        expected.add(('file', name.as_posix()))
+        for parent in name.parents:
+            if parent == Path('Package'):
+                break
+            expected.add(('directory', parent.as_posix()))
+    package = real_path(run, run / 'Package')
+    if not package.is_dir():
+        raise ValueError('missing compiler input tree')
+    actual = set()
+    for folder, directories, files in os.walk(package, followlinks=False):
+        for kind, names in [('directory', directories), ('file', files)]:
+            for name in names:
+                path = Path(folder) / name
+                if path.is_symlink():
+                    raise ValueError('symlink compiler input refused')
+                actual.add((kind, path.relative_to(run).as_posix()))
+    if actual != expected:
+        raise ValueError('compiler input membership changed')
     for item in manifest['sources'] + manifest['generated']:
         path = real_path(run, run / item['frozen'])
         if digest(read_source(path)) != item['sha256']:
             raise ValueError('frozen bytes changed')
 
 
-def receipt_success(output, command):
-    """CLI zero alone is insufficient: require complete cleanup/capture receipts."""
-    value = json.loads((output / 'status.json').read_text())
-    if any(value.get(key) is not True for key in
-           ('waitCompleted', 'captureComplete', 'groupSignalAttempted')):
-        return False
-    if any(value.get(key) is not False for key in ('timedOut', 'truncated')):
-        return False
-    if any(value.get(key) is not None for key in
-           ('failure', 'interruptedSignal', 'waitError')):
-        return False
-    if value.get('exit') != 0 or value.get('returnCode') != 0 or value.get('command') != command:
-        return False
-    pid = value.get('pid')
-    if type(pid) is not int or pid <= 0 or value.get('processGroup') != pid:
-        return False
-    if not (value.get('exitObserved') is True or value.get('registrationError') == errno.ESRCH):
-        return False
-    if value.get('registrationError') not in (None, errno.ESRCH):
-        return False
-    cleanup, error = value.get('groupCleanup'), value.get('groupSignalError')
-    if cleanup == 'signaled':
-        if error is not None:
-            return False
-    elif cleanup == 'absent':
-        if error != errno.ESRCH:
-            return False
-    elif cleanup == 'exitedLeaderOnly':
-        query = value.get('groupQuery') or {}
-        if (error != errno.EPERM or value.get('exitObserved') is not True
-                or query.get('processGroup') != pid or query.get('errorNumber') is not None
-                or query.get('bufferBytes') != 1024 or query.get('returnedBytes') != 4
-                or query.get('members') != [pid]):
-            return False
-    else:
-        return False
-    for name in ('stdout', 'stderr'):
-        counts = value.get('captured', {}).get(name, {})
-        stored = counts.get('stored')
-        if (type(stored) is not int or not 0 <= stored <= 1_048_576
-                or counts.get('received') != stored or counts.get('discarded') != 0
-                or (output / (name + '.log')).stat().st_size != stored):
-            return False
-    return True
-
+def receipt_success(output,command,expected_code=0):
+    try:
+        value=json.loads((output/'status.json').read_text())
+        required={'command','pid','processGroup','exitObserved','registrationError','groupSignalAttempted',
+            'groupSignalError','groupCleanup','groupQuery','waitCompleted','returnCode','waitError',
+            'timedOut','interruptedSignal','truncated','captureComplete','failure','exit','captured'}
+        if not isinstance(value,dict) or not required.issubset(value): return False
+        if type(expected_code) is not int or not 0<=expected_code<256: return False
+        if not isinstance(command,list) or not command or any(type(word) is not str or '\0' in word for word in command): return False
+        if any(value[key] is not True for key in ('waitCompleted','captureComplete','groupSignalAttempted')): return False
+        if any(value[key] is not False for key in ('timedOut','truncated')): return False
+        if any(value[key] is not None for key in ('failure','interruptedSignal','waitError')): return False
+        if any(type(value[key]) is not int or value[key]!=expected_code for key in ('exit','returnCode')): return False
+        if value['command']!=command: return False
+        pid=value['pid']
+        if type(pid) is not int or pid<=0 or type(value['processGroup']) is not int or value['processGroup']!=pid: return False
+        observed,registration=value['exitObserved'],value['registrationError']
+        if type(observed) is not bool: return False
+        if registration is not None and (type(registration) is not int or registration!=errno.ESRCH): return False
+        if not observed and registration!=errno.ESRCH: return False
+        cleanup,error=value['groupCleanup'],value['groupSignalError']
+        if cleanup=='signaled':
+            if error is not None or value['groupQuery'] is not None: return False
+        elif cleanup=='absent':
+            if type(error) is not int or error!=errno.ESRCH or value['groupQuery'] is not None: return False
+        elif cleanup=='exitedLeaderOnly':
+            query=value['groupQuery'];fields={'processGroup','errorNumber','bufferBytes','returnedBytes','members'}
+            if type(error) is not int or error!=errno.EPERM or not observed: return False
+            if not isinstance(query,dict) or not fields.issubset(query) or query['errorNumber'] is not None: return False
+            if any(type(query[key]) is not int or query[key]!=expected for key,expected in
+                   [('processGroup',pid),('bufferBytes',1024),('returnedBytes',4)]): return False
+            if not isinstance(query['members'],list) or len(query['members'])!=1: return False
+            if type(query['members'][0]) is not int or query['members'][0]!=pid: return False
+        else: return False
+        if not isinstance(value['captured'],dict): return False
+        for name in ('stdout','stderr'):
+            counts=value['captured'].get(name)
+            if not isinstance(counts,dict) or not {'stored','received','discarded'}.issubset(counts): return False
+            if any(type(counts[key]) is not int for key in ('stored','received','discarded')): return False
+            stored=counts['stored']
+            if (not 0<=stored<=1_048_576 or counts['received']!=stored
+                or counts['discarded']!=0 or (output/(name+'.log')).stat().st_size!=stored): return False
+        return True
+    except (OSError,ValueError,TypeError,KeyError,AttributeError): return False
 
 def execute(run, options, watchdog_main):
     run = Path(run)

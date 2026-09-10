@@ -189,5 +189,81 @@ class HarnessTests(unittest.TestCase):
         self.assertNotEqual(self.execute(watchdog=invalid), 0)
 
 
+    def test_added_compiler_inputs_before_execution_launch_no_stage(self):
+        for index, name in enumerate([
+            'Sources/SearchExecution/Unmanifested.swift',
+            'Tests/SearchExecutionTests/Extra.swift', 'Package@swift-6.0.swift',
+            'Sources/PadCore/UnexpectedDirectory/',
+        ]):
+            with self.subTest(name=name):
+                run = self.run / str(index); run.mkdir(); HARNESS.freeze(self.root, run)
+                path = run / 'Package' / name
+                if name.endswith('/'): path.mkdir()
+                else: path.write_text('// synthetic unexpected input\n')
+                self.calls.clear()
+                self.assertNotEqual(HARNESS.execute(run, HARNESS.parse_args([]), self.fake_watchdog), 0)
+                self.assertEqual(self.calls, [])
+
+    def test_added_source_after_metadata_prevents_build(self):
+        def add(argv):
+            self.fake_watchdog(argv)
+            (self.run / 'Package/Sources/SearchExecution/Extra.swift').write_text('// extra\n')
+            return 0
+        self.assertNotEqual(self.execute(watchdog=add), 0)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_success_receipt_requires_nullable_fields_and_exact_numeric_types(self):
+        mutations = [
+            lambda r: r.pop('failure'), lambda r: r.pop('waitError'),
+            lambda r: r.update(exit=False), lambda r: r.update(returnCode=0.0),
+            lambda r: r.update(processGroup=91.0),
+            lambda r: r['captured']['stderr'].update(received=False),
+            lambda r: r['captured']['stderr'].update(discarded=False),
+            lambda r: r.update(groupCleanup='exitedLeaderOnly', groupSignalError=True,
+                groupQuery=dict(processGroup=91, returnedBytes=4, bufferBytes=1024, members=[91])),
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                run = self.run / str(index); run.mkdir(); HARNESS.freeze(self.root, run)
+                self.calls.clear()
+                def malformed(argv):
+                    self.fake_watchdog(argv)
+                    path = Path(argv[argv.index('--output') + 1]) / 'status.json'
+                    receipt = json.loads(path.read_text()); mutate(receipt)
+                    path.write_text(json.dumps(receipt)); return 0
+                self.assertNotEqual(HARNESS.execute(run, HARNESS.parse_args([]), malformed), 0)
+                self.assertEqual(len(self.calls), 1)
+
+
+    def test_valid_cleanup_branches_and_missing_singleton_fields(self):
+        branches = [dict(groupCleanup='signaled', groupSignalError=None, groupQuery=None),
+                    dict(groupCleanup='absent', groupSignalError=errno.ESRCH, groupQuery=None),
+                    dict(groupCleanup='exitedLeaderOnly', groupSignalError=errno.EPERM,
+                         groupQuery=dict(processGroup=91, errorNumber=None, returnedBytes=4,
+                                         bufferBytes=1024, members=[91]))]
+        for index, branch in enumerate(branches):
+            run = self.run / str(index); run.mkdir(); HARNESS.freeze(self.root, run)
+            def receipt(argv):
+                self.fake_watchdog(argv)
+                path = Path(argv[argv.index('--output') + 1]) / 'status.json'
+                value = json.loads(path.read_text()); value.update(branch)
+                path.write_text(json.dumps(value)); return 0
+            self.assertEqual(HARNESS.execute(run, HARNESS.parse_args(['--build-only']), receipt), 0)
+        singleton = self.run / '2/toolchain'
+        path = singleton / 'status.json'; original = json.loads(path.read_text())
+        for key in original['groupQuery']:
+            with self.subTest(missing=key):
+                value = json.loads(json.dumps(original)); value['groupQuery'].pop(key)
+                path.write_text(json.dumps(value))
+                self.assertFalse(HARNESS.receipt_success(singleton, original['command']))
+        path.write_text(json.dumps(original))
+
+    def test_extra_symlink_is_rejected_without_following_it(self):
+        manifest = self.freeze()
+        (self.run / 'Package/Sources/PadCore/Extra.swift').symlink_to(self.root / 'Sources/PadCore/Core.swift')
+        with self.assertRaises(ValueError):
+            HARNESS.verify_frozen(self.run, manifest)
+
+
 if __name__ == '__main__':
     unittest.main()
