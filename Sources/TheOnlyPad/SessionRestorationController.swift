@@ -57,7 +57,8 @@ final class SessionRestorationController: NSWindowController, NSWindowDelegate,
   var onClose: (() -> Void)?
   private let onRetry: @MainActor (UnresolvedSessionEntry) async throws -> SessionResolvedFile
   private let onLocate: @MainActor (UnresolvedSessionEntry, URL) async throws -> SessionResolvedFile
-  private let onResolved: @MainActor (UnresolvedSessionEntry, SessionResolvedFile) throws -> Void
+  private let onResolved:
+    @MainActor (UnresolvedSessionEntry, SessionResolvedFile) async throws -> Void
   private let onRemove: @MainActor (UnresolvedSessionEntry) async throws -> Void
   private var generation = 0
   private var closed = false
@@ -76,7 +77,8 @@ final class SessionRestorationController: NSWindowController, NSWindowDelegate,
     onRetry: @escaping @MainActor (UnresolvedSessionEntry) async throws -> SessionResolvedFile,
     onLocate:
       @escaping @MainActor (UnresolvedSessionEntry, URL) async throws -> SessionResolvedFile,
-    onResolved: @escaping @MainActor (UnresolvedSessionEntry, SessionResolvedFile) throws -> Void,
+    onResolved:
+      @escaping @MainActor (UnresolvedSessionEntry, SessionResolvedFile) async throws -> Void,
     onRemove: @escaping @MainActor (UnresolvedSessionEntry) async throws -> Void
   ) {
     self.entries = entries
@@ -284,7 +286,7 @@ final class SessionRestorationController: NSWindowController, NSWindowDelegate,
       do {
         let result = try await read()
         guard let self, !self.closed, request == self.generation else { return }
-        try self.onResolved(entry, result)
+        try await self.onResolved(entry, result)
         guard !self.closed, request == self.generation else { return }
         self.entries.removeAll { $0.metadata.id == entry.metadata.id }
       } catch {
