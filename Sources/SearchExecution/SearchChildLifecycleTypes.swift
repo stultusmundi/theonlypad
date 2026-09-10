@@ -1,0 +1,116 @@
+import Foundation
+
+public struct SearchChildPolicy: Sendable, Equatable {
+  public let operationNanoseconds: UInt64
+  public let reapGraceNanoseconds: UInt64
+  public let idleNanoseconds: UInt64
+  public let maximumRequestsPerChild: UInt32
+
+  public init(
+    operationNanoseconds: UInt64,
+    reapGraceNanoseconds: UInt64,
+    idleNanoseconds: UInt64,
+    maximumRequestsPerChild: UInt32
+  ) throws {
+    guard
+      operationNanoseconds > 0,
+      operationNanoseconds <= 60_000_000_000,
+      reapGraceNanoseconds > 0,
+      reapGraceNanoseconds <= 5_000_000_000,
+      idleNanoseconds > 0,
+      idleNanoseconds <= 60_000_000_000,
+      maximumRequestsPerChild > 0
+    else {
+      throw SearchChildFailure.invalidPolicy
+    }
+    self.operationNanoseconds = operationNanoseconds
+    self.reapGraceNanoseconds = reapGraceNanoseconds
+    self.idleNanoseconds = idleNanoseconds
+    self.maximumRequestsPerChild = maximumRequestsPerChild
+  }
+}
+
+public struct SearchChildTicket: Sendable, Equatable {
+  public let identity: SearchWireIdentity
+}
+
+public enum SearchChildFailure: Error, Sendable, Equatable {
+  case busy
+  case invalidPolicy
+  case invalidExecutable
+  case invalidRequestID
+  case observerBusy
+  case staleTicket
+  case launchFailed(Int32)
+  case channelFailure(Int32)
+  case handshakeFailure
+  case protocolFailure
+  case cancelled
+  case deadline
+  case unexpectedExit
+  case shutDown
+}
+
+public enum SearchChildExit: Sendable, Equatable {
+  case exited(Int32)
+  case signaled(Int32)
+}
+
+public enum SearchChildOutcome: Sendable, Equatable {
+  case completed(SearchWireTerminal)
+  case failed(SearchChildFailure)
+}
+
+public enum SearchChildCleanup: Sendable, Equatable {
+  case noChild
+  case pendingLaunch(generation: UUID)
+  case stopping(generation: UUID)
+  case reaped(generation: UUID, exit: SearchChildExit)
+  case stopUnconfirmed(generation: UUID)
+}
+
+public struct SearchChildShutdown: Sendable, Equatable {
+  public let cleanup: SearchChildCleanup
+  public let channelsClosed: Bool
+
+  public var stopped: Bool {
+    switch cleanup {
+    case .noChild, .reaped:
+      return channelsClosed
+    case .pendingLaunch, .stopping, .stopUnconfirmed:
+      return false
+    }
+  }
+}
+
+protocol SearchChildConnection: AnyObject, Sendable {
+  func write(_ bytes: Data) async throws
+  func read(maxBytes: Int) async throws -> Data
+  func close() async
+}
+
+protocol SearchChildTimer: AnyObject, Sendable {
+  func cancel()
+}
+
+struct SearchLaunchedChild: Sendable {
+  let pid: Int32
+  let connection: any SearchChildConnection
+}
+
+enum SearchChildPoll: Sendable {
+  case running
+  case reaped(SearchChildExit)
+  case interrupted
+  case failed(Int32)
+}
+
+protocol SearchChildSystem: AnyObject, Sendable {
+  func launch(
+    executable: URL,
+    generation: UUID,
+    completion: @escaping @Sendable (Result<SearchLaunchedChild, SearchChildFailure>) -> Void
+  )
+  func signal(pid: Int32, signal: Int32) -> Int32
+  func pollExit(pid: Int32) -> SearchChildPoll
+}
