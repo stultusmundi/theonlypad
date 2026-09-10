@@ -44,3 +44,26 @@ Root ran exactly one baseline and one candidate for262,144 UTF-16 units of dense
 The new fixture is not a size-only extension of the earlier pilot: its typography setup differs. This single pair establishes neither p95 nor cold-engine behavior, long-line/Unicode/split performance, or a production ceiling. Historical refused results remain intact. No further batch was run.
 
 Private evidence is `.local/pane-layout-cost/typography-fixture-v3/`, with246-entry review manifest `3e9d6aea0cf1f74a325da6af881271eea166f81db73fb27c173bf7c4922e58f2`. Baseline executable SHA256 `e39f80acc6b8e7513ec0bb3b332ac477f0d48de7068a0c0962e915029443e496`; candidate `bc96ebf972d6c35733ef942e70802d497b4bd6579d76a5164dfada706afd56b9`. Both final compilations and eight pure fixture-validator checks passed before execution. Raw receipts and exact input bytes remain private.
+
+## Corrected v4 first ASCII batch — actual execution
+
+The corrected fixture ran the exact reviewed twelve-process `ascii256-low-p1` batch on the same reference machine, with all three workers explicitly command-idle. Every process used262144 UTF16 units, one pane, requested origin(0,240), and verified13pt system-monospaced typography after text population. There is one sample per case/variant; these are not p95 measurements.
+
+| Shape / wrap | Baseline origin ms | Candidate origin ms | Candidate actual origin | Largest observed peak MiB in pair |
+| --- | ---: | ---: | --- | ---: |
+| Dense / off | 0.100500 | 0.539833 | (0,240) applied | 57.563 |
+| Dense / on | 0.045583 | 0.618417 | (0,240) applied | 57.641 |
+| Long line / off | 0.113166 | 10.733375 | (0,0) clamped | 68.000 |
+| Long line / on | 0.048917 | 24.603375 | (0,240) applied | 69.109 |
+| Mixed / off | 0.088667 | 0.512833 | (0,240) applied | 57.719 |
+| Mixed / on | 0.041000 | 0.620542 | (0,240) applied | 57.719 |
+
+All nowrap baselines reported(-68,240) clamped; wrapped baselines reported(0,240) applied. The candidate long-line nowrap result remains clamped: this batch does not prove exact origin restoration for every shape. Full setup ranged97.586–154.233ms, outside the separately timed origin calls. Construction may implicitly lay out; engine-cold state is not established.
+
+The parent coordinator exited0. Root independently revalidated all12 strict ownership/wait/capture receipts, native typography/geometry/timing/memory records, exact batch ordering, frozen hashes and complete209-entry compiler input inventory. No watchdog timeout, truncation or interruption occurred. No other native batch ran.100ms origin-call/summed-call and512MiB post-return limits were not reached; these remain expansion stops rather than in-call resource guarantees.
+
+Private evidence: `.local/pane-layout-cost/typography-matrix-v4/batch-ascii256-low-p1-20260910-121741/`, including `root-verified-summary.json`. Execution manifest SHA256: `6b1ba9a0932ea999fef3a9683ecc7c4b56944edaf4ccc7ec3659cb5979bf63cb`. Baseline binary SHA256: `6778dfb5745620e39a3a1dafe14f305a71efebd0adb844ad8c13e03b6b75593e`; candidate: `d518ca4ee8295036a765564c1a3e8d7997b0b282d62b04d35509d20821f33f52`.
+
+Before execution, the Python coordinator's manifest resolver, fixture hash, receipt boundary, input inventory and progress controls were corrected. The receipt validator is an exact copy of the accepted v3 implementation. Eight expanded pure tests pass, including injected coordinator traversal and12-item order, first-failure stop, input additions before/between children, typed receipt rejection and a consistent two-pane summed-duration threshold control. Original faulty Python, manifests, binaries and compile receipts remain preserved; no failed attempt was relabeled a success.
+
+Deep origins, two panes, Unicode shaping/fallback fixtures and repeated exact cases remain unmeasured in v4. These results do not select a production ceiling or justify unbounded eager layout. In particular, the long wrapped line already costs24.603ms at this small size.
