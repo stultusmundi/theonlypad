@@ -58,3 +58,9 @@ The conservative singleton refinement is committed at `5587d43`, with27 pure tes
 | Leader exits with one same-group child | 0 | Owned group signaled | 0 | 0.019947 |
 
 Every control completed output capture without truncation, recorded successful direct-child wait, and allowed the next serial command to run. The benign singleton result does not claim signal delivery. The descendant control establishes group signaling plus pipe EOF, not a direct wait receipt for a nonchild descendant. Raw receipts remain in `.local/search-child-lifecycle-task-2/watchdog-controls-_dok7tss/`; independent review is in the same private task directory. These are watchdog self-controls, not real search-launcher/channel/helper acceptance. Production search routing remains unchanged.
+
+## Frozen integration harness
+
+The reviewed infrastructure runner now snapshots the actual core/search sources and existing lifecycle tests into a private package, records and rechecks their hashes, and runs each stage through the same-process imported watchdog. It refuses source symlinks, inconsistent snapshots, incomplete cleanup/capture receipts and zero-test output. It adds no helper, launcher, channel, public constructor or adversarial fixture.
+
+Twelve pure harness tests passed. Actual `scripts/test-search-child-lifecycle.sh --build-only` completed its build stage in 11.375807 seconds. The default command then passed all 32 deterministic lifecycle tests, with a 10.773264-second build and 0.892868-second test command. All stages returned zero with complete watchdog receipts. Private evidence is retained in `.local/search-child-integration/run.vk1hg9p8/` and `run.zq6yh9i8/`; both source manifests have SHA256 `ba8843610831d828e30949871ccb314b3681a23bec2ea61cbad6fe4b25e66e31`. Independent review approved this infrastructure boundary only. Actual channel/launcher fault testing remains outstanding.

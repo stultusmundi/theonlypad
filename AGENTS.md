@@ -123,3 +123,13 @@ Response codec at `869de1f`: `scripts/swift.sh test --scratch-path .build/search
 Wire semantic handoff at `e04f466`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireSemanticTests` passes9 tests and `--filter SearchWire` passes106. Clean committed-source full test531/0 and app build pass; see docs/verification/search-wire.md. Broad adversarial core tests still require the owned outer watchdog.
 
 Search lifecycle at `eb3f1e1`: `env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/search-child-lifecycle-repair --filter SearchChildLifecycleTests` passes32 deterministic tests; full suite563/0. Development runs used the owned outer watchdog. No real helper process or native search integration is claimed. See `docs/verification/search-child-lifecycle.md`. Real child fixtures must wait for the planned checked-in watchdog.
+
+Search-child infrastructure commands verified locally (macOS):
+
+```sh
+python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'
+scripts/test-search-child-lifecycle.sh --build-only
+scripts/test-search-child-lifecycle.sh
+```
+
+The harness freezes actual sources and invokes the reviewed owned-process watchdog directly for each build/test stage. Do not wrap it in another process-group watchdog. Its current default suite has 32 deterministic lifecycle tests; it does not yet validate a real helper or channel implementation. Raw evidence stays under ignored `.local/search-child-integration/`.
