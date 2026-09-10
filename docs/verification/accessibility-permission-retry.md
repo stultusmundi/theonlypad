@@ -9,3 +9,7 @@ The owned target terminated normally and cleanup was confirmed. The driver obser
 Private evidence is retained in `.local/ax-native-probe/actual-granted-retry/` (canonical run `run.bBWZ03`). Probe executable SHA256: `1abd3ba8fb04a99af5d8a5c64b460187c3555a659e6dd1a45c9d53074fc5da91`. Driver SHA256: `299e3f98ad2062ce1abd432c1ee5a9ffc5b22bc1cce21af695e0dd2b85c5c656`.
 
 Status: permission confirmed; File/New end-to-end AX verification outstanding. No VoiceOver, keyboard navigation, contrast, IME or broader accessibility acceptance follows from this check.
+
+A later diagnostic-only build adds fixed query-operation labels and numeric AX errors without changing actions, deadlines, acceptance or cleanup. Its source was reviewed; compilation, retained pure policy checks and a native role check passed under the accepted owned-process watchdog. The separate ad-hoc executable has SHA256 `5816af13bfd3a7d75a4f59123ac8c9bc3afb0c4daed302d1184129ff053444ea`; the driver is unchanged.
+
+That diagnostic signature did not obtain Accessibility trust during its120.101s request window. The driver ended77/missingAccess, and no target launched or AX query ran. Evidence remains in `.local/ax-native-probe/query-diagnostic/actual-runtime/` (`run.GG5sBs`). This does not replace the original granted receipt or diagnose the earlier query failure. No automatic repeat is pending. The build's initial relocation omitted the wrapper's required build pointer; root added only that pointer before execution, with source/binary/wrapper hashes unchanged.
