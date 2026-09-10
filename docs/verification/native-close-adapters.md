@@ -17,3 +17,14 @@ registry window. Independent review exposed a consumed reattachment receipt bein
 later projection validation failed. Its behavioral regression failed before the fix; attachment
 success is now recorded before the next external validation callback. Final 26-test run passed in
 1.754 seconds. These are controller tests, not AppDelegate or visible desktop acceptance.
+
+## Awaited managed navigation
+
+The controller now provides awaited navigation for an exact document/endpoint. It captures the
+model, pane, ownership, selection and edit state before worker calculation and installs only that
+pane's selection after validation. It does not grant editing or move focus; legacy navigation is
+unchanged. The suite passed 31 tests before independent review identified unfinished character
+edits preceding the normal edit revision. A held text-storage batch reproduced stale-offset
+acceptance (32 tests, two failing assertions). Pending character edits now refuse navigation.
+The final 32-test suite passed in 2.147 seconds, including closed user admission, stale worker
+results, close leases, and changing the current document without redirecting navigation.

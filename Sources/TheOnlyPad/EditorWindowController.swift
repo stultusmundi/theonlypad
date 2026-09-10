@@ -2403,6 +2403,66 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
   }
 
+  func navigateManaged(
+    documentID: UUID, endpointID: UUID, line: Int, column: Int,
+    resolveOffset: @Sendable (String, Int, Int) async throws -> Int = { text, line, column in
+      try await Task.detached(priority: .userInitiated) {
+        try TextNavigation.utf16Offset(in: text, line: line, column: column)
+      }.value
+    }
+  ) async throws {
+    guard let routing = applicationRouting else { throw PaneRoutingError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    guard let document = routing.registry.handle(id: documentID) as? EditorDocument,
+      documents.contains(where: { $0 === document })
+    else { throw PaneRoutingError.stale }
+    let source = preferredPane(in: document)
+    let sourceContext = context(for: source)
+    let ownership = document.ownershipGeneration
+    let preferredID = document.preferredPaneID
+    let operationID = document.operationID
+    let snapshot = document.storage.string
+    // Endpoint validation may invoke an application callback. Check every captured value afterward.
+    func validateTarget() throws {
+      try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+      guard !preparingToQuit, !document.saving, document.composingPaneID == nil,
+        document.operationID == operationID,
+        routing.registry.handle(id: documentID) === document,
+        routing.registry.assignment(of: documentID) == routing.assignment,
+        routing.registry.allows(.select, documentID: documentID),
+        documents.contains(where: { $0 === document }),
+        document.ownershipGeneration == ownership,
+        document.editRevision == sourceContext.editRevision,
+        !document.storage.editedMask.contains(.editedCharacters),
+        document.preferredPaneID == preferredID,
+        document.panePool.contains(where: { $0 === source }), source.isAttached,
+        !source.editor.hasMarkedText()
+      else { throw PaneRoutingError.stale }
+    }
+    try validateTarget()
+    guard source.editor.selectedRange() == sourceContext.selection else {
+      throw PaneRoutingError.stale
+    }
+    let offset = try await resolveOffset(snapshot, line, column)
+    try Task.checkCancellation()
+    try validateTarget()
+    guard source.editor.selectedRange() == sourceContext.selection,
+      offset >= 0, offset <= document.storage.length
+    else { throw PaneRoutingError.stale }
+    let range = NSRange(location: offset, length: 0)
+    try source.editor.withSelectionInstallation(
+      authorizedBy: {
+        (try? validateTarget()) != nil
+          && source.editor.selectedRange() == sourceContext.selection
+      },
+      { source.editor.setSelectedRange(range) })
+    try validateTarget()
+    guard source.editor.selectedRange() == range else { throw PaneRoutingError.stale }
+    source.editor.scrollRangeToVisible(range)
+    try validateTarget()
+    guard source.editor.selectedRange() == range else { throw PaneRoutingError.stale }
+  }
+
   func navigate(line: Int, column: Int, requireFocus: Bool = true) {
     guard let document = current, applicationAllows(.select, document: document) else { return }
     let source = preferredPane(in: document)

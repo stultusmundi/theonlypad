@@ -1100,4 +1100,200 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     await f.stop()
   }
 
+  func testManagedNavigationCompletesExactUnicodePositionWithUserGateClosed() async throws {
+    let f = try RoutingFixture()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    try await f.connect()
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let pane = try XCTUnwrap(f.controller.focusedPane)
+    let text = "first😀\r\nsecond\nlast"
+    pane.document.storage.mutableString.setString(text)
+    pane.editor.setSelectedRange(NSRange(location: 0, length: 0))
+    let responder = f.controller.window?.firstResponder
+    f.userAdmission = false
+    try await f.controller.navigateManaged(
+      documentID: pane.document.id, endpointID: f.endpointID, line: 2, column: 3)
+    XCTAssertEqual(pane.editor.selectedRange(), NSRange(location: 11, length: 0))
+    XCTAssertEqual(pane.document.storage.string, text)
+    XCTAssertTrue(f.controller.window?.firstResponder === responder)
+    pane.editor.insertText("denied", replacementRange: NSRange(location: 0, length: 0))
+    XCTAssertEqual(pane.document.storage.string, text)
+    await f.stop()
+  }
+
+  func testManagedNavigationRejectsChangedSelectionDuringWorker() async throws {
+    let f = try RoutingFixture()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    try await f.connect()
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let pane = try XCTUnwrap(f.controller.focusedPane)
+    pane.document.storage.mutableString.setString("one\ntwo")
+    pane.editor.setSelectedRange(NSRange(location: 0, length: 0))
+    let gate = RoutingGate()
+    let task = Task {
+      try await f.controller.navigateManaged(
+        documentID: pane.document.id, endpointID: f.endpointID, line: 2, column: 1,
+        resolveOffset: { text, line, column in
+          await gate.wait()
+          return try TextNavigation.utf16Offset(in: text, line: line, column: column)
+        })
+    }
+    let entered = await f.wait { gate.entered }
+    XCTAssertTrue(entered)
+    pane.editor.setSelectedRange(NSRange(location: 2, length: 0))
+    gate.release()
+    do {
+      try await task.value
+      XCTFail("accepted stale selection")
+    } catch {}
+    XCTAssertEqual(pane.editor.selectedRange(), NSRange(location: 2, length: 0))
+    await f.stop()
+  }
+
+  func testManagedNavigationRejectsEditAndEndpointLossDuringWorker() async throws {
+    for loseEndpoint in [false, true] {
+      let f = try RoutingFixture()
+      defer { try? FileManager.default.removeItem(at: f.directory) }
+      try await f.connect()
+      f.controller.newDocument()
+      _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+      let pane = try XCTUnwrap(f.controller.focusedPane)
+      pane.document.storage.mutableString.setString("one\ntwo")
+      pane.editor.setSelectedRange(NSRange(location: 0, length: 0))
+      let gate = RoutingGate()
+      let task = Task {
+        try await f.controller.navigateManaged(
+          documentID: pane.document.id, endpointID: f.endpointID, line: 2, column: 1,
+          resolveOffset: { text, line, column in
+            await gate.wait()
+            return try TextNavigation.utf16Offset(in: text, line: line, column: column)
+          })
+      }
+      let entered = await f.wait { gate.entered }
+      XCTAssertTrue(entered)
+      if loseEndpoint {
+        f.endpointLive = false
+      } else {
+        pane.document.storage.mutableString.append("!")
+      }
+      let selection = pane.editor.selectedRange()
+      gate.release()
+      do {
+        try await task.value
+        XCTFail("accepted stale target")
+      } catch {}
+      XCTAssertEqual(pane.editor.selectedRange(), selection)
+      f.endpointLive = true
+      await f.stop()
+    }
+  }
+
+  func testManagedNavigationRefusesRegistryCloseLeaseAfterWorker() async throws {
+    let f = try RoutingFixture()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    try await f.connect()
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let pane = try XCTUnwrap(f.controller.focusedPane)
+    let gate = RoutingGate()
+    let task = Task {
+      try await f.controller.navigateManaged(
+        documentID: pane.document.id, endpointID: f.endpointID, line: 1, column: 1,
+        resolveOffset: { text, line, column in
+          await gate.wait()
+          return try TextNavigation.utf16Offset(in: text, line: line, column: column)
+        })
+    }
+    let entered = await f.wait { gate.entered }
+    XCTAssertTrue(entered)
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: pane.document.id), disposition: .retainCleanHistory)
+    gate.release()
+    do {
+      try await task.value
+      XCTFail("navigation crossed registry close lease")
+    } catch {}
+    XCTAssertEqual(pane.editor.selectedRange(), NSRange(location: 0, length: 0))
+    _ = try f.registry.completeClose(ticket, result: .notRemoved(RoutingFixtureFailure.stale))
+    await f.stop()
+  }
+
+  func testManagedNavigationNeverUsesDifferentCurrentDocument() async throws {
+    let f = try RoutingFixture()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    try await f.connect()
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let original = try XCTUnwrap(f.controller.focusedPane)
+    original.document.storage.mutableString.setString("one\ntwo")
+    original.editor.setSelectedRange(NSRange(location: 0, length: 0))
+    let gate = RoutingGate()
+    let task = Task {
+      try await f.controller.navigateManaged(
+        documentID: original.document.id, endpointID: f.endpointID, line: 2, column: 1,
+        resolveOffset: { text, line, column in
+          await gate.wait()
+          return try TextNavigation.utf16Offset(in: text, line: line, column: column)
+        })
+    }
+    let entered = await f.wait { gate.entered }
+    XCTAssertTrue(entered)
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let current = try XCTUnwrap(f.controller.focusedPane)
+    XCTAssertFalse(current.document === original.document)
+    let selection = current.editor.selectedRange()
+    let responder = f.controller.window?.firstResponder
+    gate.release()
+    // A detached source may refuse; neither outcome may redirect the old request to current.
+    do { try await task.value } catch {}
+    XCTAssertEqual(current.editor.selectedRange(), selection)
+    XCTAssertEqual(current.document.storage.string, "")
+    XCTAssertTrue(f.controller.window?.firstResponder === responder)
+    XCTAssertTrue(f.controller.focusedPane === current)
+    await f.stop()
+  }
+
+  func testManagedNavigationRefusesPendingCharacterBatchBeforeRevisionAdvances() async throws {
+    let f = try RoutingFixture()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    try await f.connect()
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let pane = try XCTUnwrap(f.controller.focusedPane)
+    let model = pane.document
+    model.storage.mutableString.setString("one\ntwo")
+    pane.editor.setSelectedRange(NSRange(location: 0, length: 0))
+    let revision = model.editRevision
+    let gate = RoutingGate()
+    let task = Task {
+      try await f.controller.navigateManaged(
+        documentID: model.id, endpointID: f.endpointID, line: 2, column: 1,
+        resolveOffset: { text, line, column in
+          await gate.wait()
+          return try TextNavigation.utf16Offset(in: text, line: line, column: column)
+        })
+    }
+    let entered = await f.wait { gate.entered }
+    XCTAssertTrue(entered)
+    model.storage.beginEditing()
+    do {
+      defer { model.storage.endEditing() }
+      model.storage.replaceCharacters(in: NSRange(location: 3, length: 1), with: " ")
+      XCTAssertEqual(model.editRevision, revision)
+      XCTAssertTrue(model.storage.editedMask.contains(.editedCharacters))
+      XCTAssertEqual(pane.editor.selectedRange(), NSRange(location: 0, length: 0))
+      gate.release()
+      do {
+        try await task.value
+        XCTFail("accepted offset from before pending character batch")
+      } catch {}
+      XCTAssertEqual(pane.editor.selectedRange(), NSRange(location: 0, length: 0))
+    }
+    XCTAssertEqual(model.storage.string, "one two")
+    await f.stop()
+  }
+
 }
