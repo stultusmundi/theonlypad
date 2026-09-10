@@ -5,127 +5,136 @@ public final class SearchChildLifecycle: @unchecked Sendable {
   private let control: SearchChildLifecycleControl
 
   init(
-    executable: URL,
-    policy: SearchChildPolicy,
-    system: any SearchChildSystem,
+    executable: URL, policy: SearchChildPolicy, system: any SearchChildSystem,
     now: @escaping @Sendable () -> UInt64,
-    schedule:
-      @escaping @Sendable (
-        UInt64, @escaping @Sendable () -> Void
-      ) -> any SearchChildTimer
+    schedule: @escaping @Sendable (UInt64, @escaping @Sendable () -> Void) -> any SearchChildTimer
   ) throws {
-    guard executable.isFileURL, executable.path.hasPrefix("/"), !executable.path.isEmpty,
-      !executable.path.utf8.contains(0)
-    else {
-      throw SearchChildFailure.invalidExecutable
-    }
+    // URL.path can truncate at an encoded NUL on Foundation. Validate the full
+    // decoded URL path before passing the URL to the launcher. No filesystem access.
+    guard executable.isFileURL,
+      let path = URLComponents(url: executable, resolvingAgainstBaseURL: true)?
+        .percentEncodedPath.removingPercentEncoding,
+      path.hasPrefix("/"), !path.isEmpty, !path.utf8.contains(0)
+    else { throw SearchChildFailure.invalidExecutable }
     control = SearchChildLifecycleControl(
       executable: executable, policy: policy, system: system, now: now, schedule: schedule)
   }
 
+  deinit {
+    let owner = control
+    owner.enqueue { owner.abandon() }
+  }
+
   public func begin(requestID: UUID) async throws -> SearchChildTicket {
-    try await control.begin(requestID: requestID)
+    try await control.perform { try $0.begin(requestID: requestID) }
   }
 
   public func wait(for ticket: SearchChildTicket) async throws -> SearchChildOutcome {
+    let owner = control
     let observer = UUID()
+    let registration = SearchChildObserverRegistration()
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
-        Task {
-          await self.control.installWaiter(
-            ticket: ticket, observer: observer, continuation: continuation)
+        owner.enqueue {
+          owner.installWaiter(
+            ticket, observer: observer, registration: registration,
+            continuation: continuation)
         }
       }
     } onCancel: {
-      Task { await self.control.cancelWaiter(ticket: ticket, observer: observer) }
+      registration.cancel()
+      owner.enqueue { owner.cancelWaiter(ticket, observer: observer) }
     }
   }
 
   public func cancel(_ ticket: SearchChildTicket) async throws {
-    try await control.cancel(ticket: ticket, failure: .cancelled)
+    try await control.perform { try $0.cancel(ticket) }
   }
 
   public func cleanup(for ticket: SearchChildTicket) async throws -> SearchChildCleanup {
-    try await control.cleanup(for: ticket)
+    try await control.perform { try $0.cleanup(ticket) }
   }
 
   public func shutdown() async -> SearchChildShutdown {
-    await control.shutdown()
+    let owner = control
+    return await withCheckedContinuation { continuation in
+      owner.enqueue { owner.shutdown(continuation) }
+    }
   }
 
   func connection(for ticket: SearchChildTicket) async throws -> any SearchChildConnection {
+    let owner = control
     let observer = UUID()
+    let registration = SearchChildObserverRegistration()
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
-        Task {
-          await self.control.installConnectionWaiter(
-            ticket: ticket, observer: observer, continuation: continuation)
+        owner.enqueue {
+          owner.installConnectionWaiter(
+            ticket, observer: observer, registration: registration,
+            continuation: continuation)
         }
       }
     } onCancel: {
-      Task { await self.control.cancelConnectionWaiter(ticket: ticket, observer: observer) }
+      registration.cancel()
+      owner.enqueue { owner.cancelConnectionWaiter(ticket, observer: observer) }
     }
   }
 
   func acceptedHandshake(generation: UUID) async throws {
-    try await control.acceptedHandshake(generation: generation)
+    try await control.perform { try $0.acceptedHandshake(generation) }
   }
 
   func acceptedTerminal(_ terminal: SearchWireTerminal, ticket: SearchChildTicket) async throws {
-    try await control.acceptedTerminal(terminal, ticket: ticket)
+    try await control.perform { try $0.acceptedTerminal(terminal, ticket: ticket) }
   }
 
   func rejectedProtocol(generation: UUID) async {
-    await control.rejectedProtocol(generation: generation)
+    _ = try? await control.perform { $0.rejectedProtocol(generation) }
   }
 }
 
-private actor SearchChildLifecycleControl {
+/// All mutable state is confined to queue. Injected system methods submit work or perform
+/// bounded nonblocking syscalls; they must never do filesystem validation or blocking I/O here.
+/// Launch/timer callbacks enqueue directly, without an intermediate unstructured task.
+private final class SearchChildLifecycleControl: @unchecked Sendable {
   private struct Operation {
     let ticket: SearchChildTicket
     let deadline: UInt64
-    let timer: any SearchChildTimer
-    let beginsFreshGeneration: Bool
-    var waiter: Waiter?
-    var connectionWaiter: ConnectionWaiter?
+    var timer: (any SearchChildTimer)?
+    var waiter: (UUID, CheckedContinuation<SearchChildOutcome, Error>)?
+    var connector: (UUID, CheckedContinuation<any SearchChildConnection, Error>)?
   }
-
-  private struct Waiter {
-    let observer: UUID
-    let continuation: CheckedContinuation<SearchChildOutcome, Error>
-  }
-
-  private struct ConnectionWaiter {
-    let observer: UUID
-    let continuation: CheckedContinuation<any SearchChildConnection, Error>
-  }
-
   private struct Receipt {
     let ticket: SearchChildTicket
     let outcome: SearchChildOutcome
+    // A reserved recycle request can be cleaning a different generation.
+    let cleanupGeneration: UUID?
     var cleanup: SearchChildCleanup
   }
-
-  private struct OwnedChild {
+  private struct Child {
     let generation: UUID
     let pid: Int32
     let connection: any SearchChildConnection
-    var requestsCompleted: UInt32
-    var handshakeAccepted: Bool
-    var stopRequested: Bool
-    var signalSent: Bool
+    var completed: UInt32 = 0
+    var handshake = false
+    var stopping = false
+    var signalSent = false
     var reaped: SearchChildExit?
-    var closeCompleted: Bool
-    var stopUnconfirmed: Bool
-    var reapTimer: (any SearchChildTimer)?
+    var closeStarted = false
+    var closed = false
+    var unconfirmed = false
+    var idleDeadline: UInt64?
+    var graceDeadline: UInt64?
+    var timer: (any SearchChildTimer)?
+    var timerToken: UUID?
   }
-
   private enum Slot {
     case absent
-    case launching(generation: UUID, stopRequested: Bool)
-    case owned(OwnedChild)
+    case launching(UUID, stop: Bool)
+    case owned(Child)
   }
 
+  private let queue = DispatchQueue(label: "TheOnlyPad.search-child-control")
   private let executable: URL
   private let policy: SearchChildPolicy
   private let system: any SearchChildSystem
@@ -134,19 +143,18 @@ private actor SearchChildLifecycleControl {
   private var slot: Slot = .absent
   private var operation: Operation?
   private var receipt: Receipt?
+  // Physical ownership outlives the facade and all observers, even if launch is stuck.
+  // This lease ends only after successful reap AND actual channel close, or launch failure.
+  private var ownership: SearchChildLifecycleControl?
   private var shutDown = false
   private var shutdownWaiter: CheckedContinuation<SearchChildShutdown, Never>?
   private var shutdownTimer: (any SearchChildTimer)?
+  private var shutdownDeadline: UInt64?
 
   init(
-    executable: URL,
-    policy: SearchChildPolicy,
-    system: any SearchChildSystem,
+    executable: URL, policy: SearchChildPolicy, system: any SearchChildSystem,
     now: @escaping @Sendable () -> UInt64,
-    schedule:
-      @escaping @Sendable (
-        UInt64, @escaping @Sendable () -> Void
-      ) -> any SearchChildTimer
+    schedule: @escaping @Sendable (UInt64, @escaping @Sendable () -> Void) -> any SearchChildTimer
   ) {
     self.executable = executable
     self.policy = policy
@@ -155,458 +163,473 @@ private actor SearchChildLifecycleControl {
     self.schedule = schedule
   }
 
+  func enqueue(_ event: @escaping @Sendable () -> Void) { queue.async(execute: event) }
+
+  func perform<T: Sendable>(
+    _ body: @escaping @Sendable (SearchChildLifecycleControl) throws -> T
+  ) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+      enqueue { continuation.resume(with: Result { try body(self) }) }
+    }
+  }
+
   func begin(requestID: UUID) throws -> SearchChildTicket {
     guard requestID != SearchWireBinary.zeroUUID else { throw SearchChildFailure.invalidRequestID }
     guard !shutDown else { throw SearchChildFailure.shutDown }
     guard operation == nil else { throw SearchChildFailure.busy }
-
+    let generation: UUID
+    let ordinal: UInt64
+    var recycle: UUID?
     switch slot {
     case .absent:
-      return try admit(
-        requestID: requestID, generation: UUID(), ordinal: 1, beginsFreshGeneration: true)
+      generation = UUID()
+      ordinal = 1
     case .launching:
       throw SearchChildFailure.busy
-    case .owned(let child)
-    where child.stopRequested || child.reaped != nil || child.stopUnconfirmed:
-      throw SearchChildFailure.busy
     case .owned(let child):
-      guard child.requestsCompleted < policy.maximumRequestsPerChild,
-        child.requestsCompleted < UInt32.max
-      else {
-        let ticket = try admit(
-          requestID: requestID, generation: UUID(), ordinal: 1, beginsFreshGeneration: true)
-        requestStop(for: child.generation)
-        return ticket
+      guard !child.stopping, child.reaped == nil, !child.unconfirmed else {
+        throw SearchChildFailure.busy
       }
-      let ordinal = UInt64(child.requestsCompleted) + 1
-      return try admit(
-        requestID: requestID, generation: child.generation, ordinal: ordinal,
-        beginsFreshGeneration: false)
+      if child.completed >= policy.maximumRequestsPerChild || child.completed == UInt32.max {
+        generation = UUID()
+        ordinal = 1
+        recycle = child.generation
+      } else {
+        generation = child.generation
+        ordinal = UInt64(child.completed) + 1
+      }
     }
+    let (deadline, overflow) = now().addingReportingOverflow(policy.operationNanoseconds)
+    guard !overflow else { throw SearchChildFailure.invalidPolicy }
+    let ticket = SearchChildTicket(
+      identity: try SearchWireIdentity(
+        generation: generation, requestID: requestID, ordinal: ordinal))
+    // Publish identity before any collaborator can call back, including an inline timer.
+    operation = Operation(ticket: ticket, deadline: deadline)
+    operation?.timer = schedule(deadline) { [weak self] in
+      guard let self else { return }
+      self.enqueue { self.deadlineFired(ticket, deadline: deadline) }
+    }
+    if let recycle {
+      stop(recycle)
+    } else if case .absent = slot {
+      launch(generation)
+    } else if case .owned(var child) = slot {
+      child.idleDeadline = nil
+      slot = .owned(child)
+    }
+    return ticket
   }
 
   func installWaiter(
-    ticket: SearchChildTicket,
-    observer: UUID,
+    _ ticket: SearchChildTicket, observer: UUID, registration: SearchChildObserverRegistration,
     continuation: CheckedContinuation<SearchChildOutcome, Error>
   ) {
-    if let operation, operation.ticket == ticket {
-      guard operation.waiter == nil else {
+    if registration.isCancelled {
+      continuation.resume(throwing: CancellationError())
+      return
+    }
+    if var current = operation, current.ticket == ticket {
+      guard current.waiter == nil else {
         continuation.resume(throwing: SearchChildFailure.observerBusy)
         return
       }
-      var replacement = operation
-      replacement.waiter = .init(observer: observer, continuation: continuation)
-      self.operation = replacement
-      return
-    }
-    if let receipt, receipt.ticket == ticket {
+      current.waiter = (observer, continuation)
+      operation = current
+    } else if let receipt, receipt.ticket == ticket {
       continuation.resume(returning: receipt.outcome)
     } else {
       continuation.resume(throwing: SearchChildFailure.staleTicket)
     }
   }
 
-  func cancelWaiter(ticket: SearchChildTicket, observer: UUID) {
-    guard var operation, operation.ticket == ticket, operation.waiter?.observer == observer,
-      let waiter = operation.waiter
+  func cancelWaiter(_ ticket: SearchChildTicket, observer: UUID) {
+    guard var current = operation, current.ticket == ticket,
+      let waiter = current.waiter, waiter.0 == observer
     else { return }
-    operation.waiter = nil
-    self.operation = operation
-    waiter.continuation.resume(throwing: CancellationError())
+    current.waiter = nil
+    operation = current
+    waiter.1.resume(throwing: CancellationError())
   }
 
   func installConnectionWaiter(
-    ticket: SearchChildTicket,
-    observer: UUID,
+    _ ticket: SearchChildTicket, observer: UUID, registration: SearchChildObserverRegistration,
     continuation: CheckedContinuation<any SearchChildConnection, Error>
   ) {
-    guard let operation, operation.ticket == ticket else {
+    if registration.isCancelled {
+      continuation.resume(throwing: CancellationError())
+      return
+    }
+    guard var current = operation, current.ticket == ticket else {
       continuation.resume(throwing: SearchChildFailure.staleTicket)
       return
     }
     if case .owned(let child) = slot, child.generation == ticket.identity.generation,
-      !child.stopRequested, child.reaped == nil
+      !child.stopping, child.reaped == nil
     {
       continuation.resume(returning: child.connection)
       return
     }
-    guard operation.connectionWaiter == nil else {
+    guard current.connector == nil else {
       continuation.resume(throwing: SearchChildFailure.observerBusy)
       return
     }
-    var replacement = operation
-    replacement.connectionWaiter = .init(observer: observer, continuation: continuation)
-    self.operation = replacement
+    current.connector = (observer, continuation)
+    operation = current
   }
 
-  func cancelConnectionWaiter(ticket: SearchChildTicket, observer: UUID) {
-    guard var operation, operation.ticket == ticket,
-      operation.connectionWaiter?.observer == observer,
-      let waiter = operation.connectionWaiter
+  func cancelConnectionWaiter(_ ticket: SearchChildTicket, observer: UUID) {
+    guard var current = operation, current.ticket == ticket,
+      let waiter = current.connector, waiter.0 == observer
     else { return }
-    operation.connectionWaiter = nil
-    self.operation = operation
-    waiter.continuation.resume(throwing: CancellationError())
+    current.connector = nil
+    operation = current
+    waiter.1.resume(throwing: CancellationError())
   }
 
-  func cancel(ticket: SearchChildTicket, failure: SearchChildFailure) throws {
-    guard let operation, operation.ticket == ticket else { throw SearchChildFailure.staleTicket }
-    finish(operation: operation, outcome: .failed(failure))
-    requestStop(for: ticket.identity.generation)
+  func cancel(_ ticket: SearchChildTicket) throws {
+    guard operation?.ticket == ticket else { throw SearchChildFailure.staleTicket }
+    finish(.failed(.cancelled))
+    stop(ticket.identity.generation)
   }
 
-  func acceptedHandshake(generation: UUID) throws {
-    guard let operation, operation.ticket.identity.generation == generation else {
-      throw SearchChildFailure.staleTicket
-    }
-    guard case .owned(var child) = slot, child.generation == generation,
-      !child.stopRequested, child.reaped == nil
+  func acceptedHandshake(_ generation: UUID) throws {
+    guard operation?.ticket.identity.generation == generation,
+      case .owned(var child) = slot, child.generation == generation,
+      !child.stopping, child.reaped == nil
     else { throw SearchChildFailure.staleTicket }
-    child.handshakeAccepted = true
+    child.handshake = true
     slot = .owned(child)
   }
 
   func acceptedTerminal(_ terminal: SearchWireTerminal, ticket: SearchChildTicket) throws {
-    guard let operation, operation.ticket == ticket else { throw SearchChildFailure.staleTicket }
-    guard now() < operation.deadline else {
-      finish(operation: operation, outcome: .failed(.deadline))
-      requestStop(for: ticket.identity.generation)
+    guard let current = operation, current.ticket == ticket else {
+      throw SearchChildFailure.staleTicket
+    }
+    guard now() < current.deadline else {
+      finish(.failed(.deadline))
+      stop(ticket.identity.generation)
       throw SearchChildFailure.deadline
     }
     guard case .owned(let child) = slot, child.generation == ticket.identity.generation,
-      !child.stopRequested, child.reaped == nil
-    else {
-      finish(operation: operation, outcome: .failed(.unexpectedExit))
-      throw SearchChildFailure.unexpectedExit
-    }
-    guard child.handshakeAccepted else { throw SearchChildFailure.handshakeFailure }
-    switch system.pollExit(pid: child.pid) {
-    case .reaped(let exit):
-      var exited = child
-      exited.reaped = exit
-      slot = .owned(exited)
-      finish(operation: operation, outcome: .failed(.unexpectedExit))
-      close(child: exited)
-      throw SearchChildFailure.unexpectedExit
-    case .failed:
-      var unconfirmed = child
-      unconfirmed.stopUnconfirmed = true
-      slot = .owned(unconfirmed)
-      finish(operation: operation, outcome: .failed(.unexpectedExit))
-      close(child: unconfirmed)
-      throw SearchChildFailure.unexpectedExit
-    case .running, .interrupted:
-      break
-    }
-    finish(operation: operation, outcome: .completed(terminal))
-    var ready = child
-    ready.requestsCompleted += 1
+      !child.stopping, child.reaped == nil
+    else { throw SearchChildFailure.staleTicket }
+    guard child.handshake else { throw SearchChildFailure.handshakeFailure }
+    observe(child.generation)
+    guard operation?.ticket == ticket else { throw SearchChildFailure.unexpectedExit }
+    guard case .owned(var ready) = slot else { throw SearchChildFailure.unexpectedExit }
+    ready.completed += 1
+    let (idle, overflow) = now().addingReportingOverflow(policy.idleNanoseconds)
+    ready.idleDeadline = overflow ? now() : idle
     slot = .owned(ready)
+    finish(.completed(terminal))
+    armMaintenance(ready.generation)
   }
 
-  func rejectedProtocol(generation: UUID) {
-    if let operation, operation.ticket.identity.generation == generation {
-      finish(operation: operation, outcome: .failed(.protocolFailure))
-    }
-    requestStop(for: generation)
+  func rejectedProtocol(_ generation: UUID) {
+    if operation?.ticket.identity.generation == generation { finish(.failed(.protocolFailure)) }
+    stop(generation)
   }
 
-  func cleanup(for ticket: SearchChildTicket) throws -> SearchChildCleanup {
-    if let operation, operation.ticket == ticket { return cleanupSnapshot() }
+  func cleanup(_ ticket: SearchChildTicket) throws -> SearchChildCleanup {
+    if operation?.ticket == ticket { return cleanupSnapshot() }
     if let receipt, receipt.ticket == ticket { return receipt.cleanup }
     throw SearchChildFailure.staleTicket
   }
 
-  func shutdown() async -> SearchChildShutdown {
+  func abandon() {
     shutDown = true
-    if let operation {
-      finish(operation: operation, outcome: .failed(.shutDown))
-      requestStop(for: operation.ticket.identity.generation)
-    } else if case .owned(let child) = slot, !child.stopRequested {
-      requestStop(for: child.generation)
+    if operation != nil { finish(.failed(.shutDown)) }
+    switch slot {
+    case .launching(let generation, _): stop(generation)
+    case .owned(let child): stop(child.generation)
+    case .absent: break
     }
-    if stoppedNow { return shutdownSnapshot() }
-    if shutdownWaiter != nil { return shutdownSnapshot() }
+  }
+
+  func shutdown(_ continuation: CheckedContinuation<SearchChildShutdown, Never>) {
+    // Repeated calls inspect the same ownership; they never restart a grace period.
+    if shutDown {
+      continuation.resume(returning: shutdownSnapshot())
+      return
+    }
+    abandon()
+    guard !stoppedNow else {
+      continuation.resume(returning: shutdownSnapshot())
+      return
+    }
     let (deadline, overflow) = now().addingReportingOverflow(policy.reapGraceNanoseconds)
-    guard !overflow else { return shutdownSnapshot() }
-    return await withCheckedContinuation { continuation in
-      shutdownWaiter = continuation
-      shutdownTimer = schedule(deadline) { [weak self] in
-        Task { await self?.shutdownGraceFired(deadline: deadline) }
-      }
+    guard !overflow else {
+      continuation.resume(returning: shutdownSnapshot())
+      return
+    }
+    shutdownDeadline = deadline
+    shutdownWaiter = continuation
+    shutdownTimer = schedule(deadline) { [weak self] in
+      guard let self else { return }
+      self.enqueue { self.shutdownGraceFired(deadline) }
     }
   }
 
-  private func admit(
-    requestID: UUID,
-    generation: UUID,
-    ordinal: UInt64,
-    beginsFreshGeneration: Bool
-  ) throws -> SearchChildTicket {
-    let (deadline, overflow) = now().addingReportingOverflow(policy.operationNanoseconds)
-    guard !overflow else { throw SearchChildFailure.invalidPolicy }
-    let identity = try SearchWireIdentity(
-      generation: generation, requestID: requestID, ordinal: ordinal)
-    let ticket = SearchChildTicket(identity: identity)
-    let timer = schedule(deadline) { [weak self] in
-      Task { await self?.deadlineFired(ticket: ticket, deadline: deadline) }
-    }
-    operation = .init(
-      ticket: ticket, deadline: deadline, timer: timer,
-      beginsFreshGeneration: beginsFreshGeneration,
-      waiter: nil, connectionWaiter: nil)
-    if beginsFreshGeneration {
-      switch slot {
-      case .absent:
-        slot = .launching(generation: generation, stopRequested: false)
-        launch(generation: generation)
-      case .owned:
-        break
-      case .launching:
-        break
-      }
-    }
-    return ticket
-  }
-
-  private func launch(generation: UUID) {
+  private func launch(_ generation: UUID) {
+    slot = .launching(generation, stop: false)
+    ownership = self
     system.launch(executable: executable, generation: generation) { [weak self] result in
-      Task { await self?.launchCompleted(generation: generation, result: result) }
+      guard let self else { return }
+      self.enqueue { self.launchCompleted(generation, result: result) }
     }
   }
 
   private func launchCompleted(
-    generation: UUID,
-    result: Result<SearchLaunchedChild, SearchChildFailure>
+    _ generation: UUID, result: Result<SearchLaunchedChild, SearchChildFailure>
   ) {
-    guard case .launching(let expectedGeneration, let shouldStop) = slot,
-      expectedGeneration == generation
-    else { return }
+    guard case .launching(let expected, let stopRequested) = slot, expected == generation else {
+      return
+    }
     switch result {
     case .failure(let failure):
       slot = .absent
-      if let operation, operation.ticket.identity.generation == generation {
-        finish(operation: operation, outcome: .failed(failure))
-      }
+      ownership = nil
+      if operation?.ticket.identity.generation == generation { finish(.failed(failure)) }
+      updateReceipt(generation, cleanup: .noChild)
+      completeShutdownIfStopped()
     case .success(let launched):
-      let stopAfterLaunch = shouldStop
-      let child = OwnedChild(
-        generation: generation, pid: launched.pid, connection: launched.connection,
-        requestsCompleted: 0,
-        handshakeAccepted: false, stopRequested: false, signalSent: false, reaped: nil,
-        closeCompleted: false,
-        stopUnconfirmed: false, reapTimer: nil)
-      slot = .owned(child)
-      deliverConnectionIfWaiting(child: child)
-      if stopAfterLaunch || operation?.ticket.identity.generation != generation {
-        requestStop(for: generation)
+      slot = .owned(
+        Child(generation: generation, pid: launched.pid, connection: launched.connection))
+      if stopRequested || shutDown || operation?.ticket.identity.generation != generation {
+        stop(generation)
+      } else {
+        if var current = operation, let waiter = current.connector {
+          current.connector = nil
+          operation = current
+          waiter.1.resume(returning: launched.connection)
+        }
+        armMaintenance(generation)
       }
     }
   }
 
-  private func deadlineFired(ticket: SearchChildTicket, deadline: UInt64) {
-    guard let operation, operation.ticket == ticket, operation.deadline == deadline else { return }
-    guard now() >= deadline else { return }
-    finish(operation: operation, outcome: .failed(.deadline))
-    requestStop(for: ticket.identity.generation)
+  private func deadlineFired(_ ticket: SearchChildTicket, deadline: UInt64) {
+    guard operation?.ticket == ticket, operation?.deadline == deadline, now() >= deadline else {
+      return
+    }
+    finish(.failed(.deadline))
+    stop(ticket.identity.generation)
   }
 
-  private func requestStop(for generation: UUID) {
+  private func stop(_ generation: UUID) {
     switch slot {
-    case .launching(let currentGeneration, _) where currentGeneration == generation:
-      slot = .launching(generation: generation, stopRequested: true)
+    case .launching(let expected, _) where expected == generation:
+      slot = .launching(generation, stop: true)
     case .owned(var child) where child.generation == generation:
-      guard !child.stopRequested else { return }
-      child.stopRequested = true
-      if child.reaped == nil, !child.signalSent {
+      guard !child.stopping else { return }
+      let maySignal = !child.unconfirmed
+      child.stopping = true
+      child.idleDeadline = nil
+      let (deadline, overflow) = now().addingReportingOverflow(policy.reapGraceNanoseconds)
+      child.graceDeadline = overflow ? nil : deadline
+      child.unconfirmed = child.unconfirmed || overflow
+      // Only a successful wait receipt removes signal authority. ECHILD is handled
+      // separately by observe, which quarantines without ever signaling that PID again.
+      if child.reaped == nil, !child.signalSent, maySignal {
         child.signalSent = true
         _ = system.signal(pid: child.pid, signal: SIGKILL)
       }
-      let (graceDeadline, overflow) = now().addingReportingOverflow(policy.reapGraceNanoseconds)
-      if overflow {
-        child.stopUnconfirmed = true
-      } else {
-        child.reapTimer = schedule(graceDeadline) { [weak self] in
-          Task { await self?.reapGraceFired(generation: generation, deadline: graceDeadline) }
-        }
-      }
       slot = .owned(child)
-      close(child: child)
-      pollExit(for: generation)
-    default:
+      updateReceipt(generation, cleanup: cleanupSnapshot())
+      startClose(generation)
+      observe(generation)
+      armMaintenance(generation)
+    default: break
+    }
+  }
+
+  private func observe(_ generation: UUID) {
+    guard case .owned(var child) = slot, child.generation == generation, child.reaped == nil else {
       return
     }
-  }
-
-  private func close(child: OwnedChild) {
-    Task.detached { [connection = child.connection, generation = child.generation] in
-      await connection.close()
-      await self.connectionClosed(generation: generation)
-    }
-  }
-
-  private func connectionClosed(generation: UUID) {
-    guard case .owned(var child) = slot, child.generation == generation else { return }
-    child.closeCompleted = true
-    slot = .owned(child)
-    releaseIfComplete(generation: generation)
-    completeShutdownIfStopped()
-  }
-
-  private func reapGraceFired(generation: UUID, deadline: UInt64) {
-    guard case .owned(var child) = slot, child.generation == generation,
-      child.stopRequested, child.reaped == nil
-    else { return }
-    guard now() >= deadline else { return }
     switch system.pollExit(pid: child.pid) {
     case .reaped(let exit):
       child.reaped = exit
-      child.reapTimer?.cancel()
-      child.reapTimer = nil
+      child.timer?.cancel()
+      child.timer = nil
+      child.timerToken = nil
       slot = .owned(child)
-      updateReceiptCleanup(
-        generation: generation, cleanup: .reaped(generation: generation, exit: exit))
-      releaseIfComplete(generation: generation)
-    case .running, .interrupted:
-      child.stopUnconfirmed = true
-      slot = .owned(child)
-      updateReceiptCleanup(
-        generation: generation, cleanup: .stopUnconfirmed(generation: generation))
+      if operation?.ticket.identity.generation == generation { finish(.failed(.unexpectedExit)) }
+      updateReceipt(generation, cleanup: .reaped(generation: generation, exit: exit))
+      startClose(generation)
+      releaseIfComplete(generation)
     case .failed:
-      child.stopUnconfirmed = true
+      child.unconfirmed = true
+      child.stopping = true
+      child.idleDeadline = nil
       slot = .owned(child)
-      updateReceiptCleanup(
-        generation: generation, cleanup: .stopUnconfirmed(generation: generation))
+      if operation?.ticket.identity.generation == generation { finish(.failed(.unexpectedExit)) }
+      updateReceipt(generation, cleanup: .stopUnconfirmed(generation: generation))
+      startClose(generation)
+    case .running, .interrupted:
+      if child.stopping, let deadline = child.graceDeadline, now() >= deadline {
+        child.unconfirmed = true
+        slot = .owned(child)
+        updateReceipt(generation, cleanup: .stopUnconfirmed(generation: generation))
+      }
+    }
+  }
+
+  /// One retained low-rate observation timer per owned child, including quarantine.
+  /// Polling substitutes for process notifications in this primitive; no codec/chunk events.
+  /// The 100ms cadence is independent of policy grace; only a pending first grace
+  /// or idle deadline can wake it sooner, so tiny grace values cannot spin quarantine.
+  private func armMaintenance(_ generation: UUID) {
+    guard case .owned(var child) = slot, child.generation == generation, child.reaped == nil else {
+      return
+    }
+    child.timer?.cancel()
+    let (next, overflow) = now().addingReportingOverflow(
+      100_000_000)
+    guard !overflow else {
+      child.timer = nil
+      child.timerToken = nil
+      slot = .owned(child)
+      return
+    }
+    var deadline = next
+    if let idle = child.idleDeadline { deadline = min(deadline, idle) }
+    if let grace = child.graceDeadline, grace > now() { deadline = min(deadline, grace) }
+    let token = UUID()
+    child.timer = nil
+    child.timerToken = token
+    slot = .owned(child)
+    let timer = schedule(deadline) { [weak self, deadline] in
+      guard let self else { return }
+      self.enqueue { self.maintenanceFired(generation, token: token, deadline: deadline) }
+    }
+    if case .owned(var scheduled) = slot, scheduled.timerToken == token {
+      scheduled.timer = timer
+      slot = .owned(scheduled)
+    } else {
+      timer.cancel()
+    }
+  }
+
+  private func maintenanceFired(_ generation: UUID, token: UUID, deadline: UInt64) {
+    guard case .owned(let child) = slot, child.generation == generation,
+      child.timerToken == token, now() >= deadline
+    else { return }
+    observe(generation)
+    if case .owned(let current) = slot, current.generation == generation,
+      !current.stopping, let idle = current.idleDeadline, now() >= idle
+    {
+      stop(generation)
+    } else {
+      armMaintenance(generation)
     }
     completeShutdownIfStopped()
   }
 
-  private func pollExit(for generation: UUID) {
-    guard case .owned(let child) = slot, child.generation == generation,
-      child.stopRequested, child.reaped == nil
-    else { return }
-    if case .reaped(let exit) = system.pollExit(pid: child.pid) {
-      var reaped = child
-      reaped.reaped = exit
-      reaped.reapTimer?.cancel()
-      reaped.reapTimer = nil
-      slot = .owned(reaped)
-      updateReceiptCleanup(
-        generation: generation, cleanup: .reaped(generation: generation, exit: exit))
-      releaseIfComplete(generation: generation)
-      completeShutdownIfStopped()
+  private func startClose(_ generation: UUID) {
+    guard case .owned(var child) = slot, child.generation == generation, !child.closeStarted else {
+      return
+    }
+    child.closeStarted = true
+    slot = .owned(child)
+    // Exactly one asynchronous close per physical child, independent of the control lane.
+    Task.detached { [connection = child.connection] in
+      await connection.close()
+      self.enqueue { self.connectionClosed(generation) }
     }
   }
 
-  private func releaseIfComplete(generation: UUID) {
+  private func connectionClosed(_ generation: UUID) {
+    guard case .owned(var child) = slot, child.generation == generation else { return }
+    child.closed = true
+    slot = .owned(child)
+    releaseIfComplete(generation)
+    completeShutdownIfStopped()
+  }
+
+  private func releaseIfComplete(_ generation: UUID) {
     guard case .owned(let child) = slot, child.generation == generation,
-      child.reaped != nil, child.closeCompleted
+      child.reaped != nil, child.closed
     else { return }
+    child.timer?.cancel()
     slot = .absent
-    if let operation, operation.beginsFreshGeneration,
-      operation.ticket.identity.generation != generation
-    {
-      launchFreshOperationIfStillLive(operation)
+    ownership = nil
+    if let current = operation, current.ticket.identity.generation != generation {
+      if now() >= current.deadline {
+        finish(.failed(.deadline))
+      } else {
+        launch(current.ticket.identity.generation)
+      }
     }
   }
 
-  private func launchFreshOperationIfStillLive(_ operation: Operation) {
-    guard self.operation?.ticket == operation.ticket else { return }
-    slot = .launching(generation: operation.ticket.identity.generation, stopRequested: false)
-    launch(generation: operation.ticket.identity.generation)
+  private func finish(_ outcome: SearchChildOutcome) {
+    guard let current = operation else { return }
+    current.timer?.cancel()
+    operation = nil
+    receipt = Receipt(
+      ticket: current.ticket, outcome: outcome, cleanupGeneration: physicalGeneration,
+      cleanup: cleanupSnapshot())
+    current.connector?.1.resume(throwing: SearchChildFailure.staleTicket)
+    current.waiter?.1.resume(returning: outcome)
   }
 
-  private func finish(operation: Operation, outcome: SearchChildOutcome) {
-    operation.timer.cancel()
-    self.operation = nil
-    let cleanup = cleanupSnapshot()
-    receipt = .init(ticket: operation.ticket, outcome: outcome, cleanup: cleanup)
-    operation.connectionWaiter?.continuation.resume(throwing: SearchChildFailure.staleTicket)
-    operation.waiter?.continuation.resume(returning: outcome)
-  }
-
-  private func deliverConnectionIfWaiting(child: OwnedChild) {
-    guard let operation, operation.ticket.identity.generation == child.generation,
-      let waiter = operation.connectionWaiter
-    else { return }
-    var replacement = operation
-    replacement.connectionWaiter = nil
-    self.operation = replacement
-    waiter.continuation.resume(returning: child.connection)
+  private var physicalGeneration: UUID? {
+    switch slot {
+    case .absent: return nil
+    case .launching(let generation, _): return generation
+    case .owned(let child): return child.generation
+    }
   }
 
   private func cleanupSnapshot() -> SearchChildCleanup {
     switch slot {
-    case .absent:
-      return .noChild
-    case .launching(let generation, _):
-      return .pendingLaunch(generation: generation)
+    case .absent: return .noChild
+    case .launching(let generation, _): return .pendingLaunch(generation: generation)
     case .owned(let child):
       if let exit = child.reaped { return .reaped(generation: child.generation, exit: exit) }
-      if child.stopUnconfirmed { return .stopUnconfirmed(generation: child.generation) }
+      if child.unconfirmed { return .stopUnconfirmed(generation: child.generation) }
       return .stopping(generation: child.generation)
     }
   }
 
-  private var channelsClosed: Bool {
-    switch slot {
-    case .absent, .launching:
-      return true
-    case .owned(let child):
-      return child.closeCompleted
-    }
-  }
-
   private var stoppedNow: Bool {
-    switch slot {
-    case .absent:
-      return true
-    case .launching:
-      return false
-    case .owned(let child):
-      return child.reaped != nil && child.closeCompleted
-    }
+    if case .absent = slot { return true }
+    return false
   }
 
   private func shutdownSnapshot() -> SearchChildShutdown {
-    .init(cleanup: cleanupSnapshot(), channelsClosed: channelsClosed)
+    let closed: Bool
+    switch slot {
+    case .absent: closed = true
+    case .launching: closed = false
+    case .owned(let child): closed = child.closed
+    }
+    return .init(cleanup: cleanupSnapshot(), channelsClosed: closed)
   }
 
   private func completeShutdownIfStopped() {
-    guard stoppedNow, let waiter = shutdownWaiter else { return }
+    guard stoppedNow else { return }
     shutdownTimer?.cancel()
     shutdownTimer = nil
+    let waiter = shutdownWaiter
     shutdownWaiter = nil
-    waiter.resume(returning: shutdownSnapshot())
+    waiter?.resume(returning: shutdownSnapshot())
   }
 
-  private func shutdownGraceFired(deadline: UInt64) {
-    guard shutdownWaiter != nil, now() >= deadline else { return }
-    switch slot {
-    case .owned(let child) where child.stopRequested && child.reaped == nil:
-      pollExit(for: child.generation)
-      if case .owned(var stillOwned) = slot, stillOwned.generation == child.generation,
-        stillOwned.reaped == nil
-      {
-        stillOwned.stopUnconfirmed = true
-        slot = .owned(stillOwned)
-        updateReceiptCleanup(
-          generation: stillOwned.generation,
-          cleanup: .stopUnconfirmed(generation: stillOwned.generation))
-      }
-    case .absent, .launching, .owned:
-      break
-    }
-    guard let waiter = shutdownWaiter else { return }
+  private func shutdownGraceFired(_ deadline: UInt64) {
+    guard shutdownWaiter != nil, shutdownDeadline == deadline, now() >= deadline else { return }
+    if case .owned(let child) = slot { observe(child.generation) }
+    let waiter = shutdownWaiter
+    shutdownWaiter = nil
+    shutdownTimer?.cancel()
     shutdownTimer = nil
-    shutdownWaiter = nil
-    waiter.resume(returning: shutdownSnapshot())
+    waiter?.resume(returning: shutdownSnapshot())
   }
 
-  private func updateReceiptCleanup(generation: UUID, cleanup: SearchChildCleanup) {
-    guard var receipt, receipt.ticket.identity.generation == generation else { return }
-    receipt.cleanup = cleanup
-    self.receipt = receipt
+  private func updateReceipt(_ generation: UUID, cleanup: SearchChildCleanup) {
+    guard receipt?.cleanupGeneration == generation else { return }
+    receipt?.cleanup = cleanup
   }
 }

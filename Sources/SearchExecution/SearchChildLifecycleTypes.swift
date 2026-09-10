@@ -1,5 +1,22 @@
 import Foundation
 
+final class SearchChildObserverRegistration: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+
+  func cancel() {
+    lock.lock()
+    cancelled = true
+    lock.unlock()
+  }
+
+  var isCancelled: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cancelled
+  }
+}
+
 public struct SearchChildPolicy: Sendable, Equatable {
   public let operationNanoseconds: UInt64
   public let reapGraceNanoseconds: UInt64
@@ -89,6 +106,8 @@ protocol SearchChildConnection: AnyObject, Sendable {
   func close() async
 }
 
+/// Cancellation is idempotent and nonblocking. A callback already enqueued may still run;
+/// lifecycle identity/token checks fence it. The scheduler uses absolute monotonic time.
 protocol SearchChildTimer: AnyObject, Sendable {
   func cancel()
 }
@@ -105,6 +124,9 @@ enum SearchChildPoll: Sendable {
   case failed(Int32)
 }
 
+/// Control-lane methods must return promptly. Launch submits to one retained spawn lane
+/// and invokes completion exactly once; filesystem work must happen on that spawn lane.
+/// pollExit is the sole serialized, nonblocking wait authority for the exact owned PID.
 protocol SearchChildSystem: AnyObject, Sendable {
   func launch(
     executable: URL,
