@@ -1,6 +1,6 @@
 # Search text allocation preflight — reviewed design
 
-Status: independently approved preflight design; planned and unmeasured, with no allocator or process guarantee. The revised reservation formula rejects the earlier640MB active candidate; it does not adopt a replacement budget. Input: reviewed supervised-search/wire/lifecycle designs and current SearchService at28e2a9f. WireTask2 active; no source changes here.
+Status: independently approved preflight design; planned and unmeasured, with no allocator or process guarantee. The revised reservation formula rejects the earlier640MB active candidate; it does not adopt a replacement budget. Input: reviewed supervised-search/wire/lifecycle designs and current SearchService at28e2a9f. Wire response Task3B is approved; semantic Task4 is active. Parent-driver review corrects the provisional fixed staging term below; no allocator implementation or measurements exist.
 
 ## Concrete source costs to measure
 
@@ -62,8 +62,15 @@ Local admission refusal has no active payload to release. Healthy semantic failu
 
 ### Candidate selection rules
 
-Define N=input UTF16 ceiling, M=output UTF16 ceiling, R=max match count. For comparison reserve parent source payload3N, output work capacity6M (two worst-case UTF8 copies during growth), bitset ceil((N+1)/8), range payload16R, four bounded65,568-byte transport/chunk slots, and1MiB bounded metadata. Add25% explicit reservation headroom. Retained-result candidate reserves3N+3M+16R+1MiB, also with25% headroom. These are conservative logical reservation proposals, not proven allocator/RSS bounds; opaque String/Array capacities and framework objects must still be observed and any additional owned live copy charged separately. Helper costs are measured separately and do not fit into the parent ledger.
+Define N=input UTF16 ceiling, M=output UTF16 ceiling, R=max match count. For comparison reserve parent source payload3N, output work capacity6M (two worst-case UTF8 copies during growth), bitset ceil((N+1)/8), range payload16R, six bounded65,568-byte parent transport/codec staging credits, and1MiB bounded metadata. Add25% explicit reservation headroom. Retained-result candidate reserves3N+3M+16R+1MiB, also with25% headroom. These are conservative logical reservation proposals, not proven allocator/RSS bounds; opaque String/Array capacities and framework objects must still be observed and any additional owned live copy charged separately. Helper costs are measured separately and do not fit into the parent ledger.
 
 This formula already exceeds the earlier640MB active candidate at maximum N/M; that candidate is therefore not adopted. Do not reduce100M-unit support to force it to fit. Experiments may use an explicitly larger provisional parent reservation to observe the full supported matrix; choose the eventual ledger only after measurements and review.768MB retained remains a candidate, not a conclusion.
 
 A sink is eligible only if every supported fixture completes under the separately stated policy, exact output validates, no full-size intermediate is uncharged, and ownership tests show no lease leak/double release on every terminal path. Compare equal cases/repetitions; choose the lowest conservative charged peak among eligible candidates, using wall-time as the tie-breaker. Additional String growth copies invalidate the formula and require revision, not silent absorption into sampled RSS. If no sink qualifies, revise implementation/budget in reviewed records and repeat affected cases. RSS/combined peak and warm retention inform operational suitability/recycle policy but never become exact ledger credits. Production routing remains gated until those decisions are made.
+
+
+## Parent codec staging correction — 2026-09-10
+
+Reviewed [parent-driver plan](../plans/2026-09-10-search-parent-wire-driver.md) accounts for request chunks retained during writes, bounded read staging, copied and retained frame payload capacity, range callback temporaries, and both emitted UTF-8 and next reserved decoder output buffers. Its phase ledger raises the provisional fixed term from four to six65,568-byte credits (393,408 bytes). Candidate accumulator growth and any additional observed copies remain separately chargeable. Helper costs remain outside this parent ledger.
+
+At N=M=100,000,000 and R=100,000, the corrected arithmetic is915,541,985 active logical bytes, or1,144,427,482 after ceiling25% headroom. This is arithmetic over an unmeasured proposal, not an adopted budget or RSS result. The correction does not change supported input limits or the rejected status of the640MB candidate. Gate A must verify actual capacities and ownership; increase the formula if the implementation has further live copies.
