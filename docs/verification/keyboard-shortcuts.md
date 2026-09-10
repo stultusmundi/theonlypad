@@ -81,4 +81,15 @@ The verified app, archive and SBOM are promoted to `dist/` and pass integrity/si
 
 The generated XCTest runner entitlement enables App Sandbox. Apple lists use of accessibility APIs in assistive applications among [restricted App Sandbox activities](https://developer.apple.com/documentation/security/protecting-user-data-with-app-sandbox). This makes that runner an unsuitable supported host for external AXPress, independently of its observed false trust result. The [trust prompt API](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions) is asynchronous; requesting it does not prove that a prompt appeared or permission was granted.
 
-No entitlement, sandbox or privacy setting was changed. A separate private native test app is being designed for the same exact-owned-app AX control, with an explicit user-granted permission boundary. That check remains unverified; ordinary XCUITest results above remain valid. Raw diagnosis is retained at `.local/desktop-ax-permission-diagnosis.md`.
+No entitlement, sandbox or privacy setting was changed. A separate private native test app implements the same exact-owned-app AX control, with an explicit user-granted permission boundary. That check remains unverified; ordinary XCUITest results above remain valid. Raw diagnosis is retained at `.local/desktop-ax-permission-diagnosis.md`.
+
+
+## Separate native permission request
+
+The private ad-hoc `org.theonlypad.accessibility-check` client was built for ARM64/macOS14 with no App Sandbox entitlement. Its tab selector matches the existing desktop control: unique `tab.select.UUID` descendants of any role. A hidden native toggle-button getter returned AXUnknown; that observation is diagnostic and is not treated as external AX-role acceptance.
+
+The first launch stalled before trust inspection while opening its synthetic configuration on the external volume. An exact-owned-process stack sample establishes the blocked `readConfig`/`open` call, not a particular filesystem or TCC cause. Root confirmed termination of that exact test instance. A private temporary-directory retry initially refused Foundation's `/private/tmp` to `/tmp` normalization; a reviewed path correction preserves the physical system directory while rejecting unrelated symlinks. No system privacy or sandbox settings were changed.
+
+The corrected client then reached `waitingForTrust` and invoked the authorized prompt API. Its receipt reports false trust before and after120.109 seconds; the exact retained client terminated and the driver returned77 (`missingAccess`). No target editor was launched and no AX action ran. A requested prompt does not establish that the user saw a dialog. The user grant remains outstanding; this is not a failed product menu assertion or proof of general accessibility.
+
+Corrected probe executable SHA256: `1abd3ba8fb04a99af5d8a5c64b460187c3555a659e6dd1a45c9d53074fc5da91`; driver: `299e3f98ad2062ce1abd432c1ee5a9ffc5b22bc1cce21af695e0dd2b85c5c656`. Sanitized scalar receipts are retained privately under `.local/ax-native-probe/actual-canonical-run/`; all raw startup diagnostics and synthetic artifacts remain ignored. No automatic repeated prompt or release artifact includes this private client.
