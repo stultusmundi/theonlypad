@@ -1,6 +1,6 @@
 # Supervised search child lifecycle implementation plan
 
-> Implementation worker: use `superpowers:executing-plans`, genuine red/green tests and independent source review. Root-reviewed planned work, awaiting completion and review of the wire protocol. All new commands below are proposed/unverified. No lifecycle source or tests are implemented by this plan.
+> Implementation worker: use `superpowers:executing-plans`, genuine red/green tests and independent source review. This plan remains active. Task1 control ownership and the Task2 concrete channel portion now have verified implementations; see the component checklist and `docs/verification/search-child-lifecycle.md`. Launcher, helper lifetime, process integration and public construction remain outstanding. Commands shown for unfinished work remain proposed; proven commands are in AGENTS.md.
 
 **Goal:** Own at most one search helper process, enforce independent cancellation/deadline decisions, and retain its slot until exact reap and channel cleanup.
 
@@ -230,3 +230,12 @@ Adoption transfers three distinct, exclusively owned parent endpoints above desc
 Cancellation decides the operation result once. It cannot retract an already-written prefix or interrupt an in-flight syscall; no new syscall begins after the I/O queue observes cancellation/closure. Source cancellation handlers own monitored-descriptor closure, and one shared close completion waits for all confirmed closes. An uncertain close is never retried against the integer and never reported as acknowledged. Injected schedules and actual OS observations remain separate evidence.
 
 Acceptance includes queue bounds, partial I/O, EAGAIN/EINTR fairness, early/late cancellation, EOF, source teardown, facade loss, exact close ownership and quarantine. After code review, the separately filtered synthetic-pipe suite tests real bytes/backpressure/EOF/EPIPE and safe descriptor reuse under the accepted watchdog. It must not overwrite an unowned descriptor or alter parent-global signal policy. Passing this slice will not establish child reap, helper containment, whole-search memory or large-file performance.
+
+### Accepted channel component checks
+
+- [x] Implement and independently review bounded injected channel state, preserving the 32-test lifecycle boundary and caller-owned adoption preconditions.
+- [x] Implement and review the real Darwin/Dispatch default adapters and bounded synthetic-pipe fixture without adding a launcher or public lifecycle constructor.
+- [x] Verify the unchanged 20 channel tests plus fixture controls: final combined injected suite 40/0, including the EOF-oracle behavioral red and repair.
+- [x] Execute the reviewed actual pipe class: nine tests passed with exact stream/EOF, FIFO/backpressure, cancellation, EPIPE, acknowledged close and safe descriptor reuse, matching frozen sources and complete direct-watchdog receipts.
+
+Proven component command: `scripts/test-search-child-lifecycle.sh --filter SearchChildChannelPipeTests`. See [channel evidence](../../verification/search-child-lifecycle.md) for source hashes, earlier prefix-only proof/build refusal and the seven-test/six-failure EOF correction. These checks complete only the channel component. Task2's real launcher/system, timer/lifetime utility, fixture child and public construction, plus Task3 integration, remain unchecked.

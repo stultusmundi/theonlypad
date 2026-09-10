@@ -1,6 +1,6 @@
 # Search child lifecycle state verification
 
-Task 1 is implemented and independently approved at `eb3f1e177ccec82135c2251af7c6c7355f00dfd8`. This is the injected lifecycle state machine. Real launch, pipes, waitpid, helper integration and native search routing remain outstanding.
+Task 1 is implemented and independently approved at `eb3f1e177ccec82135c2251af7c6c7355f00dfd8`. This is the injected lifecycle state machine. The later sections record accepted direct-pipe channel tests. Real child launch, waitpid, helper integration and native search routing remain outstanding.
 
 ## Implemented boundary
 
@@ -109,3 +109,53 @@ It passed1/0 in0.002s reported XCTest case time. The default constructor deliver
 Private evidence: `.local/search-child-integration/run.9qp6ec9y`, manifest `3469c7eb7a77ddf8f8d9298f7edefb7aec9ce625a25fca034641ddce4bc19c34`. Final fixture SHA256 `d3a434b1b5cdd3cd28b38773c4c197bd7e8d0c61e605b7cf77094b3405417117`; source/negative-control review is under `.local/search-child-lifecycle-task-2/stage-a-repair/`.
 
 This single byte/EOF control is not backpressure, EPIPE, cancellation, descriptor-reuse, child inheritance/reap, performance or application-search acceptance. Those controls remain outstanding and are the next implementation work. The main distributed app has not been repackaged from this slice.
+
+## Actual bounded channel suite, 2026-09-10
+
+The reviewed Darwin/Dispatch channel component now passes all nine actual synthetic-pipe tests. These tests create owned pipes inside the test process; they do not create a search child or exercise waitpid.
+
+| Actual control | Required observation |
+|---|---|
+| Default constructor | Exact response byte, channel close and lifetime EOF |
+| Short response and request stream | Three-byte native read with a larger requested maximum; exact request bytes followed by actual EOF |
+| Backpressure and FIFO | Bounded prefill reaches actual EAGAIN; first/second write reservations, third busy refusal, exact filler/first/second payload stream through EOF |
+| Read cancellation | Actual admission and EAGAIN before cancelled result |
+| Write cancellation | Actual backpressure/admission/EAGAIN before cancelled result |
+| Sticky response EOF | Second empty result without another native read syscall |
+| EPIPE | Default inherited SIGPIPE, real EPIPE, survival with per-FD suppression and unchanged native signal snapshot |
+| Close ordering | Each actual source cancellation acknowledgment precedes its descriptor's confirmed close; channel completion follows confirmed closes |
+| Descriptor reuse | Exact old request integer reused only after acknowledged/confirmed close, then independent sentinel bytes survive repeated channel close |
+
+The fixture's request drain verifies the entire expected stream: reaching the expected count alone is insufficient. It probes at most one byte for surplus data, rejects early EOF, and succeeds only on actual EOF at the expected count. The data cases close the channel after admitted writes complete before awaiting drain EOF; FIFO begins draining earlier to release backpressure. Lifetime EOF is independently required, without inventing an ordering between its unrelated queue and channel-close return. No actual stale Dispatch callback is claimed.
+
+Fill remains bounded to 256 writes of at most 4,096 bytes. Drain remains bounded to 512 reads and 2 MiB, including EOF/probe attempts, with at most 16 calls/64 KiB per callback. Overall EOF and cancellation-acknowledgment deadlines remain 30 seconds. Results wait for source acknowledgment and confirmed owned close; uncertain close is sticky, and timed-out ownership remains quarantined. These fixture bounds and passing tests are not whole-search memory or latency guarantees.
+
+### Preserved failures and oracle correction
+
+The first broader run stopped during its sandboxed SwiftPM build because an output-file-map could not be read; no pipe test executed. The same command under the already accepted outside-sandbox toolchain environment built and passed its first data case. That earlier pass proved the expected prefix and cleanup, but could not reject surplus trailing bytes.
+
+Root review identified this oracle gap before the full suite ran. Injected tests then produced seven tests with six failed assertions: the old drain returned prefix success without checking a surplus byte or waiting for EOF. The repair added exact-payload-plus-EOF, payload/EAGAIN/EOF, surplus-byte rejection and premature-EOF controls while preserving the cancellation/close gates. The final frozen injected suite passed 40/0: original 20 channel tests, nine accepted StageA fixture tests, four bounded-I/O controls and seven drain-lifecycle tests.
+
+Root reviewed the repair, then executed the repaired first data case (1/0) followed by the full actual class (9/0). Each run had all three strict exact-command toolchain/build/test receipts, complete wait/group-cleanup/capture observations, verified captured byte lengths and full frozen source inventory. Actual test names and positive XCTest counts matched the summaries. The earlier prefix-only pass and build refusal remain preserved separately; neither was relabeled as full-stream evidence.
+
+Proven commands:
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter SearchChildChannelPipeTests/testRealShortResponseAndExactRequestBytes
+scripts/test-search-child-lifecycle.sh --filter SearchChildChannelPipeTests
+scripts/test-search-child-lifecycle.sh --filter 'PipeBoundedIOTests|PipeDrainLifecycleTests|PipeDescriptorCellTests|PipeFixtureLifecycleTests|SearchChildChannelStateTests'
+```
+
+The existing coordinator calls the accepted watchdog directly for each stage. Do not nest another session-owning watchdog. In the restricted development environment, these builds used the approved outside-sandbox SwiftPM invocation; this does not change the test commands or product signal policy.
+
+Final reviewed hashes:
+
+```text
+e0b5a4707799afad754bfbd5a1d6f1e388d0cc28d1454489df73c8190e92cf38  SearchChildChannelTests.swift
+2b3a70efb97981b3338af79ea2c539deea6649969dd1eed694c3c0de809ddf52  SearchChildChannels.swift
+9a201f6870e46daeca4baa2a2bd1f131a7c96dc40f1fa9993fe479d92485f57b  SearchChildChannelDarwin.swift
+```
+
+The repaired injected, first actual and full actual runs share source manifest SHA256 `9ffe0f0c45652a42500539085aac17371e042333fecc836d553f03fc2deac93a`. Raw synthetic evidence remains ignored: injected `run.dxc892a9`, first actual `run.a42pl2qz`, full actual `run.4kxr8u32`; the prior prefix run is `run.ta6hk71d`, build refusal `run.89aw_j8q`, and EOF-oracle red `run.ylb5rvbq`. Root source/runtime review accepted this component boundary.
+
+Real child process creation, descriptor inheritance across other app launchers, exact child reap, helper lifetime, wire/runtime integration, public lifecycle construction and production search routing remain outstanding. The existing Foundation external-command path still needs the planned inheritance audit. Direct pipe success establishes neither an OS sandbox nor packaged, desktop, large-input or performance acceptance.

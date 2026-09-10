@@ -465,6 +465,175 @@ final class SearchChildChannelPipeTests: XCTestCase {
     }
     if let operationError { throw operationError }
   }
+  func testRealShortResponseAndExactRequestBytes() async throws {
+    try await withRecordedFixture { fixture, recorded, _ in
+      try fixture.writeResponse(Data([1, 2, 3]))
+      let read = FixtureTask { try await recorded.channel.read(maxBytes: 4096) }
+      let response = try await read.value()
+      XCTAssertEqual(response, Data([1, 2, 3]))
+      let payload = Data([0x71, 0x72, 0x73, 0x74])
+      let write = FixtureTask { try await recorded.channel.write(payload) }
+      try await write.value()
+      let drain = try fixture.makeRequestDrain(expected: payload.count)
+      try await self.closeRecorded(recorded)
+      let request = try await drain.value()
+      XCTAssertEqual(request, payload)
+    }
+  }
+  func testRealBackpressureTwoReservedWritesAndFIFO() async throws {
+    try await withRecordedFixture(prefill: true) { fixture, recorded, fill in
+      let fill = try XCTUnwrap(fill)
+      XCTAssertGreaterThan(fill.bytes, 0)
+      XCTAssertLessThanOrEqual(fill.bytes, 1_048_576)
+      XCTAssertLessThanOrEqual(fill.calls, 256)
+      let firstBytes = Data(repeating: 0xA1, count: 16_384)
+      let secondBytes = Data(repeating: 0xB2, count: 16_384)
+      let first = FixtureTask { try await recorded.channel.write(firstBytes) }
+      try await self.waitFor(recorded.log, "admit.write.1")
+      try await self.waitFor(recorded.log, "write.eagain")
+      let second = FixtureTask { try await recorded.channel.write(secondBytes) }
+      try await self.waitFor(recorded.log, "admit.write.2")
+      let thirdTask = FixtureTask { try await recorded.channel.write(Data([0xC3])) }
+      let third = await channelFailure { try await thirdTask.value() }
+      XCTAssertEqual(third, .busy)
+      let expected = Data(repeating: 0x31, count: fill.bytes) + firstBytes + secondBytes
+      let drain = try fixture.makeRequestDrain(expected: expected.count)
+      let draining = FixtureTask { try await drain.value() }
+      try await first.value()
+      try await second.value()
+      try await self.closeRecorded(recorded)
+      let actual = try await draining.value()
+      XCTAssertEqual(actual, expected)
+    }
+  }
+  func testRealReadCancellationAfterObservedEAGAIN() async throws {
+    try await withRecordedFixture { _, recorded, _ in
+      let read = FixtureTask { try await recorded.channel.read(maxBytes: 64) }
+      try await self.waitFor(recorded.log, "admit.read")
+      try await self.waitFor(recorded.log, "read.eagain")
+      read.cancel()
+      let failure = await channelFailure { _ = try await read.value() }
+      XCTAssertEqual(failure, .cancelled)
+    }
+  }
+  func testRealWriteCancellationAfterObservedBackpressure() async throws {
+    try await withRecordedFixture(prefill: true) { _, recorded, _ in
+      let write = FixtureTask { try await recorded.channel.write(Data(repeating: 9, count: 4096)) }
+      try await self.waitFor(recorded.log, "admit.write.1")
+      try await self.waitFor(recorded.log, "write.eagain")
+      write.cancel()
+      let failure = await channelFailure { try await write.value() }
+      XCTAssertEqual(failure, .cancelled)
+    }
+  }
+  func testRealResponseEOFIsStickyWithoutAnotherReadSyscall() async throws {
+    try await withRecordedFixture { fixture, recorded, _ in
+      try fixture.closeResponsePeer()
+      let first = FixtureTask { try await recorded.channel.read(maxBytes: 64) }
+      let firstValue = try await first.value()
+      XCTAssertEqual(firstValue, Data())
+      try await self.waitFor(recorded.log, "ack.responseRead")
+      let reads = recorded.log.count("io.read")
+      let second = FixtureTask { try await recorded.channel.read(maxBytes: 64) }
+      let secondValue = try await second.value()
+      XCTAssertEqual(secondValue, Data())
+      XCTAssertEqual(recorded.log.count("io.read"), reads)
+      XCTAssertEqual(recorded.log.count("read.count.0"), 1)
+    }
+  }
+  func testRealEPIPEWithDefaultAndUnchangedSIGPIPE() async throws {
+    // Fixture construction requires inherited SIG_DFL; cleanup compares native snapshots.
+    try await withRecordedFixture { fixture, recorded, _ in
+      try fixture.closeRequestPeer()
+      let write = FixtureTask { try await recorded.channel.write(Data([0xA5])) }
+      let failure = await channelFailure { try await write.value() }
+      XCTAssertEqual(failure, .channelFailure(EPIPE))
+      XCTAssertEqual(recorded.log.count("write.errno.\(EPIPE)"), 1)
+    }
+  }
+  func testRealCloseAcknowledgmentsPrecedeTheirOwnedDescriptorCloses() async throws {
+    try await withRecordedFixture { fixture, recorded, _ in
+      let pending = FixtureTask { try await recorded.channel.read(maxBytes: 64) }
+      try await self.waitFor(recorded.log, "admit.read")
+      try await self.waitFor(recorded.log, "read.eagain")
+      let lifetime = FixtureTask { try await fixture.requireLifetimeEOF() }
+      try await self.closeRecorded(recorded)
+      let failure = await channelFailure { _ = try await pending.value() }
+      XCTAssertEqual(failure, .shutDown)
+      try await lifetime.value()
+      self.assertCloseOrder(recorded.log)
+      // Lifetime peer completion is required, but its unrelated queue is not ordered
+      // relative to channel.close's return. The writer close and observed EOF are real.
+    }
+  }
+  func testRealExactDescriptorReuseAfterAcknowledgedCloseSurvivesRepeatedClose() async throws {
+    try await withRecordedFixture { fixture, recorded, _ in
+      // Create the independent sentinel while the old channel integer is still owned.
+      let sentinel = try fixture.makeReuseSentinel()
+      try await self.closeRecorded(recorded)
+      self.assertCloseOrder(recorded.log)
+      let alias = try fixture.reuseClosedRequestNumber(recorded, sentinel: sentinel)
+      XCTAssertEqual(try alias.descriptor(), recorded.oldRequest)
+      try fixture.verifySentinel(sentinel, alias: alias, byte: 0x71)
+      try await self.closeRecorded(recorded)
+      try fixture.verifySentinel(sentinel, alias: alias, byte: 0x72)
+      XCTAssertEqual(recorded.log.count("close.request.confirmed"), 1)
+      XCTAssertEqual(recorded.log.count("ack.requestWrite"), 1)
+    }
+  }
+  private func waitFor(_ log: ChannelLog, _ event: String) async throws {
+    guard await XCTWaiter.fulfillment(of: [log.expectation(event)], timeout: 30) == .completed
+    else {
+      throw PipeFixtureError.peerOperationTimedOut
+    }
+  }
+  private func closeRecorded(_ recorded: RecordedPipeChannel) async throws {
+    recorded.log.record("test.close.request")
+    let close = FixtureTask { await recorded.channel.close() }
+    try await close.value()
+    recorded.log.record("test.close.returned")
+  }
+  private func assertCloseOrder(
+    _ log: ChannelLog, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    for (kind, role) in [("requestWrite", "request"), ("responseRead", "response")] {
+      XCTAssertEqual(log.count("cancel.\(kind)"), 1, file: file, line: line)
+      XCTAssertEqual(log.count("ack.\(kind)"), 1, file: file, line: line)
+      XCTAssertEqual(log.count("close.\(role).confirmed"), 1, file: file, line: line)
+      XCTAssertTrue(log.precedes("cancel.\(kind)", "ack.\(kind)"), file: file, line: line)
+      XCTAssertTrue(log.precedes("ack.\(kind)", "close.\(role).confirmed"), file: file, line: line)
+      XCTAssertTrue(log.precedes("close.\(role).confirmed", "closed"), file: file, line: line)
+    }
+    XCTAssertEqual(log.count("close.lifetime.confirmed"), 1, file: file, line: line)
+    XCTAssertTrue(log.precedes("close.lifetime.confirmed", "closed"), file: file, line: line)
+    XCTAssertTrue(log.precedes("closed", "test.close.returned"), file: file, line: line)
+  }
+  private func withRecordedFixture(
+    prefill: Bool = false,
+    _ body: (PipeFixture, RecordedPipeChannel, FixtureFillReceipt?) async throws -> Void
+  ) async throws {
+    let fixture = try PipeFixture()
+    let fill: FixtureFillReceipt?
+    do { fill = prefill ? try fixture.fillRequestBeforeAdoption() : nil } catch {
+      let original = error
+      do { try await fixture.cleanup() } catch { XCTFail("Setup cleanup also failed: \(error)") }
+      throw original
+    }
+    let recorded = fixture.makeRecordedChannels()
+    var operationError: Error?
+    do { try await body(fixture, recorded, fill) } catch { operationError = error }
+    do { try await closeRecorded(recorded) } catch { operationError = operationError ?? error }
+    if operationError == nil {
+      do { try await fixture.requireLifetimeEOF() } catch { operationError = error }
+    }
+    do { try await fixture.cleanup() } catch {
+      if let operationError { XCTFail("Operation also failed: \(operationError)") }
+      throw error
+    }
+    if let operationError { throw operationError }
+    assertCloseOrder(recorded.log)
+  }
+
 }
 
 final class PipeDescriptorCellTests: XCTestCase {
@@ -1178,6 +1347,8 @@ private enum PipeFixtureError: Error, Equatable {
   case eofTimedOut
   case cancelled
   case signalDispositionChanged
+  case ioBudgetExceeded
+  case peerOperationTimedOut
 }
 
 private enum PipeCloseResult: Equatable {
@@ -1536,6 +1707,8 @@ private final class PipeFixture {
   private var lifetimeRead: PipeDescriptorCell?
   private var lifetimeWrite: PipeDescriptorCell?
   private var lifetimeEOF: FixturePeerEOF?
+  private var requestDrain: FixturePeerDrain?
+  private var extraCells: [PipeDescriptorCell] = []
 
   private let signal: FixtureSignalGuard
 
@@ -1600,12 +1773,18 @@ private final class PipeFixture {
 
   func cleanup() async throws {
     let peer = lifetimeEOF
-    // Keep all cells and the peer after cleanup: repeated cleanup must preserve a
-    // previous uncertain result, while closeOnce prevents another numeric close.
+    let drain = requestDrain
+    // Retain cells and both peer owners: repeated cleanup preserves uncertain results.
+    // Each peer owns its descriptor exclusively, including after a deadline/quarantine.
     try await FixtureCleanup.perform(
-      peer: peer.map { peer in { try await peer.cleanup() } },
+      peer: {
+        var errors: [Error] = []
+        if let peer { do { try await peer.cleanup() } catch { errors.append(error) } }
+        if let drain { do { try await drain.cleanup() } catch { errors.append(error) } }
+        if !errors.isEmpty { throw FixturePeerCleanupFailures(errors: errors) }
+      },
       cells: [requestRead, requestWrite, responseRead, responseWrite, lifetimeRead, lifetimeWrite]
-        .compactMap { $0 },
+        .compactMap { $0 } + extraCells,
       signal: signal)
   }
 
@@ -1702,5 +1881,694 @@ private final class PipeFixture {
     return FixtureSignalSnapshot(
       handler: unsafeBitCast(action.__sigaction_u.__sa_handler, to: UInt.self),
       mask: action.sa_mask, flags: action.sa_flags)
+  }
+}
+
+// Bounded bookkeeping controls below use injected calls only, never actual pipes.
+final class PipeBoundedIOTests: XCTestCase {
+  func testFillRequiresObservedEAGAINAndCountsShortWrites() throws {
+    var results: [ChannelIOResult] = [.count(2), .count(3), .failed(EAGAIN)]
+    var calls = 0
+    let receipt = try FixtureFill.run { bytes in
+      XCTAssertEqual(bytes.count, 4096)
+      calls += 1
+      return results.removeFirst()
+    }
+    XCTAssertEqual(receipt.bytes, 5)
+    XCTAssertEqual(receipt.calls, 3)
+    XCTAssertEqual(calls, 3)
+    XCTAssertTrue(results.isEmpty)
+  }
+  func testFillStopsAtCallBudgetWithoutClaimingObservedBackpressure() {
+    var calls = 0
+    XCTAssertThrowsError(
+      try FixtureFill.run { _ in
+        calls += 1
+        return .count(4096)
+      })
+    XCTAssertEqual(calls, 256)
+    calls = 0
+    XCTAssertThrowsError(
+      try FixtureFill.run { _ in
+        calls += 1
+        return .failed(EINTR)
+      })
+    XCTAssertEqual(calls, 256)
+  }
+  func testDrainBudgetRejectsOverflowAndStopsAt512Calls() throws {
+    XCTAssertThrowsError(try FixtureDrainBudget(expected: 2_097_153))
+    XCTAssertThrowsError(try FixtureDrainBudget(expected: 0))
+    var budget = try FixtureDrainBudget(expected: 1000)
+    for _ in 0..<512 { try budget.noteCall() }
+    XCTAssertThrowsError(try budget.noteCall())
+    XCTAssertThrowsError(try budget.append(Data(repeating: 1, count: 1001), requested: 1000))
+    XCTAssertEqual(budget.bytes.count, 0)
+  }
+  func testDrainBudgetAccumulatesExactBytesAndRejectsShortBufferMismatch() throws {
+    var budget = try FixtureDrainBudget(expected: 3)
+    try budget.append(Data([1]), requested: 3)
+    XCTAssertFalse(budget.complete)
+    try budget.append(Data([2, 3]), requested: 2)
+    XCTAssertTrue(budget.complete)
+    XCTAssertEqual(budget.bytes, Data([1, 2, 3]))
+    XCTAssertThrowsError(try budget.append(Data([4]), requested: 1))
+  }
+}
+private struct FixtureFillReceipt {
+  let bytes: Int
+  let calls: Int
+}
+private enum FixtureFill {
+  static func run(write: (Data) -> ChannelIOResult) throws -> FixtureFillReceipt {
+    let block = Data(repeating: 0x31, count: 4096)
+    var filled = 0
+    for index in 0..<256 {
+      switch write(block) {
+      case .count(let count):
+        guard count > 0, count <= block.count else { throw PipeFixtureError.malformed }
+        filled += count
+      case .failed(let error) where error == EAGAIN || error == EWOULDBLOCK:
+        guard filled > 0 else { throw PipeFixtureError.malformed }
+        return .init(bytes: filled, calls: index + 1)
+      case .failed(EINTR): continue
+      case .failed(let error): throw PipeFixtureError.syscall(error)
+      }
+    }
+    throw PipeFixtureError.ioBudgetExceeded
+  }
+}
+private struct FixtureDrainBudget {
+  let expected: Int
+  private(set) var calls = 0
+  private(set) var bytes = Data()
+  init(expected: Int) throws {
+    guard (1...2_097_152).contains(expected) else { throw PipeFixtureError.ioBudgetExceeded }
+    self.expected = expected
+  }
+  var complete: Bool { bytes.count == expected }
+  var nextReadSize: Int { min(4096, expected - bytes.count) }
+  mutating func noteCall() throws {
+    guard calls < 512 else { throw PipeFixtureError.ioBudgetExceeded }
+    calls += 1
+  }
+  mutating func append(_ data: Data, requested: Int) throws {
+    guard !data.isEmpty, requested > 0, requested <= nextReadSize,
+      data.count <= requested, data.count <= expected - bytes.count
+    else { throw PipeFixtureError.ioBudgetExceeded }
+    bytes.append(data)
+  }
+}
+
+/// One exact-stream peer drain. Its cell leaves the fixture's independent cleanup list.
+/// No completion/cleanup success is published until the actual source acknowledges cancellation.
+private final class FixturePeerDrain: @unchecked Sendable {
+  private enum State { case idle, active, cancelling, settled, quarantined }
+  private let cell: PipeDescriptorCell
+  private let queue: DispatchQueue
+  private let factory: any ChannelSourceFactory
+  private let read: (Int32, Int) -> (ChannelIOResult, Data)
+  private let schedule:
+    (FixtureDeadline, DispatchQueue, @escaping @Sendable () -> Void) -> any FixtureTimer
+  private weak var retention: FixtureDrainRetention?
+  private var budget: FixtureDrainBudget
+  private var state = State.idle
+  private var source: (any ChannelReadinessSource)?
+  private var deadline: (any FixtureTimer)?
+  private var ackDeadline: (any FixtureTimer)?
+  private var pending: Result<Data, Error>?
+  private var terminal: Result<Data, Error>?
+  private var cleanupResult: Result<Void, Error>?
+  private var waiter: ((Result<Data, Error>) -> Void)?
+  private var cleanupWaiter: ((Result<Void, Error>) -> Void)?
+
+  init(
+    cell: PipeDescriptorCell, expected: Int,
+    queue: DispatchQueue = DispatchQueue(label: "pipe.fixture.drain"),
+    factory: any ChannelSourceFactory = DispatchChannelSourceFactory(),
+    read: @escaping (Int32, Int) -> (ChannelIOResult, Data) = { fd, limit in
+      var data = Data(count: limit)
+      let result = data.withUnsafeMutableBytes {
+        DarwinChannelDescriptorOperations().read(fd: fd, into: $0)
+      }
+      if case .count(let count) = result, count >= 0, count <= limit {
+        data.count = count
+        return (result, data)
+      }
+      return (result, Data())
+    },
+    schedule:
+      @escaping (FixtureDeadline, DispatchQueue, @escaping @Sendable () -> Void) -> any FixtureTimer =
+      {
+        _, queue, action in FixtureDispatchTimer(queue: queue, action: action)
+      }, retention: FixtureDrainRetention = .process
+  ) throws {
+    budget = try FixtureDrainBudget(expected: expected)
+    self.cell = cell
+    self.queue = queue
+    self.factory = factory
+    self.read = read
+    self.schedule = schedule
+    self.retention = retention
+  }
+  func value() async throws -> Data {
+    try await withCheckedThrowingContinuation { continuation in
+      observe { continuation.resume(with: $0) }
+    }
+  }
+  func cleanup() async throws {
+    try await withCheckedThrowingContinuation { continuation in
+      observeCleanup { continuation.resume(with: $0) }
+    }
+  }
+  func observe(_ body: @escaping (Result<Data, Error>) -> Void) {
+    queue.async {
+      if let terminal = self.terminal {
+        body(terminal)
+        return
+      }
+      guard self.waiter == nil else {
+        body(.failure(PipeFixtureError.malformed))
+        return
+      }
+      self.waiter = body
+      guard self.state == .idle else { return }
+      do {
+        let fd = try self.cell.descriptor()
+        self.source = self.factory.make(
+          kind: .responseRead, fd: fd, queue: self.queue,
+          event: { [self] in turn() }, cancelled: { [self] in acknowledged() })
+        self.state = .active
+        self.deadline = self.schedule(.eof, self.queue) { [weak self] in self?.timeout() }
+        self.source!.activate()
+      } catch {
+        self.state = .settled
+        self.pending = .failure(error)
+        self.finishClose()
+      }
+    }
+  }
+  func observeCleanup(_ body: @escaping (Result<Void, Error>) -> Void) {
+    queue.async {
+      if let result = self.cleanupResult {
+        body(result)
+        return
+      }
+      guard self.cleanupWaiter == nil else {
+        body(.failure(PipeFixtureError.malformed))
+        return
+      }
+      self.cleanupWaiter = body
+      switch self.state {
+      case .idle:
+        self.state = .settled
+        self.pending = .failure(PipeFixtureError.cancelled)
+        self.finishClose()
+      case .active: self.cancel(.failure(PipeFixtureError.cancelled))
+      case .cancelling: break
+      case .settled, .quarantined: preconditionFailure("Missing retained drain cleanup")
+      }
+    }
+  }
+  private func turn() {
+    guard state == .active else { return }
+    do {
+      let fd = try cell.descriptor()
+      // At most16 calls/64KiB per callback;512 calls/2MiB including EOF/probe calls.
+      // At the exact payload boundary, request only one byte to reject any surplus.
+      for _ in 0..<16 {
+        let requested = budget.complete ? 1 : budget.nextReadSize
+        try budget.noteCall()
+        let (result, data) = read(fd, requested)
+        switch result {
+        case .count(let count):
+          guard count >= 0, count == data.count, count <= requested else {
+            throw PipeFixtureError.malformed
+          }
+          if count == 0 {
+            guard budget.complete else { throw PipeFixtureError.malformed }
+            cancel(.success(budget.bytes))
+            return
+          }
+          guard !budget.complete else { throw PipeFixtureError.malformed }
+          try budget.append(data, requested: requested)
+        case .failed(let error) where error == EAGAIN || error == EWOULDBLOCK:
+          guard budget.calls < 512 else { throw PipeFixtureError.ioBudgetExceeded }
+          return  // retain actual readiness interest, never busy-poll
+        case .failed(EINTR): break
+        case .failed(let error): throw PipeFixtureError.syscall(error)
+        }
+      }
+      if budget.calls == 512 { throw PipeFixtureError.ioBudgetExceeded }
+      // The active level-triggered source supplies the next bounded turn if still readable.
+    } catch { cancel(.failure(error)) }
+  }
+  private func cancel(_ result: Result<Data, Error>) {
+    guard state == .active else { return }
+    pending = result
+    state = .cancelling
+    ackDeadline = schedule(.cancellation, queue) { [weak self] in self?.timeout() }
+    source?.cancel()
+  }
+  private func stopTimers() {
+    deadline?.cancel()
+    deadline = nil
+    ackDeadline?.cancel()
+    ackDeadline = nil
+  }
+  private func timeout() {
+    guard state == .active || state == .cancelling else { return }
+    if state == .active { cancel(.failure(PipeFixtureError.peerOperationTimedOut)) }
+    state = .quarantined
+    guard let retention else { preconditionFailure("drain quarantine unavailable") }
+    retention.retain(self)
+    stopTimers()
+    terminal = .failure(PipeFixtureError.peerOperationTimedOut)
+    cleanupResult = .failure(PipeFixtureError.peerOperationTimedOut)
+    pending = nil
+    deliver()
+  }
+  private func acknowledged() {
+    if state == .quarantined {
+      source = nil
+      return
+    }
+    guard state == .cancelling else { return }
+    source = nil
+    state = .settled
+    stopTimers()
+    finishClose()
+  }
+  private func finishClose() {
+    precondition(state == .settled)
+    switch cell.closeOnce() {
+    case .confirmed, .alreadyConsumed:
+      cleanupResult = .success(())
+      terminal = pending ?? .failure(PipeFixtureError.cancelled)
+    case .uncertain:
+      cleanupResult = .failure(PipeFixtureError.uncertainFixtureCleanup)
+      terminal = .failure(PipeFixtureError.uncertainFixtureCleanup)
+    }
+    pending = nil
+    deliver()
+  }
+  private func deliver() {
+    let completed = waiter
+    waiter = nil
+    let cleaned = cleanupWaiter
+    cleanupWaiter = nil
+    if let terminal { completed?(terminal) }
+    if let cleanupResult { cleaned?(cleanupResult) }
+  }
+}
+private final class FixtureDrainRetention {
+  static let process = FixtureDrainRetention()
+  private let lock = NSLock()
+  private var owners: [ObjectIdentifier: FixturePeerDrain] = [:]
+  func retain(_ owner: FixturePeerDrain) {
+    lock.lock()
+    defer { lock.unlock() }
+    precondition(owners.count < 64, "drain quarantine capacity exhausted")
+    owners[ObjectIdentifier(owner)] = owner
+  }
+  var count: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return owners.count
+  }
+}
+
+final class PipeDrainLifecycleTests: XCTestCase {
+  func testDrainRejectsSurplusByteAfterExpectedPayload() async throws {
+    let h = try FixtureDrainHarness(reads: [
+      (.count(3), Data([1, 2, 3])), (.count(1), Data([4])), (.count(0), Data()),
+    ])
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.results.count, 0)
+    XCTAssertEqual(h.closes.count("close"), 0)
+    h.sources.acknowledge()
+    await h.flush()
+    XCTAssertTrue(h.values.isEmpty)
+    XCTAssertEqual(h.results.errors, [.malformed])
+    XCTAssertEqual(h.reads.count("limit.1"), 1)
+    XCTAssertEqual(h.closes.count("close"), 1)
+  }
+  func testDrainWaitsThroughEAGAINForEOFBeforeAcknowledgment() async throws {
+    let h = try FixtureDrainHarness(reads: [
+      (.count(3), Data([1, 2, 3])), (.failed(EAGAIN), Data()), (.count(0), Data()),
+    ])
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.sources.log.count("cancel.responseRead"), 0)
+    XCTAssertEqual(h.results.count, 0)
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.sources.log.count("cancel.responseRead"), 1)
+    XCTAssertEqual(h.results.count, 0)
+    XCTAssertEqual(h.closes.count("close"), 0)
+    h.sources.acknowledge()
+    await h.flush()
+    XCTAssertEqual(h.values, [Data([1, 2, 3])])
+    XCTAssertEqual(h.reads.count("limit.1"), 2)
+    XCTAssertEqual(h.closes.count("close"), 1)
+  }
+  func testDrainRejectsEOFBeforeExpectedPayload() async throws {
+    let h = try FixtureDrainHarness(reads: [(.count(1), Data([1])), (.count(0), Data())])
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.results.count, 0)
+    XCTAssertEqual(h.closes.count("close"), 0)
+    h.sources.acknowledge()
+    await h.flush()
+    XCTAssertTrue(h.values.isEmpty)
+    XCTAssertEqual(h.results.errors, [.malformed])
+    XCTAssertEqual(h.closes.count("close"), 1)
+  }
+
+  func testExactDrainDefersDataAndCloseUntilAcknowledgment() async throws {
+    let h = try FixtureDrainHarness(reads: [
+      (.count(1), Data([1])), (.failed(EAGAIN), Data()), (.count(2), Data([2, 3])),
+      (.count(0), Data()),
+    ])
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.results.count, 0)
+    h.sources.fire()
+    await h.flush()
+    XCTAssertEqual(h.sources.log.count("cancel.responseRead"), 1)
+    XCTAssertEqual(h.results.count, 0)
+    XCTAssertEqual(h.closes.count("close"), 0)
+    h.sources.acknowledge()
+    await h.flush()
+    XCTAssertEqual(h.values, [Data([1, 2, 3])])
+    XCTAssertEqual(h.reads.count("limit.1"), 1)
+    XCTAssertEqual(h.closes.count("close"), 1)
+    h.owner!.observe(h.record)
+    await h.flush()
+    XCTAssertEqual(h.values.count, 2)
+    XCTAssertFalse(h.timers.fire(.eof))
+    XCTAssertFalse(h.timers.fire(.cancellation))
+  }
+  func testDrainCloseUncertaintyIsStickyForLaterCleanup() async throws {
+    let h = try FixtureDrainHarness(
+      reads: [(.count(3), Data([1, 2, 3])), (.count(0), Data())], closeError: EBADF)
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    h.sources.acknowledge()
+    await h.flush()
+    h.owner!.observeCleanup(h.cleanup.record)
+    await h.flush()
+    XCTAssertEqual(h.results.errors, [.uncertainFixtureCleanup])
+    XCTAssertEqual(h.cleanup.errors, [.uncertainFixtureCleanup])
+    XCTAssertTrue(h.values.isEmpty)
+    XCTAssertEqual(h.closes.count("close"), 1)
+  }
+  func testDrainActiveTimeoutQuarantinesAndLateAckNeverCloses() async throws {
+    let h = try FixtureDrainHarness(reads: [])
+    h.owner!.observe(h.record)
+    await h.flush()
+    XCTAssertTrue(h.timers.fire(.eof))
+    await h.flush()
+    XCTAssertEqual(h.sources.log.count("cancel.responseRead"), 1)
+    XCTAssertEqual(h.retention.count, 1)
+    weak var retained = h.owner
+    h.owner = nil
+    XCTAssertNotNil(retained)
+    h.sources.acknowledge()
+    await h.flush()
+    retained?.observeCleanup(h.cleanup.record)
+    await h.flush()
+    XCTAssertEqual(h.results.errors, [.peerOperationTimedOut])
+    XCTAssertEqual(h.cleanup.errors, [.peerOperationTimedOut])
+    XCTAssertEqual(h.closes.count("close"), 0)
+    retained = nil
+  }
+  func testDrainCancellationTimeoutDoesNotExposePendingBytes() async throws {
+    let h = try FixtureDrainHarness(reads: [(.count(3), Data([1, 2, 3])), (.count(0), Data())])
+    h.owner!.observe(h.record)
+    await h.flush()
+    h.sources.fire()
+    await h.flush()
+    XCTAssertTrue(h.timers.fire(.cancellation))
+    await h.flush()
+    XCTAssertTrue(h.values.isEmpty)
+    XCTAssertEqual(h.results.errors, [.peerOperationTimedOut])
+    h.sources.acknowledge()
+    await h.flush()
+    XCTAssertEqual(h.closes.count("close"), 0)
+  }
+}
+private final class FixtureDrainHarness: @unchecked Sendable {
+  let queue = DispatchQueue(label: "fixture.drain.injected")
+  let sources = FixtureSources()
+  let timers = FixtureManualTimers()
+  let retention = FixtureDrainRetention()
+  let closes = ChannelLog()
+  let reads = ChannelLog()
+  let results = FixtureResults()
+  let cleanup = FixtureResults()
+  private let lock = NSLock()
+  private var storage: [Data] = []
+  var owner: FixturePeerDrain?
+  var values: [Data] {
+    lock.lock()
+    defer { lock.unlock() }
+    return storage
+  }
+  init(reads: [(ChannelIOResult, Data)], closeError: Int32 = 0) throws {
+    let closes = closes
+    let cell = PipeDescriptorCell(41) { _ in
+      closes.record("close")
+      return closeError
+    }
+    let timers = timers
+    var pending = reads
+    let calls = self.reads
+    owner = try FixturePeerDrain(
+      cell: cell, expected: 3, queue: queue, factory: sources,
+      read: { _, requested in
+        calls.record("limit.\(requested)")
+        return pending.isEmpty ? (.failed(EAGAIN), Data()) : pending.removeFirst()
+      },
+      schedule: { kind, queue, action in timers.schedule(kind, queue: queue, action: action) },
+      retention: retention)
+  }
+  func record(_ result: Result<Data, Error>) {
+    if case .success(let value) = result {
+      lock.lock()
+      storage.append(value)
+      lock.unlock()
+    }
+    results.record(result.map { _ in () })
+  }
+  func flush() async {
+    await withCheckedContinuation { continuation in queue.async { continuation.resume() } }
+  }
+}
+
+/// Wrappers call the real Darwin/Dispatch adapters; records never manufacture OS callbacks.
+private final class RecordingPipeIO: ChannelDescriptorOperations, @unchecked Sendable {
+  let log: ChannelLog
+  let names: [Int32: String]
+  init(log: ChannelLog, names: [Int32: String]) {
+    self.log = log
+    self.names = names
+  }
+  func read(fd: Int32, into buffer: UnsafeMutableRawBufferPointer) -> ChannelIOResult {
+    let value = DarwinChannelDescriptorOperations().read(fd: fd, into: buffer)
+    log.record("io.read")
+    record(value, operation: "read")
+    return value
+  }
+  func write(fd: Int32, from buffer: UnsafeRawBufferPointer) -> ChannelIOResult {
+    let value = DarwinChannelDescriptorOperations().write(fd: fd, from: buffer)
+    log.record("io.write")
+    record(value, operation: "write")
+    return value
+  }
+  private func record(_ value: ChannelIOResult, operation: String) {
+    switch value {
+    case .failed(let error) where error == EAGAIN || error == EWOULDBLOCK:
+      log.record(operation + ".eagain")
+    case .failed(let error): log.record(operation + ".errno.\(error)")
+    case .count(let count): log.record(operation + ".count.\(count)")
+    }
+  }
+  func close(fd: Int32) -> Int32 {
+    let value = DarwinChannelDescriptorOperations().close(fd: fd)
+    log.record("close.\(names[fd] ?? "unknown").\(value == 0 ? "confirmed" : "uncertain")")
+    return value
+  }
+}
+private final class RecordingPipeSources: ChannelSourceFactory, @unchecked Sendable {
+  let log: ChannelLog
+  init(log: ChannelLog) { self.log = log }
+  func make(
+    kind: ChannelSourceKind, fd: Int32, queue: DispatchQueue,
+    event: @escaping @Sendable () -> Void, cancelled: @escaping @Sendable () -> Void
+  ) -> any ChannelReadinessSource {
+    let log = log
+    let source = DispatchChannelSourceFactory().make(
+      kind: kind, fd: fd, queue: queue,
+      event: {
+        log.record("event.\(kind)")
+        event()
+      },
+      cancelled: {
+        log.record("ack.\(kind)")
+        cancelled()
+      })
+    return RecordingPipeSource(source: source, kind: kind, log: log)
+  }
+}
+private final class RecordingPipeSource: ChannelReadinessSource, @unchecked Sendable {
+  let source: any ChannelReadinessSource
+  let kind: ChannelSourceKind
+  let log: ChannelLog
+  init(source: any ChannelReadinessSource, kind: ChannelSourceKind, log: ChannelLog) {
+    self.source = source
+    self.kind = kind
+    self.log = log
+  }
+  func activate() {
+    log.record("activate.\(kind)")
+    source.activate()
+  }
+  func suspend() { source.suspend() }
+  func resume() { source.resume() }
+  func cancel() {
+    log.record("cancel.\(kind)")
+    source.cancel()
+  }
+}
+private struct RecordedPipeChannel {
+  let channel: SearchChildChannels
+  let log: ChannelLog
+  let oldRequest: Int32
+}
+private final class FixtureTask<Value: Sendable> {
+  private let task: Task<Value, Error>
+  private let finished: XCTestExpectation
+  init(_ operation: @escaping @Sendable () async throws -> Value) {
+    let done = XCTestExpectation(description: "owned pipe operation completed")
+    finished = done
+    task = Task {
+      defer { done.fulfill() }
+      return try await operation()
+    }
+  }
+  func value() async throws -> Value {
+    guard await XCTWaiter.fulfillment(of: [finished], timeout: 30) == .completed else {
+      task.cancel()
+      throw PipeFixtureError.peerOperationTimedOut
+    }
+    return try await task.value
+  }
+  func cancel() { task.cancel() }
+  deinit { task.cancel() }
+}
+private struct FixturePeerCleanupFailures: Error { let errors: [Error] }
+private struct FixtureSentinel {
+  let read: PipeDescriptorCell
+  let write: PipeDescriptorCell
+}
+
+extension PipeFixture {
+  fileprivate func fillRequestBeforeAdoption() throws -> FixtureFillReceipt {
+    guard let requestWrite else { throw PipeFixtureError.malformed }
+    let fd = try requestWrite.descriptor()
+    return try FixtureFill.run { data in
+      data.withUnsafeBytes { DarwinChannelDescriptorOperations().write(fd: fd, from: $0) }
+    }
+  }
+  fileprivate func makeRecordedChannels() -> RecordedPipeChannel {
+    let request = transfer(&requestWrite)
+    let response = transfer(&responseRead)
+    let lifetime = transfer(&lifetimeWrite)
+    let log = ChannelLog()
+    let operations = RecordingPipeIO(
+      log: log, names: [request: "request", response: "response", lifetime: "lifetime"])
+    let channel = SearchChildChannels(
+      requestWriteFD: request, responseReadFD: response,
+      lifetimeWriteFD: lifetime, operations: operations, sources: RecordingPipeSources(log: log),
+      observe: { observation in
+        switch observation {
+        case .readAdmitted: log.record("admit.read")
+        case .writeAdmitted(let position): log.record("admit.write.\(position)")
+        case .closing: log.record("closing")
+        case .closed: log.record("closed")
+        case .turn: break
+        }
+      })
+    return RecordedPipeChannel(channel: channel, log: log, oldRequest: request)
+  }
+  fileprivate func makeRequestDrain(expected: Int) throws -> FixturePeerDrain {
+    guard requestDrain == nil, let requestRead else { throw PipeFixtureError.malformed }
+    let drain = try FixturePeerDrain(cell: requestRead, expected: expected)
+    requestDrain = drain
+    self.requestRead = nil
+    return drain
+  }
+  fileprivate func closeResponsePeer() throws {
+    guard let responseWrite, responseWrite.closeOnce() == .confirmed else {
+      throw PipeFixtureError.uncertainFixtureCleanup
+    }
+  }
+  fileprivate func closeRequestPeer() throws {
+    guard let requestRead, requestRead.closeOnce() == .confirmed else {
+      throw PipeFixtureError.uncertainFixtureCleanup
+    }
+  }
+  fileprivate func makeReuseSentinel() throws -> FixtureSentinel {
+    let (read, write) = try Self.normalizedPipe()
+    extraCells += [read, write]
+    try Self.enableNonblocking(try read.descriptor())
+    try Self.enableNonblocking(try write.descriptor())
+    try Self.enableNoSigPipe(try write.descriptor())
+    return FixtureSentinel(read: read, write: write)
+  }
+  fileprivate func reuseClosedRequestNumber(
+    _ channel: RecordedPipeChannel, sentinel: FixtureSentinel
+  ) throws -> PipeDescriptorCell {
+    guard channel.oldRequest > 3, channel.log.count("closed") == 1,
+      channel.log.count("ack.requestWrite") == 1,
+      channel.log.count("close.request.confirmed") == 1,
+      channel.log.count("test.close.returned") >= 1
+    else { throw PipeFixtureError.malformed }
+    let value = Darwin.fcntl(try sentinel.read.descriptor(), F_DUPFD_CLOEXEC, channel.oldRequest)
+    guard value >= 0 else { throw PipeFixtureError.syscall(errno) }
+    let alias = PipeDescriptorCell(value)
+    extraCells.append(alias)
+    // Never overwrite/correct a collision. The unexpected duplicate is fixture-owned
+    // and its single close is still accounted by final cleanup.
+    guard value == channel.oldRequest else { throw PipeFixtureError.malformed }
+    try Self.verifyCloexec(value)
+    return alias
+  }
+  fileprivate func verifySentinel(
+    _ sentinel: FixtureSentinel, alias: PipeDescriptorCell, byte: UInt8
+  ) throws {
+    let payload = Data([byte, byte ^ 0xFF, byte])
+    let writer = try sentinel.write.descriptor()
+    let written = payload.withUnsafeBytes {
+      DarwinChannelDescriptorOperations().write(fd: writer, from: $0)
+    }
+    guard written == .count(payload.count) else { throw PipeFixtureError.malformed }
+    var result = Data(count: payload.count)
+    let fd = try alias.descriptor()
+    let read = result.withUnsafeMutableBytes {
+      DarwinChannelDescriptorOperations().read(fd: fd, into: $0)
+    }
+    guard read == .count(payload.count), result == payload else { throw PipeFixtureError.malformed }
   }
 }
