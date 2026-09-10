@@ -893,6 +893,49 @@ final class SearchWireRequestTests: XCTestCase {
     assertPoisoned(reader)
   }
 
+  func testReaderInputCallbackUncaughtReentryPreservesOuterPoison() throws {
+    let reader = try readyReader()
+    let sink = RecordingRequestSink()
+    var nestedCallReached = false
+    sink.onInput = { _ in
+      nestedCallReached = true
+      try reader.finish()
+    }
+    let bytes = twoChunkRequestWire()
+
+    XCTAssertThrowsError(try consume(bytes, with: reader, sink: sink)) {
+      XCTAssertEqual($0 as? SearchWireError, .poisoned)
+    }
+    XCTAssertTrue(nestedCallReached)
+    XCTAssertEqual(sink.inputUTF8, Data([0x41]))
+    XCTAssertTrue(sink.executions.isEmpty)
+    assertPoisoned(reader)
+  }
+
+  func testReaderInputCallbackErrorCannotOverrideCaughtReentry() throws {
+    enum Refusal: Error { case stop }
+    let reader = try readyReader()
+    let sink = RecordingRequestSink()
+    var nestedError: SearchWireError?
+    sink.onInput = { _ in
+      do {
+        try reader.finish()
+      } catch {
+        nestedError = error as? SearchWireError
+      }
+      throw Refusal.stop
+    }
+    let bytes = twoChunkRequestWire()
+
+    XCTAssertThrowsError(try consume(bytes, with: reader, sink: sink)) {
+      XCTAssertEqual($0 as? SearchWireError, .poisoned)
+    }
+    XCTAssertEqual(nestedError, .reentrantUse)
+    XCTAssertEqual(sink.inputUTF8, Data([0x41]))
+    XCTAssertTrue(sink.executions.isEmpty)
+    assertPoisoned(reader)
+  }
+
   func testReaderRejectsEveryPartialHeaderAfterExecuteBeforeDrivingPendingWork() throws {
     let trailing = literalFrame(
       kind: 16,
@@ -1032,6 +1075,15 @@ final class SearchWireRequestTests: XCTestCase {
       requestID: frameRequestID,
       payload: basicRequestMetadata(inputUTF16: 0, ordinal: ordinal))
     bytes.append(literalFrame(kind: 18, requestID: frameRequestID, payload: Data()))
+    return bytes
+  }
+
+  private func twoChunkRequestWire() -> Data {
+    var bytes = literalFrame(
+      kind: 16, requestID: requestID, payload: basicRequestMetadata(inputUTF16: 2))
+    bytes.append(literalFrame(kind: 17, requestID: requestID, payload: Data([0x41, 0x00])))
+    bytes.append(literalFrame(kind: 17, requestID: requestID, payload: Data([0x42, 0x00])))
+    bytes.append(literalFrame(kind: 18, requestID: requestID, payload: Data()))
     return bytes
   }
 

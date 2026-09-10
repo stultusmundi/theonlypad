@@ -57,10 +57,10 @@ public final class SearchWireRequestReader {
       }
     } catch {
       let result: SearchWireError
-      if let preservedError {
-        result = preservedError
-      } else if state == .failed {
+      if state == .failed {
         result = .poisoned
+      } else if let preservedError {
+        result = preservedError
       } else {
         result = error as? SearchWireError ?? .sinkRejected
       }
