@@ -1,6 +1,6 @@
 # New-window transfer handoff — 2026-09-10
 
-Source commit: `1c96b99e424caae18a9f9d1999fe7bf02c515e7f`. Implementation and hidden/native verification are complete for this internal handoff task; independent specification/code review is pending. The product chooser is still outstanding. This is not complete F-02 or desktop acceptance.
+Source commit: `1c96b99e424caae18a9f9d1999fe7bf02c515e7f`. Implementation and hidden/native verification are complete for this internal handoff task; independent specification/code review approved the scope with no findings. The product chooser is still outstanding. This is not complete F-02 or desktop acceptance.
 
 ## Implemented
 
@@ -35,4 +35,4 @@ The initial all-view restoration experiment was removed. Incomplete origin-only 
 
 ## Outstanding and blocked
 
-Independent review must finish before the next task exposes New Window in the destination chooser and connects final generation-fenced presentation. Groups, streaming transfers and remaining F-02 clauses remain outstanding. No visible windows, keyboard input, XCUITest, VoiceOver, performance benchmark or packaged runtime acceptance was performed here. The console remains locked. Current local package is still source `324a3de`, not this commit; no signing/notarization or publication claim is made.
+Independent review approved the internal handoff. The next task exposes New Window in the destination chooser and connects final generation-fenced presentation. Groups, streaming transfers and remaining F-02 clauses remain outstanding. No visible windows, keyboard input, XCUITest, VoiceOver, performance benchmark or packaged runtime acceptance was performed here. The console remains locked. Current local package is still source `324a3de`, not this commit; no signing/notarization or publication claim is made.

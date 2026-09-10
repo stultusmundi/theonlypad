@@ -10,7 +10,7 @@
 
 **Spec:** [native-document-transfer.md](../specs/native-document-transfer.md), extending its explicitly deferred new-window stage only. [document-transfer.md](../specs/document-transfer.md) remains the full F-02 scope.
 
-**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented and independently approved after review fixes, with 23 preparation and 10 native-open tests passing; handoff and chooser remain outstanding. Existing-window evidence does not certify this stage.
+**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented and independently approved after review fixes, with 23 preparation and 10 native-open tests passing; Task 2 handoff is also implemented and independently approved (44 new-window tests plus matching compatibility); Task 3 chooser/presentation is in progress. Existing-window evidence does not certify this stage.
 
 ## Constraints and current source mapping
 
@@ -94,14 +94,14 @@ Under the owner preparation gate, validate emptiness/identity, unregister the ex
 
 **Files:** owner/new-window types above; same new native tests/runner. Modify existing process/native ports only if a concrete failing contract requires it and ownership is coordinated.
 
-- [ ] Write real hidden-controller red: move dirty Unicode/CRLF source to a new window; assert same UUID/model/storage/undo/panes/authority and no extra scratch. Verify source neighbor selection, pinned target ordering, original bytes/encoding/BOM and one final paired recovery identity.
-- [ ] Gate actual paired publisher before capture and after old-placement capture. Ensure preparation drains and both pause tokens release exactly once; final store readback contains the new target only after settlement, never a leaked provisional window.
-- [ ] Exercise failure before registration, after registration before controller return, after endpoint installation, before inner start, during source/target projection, and in rollback. Assert either exact unused cleanup or retained same inner transfer/endpoint, never duplicate creation/read/adoption on retry.
-- [ ] Cancel a waiting task without cancelling operation ownership. Reenter a second operation during final notifications; old cleanup must not erase its state.
-- [ ] Close the provisional endpoint before staging, after staging and during terminal refresh. Reuse the real file-backed monitor tests: source-close-before-reservation, target-afterstage, final endpoint reattachment, original parent continuity and external-change detection after retry.
-- [ ] After inner settlement but before wrapper cleanup, edit the surviving moved model. Cleanup/presentation must preserve the latest text and undo; no old receipt may overwrite it.
-- [ ] Force cleanup refusal by populating/replacing the provisional endpoint via an explicit test boundary; it must remain retained. Test already-unregistered cleanup retry and reentrant close callback. Never weaken registry admission merely to create this fixture.
-- [ ] Implement, obtain independent review, and rerun existing owner/process/monitor compatibility suites from a frozen source snapshot.
+- [x] Write real hidden-controller red: move dirty Unicode/CRLF source to a new window; assert same UUID/model/storage/undo/panes/authority and no extra scratch. Verify source neighbor selection, pinned target ordering, original bytes/encoding/BOM and one final paired recovery identity.
+- [x] Gate actual paired publisher before capture and after old-placement capture. Ensure preparation drains and both pause tokens release exactly once; final store readback contains the new target only after settlement, never a leaked provisional window.
+- [x] Exercise failure before registration, after registration before controller return, after endpoint installation, before inner start, during source/target projection, and in rollback. Assert either exact unused cleanup or retained same inner transfer/endpoint, never duplicate creation/read/adoption on retry.
+- [x] Cancel a waiting task without cancelling operation ownership. Reenter a second operation during final notifications; old cleanup must not erase its state.
+- [x] Close the provisional endpoint before staging, after staging and during terminal refresh. Reuse the real file-backed monitor tests: source-close-before-reservation, target-afterstage, final endpoint reattachment, original parent continuity and external-change detection after retry.
+- [x] After inner settlement but before wrapper cleanup, edit the surviving moved model. Cleanup/presentation must preserve the latest text and undo; no old receipt may overwrite it.
+- [x] Force cleanup refusal by populating/replacing the provisional endpoint via an explicit test boundary; it must remain retained. Test already-unregistered cleanup retry and reentrant close callback. Never weaken registry admission merely to create this fixture.
+- [x] Implement, obtain independent review, and rerun existing owner/process/monitor compatibility suites from a frozen source snapshot.
 
 ## Task 3 — Product chooser and presentation
 
