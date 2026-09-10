@@ -4,14 +4,14 @@ TheOnlyPad is incomplete. Continue the full BUILD_PROMPT autonomously. Local wor
 
 ## Current state and exact next action
 
-Branch `build/native-editor`. Existing-window transfer integration is implemented and independently reviewed, pending its local commit and package refresh. The same native model/storage/undo/recovery authority moves through the process registry; captured destination identities and presentation generations reject stale completions. Endpoint-loss retry preserves file bytes, monitor continuity and newer edits. New-window destinations, groups, streaming and the remaining full brief are still outstanding.
+Branch `build/native-editor`. Existing-window transfer integration is implemented and independently reviewed, committed locally as `324a3de` with its package refreshed. The same native model/storage/undo/recovery authority moves through the process registry; captured destination identities and presentation generations reject stale completions. Endpoint-loss retry preserves file bytes, monitor continuity and newer edits. New-window destinations, groups, streaming and the remaining full brief are still outstanding.
 
 Final frozen source: `.local/native-transfer-reviewed-integrated/source-provenance.json`. All 364 source/test/runner files match the working tree. App/core build: 10.86 seconds. Fresh tests: 404 core/0 (15.923s), 71 managed native/0 (5.881s), 11 actual transfer/0 (3.343s), 9 controller projection/0 (1.168s), 3 actual command/presentation/0 (0.404s), native bindings compile/runtime zero (44 checks). Logs: `.local/transfer-reviewed-{core,managed,owner,projection,chooser,bindings}.log`. Separate final process/registry snapshot `.local/native-transfer-final-integrated` passes 15 process/0 and 62 registry/0; it precedes only the final AppDelegate focus guard.
 
 Exact next actions:
 
 1. Legacy monitor compatibility passed (`.local/transfer-reviewed-monitor-lifecycle.log`, exit zero). Source formatting, public-pattern check and git diff check pass. Do not repeat broad tests without a change/failure.
-2. Record final checks, commit the scoped reviewed integration locally, package from that committed source in an isolated private snapshot, verify archive/SBOM/hash/signature before promotion. Do not launch the app while console access remains blocked. Current dist still points to the older source listed below.
+2. Integration and packaging are complete for this slice: commit `324a3de`, verified local package and archive, no desktop launch. See `docs/verification/native-transfer-package.md`. Continue the next plan; do not repeat completed checks.
 3. Execute the root-reviewed `docs/superpowers/plans/2026-09-10-transfer-new-window-target.md`. It requires an explicit retained provisional-window operation, aggregate live+unresolved capacity, exact outer publisher pause, reuse of the existing inner transfer, cleanup admission that cannot deadlock, and nonpresenting configuration separate from final presentation. No document copy/factory/adoption is permitted. Add actual red/green tests and independent review.
 4. Continue all remaining applicable matrix requirements; this is an internal milestone, not completion.
 
@@ -51,7 +51,7 @@ Coordinate shared scratch builds. Raw logs and synthetic fixtures stay ignored i
 
 An approved read-only console probe on 2026-09-10 confirmed the screen remains locked. The user was asked to unlock and approve UI Automation if prompted; no response yet. Do not run visible apps, benchmarks, posted input or XCUITest until access is confirmed. Hidden AppKit tests and build-for-testing are allowed. Never change credentials/security settings. Earlier UI automation failures do not establish their cause from today's lock state.
 
-Current artifacts are source `81db251`: `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json`. Executable SHA-256 `03606c59b55d33b67f46d465ae1c4727492277480c3b67da45afa7a5a0675bb9`. Isolated committed-source release build: 29.41 seconds. Six-file bundle/archive/SBOM checks and strict deep ad-hoc signature verification passed before and after promotion. See `docs/verification/managed-package.md`. No Developer ID, notarization, publication or current packaged desktop acceptance. Earlier GUI and Intel cross-build evidence belong to older binaries.
+Current artifacts are source `324a3de`: `dist/TheOnlyPad.app`, `dist/TheOnlyPad-0.1.0-dev-arm64.zip`, `dist/TheOnlyPad.sbom.json`. Executable SHA-256 `0d58d1ea0e6cff4ac73bbc1461dc8a57f6d0784301def59f472f195fb2df0ce6`. Isolated committed-source release build: 30.82 seconds. Six-file bundle/archive/SBOM checks and strict deep ad-hoc signature verification passed before and after promotion. See `docs/verification/native-transfer-package.md`. No Developer ID, notarization, publication or current packaged desktop acceptance. Earlier GUI and Intel cross-build evidence belong to older binaries.
 
 ## Remaining acceptance
 
