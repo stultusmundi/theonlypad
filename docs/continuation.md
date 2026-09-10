@@ -15,7 +15,7 @@ Exact next actions:
 3. Execute the root-reviewed `docs/superpowers/plans/2026-09-10-transfer-new-window-target.md`. It requires an explicit retained provisional-window operation, aggregate live+unresolved capacity, exact outer publisher pause, reuse of the existing inner transfer, cleanup admission that cannot deadlock, and nonpresenting configuration separate from final presentation. No document copy/factory/adoption is permitted. Add actual red/green tests and independent review.
 4. Continue all remaining applicable matrix requirements; this is an internal milestone, not completion.
 
-Agents: document_core completed controller reconciliation and AppDelegate presentation fixes; engine_spike completed binding corrections and reviewed process/owner; requirements completed owner tests, independent presenter review and the new-window plan. All code ownership is released. Use followup_task for new bounded work.
+Active agent: `/root/new_window_preparation` owns new-window Task1 admission/preparation, NativeApplicationDocuments, NativeNewWindowTransfer, narrow AppDelegate configuration and registry registration hook, plus dedicated tests/runner. Base dc61162. Root owns public records and package work; do not edit those agent-owned sources. Its exact brief/report and ledger are in ignored `.superpowers/sdd/2026-09-10-transfer-new-window-target/`. Prior three agents are completed and available for independent review. Task1 returns an internal prepared/cancelled/retained result; full move handoff and chooser are later tasks. Captured workspace revision fences source-selection ABA; a trusted registration hook records effects before public callbacks.
 
 ## Important invariants
 
