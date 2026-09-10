@@ -29,7 +29,7 @@ scripts/package.sh --ad-hoc-sign
 scripts/test-desktop-ui.sh
 ```
 
-An earlier packaged build passed actual XCUITests for native open/edit/save/Command-Q/relaunch/reopen and scratch-buffer quit/relaunch recovery, using isolated synthetic state. Those results do not apply to the current shared-pane package, whose desktop execution awaits macOS automation authentication. Broader GUI, physical IME and VoiceOver acceptance remain outstanding. Launch the local bundle with `open dist/TheOnlyPad.app`. Never use real documents in harnesses. The native integration harnesses intentionally SIGKILL their own child to test recovery; the separate desktop UI script uses Xcode's actual XCTest runner and keeps raw diagnostics under ignored `.local/desktop-ui`.
+Current package source `9231fc3` passed actual XCUITests for open/edit/save/Command-Q/relaunch/reopen, shortcut customization/persistence/reset, and an Option-held menu action using isolated synthetic state. The separate direct AXPress check remains unverified: sandboxed XCTest is an unsuitable host and a separately identified native test client needs user-granted Accessibility access. Broader GUI, physical IME and VoiceOver acceptance remain outstanding. Launch the local bundle with `open dist/TheOnlyPad.app`. Never use real documents in harnesses. The native integration harnesses intentionally SIGKILL their own child to test recovery; the separate desktop UI script uses Xcode's actual XCTest runner and keeps raw diagnostics under ignored `.local/desktop-ui`.
 
 SwiftPM and Foundation atomic file writes require an approved unsandboxed toolchain invocation in the current restricted environment. Keep caches in ignored project directories. Tests must not be skipped to mask a permission failure.
 
@@ -54,7 +54,7 @@ scripts/test-disk-status-view.sh .build/native-monitor-integration/arm64-apple-m
 scripts/test-disk-conflict-panel.sh
 ```
 
-While GUI access is pending, do not launch visible harnesses or repeat desktop authentication attempts. Continue independent hidden/native and core verification and record the distinction.
+Ordinary XCUITest automation is available. Root exclusively owns serial GUI execution and exact-owned-app cleanup; agents must not post input or launch visible harnesses concurrently. The user authorizes a separate Accessibility permission prompt, but the actual grant remains user-owned. Never change privacy settings or infer grant from silence.
 
 Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store-integration` passed361 tests. `scripts/test-shortcut-recorder.sh .build/shortcut-store-integration/arm64-apple-macosx/debug` passed47 hidden checks using the declared Swift5 mode. Unposted native event/menu conversion and injected recorder lifecycle are separate evidence; this runner never shows windows or posts keyboard events and cannot establish physical keyboard acceptance.
 

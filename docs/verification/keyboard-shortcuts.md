@@ -76,3 +76,9 @@ A clean detached checkout of `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0` records 
 Actual desktop run `.local/desktop-ui/shortcut-production-5aq_v27w/` completed with three passes: original customization/persistence/reset (61.702 seconds), open/edit/save/quit/reopen (60.103 seconds), and Option-held File → New Tab (27.860 seconds). The exact-app AXPress control explicitly skipped because runner Accessibility trust remained unavailable. The original regression body is unchanged; the additional controls contain no private tracing or automatic permission prompt.
 
 The verified app, archive and SBOM are promoted to `dist/` and pass integrity/signature checks there. This resolves the observed reset regression for the tested package; it does not establish arbitrary keyboard layouts, AX dispatch, full accessibility or all shortcut/macro workflows. Ad-hoc signing is local only: no Developer ID, notarization, remote publication or release claim.
+
+## Direct AX host diagnosis
+
+The generated XCTest runner entitlement enables App Sandbox. Apple lists use of accessibility APIs in assistive applications among [restricted App Sandbox activities](https://developer.apple.com/documentation/security/protecting-user-data-with-app-sandbox). This makes that runner an unsuitable supported host for external AXPress, independently of its observed false trust result. The [trust prompt API](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions) is asynchronous; requesting it does not prove that a prompt appeared or permission was granted.
+
+No entitlement, sandbox or privacy setting was changed. A separate private native test app is being designed for the same exact-owned-app AX control, with an explicit user-granted permission boundary. That check remains unverified; ordinary XCUITest results above remain valid. Raw diagnosis is retained at `.local/desktop-ax-permission-diagnosis.md`.
