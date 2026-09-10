@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-supervised-search.md`; prerequisite `docs/superpowers/plans/2026-09-10-search-single-enumeration.md`; the reviewed protocol constraints below.
 
-**Status:** Task1 framing implemented and independently approved at aa3aa82 (19 focused tests pass). Tasks2–4 remain planned; see `docs/verification/search-wire.md`. Semantic prerequisite28e2a9f is independently approved.
+**Status:** Task1 framing implemented and independently approved at aa3aa82 (19 focused tests pass). Task2 UTF-16 is independently approved at10c4dd4 (20 focused tests,19 framing regressions pass); Tasks3A/3B/4 remain planned; see `docs/verification/search-wire.md`. Semantic prerequisite28e2a9f is independently approved.
 
 ## Global Constraints
 
@@ -278,7 +278,7 @@ XCTAssertLessThanOrEqual(decoder.bufferedByteCount, 32)
 
 Files: SearchWireUTF16.swift, SearchWireUTF16Tests.swift.
 
-- [ ] Add exact-length fixtures with split surrogate pair, embedded NUL, U+FEFF, BMP three-byte UTF-8 and supplementary characters. Test literal expected UTF-8 bytes, not a second run of the same decoder.
+- [x] Add exact-length fixtures with split surrogate pair, embedded NUL, U+FEFF, BMP three-byte UTF-8 and supplementary characters. Test literal expected UTF-8 bytes, not a second run of the same decoder.
 
 ```swift
 let codec = try SearchWireUTF16Decoder(expectedUTF16: 2)
@@ -298,10 +298,10 @@ XCTAssertThrowsError(try index.validate(NSRange(location: 1, length: 0), within:
 try index.validate(NSRange(location: 0, length: 2), within: nil)
 ```
 
-- [ ] Proposed command: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireUTF16Tests`; retain failing assertions then implement incremental scalar state/bitset and rerun.
-- [ ] Add odd-sized frame payload, short/long known-length input, missing low surrogate at EOF, low-first, split pair followed by wrong scalar, zero input/EOF boundary and negative/overflowed NSRange. Do not allocate a fake huge input merely to check integer rejection.
-- [ ] Observable large-index correctness: incrementally feed a fixed repeated mixture of ASCII, a three-byte BMP scalar and supplementary pairs, using several chunk boundaries through pairs. Validate100K predetermined legal ranges distributed across the input; reject predetermined offsets inside pairs, out-of-bounds/overflow endpoints and an invalid late-file scope. Assert exact answers, storageByteCount formula and immutable finished behavior. Do not add test-only loop/probe counters that mirror implementation. Review source explicitly for stored packed bitset, one advancing construction traversal and two constant-time indexed endpoint reads; latency/scaling benchmarking is separate and unclaimed by these correctness tests.
-- [ ] Encoder tests consume nextChunk until nil, assert each <=65,536/even and exact expected bytes; wrong expected length errors instead of a successful end marker. Test repeated nextChunk after successful end returns nil, while after failure throws poisoned. Review/commit scoped Unicode deliverable.
+- [x] Proposed command: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireUTF16Tests`; retain failing assertions then implement incremental scalar state/bitset and rerun.
+- [x] Add odd-sized frame payload, short/long known-length input, missing low surrogate at EOF, low-first, split pair followed by wrong scalar, zero input/EOF boundary and negative/overflowed NSRange. Do not allocate a fake huge input merely to check integer rejection.
+- [x] Observable large-index correctness: incrementally feed a fixed repeated mixture of ASCII, a three-byte BMP scalar and supplementary pairs, using several chunk boundaries through pairs. Validate100K predetermined legal ranges distributed across the input; reject predetermined offsets inside pairs, out-of-bounds/overflow endpoints and an invalid late-file scope. Assert exact answers, storageByteCount formula and immutable finished behavior. Do not add test-only loop/probe counters that mirror implementation. Review source explicitly for stored packed bitset, one advancing construction traversal and two constant-time indexed endpoint reads; latency/scaling benchmarking is separate and unclaimed by these correctness tests.
+- [x] Encoder tests consume nextChunk until nil, assert each <=65,536/even and exact expected bytes; wrong expected length errors instead of a successful end marker. Test repeated nextChunk after successful end returns nil, while after failure throws poisoned. Review/commit scoped Unicode deliverable.
 
 ## Task 3 — Sequential request/response readers and writers
 
