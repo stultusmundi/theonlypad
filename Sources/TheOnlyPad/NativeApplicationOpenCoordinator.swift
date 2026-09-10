@@ -22,12 +22,14 @@ struct NativeApplicationOpenDestination: Equatable {
   let reportError: (OpenRequestFailure) -> Void
 }
 enum NativeApplicationOpenError: Error, LocalizedError {
-  case tooLarge, unsafeFile
+  case tooLarge, unsafeFile, documentClosed
   var errorDescription: String? {
     switch self {
     case .tooLarge:
       return "This file exceeds the 100 MB editable limit. Open it in the read-only byte viewer."
     case .unsafeFile: return "Open requires a regular local file."
+    case .documentClosed:
+      return "The opened document was closed before its requested position could be restored."
     }
   }
 }
@@ -131,11 +133,26 @@ enum NativeApplicationOpenError: Error, LocalizedError {
       current = nil
       return .completed
     } catch {
-      let retained = current?.intakeID != nil || current?.documentID != nil
+      let positioningIsTerminal = current?.documentID != nil && Self.isTerminalPositionError(error)
+      let retained =
+        !positioningIsTerminal && (current?.intakeID != nil || current?.documentID != nil)
       if !retained { current = nil }
       pendingFailure = .init(id: envelope.id, error: error)
       return retained ? .retained(error) : .refused(error)
     }
+  }
+
+  /// These failures concern positioning only; an already imported model remains registry-owned.
+  /// A retained intake without an imported document ID must never be abandoned by error classification.
+  private static func isTerminalPositionError(_ error: Error) -> Bool {
+    if let error = error as? LaunchRequestError {
+      switch error {
+      case .lineOutOfRange, .invalidPosition: return true
+      default: return false
+      }
+    }
+    if case NativeApplicationOpenError.documentClosed = error { return true }
+    return false
   }
 
   nonisolated private static func read(_ url: URL) throws -> NativeDocumentSeed {

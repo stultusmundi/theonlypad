@@ -19,3 +19,12 @@ remaining issue in that change.
 This verifies the adapter with actual injected native collaborators where stated. Full process-owner
 FIFO wiring and AppDelegate/Finder/CLI delivery have separate acceptance tests. No visible desktop
 or packaged execution is claimed.
+
+## Terminal positioning errors
+
+The expanded ten-test suite passed in 0.403 seconds. An invalid line after a successful import and
+an explicitly closed imported target now report a terminal positioning failure and let later
+requests proceed. The live imported model and recovery authority remain owned by the registry.
+These classifications apply only after an imported document ID is known; the same error during a
+retained intake cannot abandon that transaction. Actual invalid-line navigation and queue progress
+were tested; the closed-target case uses the explicit collaborator boundary.
