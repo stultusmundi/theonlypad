@@ -91,3 +91,21 @@ The harness now compares the entire SwiftPM input-tree membership against its ma
 Pure regression evidence: the initial16-test run reproduced13 behavioral failures; final18 harness tests plus27 existing watchdog tests passed. A fresh actual lifecycle run passed32/0 with all three complete process receipts and exact source membership independently verified. Private run `.local/search-child-integration/run.iqiqcfbd` uses manifest `e296078d20369b0d636185de02bf248c8aa152c3634ef24b1d1a4148350248a1`. Independent specification and code-quality review approved the two-file correction. This protects locally owned test-evidence capture against accidental changes; it is not an atomic filesystem sandbox against a hostile writer.
 
 Real pipe fixture, helper launch and application routing remain unverified. The separate legacy shortcut runner's provenance validation gap is recorded and outstanding; this correction does not repair that runner.
+
+## Concrete adapters and first actual pipe control
+
+The internal default connection constructor now uses one-syscall Darwin read/write/close operations and real Dispatch readiness sources. The caller still owns descriptor normalization, flags and exclusive adoption; no lifecycle launcher or public application routing was added. Dispatch cancellation acknowledgment precedes each monitored descriptor's raw close.
+
+The test fixture was repaired after review found lost close errors, missing EOF deadlines, cleanup waiters that could hang, weak quarantine ownership and absent signal-state comparison. Deterministic failures first reproduced7 tests/17 assertions plus a separate1-test/3-assertion cleanup failure. Final29/0 combined the unchanged20 channel-state tests with9 injected fixture controls. The fixture retains terminal results independently of observers, keeps uncertain close results sticky without retry, bounds EOF/cancel acknowledgment, and retains timed-out source ownership until process teardown. These are test-fixture controls, not a production launcher implementation.
+
+Root reviewed the final source and ran exactly one actual smoke:
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter SearchChildChannelPipeTests/testDefaultConstructorReadsOwnedResponseByte
+```
+
+It passed1/0 in0.002s reported XCTest case time. The default constructor delivered one exact response byte over a real synthetic pipe, then closed; the independent lifetime peer required EOF, actual source cancellation acknowledgment and confirmed peer close. Cleanup checked unchanged inherited default SIGPIPE disposition. No signal disposition was modified, and no real document or GUI was involved. All toolchain/build/test receipts had confirmed wait, complete capture and no timeout/interruption/truncation; frozen input membership was checked independently.
+
+Private evidence: `.local/search-child-integration/run.9qp6ec9y`, manifest `3469c7eb7a77ddf8f8d9298f7edefb7aec9ce625a25fca034641ddce4bc19c34`. Final fixture SHA256 `d3a434b1b5cdd3cd28b38773c4c197bd7e8d0c61e605b7cf77094b3405417117`; source/negative-control review is under `.local/search-child-lifecycle-task-2/stage-a-repair/`.
+
+This single byte/EOF control is not backpressure, EPIPE, cancellation, descriptor-reuse, child inheritance/reap, performance or application-search acceptance. Those controls remain outstanding and are the next implementation work. The main distributed app has not been repackaged from this slice.

@@ -38,9 +38,20 @@ protocol ChannelSourceFactory: Sendable {
 /// The caller must establish CLOEXEC on all three, O_NONBLOCK on the data endpoints,
 /// and verified per-descriptor NOSIGPIPE on the request writer before adoption.
 /// The injected queue must be serial. This implementation does not set flags,
-/// create pipes, or launch children; concrete syscall/source adapters are a later slice.
+/// create pipes, or launch children. Its default Darwin/Dispatch adapters are local
+/// plumbing only; launcher routing remains outside this boundary.
 final class SearchChildChannels: SearchChildConnection, @unchecked Sendable {
   private let core: ChannelCore
+
+  /// Internal default construction after a future owner has established every
+  /// descriptor precondition documented below. This slice does not adopt it from
+  /// lifecycle code; direct-pipe tests exercise it with exclusive synthetic ends.
+  convenience init(requestWriteFD: Int32, responseReadFD: Int32, lifetimeWriteFD: Int32) {
+    self.init(
+      requestWriteFD: requestWriteFD, responseReadFD: responseReadFD,
+      lifetimeWriteFD: lifetimeWriteFD, operations: DarwinChannelDescriptorOperations(),
+      sources: DispatchChannelSourceFactory(), queue: DispatchQueue(label: "SearchChildChannels.io"))
+  }
 
   init(
     requestWriteFD: Int32, responseReadFD: Int32, lifetimeWriteFD: Int32,
