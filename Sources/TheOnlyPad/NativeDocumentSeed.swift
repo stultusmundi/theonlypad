@@ -170,7 +170,7 @@ struct NativeDocumentSeed: Sendable {
     id: UUID = UUID(), text: String, url: URL?, originalBytes: Data?,
     encoding: DocumentEncoding, hasBOM: Bool, saved: DecodedDocument,
     bookmarks: DocumentBookmarks, language: DocumentLanguage, manualLanguage: Bool,
-    limits: Limits = .standard
+    pinned: Bool = false, limits: Limits = .standard
   ) throws -> Self {
     guard text.utf16.elementsEqual(saved.text.utf16), encoding == saved.encoding,
       hasBOM == saved.hasBOM
@@ -189,7 +189,8 @@ struct NativeDocumentSeed: Sendable {
     guard resolved.bookmarks == bookmarks else { throw NativeDocumentSeedError.invalidPair }
     return try .init(
       id: id, kind: .reopened, decoded: .init(text: text, encoding: encoding, hasBOM: hasBOM),
-      url: url, bytes: originalBytes, saved: saved, language: language, manual: manualLanguage,
+      url: url, bytes: originalBytes, saved: saved, pinned: pinned, language: language,
+      manual: manualLanguage,
       bookmarks: bookmarks, limits: limits)
   }
   static func legacyRecovery(_ snapshot: RecoverySnapshot, limits: Limits = .standard) throws

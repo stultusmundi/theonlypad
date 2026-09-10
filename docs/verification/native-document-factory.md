@@ -11,3 +11,9 @@ Seed limits are per payload, not aggregate process admission. The process retain
 ## Prepared restoration and display-name detection
 
 The expanded hidden harness passed 122 checks plus the unchanged shared-pane ownership control. Root reran `scripts/test-document-factory.sh .build/native-ownership-integrated/arm64-apple-macosx/debug`; compilation and runtime exited zero in `.local/document-factory/run.muomEb3i`. Seven behavioral failures preceded the fix. Encoded restoration decodes once and retains the same saved baseline and presentation. Backup, disk-copy and recovery seeds detect language from their final display name, with filename precedence over shebang detection and manual overrides preserved. Independent review found no material issue. This does not validate native controller routing or desktop interaction.
+
+## Reopened pinned history
+
+The reopened seed now accepts `pinned: Bool = false` and passes it through the existing immutable seed/factory path. The native regression constructs a reopened model with `pinned: true` and checks both seed and model, while a legacy call without the argument remains unpinned. No controller, model, intake or ownership changes accompany this fix.
+
+Command: `scripts/test-document-factory.sh .build/native-ownership-integrated/arm64-apple-macosx/debug`. Compiled behavioral red `run.h4LCsAQQ`: 133 checks, one failure for the reopened pin. Green `run.k9qc1cej`: all 133 factory checks and unchanged shared-pane ownership harness passed. Strict formatter lint passed. Tests use synthetic values with no shown windows or GUI interaction.

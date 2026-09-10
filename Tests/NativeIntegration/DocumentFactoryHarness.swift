@@ -138,6 +138,18 @@ import PadCore
         !reopened.dirty && reopened.bookmarks == bookmarks && reopened.manualLanguage,
         "reopened clean history values exact")
     }
+    let pinnedReopenSeed = try NativeDocumentSeed.reopened(
+      text: text, url: url, originalBytes: bytes, encoding: .utf16LE, hasBOM: true,
+      saved: decoded, bookmarks: bookmarks, language: .swift, manualLanguage: true, pinned: true)
+    if let pinnedReopen = make(pinnedReopenSeed, "pinned-reopened") {
+      check(
+        pinnedReopenSeed.pinned && pinnedReopen.pinned,
+        "reopened history pin preserved by native factory")
+    }
+    let legacyReopenSeed = try NativeDocumentSeed.reopened(
+      text: text, url: url, originalBytes: bytes, encoding: .utf16LE, hasBOM: true,
+      saved: decoded, bookmarks: bookmarks, language: .swift, manualLanguage: true)
+    check(!legacyReopenSeed.pinned, "legacy reopened seed defaults unpinned")
     let snapshot = RecoverySnapshot(
       id: UUID(), text: text, encoding: .utf16LE, hasBOM: true,
       originalPath: "/informational/original.txt")
