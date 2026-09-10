@@ -24,14 +24,19 @@ text=owner.read_text()
 needle='try await checkpoints.drainPause(pause)\n      value.pauseDrained = true'
 if text.count(needle)!=1: raise SystemExit('Expected one preparation drain interception')
 text=text.replace(needle, 'try await checkpoints.drainPause(pause)\n      try await newWindowDrainHook?()\n      value.pauseDrained = true')
+needle='if let task = value.task { _ = await task.value }\n    do {'
+if text.count(needle)!=1: raise SystemExit('Expected one owned cleanup interception')
+text=text.replace(needle, 'if let task = value.task { _ = await task.value }\n    do {\n      try await newWindowCleanupHook?()')
 owner.write_text(text+"""
 @MainActor var newWindowDrainHook: (() async throws -> Void)?
+@MainActor var newWindowCleanupHook: (() async throws -> Void)?
 extension NativeApplicationDocuments {
   func testPreparePublisher() async throws { try await checkpoints.testPreparePublisher() }
   func testAcquirePause() throws -> CheckpointPauseToken { try checkpoints.acquirePause() }
   func testDrainPause(_ token: CheckpointPauseToken) async throws { try await checkpoints.drainPause(token) }
   func testReleasePause(_ token: CheckpointPauseToken) throws { try checkpoints.releasePause(token) }
   var testPreparationPending: Bool { preparingNewWindow != nil }
+  var testExternalRequestID: UUID? { externalOpens.currentID }
   var testCleanupRunning: Bool { preparingNewWindow?.cleanupRunning == true }
   func testProject(_ windowID: UUID) throws { try project(windowID: windowID) }
   func testStartClose(_ documentID: UUID) throws {

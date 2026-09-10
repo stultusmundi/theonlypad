@@ -22,7 +22,7 @@ struct NativeApplicationOpenDestination: Equatable {
   let reportError: (OpenRequestFailure) -> Void
 }
 enum NativeApplicationOpenError: Error, LocalizedError {
-  case tooLarge, unsafeFile, documentClosed
+  case tooLarge, unsafeFile, documentClosed, temporarilyUnavailable
   var errorDescription: String? {
     switch self {
     case .tooLarge:
@@ -30,6 +30,8 @@ enum NativeApplicationOpenError: Error, LocalizedError {
     case .unsafeFile: return "Open requires a regular local file."
     case .documentClosed:
       return "The opened document was closed before its requested position could be restored."
+    case .temporarilyUnavailable:
+      return "A window move is in progress. Retry opening the file after it finishes."
     }
   }
 }
@@ -133,6 +135,12 @@ enum NativeApplicationOpenError: Error, LocalizedError {
       current = nil
       return .completed
     } catch {
+      // Destination admission can defer an accepted envelope before any native/import effects.
+      // Preserve only this typed transient refusal; malformed and permanent requests still advance.
+      if current == nil, case NativeApplicationOpenError.temporarilyUnavailable = error {
+        pendingFailure = .init(id: envelope.id, error: error)
+        return .retained(error)
+      }
       let positioningIsTerminal = current?.documentID != nil && Self.isTerminalPositionError(error)
       let retained =
         !positioningIsTerminal && (current?.intakeID != nil || current?.documentID != nil)

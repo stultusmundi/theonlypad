@@ -55,6 +55,7 @@ import XCTest
     }
     func cleanup() async {
       newWindowDrainHook = nil
+      newWindowCleanupHook = nil
       newWindowStatusHook = nil
       _ = try? await owner.prepareQuit()
       for window in owner.windows { window.window?.close() }
@@ -417,7 +418,41 @@ import XCTest
     XCTAssertEqual(
       try f.owner.registry.captureWindows().flatMap { $0.groups.flatMap(\.documentIDs) },
       [f.documentID])
+    XCTAssertEqual(
+      f.owner.pendingExternalOpenCount, 1, "The accepted original request remains retryable")
+    guard let originalRequestID = f.owner.testExternalRequestID else {
+      XCTFail("Temporary destination refusal must retain the original queued request")
+      try await f.owner.cancelNewWindowPreparation(id)
+      await f.cleanup()
+      return
+    }
+    XCTAssertEqual(f.owner.externalOpenFailure?.id, originalRequestID)
+    let later = f.directory.appendingPathComponent("later-synthetic.txt")
+    try Data("later".utf8).write(to: later)
+    XCTAssertEqual(f.owner.enqueueExternal([.init(url: later)]).acceptedCount, 1)
+    XCTAssertEqual(f.owner.pendingExternalOpenCount, 2)
+    XCTAssertEqual(f.owner.testExternalRequestID, originalRequestID)
+    f.observations.configure = nil
     try await f.owner.cancelNewWindowPreparation(id)
+    XCTAssertEqual(f.owner.windows.count, before)
+    try f.owner.retryExternalOpen()
+    XCTAssertEqual(
+      f.owner.testExternalRequestID, originalRequestID, "Retry uses the accepted envelope")
+    for _ in 0..<10000 {
+      if f.owner.pendingExternalOpenCount == 0 { break }
+      try await Task.sleep(nanoseconds: 1_000_000)
+    }
+    XCTAssertEqual(f.owner.pendingExternalOpenCount, 0)
+    let ordered = try f.owner.registry.captureWindows().flatMap { $0.groups.flatMap(\.documentIDs) }
+    XCTAssertEqual(ordered.count, 3)
+    XCTAssertEqual(ordered.first, f.documentID)
+    XCTAssertEqual(
+      ordered.dropFirst().compactMap { (f.owner.registry.handle(id: $0) as? EditorDocument)?.url },
+      [extra, later])
+    XCTAssertEqual(newWindowFactoryCalls, 2, "Original and later requests each create one model")
+    XCTAssertEqual(newWindowAdoptionCalls, 2)
+    XCTAssertEqual(f.observations.configurations, before + 1, "Retry creates no extra endpoint")
+    XCTAssertEqual(f.owner.windows.count, before)
     await f.cleanup()
   }
 
@@ -609,6 +644,13 @@ import XCTest
       try await f.owner.cancelNewWindowPreparation(id)
       XCTFail("Unproven changed registration must be retained")
     } catch {}
+    let cleanupOutcome = try await f.owner.waitForNewWindowPreparation(id)
+    if case .retained(let error) = cleanupOutcome,
+      case .cleanupChanged? = error as? NativeNewWindowPreparationError
+    {
+    } else {
+      XCTFail("A failed cancellation must report its retained cleanup error, never cancelled")
+    }
     XCTAssertTrue(f.owner.testPreparationPending)
     XCTAssertNotNil(f.owner.registry.window(id: windowID))
     do {
@@ -695,5 +737,87 @@ import XCTest
     XCTAssertFalse(f.owner.testPreparationPending)
     try f.owner.testReleasePause(otherPause)
     await f.cleanup()
+  }
+
+  func testWaiterAwaitsHeldCleanupBeforeReportingCancelled() async throws {
+    try await assertWaiterAwaitingCleanup(changedRegistration: false)
+  }
+
+  func testWaiterAwaitsHeldCleanupBeforeReportingRetainedFailure() async throws {
+    try await assertWaiterAwaitingCleanup(changedRegistration: true)
+  }
+
+  private func assertWaiterAwaitingCleanup(changedRegistration: Bool) async throws {
+    let f = try Fixture(windows: 1)
+    try await f.start()
+    let id = try f.owner.startNewWindowPreparation(f.owner.prepareMove(documentID: f.documentID))
+    guard case .prepared(let destination) = try await f.owner.waitForNewWindowPreparation(id) else {
+      return XCTFail("Expected prepared destination")
+    }
+    var release: CheckedContinuation<Void, Never>?
+    newWindowCleanupHook = { await withCheckedContinuation { release = $0 } }
+    let cancel = Task { try await f.owner.cancelNewWindowPreparation(id) }
+    for _ in 0..<10000 {
+      if release != nil { break }
+      await Task.yield()
+    }
+    let held = try XCTUnwrap(release)
+    var waiterStarted = false
+    var waiterFinished = false
+    let waiter = Task {
+      waiterStarted = true
+      let result = try await f.owner.waitForNewWindowPreparation(id)
+      waiterFinished = true
+      return result
+    }
+    for _ in 0..<10000 {
+      if waiterStarted { break }
+      await Task.yield()
+    }
+    XCTAssertTrue(waiterStarted)
+    // The waiter has an already-completed preparation to observe, while actual cleanup is held.
+    for _ in 0..<1000 { await Task.yield() }
+    XCTAssertFalse(waiterFinished, "Cancellation intent is not a settled cleanup receipt")
+    XCTAssertTrue(f.owner.testCleanupRunning)
+    XCTAssertTrue(f.owner.testPreparationPending)
+    XCTAssertNotNil(f.owner.registry.window(id: destination.windowID))
+    if changedRegistration {
+      let unrelated = UUID()
+      try f.owner.registry.registerWindow(id: unrelated, initialGroupID: UUID())
+      try f.owner.registry.unregisterEmptyWindow(
+        unrelated, expectedRevision: f.owner.registry.workspaceRevision)
+    }
+    newWindowCleanupHook = nil
+    held.resume()
+    do {
+      try await cancel.value
+      XCTAssertFalse(changedRegistration, "Changed registration must refuse cleanup")
+    } catch {
+      XCTAssertTrue(
+        changedRegistration, "Unchanged cleanup should settle: \(String(reflecting: error))")
+    }
+    let result = try await waiter.value
+    if changedRegistration {
+      if case .retained(let error) = result,
+        case .cleanupChanged? = error as? NativeNewWindowPreparationError
+      {
+      } else {
+        XCTFail("Waiter must report actual retained cleanup failure")
+      }
+      XCTAssertTrue(f.owner.testPreparationPending)
+      XCTAssertTrue(f.owner.canRetryRecovery)
+      XCTAssertNotNil(f.owner.registry.window(id: destination.windowID))
+      do {
+        _ = try await f.owner.prepareQuit()
+        XCTFail("Retained cleanup must veto quit")
+      } catch {}
+      // Intentionally retained synthetic state remains paused until this isolated process exits.
+      try? FileManager.default.removeItem(at: f.directory)
+    } else {
+      if case .cancelled = result {} else { XCTFail("Settled cleanup must report cancelled") }
+      XCTAssertFalse(f.owner.testPreparationPending)
+      XCTAssertNil(f.owner.registry.window(id: destination.windowID))
+      await f.cleanup()
+    }
   }
 }

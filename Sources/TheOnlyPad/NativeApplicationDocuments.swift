@@ -44,10 +44,11 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     var unregistered = false
     var pause: CheckpointPauseToken?
     var pauseDrained = false
-    var cancelled = false
+    var cancellationRequested = false
     var failure: Error?
     var task: Task<NativeNewWindowPreparationResult, Never>?
     var cleanupRunning = false
+    var cleanupTask: Task<NativeNewWindowPreparationResult, Never>?
     init(_ choices: NativeDocumentMoveChoices, capacity: SessionCapacitySnapshot) {
       self.choices = choices
       self.capacity = capacity
@@ -143,12 +144,12 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       try await checkpoints.drainPause(pause)
       value.pauseDrained = true
       try validateNewWindowSource(value, revision: value.sourceRevision)
-      guard try newWindowCapacity() == value.capacity, !value.cancelled else {
+      guard try newWindowCapacity() == value.capacity, !value.cancellationRequested else {
         throw NativeNewWindowPreparationError.changed
       }
       try await drainLegacy()
       try validateNewWindowSource(value, revision: value.sourceRevision)
-      guard try newWindowCapacity() == value.capacity, !value.cancelled else {
+      guard try newWindowCapacity() == value.capacity, !value.cancellationRequested else {
         throw NativeNewWindowPreparationError.changed
       }
       try registry.registerWindow(
@@ -162,7 +163,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       _ = try constructEndpoint(endpoint, provisional: true)
       try validateNewWindowSource(value, revision: registered)
       try validateNewWindowCapacity(value)
-      guard !value.cancelled else { throw CancellationError() }
+      guard !value.cancellationRequested else { throw CancellationError() }
       return .prepared(
         .init(windowID: value.assignment.windowID, endpointID: endpoint.id, title: "New Window"))
     } catch {
@@ -190,16 +191,30 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
     // The owner's task deliberately outlives cancellation of any one waiter.
     let result = await task.value
-    guard preparingNewWindow === value, !value.cancelled else { return .cancelled }
+    // Cancellation intent is not a receipt. A retained or unfinished cleanup still owns its pause.
+    if let cleanup = value.cleanupTask { return await cleanup.value }
+    guard preparingNewWindow === value else { throw NativeNewWindowPreparationError.expired }
     return result
   }
   func cancelNewWindowPreparation(_ id: NativeNewWindowMoveID) async throws {
     guard let value = preparingNewWindow, value.id == id, !value.cleanupRunning else {
       throw NativeNewWindowPreparationError.expired
     }
-    value.cancelled = true
+    value.cancellationRequested = true
     value.cleanupRunning = true
+    let cleanup = Task { await self.cleanupNewWindowPreparation(value) }
+    value.cleanupTask = cleanup
+    switch await cleanup.value {
+    case .cancelled: return
+    case .retained(let error): throw error
+    case .prepared: throw NativeNewWindowPreparationError.expired
+    }
+  }
+  private func cleanupNewWindowPreparation(_ value: NewWindowPreparation) async
+    -> NativeNewWindowPreparationResult
+  {
     defer { value.cleanupRunning = false }
+    // Await only raw preparation; public waiters may themselves be waiting for this cleanup.
     if let task = value.task { _ = await task.value }
     do {
       guard preparingNewWindow === value else { throw NativeNewWindowPreparationError.expired }
@@ -234,9 +249,10 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       }
       preparingNewWindow = nil
       checkpoints.requestCheckpoint()
+      return .cancelled
     } catch {
       value.failure = error
-      throw error
+      return .retained(error)
     }
   }
 
@@ -659,7 +675,9 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private lazy var externalOpens: NativeApplicationOpenCoordinator = .init(
     ports: .init(
       chooseDestination: { _ in
-        try self.requireNewWindowSettled()
+        guard self.preparingNewWindow == nil else {
+          throw NativeApplicationOpenError.temporarilyUnavailable
+        }
         guard self.ready else { throw NativeWorkspaceError.notReady }
         try self.intake.requireSettled()
         try self.closing.requireSettled()
