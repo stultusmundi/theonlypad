@@ -68,6 +68,13 @@ final class EditorDocument {
   private var nextManagedRecoveryRevision: UInt64?
   /// Managed epoch fence; unrelated to the legacy recoveryRevision counter.
   private(set) var highestIssuedRecoveryRevision: UInt64 = 0
+  /// Trusted transfer rotation: assignments and returned receipt have no callback boundary.
+  func rotateTransferOwnership() -> (ownershipGeneration: UUID, mutationGeneration: UUID) {
+    let pair = (ownershipGeneration: UUID(), mutationGeneration: UUID())
+    ownershipGeneration = pair.ownershipGeneration
+    closeMutationGeneration = pair.mutationGeneration
+    return pair
+  }
   func advanceOwnershipGeneration() {
     ownershipGeneration = UUID()
     noteCloseMutation()

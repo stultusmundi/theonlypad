@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+if [ "$#" -ne 0 ]; then echo 'Usage: scripts/test-native-document-transfer.sh' >&2; exit 2; fi
+root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+cd "$root"
+mkdir -p .local/native-document-transfer-tests
+run=$(mktemp -d "$PWD/.local/native-document-transfer-tests/run.XXXXXXXX")
+echo "Private native transfer adapter evidence: $run"
+python3 - "$run" <<'PY'
+from pathlib import Path
+import hashlib,json,sys
+run=Path(sys.argv[1]);package=run/'Package'
+items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
+items += [(p,package/'Sources/NativeRouting'/p.name) for p in Path('Sources/TheOnlyPad').glob('*.swift') if p.name!='TheOnlyPadApplication.swift']
+items += [(Path('Tests/NativeIntegration/EditorDocumentTransferTests.swift'),package/'Tests/NativeRoutingTests/EditorDocumentTransferTests.swift')]
+manifest=[]
+for source,target in items:
+ target.parent.mkdir(parents=True,exist_ok=True);data=source.read_bytes();target.write_bytes(data);manifest.append({'source':str(source),'sha256':hashlib.sha256(data).hexdigest()})
+model=package/'Sources/NativeRouting/EditorDocument.swift'
+original=model.read_text()
+marker='  var dirty: Bool {'
+assert original.count(marker)==1
+model.write_text(original.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1'))
+(run/'model-instrumented-sha256.txt').write_text(hashlib.sha256(model.read_bytes()).hexdigest()+'\n')
+(run/'instrumentation.txt').write_text('One counter before original dirty getter; original dirty implementation retained unchanged.\n')
+(run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
+(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"NativeRouting",dependencies:["PadCore"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')
+PY
+python3 - "$run" <<'PY'
+from pathlib import Path
+import json,os,signal,subprocess,sys
+run=Path(sys.argv[1])
+state=run/'State';state.mkdir()
+env=os.environ.copy();env['THEONLYPAD_STATE_DIRECTORY']=str(state)
+with (run/'test.log').open('wb') as log:
+ child=subprocess.Popen(['scripts/swift.sh','test','--package-path',str(run/'Package'),'--scratch-path',str(run/'Build')],stdout=log,stderr=subprocess.STDOUT,start_new_session=True,env=env)
+ try:code=child.wait(timeout=180);timed_out=False
+ except subprocess.TimeoutExpired:
+  try:os.killpg(child.pid,signal.SIGKILL)
+  except ProcessLookupError:pass
+  child.wait();code=124;timed_out=True
+(run/'status.json').write_text(json.dumps({'exit':code,'timedOut':timed_out})+'\n')
+print((run/'test.log').read_text(),end='');raise SystemExit(code)
+PY
