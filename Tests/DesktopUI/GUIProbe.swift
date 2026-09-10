@@ -363,11 +363,21 @@ final class GUIProbe: XCTestCase {
     editor.click()
     app.typeText("synthetic before failed quit\n")
     assertText("synthetic before failed quit\n", in: app)
-    // A synthetic regular file in place of the not-yet-created session directory
-    // makes the real private-store write fail without changing system permissions.
-    let obstruction = state.appendingPathComponent("Session")
-    XCTAssertFalse(FileManager.default.fileExists(atPath: obstruction.path))
-    try Data("synthetic obstruction".utf8).write(to: obstruction, options: .withoutOverwriting)
+    // Periodic checkpoints can already have created this private fixture directory.
+    // Restrict only its permissions to make the real session store refuse writes.
+    let obstruction = state.appendingPathComponent("Session", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: obstruction, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o500], ofItemAtPath: obstruction.path)
+    defer {
+      do {
+        try FileManager.default.setAttributes(
+          [.posixPermissions: 0o700], ofItemAtPath: obstruction.path)
+      } catch {
+        XCTFail("Could not restore synthetic session directory permissions: \(error)")
+      }
+    }
     app.typeKey("q", modifierFlags: .command)
     let alert = app.dialogs.firstMatch
     XCTAssertTrue(alert.waitForExistence(timeout: 10))
@@ -380,8 +390,10 @@ final class GUIProbe: XCTestCase {
     app.typeKey("a", modifierFlags: .command)
     app.typeText("synthetic after failed quit\n")
     assertText("synthetic after failed quit\n", in: app)
-    XCTAssertEqual(try Data(contentsOf: obstruction), Data("synthetic obstruction".utf8))
-    try FileManager.default.removeItem(at: obstruction)
+    let attributes = try FileManager.default.attributesOfItem(atPath: obstruction.path)
+    XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o500)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700], ofItemAtPath: obstruction.path)
     quitAndRelaunch(app)
     assertText("synthetic after failed quit\n", in: app)
   }
@@ -457,10 +469,10 @@ final class GUIProbe: XCTestCase {
     waitForDiskChange(app)
     assertText(dirty, in: app)
     diskAction("document.diskReload", in: app)
-    let discard = app.buttons["Reload from Disk"]
+    let confirmation = app.dialogs.containing(.button, identifier: "Reload from Disk").element
     XCTAssertTrue(
-      discard.waitForExistence(timeout: 10), "Dirty reload requires an actual confirmation")
-    let cancel = app.buttons["Cancel"]
+      confirmation.waitForExistence(timeout: 10), "Dirty reload requires an actual confirmation")
+    let cancel = confirmation.buttons["Cancel"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     cancel.click()
     assertText(dirty, in: app)
