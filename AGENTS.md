@@ -119,3 +119,5 @@ UTF-16 codec at `10c4dd4`: `scripts/swift.sh test --scratch-path .build/search-w
 Request codec at `2a76168`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireRequestTests` passes30 tests after independent review fixes. These tests validate protocol/Unicode/phase behavior only; the app is not yet routed through a helper.
 
 Response codec at `869de1f`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireResponseTests` passes28 tests; independent source review approves the scope. This is protocol evidence, not helper or desktop acceptance.
+
+Wire semantic handoff at `e04f466`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireSemanticTests` passes9 tests and `--filter SearchWire` passes106. Clean committed-source full test531/0 and app build pass; see docs/verification/search-wire.md. Broad adversarial core tests still require the owned outer watchdog.

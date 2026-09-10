@@ -96,3 +96,14 @@ Tests include fixed ABI bytes, all semantic terminal statuses, partial-body fail
 Process limitation: the initial red was missing-API compilation. After implementation, the sole initial failure was an incorrect test expectation (malformedUTF16 instead of required lengthMismatch for short replacement on early success). Correcting that oracle was not a production fix. No compiling behavioral red preceded implementation; the report preserves that gap without manufactured history.
 
 Semantic wire integration, real helper execution, cancellation/deadline containment, memory measurements, native/folder routing and packaged desktop acceptance remain outstanding. The earlier464-test committed-source run predates both request and response implementations. Current distributable artifacts remain source55a7b1b.
+
+
+## Semantic handoff and integrated source — 2026-09-10
+
+Task4 `e04f4660719927c4ed81f2c8bf05c6495e171e61` adds nine benign semantic integration tests. Independent specification/quality review approved without findings. The real request writer/reader, returned boundary index, one actual SearchService.execute/Framework enumeration, response writer/reader and separate terminal/ack sequence preserve fixed capture/literal/escaped/scoped/zero-length/surrogate/Unicode results. Tests distinguish nil and empty replacement and verify semantic error followed by same-generation ordinal reuse. The first run was green over approved APIs; no production defect or fabricated red is claimed.
+
+Focused semantic9/0 and all-wire106/0 pass, along with target build, strict recursive formatting, public-source and whitespace checks. Root verified source SHA256 `ddbb1171b6d9f0b1cd5644a9888682f26034f23db1702adb829906967f411131`, retained raw-log hashes and actual summaries. An initial formatter invocation lacked --recursive and exited64; the corrected invocation passed without diagnostics.
+
+A clean detached snapshot at that commit records605 tracked-file hashes. Its complete **531-test suite passed with0 failures** (15.731 seconds XCTest,29.544 seconds guarded command, no timeout). The actual application build also passed on that snapshot (incremental0.508 seconds, no timeout). Commands were `scripts/swift.sh test --scratch-path .build/integrated` and `scripts/swift.sh build --scratch-path .build/integrated`, supervised by the existing private owned-process harness. Timings describe verification, not UI or performance benchmarks.
+
+Raw provenance and results remain ignored locally. This completes the bounded wire plan; it does not implement the helper lifecycle/runtime, memory policy, hard cancellation, native/folder routing or a packaged helper. Existing packaged desktop verification concerns source55a7b1b, which predates the search changes.
