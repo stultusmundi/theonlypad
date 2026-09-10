@@ -31,7 +31,8 @@ final class PaneSessionTests: XCTestCase {
       }
     }
     app.launch()
-    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+    XCTAssertTrue(
+      app.windows.firstMatch.exists || app.windows.firstMatch.waitForExistence(timeout: 15))
     return (app, state)
   }
 
@@ -48,6 +49,7 @@ final class PaneSessionTests: XCTestCase {
 
   @MainActor
   private func waitCount(_ query: XCUIElementQuery, _ count: Int) {
+    if query.count == count { return }
     XCTAssertEqual(
       XCTWaiter.wait(
         for: [
@@ -59,18 +61,20 @@ final class PaneSessionTests: XCTestCase {
   @MainActor
   private func menu(_ app: XCUIApplication, _ section: String, _ title: String) {
     let menu = app.menuBars.menuBarItems[section]
-    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+    XCTAssertTrue(menu.exists || menu.waitForExistence(timeout: 5))
     menu.click()
     let item = menu.menus.menuItems.matching(NSPredicate(format: "title == %@", title)).firstMatch
-    XCTAssertTrue(item.waitForExistence(timeout: 5), "Missing actual menu action: \(title)")
+    XCTAssertTrue(
+      item.exists || item.waitForExistence(timeout: 5), "Missing actual menu action: \(title)")
     XCTAssertTrue(item.isEnabled)
     item.click()
   }
 
   @MainActor
   private func exact(_ text: String, in view: XCUIElement) {
-    XCTAssertTrue(view.waitForExistence(timeout: 10))
+    XCTAssertTrue(view.exists || view.waitForExistence(timeout: 10))
     let expected = Data(text.utf8)
+    if let actual = view.value as? String, Data(actual.utf8) == expected { return }
     let predicate = NSPredicate { object, _ in
       guard let actual = (object as? XCUIElement)?.value as? String else { return false }
       return Data(actual.utf8) == expected
@@ -101,7 +105,7 @@ final class PaneSessionTests: XCTestCase {
       _ = try XCTUnwrap(UUID(uuidString: suffix))
       let container = app.windows.descendants(matching: .any)
         .matching(identifier: "editor.pane." + suffix).firstMatch
-      XCTAssertTrue(container.waitForExistence(timeout: 5))
+      XCTAssertTrue(container.exists || container.waitForExistence(timeout: 5))
       XCTAssertGreaterThan(container.frame.width, 0)
       XCTAssertGreaterThan(container.frame.height, 0)
       XCTAssertTrue(view.isHittable)
@@ -208,7 +212,8 @@ final class PaneSessionTests: XCTestCase {
     XCTAssertGreaterThan(before.panes[1].scrollY, before.panes[0].scrollY + 50)
 
     app.launch()
-    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+    XCTAssertTrue(
+      app.windows.firstMatch.exists || app.windows.firstMatch.waitForExistence(timeout: 15))
     _ = try arrangement(app, sideBySide: sideBySide)
     exactBoth(text, app)
     waitCount(tabs(app), 1)
@@ -229,7 +234,8 @@ final class PaneSessionTests: XCTestCase {
     }
 
     app.launch()
-    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+    XCTAssertTrue(
+      app.windows.firstMatch.exists || app.windows.firstMatch.waitForExistence(timeout: 15))
     _ = try arrangement(app, sideBySide: sideBySide)
     exactBoth(text, app)
     // Replacement proves both selection length and preferred focus, without clicking a pane.
