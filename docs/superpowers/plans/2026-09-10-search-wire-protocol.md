@@ -1,6 +1,6 @@
 # Search wire protocol implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans, with TDD and independent review. All commands below are proposed and unverified for the new target.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans, with TDD and independent review. Commands for outstanding tasks are proposed; completed-task verification is recorded in `docs/verification/search-wire.md`.
 
 **Goal:** Implement a bounded, incremental, view-free wire codec for one sequential search connection, without launching processes or changing search semantics.
 
@@ -242,7 +242,7 @@ BoundaryIndex holds `ceil((expectedUTF16+1)/8)` bytes, <=12,500,001 at100M units
 
 Parent builds its index while encoding the immutable original input on the bounded codec lane; helper RequestReader builds a temporary index while decoding for scope validation, releases it before engine execution, and retains only its decoded text in its caller-owned sink. Same algorithms are reusable; do not allocate a second full wire buffer. RequestReader must finish its index before sink.execute, so no engine is entered with malformed text/scope.
 
-Text sinks own incremental construction of the one final String and their exact allocation credits; this wire stage exposes bytes and does not hide a whole-text accumulator. Test sinks may use bounded synthetic accumulation. App/helper String building, growth and bridging require the later measured codec allocation task: the candidate640MB active ledger depends on streaming, and768MB retained ledger covers up to600MB original+replacement UTF-8 payload. Neither is implemented by this codec. Temporary frames/chunks/range arrays and boundary bits must be included in those ledgers, and a sink retaining callback Data must account for that lifetime. No arbitrary text diagnostics or full capture arrays escape.
+Text sinks own incremental construction of the one final String and their exact allocation credits; this wire stage exposes bytes and does not hide a whole-text accumulator. Test sinks may use bounded synthetic accumulation. App/helper String building, growth and bridging require the later measured codec allocation task: the earlier640MB active candidate has been superseded by the reviewed allocation preflight, and768MB retained remains a candidate covering up to600MB original+replacement UTF-8 payload before additional charges. Neither is implemented by this codec. Temporary frames/chunks/range arrays and boundary bits must be included in those ledgers, and a sink retaining callback Data must account for that lifetime. No arbitrary text diagnostics or full capture arrays escape.
 
 ## Task 1 — Module, frame bounds and poison semantics
 
