@@ -133,3 +133,5 @@ scripts/test-search-child-lifecycle.sh
 ```
 
 The harness freezes actual sources and invokes the reviewed owned-process watchdog directly for each build/test stage. Do not wrap it in another process-group watchdog. Its current default suite has 32 deterministic lifecycle tests; it does not yet validate a real helper or channel implementation. Raw evidence stays under ignored `.local/search-child-integration/`.
+
+Injected channel state: `scripts/test-search-child-lifecycle.sh --filter SearchChildChannelStateTests` passes20 tests; the unchanged default lifecycle filter passes32 using the same frozen source manifest. The channel initializer requires explicit descriptor/source collaborators and verified adoption preconditions. No concrete adapter, actual pipe, helper or production routing is established by these tests. See `docs/verification/search-child-lifecycle.md`.

@@ -22,6 +22,7 @@ let package = Package(
 '''
 FIXED = (
     'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift',
+    'Tests/SearchChildIntegration/SearchChildChannelTests.swift',
     'scripts/swift.sh', 'scripts/run-owned-search-tests.py',
     'scripts/test-search-child-lifecycle.sh',
     'Tests/SearchChildIntegration/run_harness.py',
@@ -98,6 +99,8 @@ def freeze(root, run):
         relative = source.relative_to(root).as_posix()
         prefix = 'Package' if relative.startswith(('Sources/', 'Tests/SearchExecutionTests/')) else 'Runner'
         target = run / prefix / relative
+        if relative == 'Tests/SearchChildIntegration/SearchChildChannelTests.swift':
+            target = run / 'Package/Tests/SearchExecutionTests/SearchChildChannelTests.swift'
         copy_source(source, target)
         items.append(dict(source=relative, frozen=target.relative_to(run).as_posix(),
                           sha256=digest(target.read_bytes())))

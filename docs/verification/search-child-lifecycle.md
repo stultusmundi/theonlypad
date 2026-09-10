@@ -64,3 +64,22 @@ Every control completed output capture without truncation, recorded successful d
 The reviewed infrastructure runner now snapshots the actual core/search sources and existing lifecycle tests into a private package, records and rechecks their hashes, and runs each stage through the same-process imported watchdog. It refuses source symlinks, inconsistent snapshots, incomplete cleanup/capture receipts and zero-test output. It adds no helper, launcher, channel, public constructor or adversarial fixture.
 
 Twelve pure harness tests passed. Actual `scripts/test-search-child-lifecycle.sh --build-only` completed its build stage in 11.375807 seconds. The default command then passed all 32 deterministic lifecycle tests, with a 10.773264-second build and 0.892868-second test command. All stages returned zero with complete watchdog receipts. Private evidence is retained in `.local/search-child-integration/run.vk1hg9p8/` and `run.zq6yh9i8/`; both source manifests have SHA256 `ba8843610831d828e30949871ccb314b3681a23bec2ea61cbad6fe4b25e66e31`. Independent review approved this infrastructure boundary only. Actual channel/launcher fault testing remains outstanding.
+
+## Injected nonblocking channel state, 2026-09-10
+
+`SearchChildChannels` now implements the internal connection protocol with explicit descriptor/source injection. Admission reserves one read and two FIFO writes before dispatch, each write at most65,536 bytes; the read request limit is65,568 bytes. A serial pump performs at most four syscalls/65,536 transferred bytes per turn. First-result arbitration preserves cancellation, short writes retain their offsets, EOF is sticky, and source cancellation acknowledgment precedes each monitored descriptor's single close attempt. An uncertain close retains quarantine and never reports confirmed cleanup.
+
+Independent source review found a test gap: the original late-cancellation test cancelled after its handler exited. A new gate cancels after success selection but before continuation delivery; a second gate cancels an entered read. The private negative control produced two tests/four behavioral failures, with no timeout or compilation failure. Reviewed production was not weakened. Root reviewed the correction and verified final source hashes against retained actual receipts.
+
+Final frozen channel tests:20/0; unchanged lifecycle regression:32/0. Both use manifest `6f868e669593809d8733c1245e19e549dbb5eaa1d6df31c4dca9658c623c469a`. Every toolchain/build/test stage completed with actual wait0, complete capture and no timeout, truncation, interruption or receipt failure. The unchanged pure harness has13/0 evidence. Strict source formatting and public-source checks pass.
+
+Proven commands:
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter SearchChildChannelStateTests
+scripts/test-search-child-lifecycle.sh
+```
+
+Raw synthetic results remain ignored in `.local/search-child-integration/run.mxcjoh6i/` and `run.kbnxa014/`; reviews/negative control are under `.local/search-child-lifecycle-task-2/channels-cancellation-review/`. Production source SHA256 is `5a2770fa001e914c3c7b10b634bfe9d4c9d10ee429d7e13862c9cf54f63fd754`; test source is `534351a0e4db585952d571056f83f0c57ff2cd34ad502d2a93f854a31452e63e`.
+
+These are injected syscall/source tests. Concrete Darwin/Dispatch adapters, actual pipe backpressure/EOF/NOSIGPIPE/descriptor reuse, launcher/helper/reap containment and application routing remain outstanding. There is no fake-backed default or public production constructor. Adoption preconditions remain caller obligations; this slice does not establish flags, kernel ownership, physical cancellation or whole-search memory bounds.

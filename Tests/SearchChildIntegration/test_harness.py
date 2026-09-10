@@ -23,6 +23,7 @@ class HarnessTests(unittest.TestCase):
             'Sources/PadCore/Core.swift': 'import Foundation\n',
             'Sources/SearchExecution/Child.swift': 'import PadCore\n',
             'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift': 'import XCTest\n',
+            'Tests/SearchChildIntegration/SearchChildChannelTests.swift': '// real channel test source\n',
             'scripts/swift.sh': '#!/bin/sh\nexec swift "$@"\n',
             'scripts/run-owned-search-tests.py': '# accepted watchdog snapshot\n',
             'scripts/test-search-child-lifecycle.sh': '# entry\n',
@@ -77,6 +78,16 @@ class HarnessTests(unittest.TestCase):
         self.assertIn('SearchExecutionTests', package)
         self.assertNotIn('executableTarget', package)
         self.assertNotIn('Fixture', package)
+
+    def test_channel_test_is_frozen_into_existing_test_target(self):
+        manifest = self.freeze()
+        item = next(x for x in manifest['sources'] if x['source'] ==
+                    'Tests/SearchChildIntegration/SearchChildChannelTests.swift')
+        self.assertEqual(item['frozen'],
+                         'Package/Tests/SearchExecutionTests/SearchChildChannelTests.swift')
+        self.assertEqual((self.run / item['frozen']).read_bytes(),
+                         (self.root / item['source']).read_bytes())
+        self.assertEqual(HARNESS.parse_args([]).filter, 'SearchChildLifecycleTests')
 
     def test_rejects_symlink_source_and_intermediate_directory(self):
         path = self.root / 'Sources/PadCore/Core.swift'
