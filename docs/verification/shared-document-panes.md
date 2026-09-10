@@ -1,6 +1,6 @@
 # Shared document pane verification
 
-Status: shared ownership, both visible split orientations, pane routing and cache/settings fan-out are implemented and covered by native tests. Packaged execution, physical IME/accessibility and performance acceptance remain outstanding. F-01 is not complete.
+Status: shared ownership, both visible split orientations, pane routing and cache/settings fan-out are implemented and covered by native tests. The packaged shared-edit/undo and scratch-pane restart workflows passed on2026-09-10 as recorded below. Scroll restoration has a separate failing desktop check; physical IME/accessibility and performance acceptance remain outstanding. F-01 is not complete.
 
 Task1 moved storage, dirty state, saved bytes and undo ownership into EditorDocument. Each retained EditorPane owns its layout manager, container, text view, scroll view and quit-selection state. The pool is bounded to two presentations; detach preserves native undo targets and history. Recovery capture revisions and character-edit revisions are separate. Temporary first-pane accessors remain for compatibility; controller commands now use explicit pane routing.
 
@@ -36,4 +36,15 @@ An unchanged controller failed the real split command assertion before implement
 
 Production verification: core204 passed8.952seconds; the complete native suite32534 exited0. This includes the four visible modes, real AppDelegate/menu registry split-focus-collapse assertions, all routing cases, save/encoding/lifetime/session checks and both process-kill recovery cases. Independent source review found no material issue. The desktop target, including two new split tests, compiled with `xcodebuild build-for-testing`21390; those tests have not executed.
 
-Adding another pane is provisionally limited to2,000,000 UTF-16 units, with a visible status explanation. Existing two-pane layouts can change orientation. Restart restores one presentation per logical tab; orientation persistence, document transfer and linked scrolling are not implemented. The initial adapter matrix completed six of 18 cases; twelve visibility failures remain incomplete measurements. See [the benchmark record](shared-pane-performance.md) for all outcomes and long-line costs. These native results do not establish physical keyboard/IME/VoiceOver behavior, packaged desktop acceptance or performance targets.
+Adding another pane is provisionally limited to2,000,000 UTF-16 units, with a visible status explanation. Existing two-pane layouts can change orientation. That initial slice restored one presentation per logical tab. Later work added persisted pane orientation and selections; see [pane presentation](persisted-pane-presentation.md) and the current desktop evidence below. Linked scrolling remains outstanding. The initial adapter matrix completed six of 18 cases; twelve visibility failures remain incomplete measurements. See [the benchmark record](shared-pane-performance.md) for all outcomes and long-line costs. These native results do not establish physical keyboard/IME/VoiceOver behavior, packaged desktop acceptance or performance targets.
+
+## Packaged shared-pane workflows — 2026-09-10
+
+Against unchanged packaged source55a7b1b (executable SHA256 `f02db4960212814ea8cbf38b351f466081f310a4ec1db7135a2f6a62f70525eb`), both real desktop tests passed:
+
+- Shared editing through both panes, grouped undo/redo, both orientations, focus routing, collapse, save with exact disk bytes, quit/restart, restored two-pane content/axis and one logical tab:61.559 seconds.
+- Two unsaved scratch panes, shared content, normal quit/restart, restored two-pane content/axis and one persisted logical tab:27.681 seconds.
+
+The tests now require the implemented two-pane restoration instead of the earlier one-pane behavior. Pane ordering uses fixed container frames because document text frames move during scrolling. Immediate accessibility probes avoid unnecessary XCTest polling delays; all fallback waits and the original120-second execution limit remain. Independent review approved these harness corrections. The long workflow previously expired while still progressing through menu actions; it now completes without raising its time limit.
+
+Private source provenance/results: `.local/desktop-ui/pane-harness-retry-rdjm4__b/`. The same three-test run also includes a **failing** scroll-restoration test, so its overall exit is65. Earlier launch-only failures were caused by an owned app instance left running after a shortcut-test timeout; exact-instance normal termination resolved that infrastructure problem. This evidence does not close the scroll, accessibility, IME or performance requirements.

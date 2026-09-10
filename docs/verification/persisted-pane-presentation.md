@@ -49,3 +49,11 @@ Worker-only hold/drain assertions were retired only after this suspension was re
 Two desktop restart tests and their project membership compiled and their source hashes still match. They have not executed. A fresh read-only console check on 2026-09-10 confirmed the screen remains locked; no security settings or credentials were used. Hidden AppKit tests do not establish physical IME, VoiceOver, visible scroll/focus, packaged restart or performance acceptance.
 
 Strict source formatting, public-source checks, diff checks and runner syntax passed. CI includes the retained tests but hosted CI has not run. The existing verified package still predates this work until local packaging is completed and recorded separately. F-02 transfer, linked scrolling and broader workspace/performance scope remain outstanding.
+
+## Current packaged desktop failures — 2026-09-10
+
+The source55a7b1b package was exercised with actual XCUITest keyboard/menu actions. The first complete suite found side-by-side restored slot-zero scroll0 instead of240 (tolerance2). Its stacked layout assertion was a harness error: sorting scrolling document text frames reversed correctly adjacent fixed pane containers. Independent review approved sorting the fixed containers while retaining all UUID, positive-size, hittability and adjacency assertions.
+
+A fresh run with that corrected ordering passed the stacked geometry checks, then exposed restored scroll102 instead of240. The final quit persisted the wrong origin. This is a production restoration failure, not a passing pane acceptance result; tolerances and requested values remain unchanged. Both shared-pane content/undo/restart tests passed separately within that run, as recorded in [shared-pane verification](shared-document-panes.md).
+
+The internal mechanism is still being diagnosed with a private instrumented copy; early layout clamping is a hypothesis until geometry traces establish it. No speculative scroll fix or delayed replay has been shipped. Raw synthetic evidence and source manifests remain ignored under `.local/desktop-ui/`.

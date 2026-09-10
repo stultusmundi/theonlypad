@@ -31,7 +31,8 @@ final class SharedPanesTests: XCTestCase {
       }
     }
     app.launch()
-    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+    XCTAssertTrue(
+      app.windows.firstMatch.exists || app.windows.firstMatch.waitForExistence(timeout: 15))
     return (app, state)
   }
 
@@ -48,6 +49,7 @@ final class SharedPanesTests: XCTestCase {
 
   @MainActor
   private func waitCount(_ query: XCUIElementQuery, _ count: Int) {
+    if query.count == count { return }
     XCTAssertEqual(
       XCTWaiter.wait(
         for: [
@@ -59,18 +61,20 @@ final class SharedPanesTests: XCTestCase {
   @MainActor
   private func menu(_ app: XCUIApplication, _ section: String, _ title: String) {
     let menu = app.menuBars.menuBarItems[section]
-    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+    XCTAssertTrue(menu.exists || menu.waitForExistence(timeout: 5))
     menu.click()
     let item = menu.menus.menuItems.matching(NSPredicate(format: "title == %@", title)).firstMatch
-    XCTAssertTrue(item.waitForExistence(timeout: 5), "Missing actual menu action: \(title)")
+    XCTAssertTrue(
+      item.exists || item.waitForExistence(timeout: 5), "Missing actual menu action: \(title)")
     XCTAssertTrue(item.isEnabled)
     item.click()
   }
 
   @MainActor
   private func exact(_ text: String, in view: XCUIElement) {
-    XCTAssertTrue(view.waitForExistence(timeout: 10))
+    XCTAssertTrue(view.exists || view.waitForExistence(timeout: 10))
     let expected = Data(text.utf8)
+    if let actual = view.value as? String, Data(actual.utf8) == expected { return }
     let predicate = NSPredicate { object, _ in
       guard let actual = (object as? XCUIElement)?.value as? String else { return false }
       return Data(actual.utf8) == expected
@@ -93,23 +97,26 @@ final class SharedPanesTests: XCTestCase {
   @MainActor
   private func arrangement(_ app: XCUIApplication, sideBySide: Bool) throws -> [XCUIElement] {
     waitCount(editors(app), 2)
-    let views = editors(app).allElementsBoundByIndex.sorted {
-      sideBySide ? $0.frame.midX < $1.frame.midX : $0.frame.midY < $1.frame.midY
-    }
+    let views = editors(app).allElementsBoundByIndex
     XCTAssertNotEqual(views[0].identifier, views[1].identifier)
-    let containers = try views.map { view -> XCUIElement in
+    // Text view frames move with document scrolling. Order the fixed pane containers.
+    let panes = try views.map { view -> (view: XCUIElement, container: XCUIElement) in
       let suffix = String(view.identifier.dropFirst("editor.text.".count))
       _ = try XCTUnwrap(UUID(uuidString: suffix))
       let container = app.windows.descendants(matching: .any)
         .matching(identifier: "editor.pane." + suffix).firstMatch
-      XCTAssertTrue(container.waitForExistence(timeout: 5))
+      XCTAssertTrue(container.exists || container.waitForExistence(timeout: 5))
       XCTAssertGreaterThan(container.frame.width, 0)
       XCTAssertGreaterThan(container.frame.height, 0)
       XCTAssertTrue(view.isHittable)
-      return container
+      return (view, container)
+    }.sorted {
+      sideBySide
+        ? $0.container.frame.midX < $1.container.frame.midX
+        : $0.container.frame.midY < $1.container.frame.midY
     }
-    let first = containers[0].frame
-    let second = containers[1].frame
+    let first = panes[0].container.frame
+    let second = panes[1].container.frame
     if sideBySide {
       XCTAssertLessThanOrEqual(first.maxX, second.minX + 2)
       XCTAssertLessThan(abs(first.midY - second.midY), 5)
@@ -117,12 +124,12 @@ final class SharedPanesTests: XCTestCase {
       XCTAssertLessThanOrEqual(first.maxY, second.minY + 2)
       XCTAssertLessThan(abs(first.midX - second.midX), 5)
     }
-    return views
+    return panes.map(\.view)
   }
 
   @MainActor
   private func append(_ marker: String, through view: XCUIElement, app: XCUIApplication) {
-    XCTAssertTrue(view.waitForExistence(timeout: 10))
+    XCTAssertTrue(view.exists || view.waitForExistence(timeout: 10))
     view.click()
     app.typeKey(.downArrow, modifierFlags: .command)
     app.typeText(marker)
@@ -235,10 +242,11 @@ final class SharedPanesTests: XCTestCase {
     quit(app)
     try assertOnePersistedTab(state, tabIdentifier: tabID)
     app.launch()
-    waitCount(editors(app), 1)
+    waitCount(editors(app), 2)
     waitCount(tabs(app), 1)
     XCTAssertEqual(tabs(app).firstMatch.identifier, tabID)
-    exact(expected, in: editors(app).firstMatch)
+    exactBoth(expected, app)
+    _ = try arrangement(app, sideBySide: true)
     XCTAssertEqual(try Data(contentsOf: file), Data(expected.utf8))
   }
 
@@ -257,9 +265,10 @@ final class SharedPanesTests: XCTestCase {
     quit(app)
     try assertOnePersistedTab(state, tabIdentifier: tabID)
     app.launch()
-    waitCount(editors(app), 1)
+    waitCount(editors(app), 2)
     waitCount(tabs(app), 1)
     XCTAssertEqual(tabs(app).firstMatch.identifier, tabID)
-    exact(expected, in: editors(app).firstMatch)
+    exactBoth(expected, app)
+    _ = try arrangement(app, sideBySide: false)
   }
 }

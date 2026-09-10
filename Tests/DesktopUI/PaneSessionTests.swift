@@ -93,11 +93,10 @@ final class PaneSessionTests: XCTestCase {
   @MainActor
   private func arrangement(_ app: XCUIApplication, sideBySide: Bool) throws -> [XCUIElement] {
     waitCount(editors(app), 2)
-    let views = editors(app).allElementsBoundByIndex.sorted {
-      sideBySide ? $0.frame.midX < $1.frame.midX : $0.frame.midY < $1.frame.midY
-    }
+    let views = editors(app).allElementsBoundByIndex
     XCTAssertNotEqual(views[0].identifier, views[1].identifier)
-    let containers = try views.map { view -> XCUIElement in
+    // Text view frames move with document scrolling. Order the fixed pane containers.
+    let panes = try views.map { view -> (view: XCUIElement, container: XCUIElement) in
       let suffix = String(view.identifier.dropFirst("editor.text.".count))
       _ = try XCTUnwrap(UUID(uuidString: suffix))
       let container = app.windows.descendants(matching: .any)
@@ -106,10 +105,14 @@ final class PaneSessionTests: XCTestCase {
       XCTAssertGreaterThan(container.frame.width, 0)
       XCTAssertGreaterThan(container.frame.height, 0)
       XCTAssertTrue(view.isHittable)
-      return container
+      return (view, container)
+    }.sorted {
+      sideBySide
+        ? $0.container.frame.midX < $1.container.frame.midX
+        : $0.container.frame.midY < $1.container.frame.midY
     }
-    let first = containers[0].frame
-    let second = containers[1].frame
+    let first = panes[0].container.frame
+    let second = panes[1].container.frame
     if sideBySide {
       XCTAssertLessThanOrEqual(first.maxX, second.minX + 2)
       XCTAssertLessThan(abs(first.midY - second.midY), 5)
@@ -117,7 +120,7 @@ final class PaneSessionTests: XCTestCase {
       XCTAssertLessThanOrEqual(first.maxY, second.minY + 2)
       XCTAssertLessThan(abs(first.midX - second.midX), 5)
     }
-    return views
+    return panes.map(\.view)
   }
 
   @MainActor
