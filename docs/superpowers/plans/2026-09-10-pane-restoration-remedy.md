@@ -22,9 +22,11 @@ New native value types belong in `Sources/TheOnlyPad/DocumentAppliedSettings.swi
 
 Files: `scripts/test-native-document-transfer.sh`, `scripts/test-editor-transfer-projection.sh`, `scripts/test-native-close-model.sh`; a shared coordinator under `Tests/NativeIntegration/` if useful; corresponding pure coordinator tests. Own these files explicitly before parallel implementation.
 
-- [ ] Preserve each runner's exact source transformations, build prerequisites and assertions while replacing its legacy session-owning Popen/wait cleanup with the accepted frozen watchdog imported and called by the same coordinator process. Do not wrap the old runner in a second session owner.
-- [ ] Freeze all required native sources, test-only access extensions and build inputs; include `DocumentAppliedSettings.swift` when introduced. Selective source-list runners must not accidentally omit it. Recheck hashes after execution and retain complete wait/capture receipts plus positive test counts.
-- [ ] Add pure failure cases for failed/missing receipts, source changes and zero-test success. Run the unchanged transfer/projection/close suites through the migrated coordinators; document built-product prerequisites exactly. Review this independently before using the runners for Task1/2.
+- [x] Preserve each runner's exact source transformations, build prerequisites and assertions while replacing its legacy session-owning Popen/wait cleanup with the accepted frozen watchdog imported and called by the same coordinator process. Do not wrap the old runner in a second session owner.
+- [x] Freeze all required native sources, test-only access extensions and build inputs; include `DocumentAppliedSettings.swift` when introduced. Selective source-list runners must not accidentally omit it. Recheck hashes after execution and retain complete wait/capture receipts plus positive test counts.
+- [x] Add pure failure cases for failed/missing receipts, source changes and zero-test success. Run the unchanged transfer/projection/close suites through the migrated coordinators; document built-product prerequisites exactly. Review this independently before using the runners for Task1/2.
+
+Verified evidence: `docs/verification/native-regression-runners.md`.
 
 ## Task 1: Applied state, configuration admission and settings reconciliation
 

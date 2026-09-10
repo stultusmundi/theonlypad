@@ -27,6 +27,7 @@ jobs:
         run: scripts/test-managed-documents.sh
       - name: Document transfer foundations
         run: |
+          python3 -m unittest discover -s Tests/NativeIntegration -p test_native_regressions.py
           scripts/test-document-transfer-registry.sh
           bash scripts/test-application-document-transfer-process.sh
           scripts/test-application-document-transfer-publisher.sh
