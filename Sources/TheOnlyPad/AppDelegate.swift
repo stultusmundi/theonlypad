@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var registry = CommandRegistry()
   private var shortcutController: ApplicationShortcutController?
   private var shortcutRegistryReady = false
+  private var commandKeyPublication = 0
+  private var publishedCommandKeys: [String: PublishedCommandKey] = [:]
   private var preparingQuit = false
   private var preferences: PreferencesController?
   private var settings = EditorSettings.defaults
@@ -444,6 +446,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   @objc private func command(_ sender: NSMenuItem) {
     guard let id = sender.representedObject as? String else { return }
+    guard
+      !NativeCommandKeyAdmission.shouldReject(
+        sender: sender, snapshot: publishedCommandKeys[id], publication: commandKeyPublication,
+        scopedEvent: (NSApp as? CommandDispatchApplication)?.keyboardDispatchEvent,
+        currentEvent: NSApp.currentEvent
+      )
+    else { return }
     dispatch(id)
   }
 
@@ -785,6 +794,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   private func buildMenus() {
+    commandKeyPublication += 1
+    var nextCommandKeys: [String: PublishedCommandKey] = [:]
     let main = NSMenu()
     func submenu(_ title: String) -> NSMenu {
       let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
@@ -832,10 +843,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       let item = NSMenuItem(title: title, action: #selector(command(_:)), keyEquivalent: "")
       item.target = self
       item.representedObject = descriptor.id
-      NativeKeyboardShortcut.configure(
-        item,
-        shortcut: shortcutRegistryReady
-          ? descriptor.shortcut.flatMap { try? KeyboardShortcut(canonicalString: $0) } : nil)
+      let shortcut =
+        shortcutRegistryReady
+        ? descriptor.shortcut.flatMap { try? KeyboardShortcut(canonicalString: $0) } : nil
+      NativeKeyboardShortcut.configure(item, shortcut: shortcut)
+      nextCommandKeys[descriptor.id] = PublishedCommandKey(
+        item: item, id: descriptor.id, shortcut: shortcut, publication: commandKeyPublication)
       if menu === app { menu.insertItem(item, at: 1) } else { menu.addItem(item) }
     }
     let window = submenu("Window")
@@ -849,5 +862,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     NSApp.windowsMenu = window
     if !shortcutRegistryReady { withdrawShortcutEquivalents(main) }
     NSApp.mainMenu = main
+    publishedCommandKeys = nextCommandKeys
   }
 }

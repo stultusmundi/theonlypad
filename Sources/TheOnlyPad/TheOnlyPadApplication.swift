@@ -3,7 +3,7 @@ import AppKit
 @main
 struct TheOnlyPadApplication {
   @MainActor static func main() {
-    let application = NSApplication.shared
+    let application = CommandDispatchApplication.shared
     application.setActivationPolicy(.regular)
     let delegate = AppDelegate()
     application.delegate = delegate

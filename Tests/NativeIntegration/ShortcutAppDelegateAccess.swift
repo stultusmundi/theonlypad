@@ -10,4 +10,7 @@ extension AppDelegate {
   }
   var shortcutReadyForTesting: Bool { shortcutRegistryReady }
   var shortcutRegistryForTesting: CommandRegistry { registry }
+  // Read actual published state; do not synthesize menu snapshots.
+  var publishedCommandKeysForTesting: [String: PublishedCommandKey] { publishedCommandKeys }
+  var commandKeyPublicationForTesting: Int { commandKeyPublication }
 }

@@ -44,7 +44,7 @@ let info: [String: Any] = [
     "DevelopmentVersion": AppIdentity.version,
     "LSMinimumSystemVersion": minimum,
     "NSHighResolutionCapable": true,
-    "NSPrincipalClass": "NSApplication",
+    "NSPrincipalClass": "PadCommandApplication",
     "CFBundleURLTypes": [["CFBundleURLName": AppIdentity.bundleIdentifier + ".open", "CFBundleURLSchemes": [AppIdentity.urlScheme]]],
     "NSHumanReadableCopyright": "MIT license; see Resources/LICENSE.txt",
     "CFBundleDocumentTypes": [[

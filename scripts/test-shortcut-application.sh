@@ -8,7 +8,7 @@ if [ "$#" -ne 0 ]; then
 fi
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
-for file in Sources/TheOnlyPad/ApplicationShortcutController.swift Sources/TheOnlyPad/KeyboardShortcutController.swift Tests/NativeIntegration/ShortcutApplicationTests.swift Tests/NativeIntegration/ShortcutAppDelegateAccess.swift Tests/NativeIntegration/ShortcutControllerAccess.swift; do
+for file in scripts/run-owned-search-tests.py Sources/TheOnlyPad/ApplicationShortcutController.swift Sources/TheOnlyPad/KeyboardShortcutController.swift Tests/NativeIntegration/ShortcutApplicationTests.swift Tests/NativeIntegration/NativeCommandKeyAdmissionTests.swift Tests/NativeIntegration/NativeCommandPublicationTests.swift Tests/NativeIntegration/ShortcutAppDelegateAccess.swift Tests/NativeIntegration/ShortcutControllerAccess.swift; do
   if [ ! -f "$file" ]; then echo "Required integration source is missing: $file" >&2; exit 2; fi
 done
 mkdir -p .local/shortcut-application-tests
@@ -40,7 +40,8 @@ for name,access,marker,private_marker in [
     target.write_text(original+'\n'+contents)
     (run/(name+'.test-access.txt')).write_text(contents)
     manifest.append({'source':extension.as_posix(),'appendedTo':str(target.relative_to(package)),'sha256':hashlib.sha256(contents.encode()).hexdigest()})
-freeze(Path('Tests/NativeIntegration/ShortcutApplicationTests.swift'),tests/'ShortcutApplicationTests.swift')
+for name in ['ShortcutApplicationTests.swift', 'NativeCommandKeyAdmissionTests.swift', 'NativeCommandPublicationTests.swift']:
+    freeze(Path('Tests/NativeIntegration')/name,tests/name)
 (package/'Package.swift').write_text('''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(
@@ -54,29 +55,64 @@ let package = Package(
   swiftLanguageModes: [.v5]
 )
 ''')
+watchdog_source=Path('scripts/run-owned-search-tests.py')
+watchdog_bytes=watchdog_source.read_bytes()
+(run/'run-owned-search-tests.py').write_bytes(watchdog_bytes)
+manifest.append({'source':str(watchdog_source),'destination':'run-owned-search-tests.py',
+                 'sha256':hashlib.sha256(watchdog_bytes).hexdigest()})
 (run/'source-hashes.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (run/'frozen-source-hashes.json').write_text(json.dumps([
     {'path':str(path.relative_to(package)),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
     for path in sorted(package.rglob('*.swift'))],indent=2)+'\n')
 PY
-python3 - "$run" <<'PY'
+exec python3 - "$run" <<'PY'
 from pathlib import Path
-import json,os,signal,subprocess,sys
+import importlib.util,json,re,sys
 run=Path(sys.argv[1])
-command=['scripts/swift.sh','test','--package-path',str(run/'Package'),'--scratch-path',str(run/'Build')]
-with (run/'toolchain.log').open('wb') as log:
-    subprocess.run(['swift','--version'],stdout=log,stderr=subprocess.STDOUT,check=True)
-with (run/'test.log').open('wb') as log:
-    child=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+spec=importlib.util.spec_from_file_location('shortcut_test_watchdog',run/'run-owned-search-tests.py')
+watchdog=importlib.util.module_from_spec(spec)
+sys.modules[spec.name]=watchdog
+spec.loader.exec_module(watchdog)
+# The imported watchdog is the sole process owner. Never wrap this coordinator
+# in another process-group watchdog or add Popen/poll/wait/session logic here.
+def execute(command,name,timeout):
+    output=run/name
+    code=watchdog.main(['--timeout',str(timeout),'--output',str(output),'--',*command])
     try:
-        code=child.wait(timeout=180)
-        status={'exit':code,'timedOut':False}
-    except subprocess.TimeoutExpired:
-        try:os.killpg(child.pid,signal.SIGKILL)
-        except ProcessLookupError:pass
-        child.wait();code=124
-        status={'exit':code,'timedOut':True,'ownedProcessGroupKilledAndReaped':True}
-(run/'status.json').write_text(json.dumps(status)+'\n')
-print((run/'test.log').read_text(),end='')
+        receipt=json.loads((output/'status.json').read_text())
+    except (OSError,ValueError):
+        receipt=None
+    text=''.join((output/stream).read_text(errors='replace')
+                 for stream in ['stdout.log','stderr.log'] if (output/stream).is_file())
+    valid_success=(isinstance(receipt,dict) and 'failure' in receipt and 'interruptedSignal' in receipt
+                   and receipt.get('exit')==0
+                   and receipt.get('waitCompleted') is True and receipt.get('returnCode')==0
+                   and receipt.get('captureComplete') is True and receipt.get('truncated') is False
+                   and receipt.get('timedOut') is False and receipt.get('failure') is None
+                   and receipt.get('interruptedSignal') is None
+                   and receipt.get('groupSignalAttempted') is True
+                   and receipt.get('groupCleanup') in ('signaled','absent','exitedLeaderOnly'))
+    if receipt is None or (code==0 and not valid_success):
+        code=125
+    return code,receipt,text
+code,toolchain_receipt,toolchain=execute(['swift','--version'],'toolchain-watchdog',30)
+(run/'toolchain.log').write_text(toolchain)
+receipt=None; output=''; count=0; suites_present=False
+if code==0:
+    command=['scripts/swift.sh','test','--package-path',str(run/'Package'),'--scratch-path',str(run/'Build')]
+    code,receipt,output=execute(command,'test-watchdog',180)
+    (run/'test.log').write_text(output)
+    summaries=[(int(count),int(failures)) for count,failures in
+               re.findall(r'Executed (\d+) tests?, with (\d+) failures',output)]
+    count=max((count for count,_ in summaries),default=0)
+    suites_present=all("Test Suite '"+name+"' passed" in output for name in
+                       ['NativeCommandKeyAdmissionTests','NativeCommandPublicationTests','ShortcutApplicationTests'])
+    if code==0 and (count==0 or any(failures for _,failures in summaries) or not suites_present):
+        code=125
+status={'exit':code,'testCount':count,'requiredSuitesPassed':suites_present,
+        'toolchainWatchdog':toolchain_receipt,'testWatchdog':receipt}
+(run/'status.json').write_text(json.dumps(status,indent=2)+'\n')
+print(output,end='')
+print(json.dumps({'exit':code,'testCount':count,'requiredSuitesPassed':suites_present}))
 raise SystemExit(code)
 PY
