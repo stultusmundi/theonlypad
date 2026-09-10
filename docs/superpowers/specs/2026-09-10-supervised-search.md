@@ -27,7 +27,7 @@ Choose **one application-owned supervisor with one sequential bundled Foundation
 
 Apple describes XPC services as launchd-managed; this is a different lifecycle from a directly waited child. [Apple XPC service guide](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html). ICU exposes matching time and stack limits, but adopting them would not establish Foundation's configuration or a compilation deadline. [ICU regex API](https://unicode-org.github.io/icu-docs/apidoc/dev/icu4c/uregex_8h.html).
 
-## Current integration facts
+## Design-baseline integration facts
 
 - `SearchService.matches` and `replacing` compile and enumerate synchronously. The document panel invokes both for Replace All, giving two enumerations and budgets. Selection bounds use transparent bounds and no anchoring bounds, Unicode word boundaries, and UTF-16 scalar validation. Regex replacement uses the existing numeric capture parser, including `$0`, optional unmatched groups and backslash quoting. Preserve these semantics.
 - `SearchPanelController.start` captures a String before creating an unbounded detached task. Cancel invalidates UI generation but releases its task reference immediately. `EditorWindowController.showSearch` binds one original model/pane and currently uses exact text comparison at selection/replacement. Snapshot and application admission must remain native-owned.
@@ -35,7 +35,7 @@ Apple describes XPC services as launchd-managed; this is a different lifecycle f
 - Package.swift currently has PadCore, TheOnlyPad and core tests only. `scripts/package.sh` copies and signs one executable. `scripts/sbom.py` inventories its hash, and `check-package.py` compares bundle/archive bytes. A helper must be explicitly built, copied, signed, inventoried and checked; a developer executable beside the app is insufficient.
 - Selection/open-document scopes, complete folder replacement/backup flows, and 1 GB regex support are not implemented by this change. Existing large-file search is literal byte search; keep its capability label distinct. Full C-07/C-08/I scope remains required across staged work.
 
-Sources inspected: the two reviewed regex documents, SearchService.swift, FolderSearch.swift, SearchPanelController.swift, FolderSearchController.swift, the `showSearch` adapter in EditorWindowController.swift, Package.swift, package.sh, sbom.py and check-package.py. The active error worker may change flag handling/messages after this read; implementation must integrate its final reviewed source rather than snapshot these older versions over it.
+Sources inspected: the two reviewed regex documents, SearchService.swift, FolderSearch.swift, SearchPanelController.swift, FolderSearchController.swift, the `showSearch` adapter in EditorWindowController.swift, Package.swift, package.sh, sbom.py and check-package.py. The later engine-error fix 9d54295 and semantic operation 28e2a9f are independently approved. Frame-only module aa3aa82 is independently approved; no helper or native routing exists yet. Integrate the reviewed current sources rather than restoring this older baseline.
 
 ## Ownership, admission and exact interfaces
 

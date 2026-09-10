@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-supervised-search.md`, semantic primitive stage, and `docs/verification/regex-execution-review.md`. This plan does not implement process containment.
 
-**Status:** Planned; execute only after the active engineFailure task is independently approved. Root retains ownership of this plan until dispatch.
+**Status:** Implemented and independently approved at 28e2a9f; verification is recorded below and in `docs/verification/search.md`. This completed semantic slice does not complete supervised execution or native routing.
 
 ## Global Constraints
 
@@ -49,8 +49,8 @@ public func execute(
 
 `find` returns ranges and nil replacement. `replace` returns ranges and full resulting text, even with zero matches. Captures stay internal; no public capture payload or additional capture enumeration is needed. Existing `matches` returns the find output ranges. Existing `replacing` calls replace with nil scope and returns its guaranteed replacement. Both preserve their current defaults and errors.
 
-- [ ] Add an invocation-counting benign enumerator through the preceding internal test seam. It delegates to the actual compiled Foundation regex, increments once per enumeration, and uses a generous finite test budget. Record the current native-style composition of matches then replacing as two enumerations; this is baseline evidence, not a new product test to retain unnecessarily.
-- [ ] Add tests for the new public execute API. Distinguish an API compilation red from a genuine assertion failure. The principal acceptance is exact ranges/output and one invocation:
+- [x] Add an invocation-counting benign enumerator through the preceding internal test seam. It delegates to the actual compiled Foundation regex, increments once per enumeration, and uses a generous finite test budget. Record the current native-style composition of matches then replacing as two enumerations; this is baseline evidence, not a new product test to retain unnecessarily.
+- [x] Add tests for the new public execute API. Distinguish an API compilation red from a genuine assertion failure. The principal acceptance is exact ranges/output and one invocation:
 
 ```swift
 let query = SearchQuery(pattern: "(a)", mode: .regex)
@@ -61,8 +61,8 @@ XCTAssertEqual(result.replacement, "a! a!")
 XCTAssertEqual(enumerations, 1)
 ```
 
-- [ ] Run `scripts/swift.sh test --scratch-path .build/search-single-enumeration --filter SearchExecutionTests`; retain setup and behavioral results separately.
-- [ ] Move the existing replacement assembly into a private builder receiving the query mode, single compiled expression, accepted checking results, original text, template and the same monotonic deadline. The mode is necessary: literal/escaped replacement text stays literal and must not be parsed as regex captures. Validate template after search, as currently done. Do not call matches/replacing recursively from execute. The implementation flow is:
+- [x] Run `scripts/swift.sh test --scratch-path .build/search-single-enumeration --filter SearchExecutionTests`; retain setup and behavioral results separately.
+- [x] Move the existing replacement assembly into a private builder receiving the query mode, single compiled expression, accepted checking results, original text, template and the same monotonic deadline. The mode is necessary: literal/escaped replacement text stays literal and must not be parsed as regex captures. Validate template after search, as currently done. Do not call matches/replacing recursively from execute. The implementation flow is:
 
 ```swift
 let deadline = ProcessInfo.processInfo.systemUptime + timeLimit
@@ -79,11 +79,11 @@ return SearchExecutionOutput(matches: results.map(\.range), replacement: replace
 
 Keep existing preallocation/output limits and cancellation checks inside the builder. A failed enumeration/template/output check returns no output object. Prefix copying starts at original offset0 and suffix ends at original text length, so scoped replacement preserves text outside the scope.
 
-- [ ] Add explicit scoped replacement acceptance: replacing `a` within range(2,1) of `a a a` yields range(2,1) and `a b a`. A whole-word query over the middle letters of a word yields no artificial boundary. Include zero-length EOF replacement, lookahead captures, unmatched optional captures, `$0`, multi-digit numeric capture parsing and escaped template literals. Expected outputs are literal fixture values, not a second execution of the same implementation.
-- [ ] Add benign fixtures for literal metacharacters, escaped newline/NUL, Unicode case/whole-word behavior, emoji plus combining marks and invalid surrogate-splitting scopes. Require exact UTF-16 ranges and compare Unicode replacement output as UTF-16 units, not only Swift String equality (which permits canonical equivalence). Test no matches returns unchanged full text for replace and nil replacement for find.
-- [ ] Assert prior error precedence and limits: invalid query before invalid template; engineFailure before result construction; cancellation/limit followed by internalError preserves the first error; oversized output refuses; invalid scope does not enumerate. Preserve existing wrapper behavior with direct expected results, and count exactly one enumeration per wrapper call.
-- [ ] Rerun the focused suite, preceding engine-error suite and actual app build. If running all SearchTests or the core suite, use the verified outer watchdog. Run scoped strict formatting/public/whitespace checks; retain exact source hashes and command outcomes.
-- [ ] Obtain independent spec and quality review, resolve material findings and make a scoped local commit. Record this API as implemented only after tests/review; C-07/C-08 remain partial until supervisor/native/folder integration and remaining acceptance complete.
+- [x] Add explicit scoped replacement acceptance: replacing `a` within range(2,1) of `a a a` yields range(2,1) and `a b a`. A whole-word query over the middle letters of a word yields no artificial boundary. Include zero-length EOF replacement, lookahead captures, unmatched optional captures, `$0`, multi-digit numeric capture parsing and escaped template literals. Expected outputs are literal fixture values, not a second execution of the same implementation.
+- [x] Add benign fixtures for literal metacharacters, escaped newline/NUL, Unicode case/whole-word behavior, emoji plus combining marks and invalid surrogate-splitting scopes. Require exact UTF-16 ranges and compare Unicode replacement output as UTF-16 units, not only Swift String equality (which permits canonical equivalence). Test no matches returns unchanged full text for replace and nil replacement for find.
+- [x] Assert prior error precedence and limits: invalid query before invalid template; engineFailure before result construction; cancellation/limit followed by internalError preserves the first error; oversized output refuses; invalid scope does not enumerate. Preserve existing wrapper behavior with direct expected results, and count exactly one enumeration per wrapper call.
+- [x] Rerun the focused suite, preceding engine-error suite and actual app build. If running all SearchTests or the core suite, use the verified outer watchdog. Run scoped strict formatting/public/whitespace checks; retain exact source hashes and command outcomes.
+- [x] Obtain independent spec and quality review, resolve material findings and make a scoped local commit. Record this API as implemented only after tests/review; C-07/C-08 remain partial until supervisor/native/folder integration and remaining acceptance complete.
 
 ## Root consistency review
 

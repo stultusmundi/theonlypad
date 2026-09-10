@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-supervised-search.md`; prerequisite `docs/superpowers/plans/2026-09-10-search-single-enumeration.md`; the reviewed protocol constraints below.
 
-**Status:** Root-reviewed planned work; no codec implementation or verification yet. Semantic prerequisite28e2a9f is independently approved; Task1 framing is ready for dispatch.
+**Status:** Task1 framing implemented and independently approved at aa3aa82 (19 focused tests pass). Tasks2–4 remain planned; see `docs/verification/search-wire.md`. Semantic prerequisite28e2a9f is independently approved.
 
 ## Global Constraints
 
@@ -247,8 +247,8 @@ Text sinks own incremental construction of the one final String and their exact 
 
 Files: SearchWireTypes.swift, SearchWireFrameCodec.swift, SearchWireFrameTests.swift, Package.swift. This task implements SearchWireIdentity, SearchWireError, SearchWireKind, SearchWireFrame and frame encoder/decoder only. Limits/request/response/terminal values are added with Task3, not committed as unused stubs here.
 
-- [ ] Add the listed target/test declarations and compiling type/method seams. Do not misreport missing-module compilation as a behavioral red.
-- [ ] Write fixed-byte header fixtures by hand (magic/version/kind/count/UUID), not only encoder/decoder round trips. Principal behavioral fixture: declared payload65,537 must reject before body or sink invocation.
+- [x] Add the listed target/test declarations and compiling type/method seams. Do not misreport missing-module compilation as a behavioral red.
+- [x] Write fixed-byte header fixtures by hand (magic/version/kind/count/UUID), not only encoder/decoder round trips. Principal behavioral fixture: declared payload65,537 must reject before body or sink invocation.
 
 ```swift
 let decoder = SearchWireFrameDecoder()
@@ -262,9 +262,9 @@ XCTAssertEqual(emitted, 0)
 XCTAssertLessThanOrEqual(decoder.bufferedByteCount, 32)
 ```
 
-- [ ] Proposed command: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireFrameTests`; retain genuine red, then implement bounded header/body counters and rerun unchanged tests.
-- [ ] Cover every header split, coalesced small frames, invalid magic/version/kind, UInt64.max length, empty allowed frame, maximum payload, trailing partial header/body EOF, emit failure, caught callback reentry and poisoned subsequent use. Assert exact errors and no sink calls on rejected headers.
-- [ ] Scope-format, independently review this framing deliverable, then scoped local commit if root dispatch authorizes it. No process test or broad core suite needed for this parser task.
+- [x] Proposed command: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireFrameTests`; retain genuine red, then implement bounded header/body counters and rerun unchanged tests.
+- [x] Cover every header split, coalesced small frames, invalid magic/version/kind, UInt64.max length, empty allowed frame, maximum payload, trailing partial header/body EOF, emit failure, caught callback reentry and poisoned subsequent use. Assert exact errors and no sink calls on rejected headers.
+- [x] Scope-format, independently review this framing deliverable, then scoped local commit if root dispatch authorizes it. No process test or broad core suite needed for this parser task.
 
 ## Task 2 — Streaming UTF-16 and constant-time range endpoints
 
@@ -347,4 +347,4 @@ Feed this result through the exact writer/reader/sink sequence described above a
 
 This proposal defines the complete wire-only interfaces and binary schema; no process/native receipt is fabricated. Root review refinements are explicit: versioned hello rather than nonexistent build hash; match-only responses; complete codec lifecycle/direct-call limits; scheduled execution/acknowledgement after consume; local semantic preflight distinct from poisoned peer IPC; observable large-index correctness plus source complexity review. Exact Foundation zero-length controls precede predicate enforcement and never authorize sorting/tolerance. Memory growth of the eventual String sinks and hard child lifecycle are intentionally outside this implementation slice and must be covered before production routing.
 
-No plan commands have been executed. Root reviewed the private draft and lifecycle/error-boundary refinements before adopting this plan. The task split prevents committing unused codec stubs; each task retains its own meaningful tests and review gate. No source, tests or Package.swift change has been made by this plan.
+Task1 commands have been executed and reviewed; later-task commands remain proposed. Root reviewed the private draft and lifecycle/error-boundary refinements before adopting this plan. The task split prevents committing unused codec stubs; each task retains its own meaningful tests and review gate. Task1 changed only Package.swift and the three framing source/test files; later protocol stages remain outstanding.
