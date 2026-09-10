@@ -50,7 +50,8 @@ final class SearchChildChannels: SearchChildConnection, @unchecked Sendable {
     self.init(
       requestWriteFD: requestWriteFD, responseReadFD: responseReadFD,
       lifetimeWriteFD: lifetimeWriteFD, operations: DarwinChannelDescriptorOperations(),
-      sources: DispatchChannelSourceFactory(), queue: DispatchQueue(label: "SearchChildChannels.io"))
+      sources: DispatchChannelSourceFactory(), queue: DispatchQueue(label: "SearchChildChannels.io")
+    )
   }
 
   init(
