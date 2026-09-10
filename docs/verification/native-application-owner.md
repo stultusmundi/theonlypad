@@ -55,3 +55,18 @@ This run used a frozen native package from before the concurrent AppDelegate mig
 hashed owner/test overlays. It includes real native controllers, registry, recovery actor and
 publisher, but does not validate the new AppDelegate source. AppDelegate and complete frozen
 application verification follow separately.
+
+A combined managed-document runner is being prepared to run the AppDelegate, process owner,
+controller routing, intake, external-open and close suites against one frozen native source set.
+Its result and CI adoption remain pending until execution.
+
+## Lost native endpoint recovery
+
+Independent review confirmed that generic checkpoint Retry repeated a missing-endpoint failure.
+A native regression edited a scratch document, forcibly closed its controller, and observed that
+Retry left no replacement endpoint. The original run had two expected failed assertions and an
+additional framework cleanup exception; that exception is not attributed to the ownership defect.
+Retry now requires settled ownership, recreates missing endpoints and reprojects existing ones
+before requesting a checkpoint. Nine owner tests pass in 2.354 seconds. The new test confirms the
+same dirty model, recovery authority and text survive, then reads the final session and recovery
+stores. Independent rereview found no material issue in this correction.

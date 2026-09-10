@@ -313,4 +313,46 @@ import XCTest
     XCTAssertEqual(try store.load()?.windows, [saved])
   }
 
+  func testCheckpointRetryRecreatesLostEndpointWithoutReplacingDirtyModel() async throws {
+    _ = NSApplication.shared
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = SessionStore(directory: directory.appendingPathComponent("session"))
+    let recoveryDirectory = directory.appendingPathComponent("recovery")
+    let recovery = RecoveryCoordinator(
+      directory: recoveryDirectory,
+      saveCheckpointSession: { try store.save($0) }, readCheckpointSession: { try store.load() })
+    let session = SessionCoordinator(
+      loadSession: { try store.load() }, claimRecovery: { try await recovery.claimStartup() })
+    let owner = try NativeApplicationDocuments(
+      session: session, recovery: recovery,
+      monitoring: ApplicationFileMonitoring(), onWindowCreated: { _ in }, onError: { _ in })
+    try await owner.start()
+    let controller = try XCTUnwrap(owner.windows.first)
+    let id = try XCTUnwrap(controller.selectedDocumentID)
+    let model = try XCTUnwrap(owner.registry.handle(id: id) as? EditorDocument)
+    let authority = model.recoveryAuthority
+    controller.focusedPane!.editor.insertText(
+      "retained endpoint 👩🏽‍💻\n", replacementRange: NSRange(location: 0, length: 0))
+    controller.close()
+    XCTAssertTrue(owner.windows.isEmpty)
+    XCTAssertTrue(owner.registry.handle(id: id) === model)
+    owner.requestCheckpoint()
+    for _ in 0..<500 where owner.lastCheckpointError == nil {
+      try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    XCTAssertNotNil(owner.lastCheckpointError)
+    try await owner.retryRecovery()
+    XCTAssertEqual(owner.windows.count, 1)
+    XCTAssertTrue(owner.registry.handle(id: id) === model)
+    XCTAssertEqual(model.recoveryAuthority, authority)
+    XCTAssertEqual(owner.windows.first?.focusedPane?.editor.string, "retained endpoint 👩🏽‍💻\n")
+    _ = try await owner.prepareQuit()
+    XCTAssertEqual(try store.load()?.windows.first?.tabs.first?.id, id)
+    XCTAssertEqual(
+      try RecoveryStore(directory: recoveryDirectory).loadAll().first { $0.id == id }?.text,
+      model.storage.string)
+  }
+
 }

@@ -606,6 +606,16 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       if case .retained(_, _, let error) = try await closing.wait(for: status.id) { throw error }
       return
     }
+    try requireUserAdmission()
+    try intake.requireSettled()
+    try closing.requireSettled()
+    for window in try registry.captureReadyWindows() {
+      if endpoints[window.id] == nil {
+        try recreateEndpoint(windowID: window.id)
+      } else {
+        try project(windowID: window.id)
+      }
+    }
     checkpoints.requestCheckpoint()
   }
 
