@@ -62,7 +62,7 @@ XCTAssertEqual(enumerations, 1)
 ```
 
 - [ ] Run `scripts/swift.sh test --scratch-path .build/search-single-enumeration --filter SearchExecutionTests`; retain setup and behavioral results separately.
-- [ ] Move the existing replacement assembly into a private builder receiving the single compiled expression, accepted checking results, original text, template and the same monotonic deadline. Validate template after search, as currently done. Do not call matches/replacing recursively from execute. The implementation flow is:
+- [ ] Move the existing replacement assembly into a private builder receiving the query mode, single compiled expression, accepted checking results, original text, template and the same monotonic deadline. The mode is necessary: literal/escaped replacement text stays literal and must not be parsed as regex captures. Validate template after search, as currently done. Do not call matches/replacing recursively from execute. The implementation flow is:
 
 ```swift
 let deadline = ProcessInfo.processInfo.systemUptime + timeLimit
@@ -71,7 +71,7 @@ let replacement: String?
 switch operation {
 case .find: replacement = nil
 case .replace(let template):
-  replacement = try buildReplacement(regex: regex, results: results, text: text,
+  replacement = try buildReplacement(mode: query.mode, regex: regex, results: results, text: text,
                                      template: template, deadline: deadline)
 }
 return SearchExecutionOutput(matches: results.map(\.range), replacement: replacement)

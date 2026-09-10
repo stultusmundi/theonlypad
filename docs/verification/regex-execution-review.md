@@ -1,5 +1,8 @@
 # Regex execution review — 2026-09-10
 
+Update: the internal-engine-error finding is fixed and independently approved at `9d54295`; [verification](search.md) records 412 passing committed-source core tests and actual hidden native catch coverage. The original assessment below describes its recorded pre-fix source. Hard execution containment and remaining scopes are still outstanding; the [supervised-search design](../superpowers/specs/2026-09-10-supervised-search.md) is planned, not implemented.
+
+
 Read-only assessment of C-03/C-07/C-08/C-10 and I background/cancellation requirements in `docs/BUILD_PROMPT.md:94` and `docs/BUILD_PROMPT.md:163`. Production sources were not modified. No build, runtime test, pathological regex, GUI, or benchmark was executed in this review. Historical results below are attributed to existing records, not fresh verification.
 
 ## Findings

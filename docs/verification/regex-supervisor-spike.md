@@ -14,3 +14,9 @@ A compiled Foundation child builds `(a+)+$`, writes a marker immediately before 
 This supports the feasibility of independently terminating and reaping an owned regex child while allowing a subsequent child to succeed. It does not implement or verify persistent IPC, application cancellation, queue fairness, byte budgets, RSS limits, packaging, crash recovery, or full search semantics. Startup and request deadlines must be distinct in the eventual design. Process separation alone is not a sandbox.
 
 The probe ran on the recorded macOS 26.6.2 ARM64 environment with the installed Swift 6.3.3 toolchain. Timings are single feasibility observations, not performance benchmarks or universal guarantees. The application still uses cooperative in-process regex execution; hard containment remains outstanding.
+
+## Scalar-boundary compatibility probe
+
+A separate bounded Foundation child searched one synthetic emoji (two UTF-16 units). Explicit high-surrogate, low-surrogate and high-surrogate-class patterns produced no matches; a dot produced exactly range(0,2). The child completed successfully in 0.468s under a 10-second outer watchdog. Evidence: `.local/regex-scalar-spike/result`.
+
+This supports scalar-boundary validation for these four fixtures only. It does not prove every possible regex produces scalar-aligned ranges. Keep these cases in direct/helper differential coverage and preserve full original UTF-16 coordinates. No application behavior changed.

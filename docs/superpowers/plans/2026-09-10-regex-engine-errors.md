@@ -10,7 +10,7 @@
 
 **Spec:** [regex execution review](../../verification/regex-execution-review.md), source-confirmed failure handling finding and proposed narrow fix. The supervised-helper architecture described there is separate outstanding work.
 
-**Status:** In progress with a dedicated worker after independently approved new-window tasks. Root reviewed this scope against C-02/C-07/C-08. No final implementation or verification claim yet.
+**Status:** Implemented at `9d54295`, independently approved for specification and quality with no findings. Focused core/folder and actual hidden native tests pass; committed-source integration passes 412 core tests. See `docs/verification/search.md`. Hard supervision, native scopes and broader C acceptance remain outstanding.
 
 ## Global constraints
 
@@ -28,7 +28,7 @@
 
 **Interfaces:** Keep existing public initializers and search methods source-compatible. Add `SearchError.engineFailure`. Introduce an internal `SearchService` initializer with an enumeration closure receiving the real compiled expression, text, matching options, range and Foundation callback. Existing public initialization supplies the actual Foundation enumeration closure. An internal folder executor overload takes the same query/text, current per-file limits and cancellation closure; the public overload uses SearchService. Keep query compilation and validation in the real service, not the scripted enumerator.
 
-- [ ] Add compiling seams that initially forward current production behavior unchanged. Add deterministic tests invoking public `matches` and `replacing` on the injected service. Construct a benign `NSTextCheckingResult` from a real expression such as `a` matched in `aa`; never fabricate invalid ranges. Emit nil+internalError, early valid match followed by completed+internalError, and result+internalError. Assert the exact typed error and no returned replacement. Assert the passed options include reportCompletion.
+- [x] Add compiling seams that initially forward current production behavior unchanged. Add deterministic tests invoking public `matches` and `replacing` on the injected service. Construct a benign `NSTextCheckingResult` from a real expression such as `a` matched in `aa`; never fabricate invalid ranges. Emit nil+internalError, early valid match followed by completed+internalError, and result+internalError. Assert the exact typed error and no returned replacement. Assert the passed options include reportCompletion.
 
 ```swift
 let query = SearchQuery(pattern: "a", mode: .regex)
@@ -40,8 +40,8 @@ XCTAssertThrowsError(try service.replacing(query, in: "aa", with: "b")) {
 }
 ```
 
-- [ ] Run `scripts/swift.sh test --scratch-path .build/search-engine-errors --filter SearchEngineFailureTests`. Retain the genuine behavioral red separately from seam compilation errors. This new suite must contain only scripted flags and benign real-engine controls.
-- [ ] Request reportProgress and reportCompletion together, preserving transparent/anchoring options. In every callback, first preserve an existing terminal failure and request stop. Check internalError before appending a result; store the first failure, request stop and throw it after enumeration. Cancellation/deadline checks continue to run; a later completion/error cannot overwrite an earlier cancellation or limit failure.
+- [x] Run `scripts/swift.sh test --scratch-path .build/search-engine-errors --filter SearchEngineFailureTests`. Retain the genuine behavioral red separately from seam compilation errors. This new suite must contain only scripted flags and benign real-engine controls.
+- [x] Request reportProgress and reportCompletion together, preserving transparent/anchoring options. In every callback, first preserve an existing terminal failure and request stop. Check internalError before appending a result; store the first failure, request stop and throw it after enumeration. Cancellation/deadline checks continue to run; a later completion/error cannot overwrite an earlier cancellation or limit failure.
 
 ```swift
 if failure != nil { stop.pointee = true; return }
@@ -55,11 +55,11 @@ do {
 }
 ```
 
-- [ ] Add benign progress/completed/hitEnd/requiredEnd controls, including zero-result success. Script a first match-limit failure then completion+internalError and require matchLimit. For cancellation, flip the test cancellation state only after enumeration begins, emit progress, then completion+internalError, and require cancelled. Include a real Foundation control asserting exact ranges/output. Rerun the same focused command unchanged.
-- [ ] Add a temporary-folder test with two synthetic UTF-8 files: the first yields one hit; the second executor throws engineFailure. The public operation path must throw engineFailure and return no complete report; unreadable counters cannot absorb it. Account for empty-input pattern validation separately so the first-file behavior is unambiguous. Retain ordinary malformed/cancel/limit semantics and execute the affected FolderSearchTests under an owned outer watchdog.
-- [ ] Add explicit engineFailure messages in document and folder panels: “The search engine could not finish. Narrow the pattern and try again.” Test the actual existing error-to-status path with injected errors or the established hidden harness; no visible app while GUI access is blocked. The failure path must not call replacement or publish partial results.
-- [ ] Run affected benign semantic tests and actual app build. For any command including existing adversarial tests, launch the runner as an owned subprocess with an outer timeout, terminate/reap only that subprocess group on expiry, and report timeout as failure. Do not label the cooperative 20ms fixture a hard-deadline proof.
-- [ ] Run scoped formatter, whitespace and public-pattern checks. Obtain independent spec/code review; correct material findings. Commit only owned files and publish sanitized evidence distinguishing scripted injection from actual Foundation controls. C-08 remains partial until hard execution containment and full acceptance are implemented.
+- [x] Add benign progress/completed/hitEnd/requiredEnd controls, including zero-result success. Script a first match-limit failure then completion+internalError and require matchLimit. For cancellation, flip the test cancellation state only after enumeration begins, emit progress, then completion+internalError, and require cancelled. Include a real Foundation control asserting exact ranges/output. Rerun the same focused command unchanged.
+- [x] Add a temporary-folder test with two synthetic UTF-8 files: the first yields one hit; the second executor throws engineFailure. The public operation path must throw engineFailure and return no complete report; unreadable counters cannot absorb it. Account for empty-input pattern validation separately so the first-file behavior is unambiguous. Retain ordinary malformed/cancel/limit semantics and execute the affected FolderSearchTests under an owned outer watchdog.
+- [x] Add explicit engineFailure messages in document and folder panels: “The search engine could not finish. Narrow the pattern and try again.” Test the actual existing error-to-status path with injected errors or the established hidden harness; no visible app while GUI access is blocked. The failure path must not call replacement or publish partial results.
+- [x] Run affected benign semantic tests and actual app build. For any command including existing adversarial tests, launch the runner as an owned subprocess with an outer timeout, terminate/reap only that subprocess group on expiry, and report timeout as failure. Do not label the cooperative 20ms fixture a hard-deadline proof.
+- [x] Run scoped formatter, whitespace and public-pattern checks. Obtain independent spec/code review; correct material findings. Commit only owned files and publish sanitized evidence distinguishing scripted injection from actual Foundation controls. C-08 remains partial until hard execution containment and full acceptance are implemented.
 
 ## Root design review
 
