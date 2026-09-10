@@ -74,3 +74,25 @@ Final SHA256 values:
 Missing-API compilation was recorded separately from behavioral red. Raw check output remains in tool transcripts; no separate logfiles were retained for this task. Response/terminal codecs, helper execution, containment, allocation policy, native/folder routing and packaged acceptance remain outstanding. The earlier464-test integration snapshot does not include this request implementation.
 
 Independent review found that input callbacks reentering the request reader could be normalized by the UTF16 decoder to sinkRejected, which incorrectly took precedence over the reader’s own failed state. Two new regressions first failed with exactly that mismatch, then passed after the containing failed state was checked first. Final request suite: **30 tests,0 failures**; strict scoped formatting/public-source/whitespace checks pass. Unchanged framing/UTF16 suites were not repeated for this ordering-only fix. Root verified final source and retained red/green log hashes and inspected their result summaries. The correction logs remain ignored locally, and scoped re-review approved I1 with no new findings.
+
+
+## Sequential response path — 2026-09-10
+
+Task3B source `869de1f7e26190f8d70baa128f501dffa41c2a94` implements response/terminal values, bounded response writing and sequential response reading. Independent specification and quality review approved this scope with no confirmed implementation findings. The reader validates request/index identity, ordinal, scalar/scope/range ordering, body shape, replacement UTF-16 and terminal status. It defers completion until its enclosing frame consume succeeds without trailing bytes. The writer validates signed ranges and body shape before responseStart, writes bounded batches, and emits terminal separately. Shared binary helpers moved to Types; request-codec changes are scoped to mechanical helper use.
+
+The implementation report records **28 response,30 request,19 frame and20 UTF-16 tests, all with0 failures**, plus the SearchExecution target build, strict scoped formatting, public-source and whitespace checks. Raw command output remains in the private execution transcript; separate raw logs were not retained. Root verified the four source SHA256 values:
+
+- Types: `2e4371b215fec840a498ab3686afde485bd1f30689743414b1ba05beb204674d`.
+- Request codec: `c69e5a559deea4824f8c2f8e3d8166c5a88dbc01c180d56763efd980c1392cac`.
+- Response codec: `c5f75540fd1b847111fbc37d57938709669607edcea7ccbf5dc087cbff38e49d`.
+- Response tests: `64b0a246f2275d67bec12e6c0c4b058738b94b54ec5d020d6c62033677b337fb`.
+
+```sh
+scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireResponseTests
+```
+
+Tests include fixed ABI bytes, all semantic terminal statuses, partial-body failure discard, signed writer preflight, scalar/range/scope validation, UTF-16 errors, callback refusal/reentry, ordinal reuse/exhaustion, and ready-phase partial trailing frames. Four benign Foundation zero-length controls returned the exact planned range order. No sorting or relaxed comparison was introduced.
+
+Process limitation: the initial red was missing-API compilation. After implementation, the sole initial failure was an incorrect test expectation (malformedUTF16 instead of required lengthMismatch for short replacement on early success). Correcting that oracle was not a production fix. No compiling behavioral red preceded implementation; the report preserves that gap without manufactured history.
+
+Semantic wire integration, real helper execution, cancellation/deadline containment, memory measurements, native/folder routing and packaged desktop acceptance remain outstanding. The earlier464-test committed-source run predates both request and response implementations. Current distributable artifacts remain source55a7b1b.

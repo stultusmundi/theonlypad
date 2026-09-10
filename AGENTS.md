@@ -117,3 +117,5 @@ Search framing at `aa3aa82`: `scripts/swift.sh test --scratch-path .build/search
 UTF-16 codec at `10c4dd4`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireUTF16Tests` passes20 tests, and the framing filter above still passes19. These are bounded Unicode/index correctness tests, not desktop or memory benchmarks.
 
 Request codec at `2a76168`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireRequestTests` passes30 tests after independent review fixes. These tests validate protocol/Unicode/phase behavior only; the app is not yet routed through a helper.
+
+Response codec at `869de1f`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireResponseTests` passes28 tests; independent source review approves the scope. This is protocol evidence, not helper or desktop acceptance.

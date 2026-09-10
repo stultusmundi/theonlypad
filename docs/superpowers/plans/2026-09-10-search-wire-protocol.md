@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-supervised-search.md`; prerequisite `docs/superpowers/plans/2026-09-10-search-single-enumeration.md`; the reviewed protocol constraints below.
 
-**Status:** Task1 framing implemented and independently approved at aa3aa82 (19 focused tests pass). Task2 UTF-16 is independently approved at10c4dd4 (20 focused tests,19 framing regressions pass); Task3A is independently approved at2a76168 (30 request tests); Task3B is in progress; Task4 remains planned; see `docs/verification/search-wire.md`. Semantic prerequisite28e2a9f is independently approved.
+**Status:** Task1 framing implemented and independently approved at aa3aa82 (19 focused tests pass). Task2 UTF-16 is independently approved at10c4dd4 (20 focused tests,19 framing regressions pass); Task3A is independently approved at2a76168 (30 request tests); Task3B is independently approved at869de1f (28 response tests and neighboring regressions reported passing); Task4 remains planned; see `docs/verification/search-wire.md`. Semantic prerequisite28e2a9f is independently approved.
 
 ## Global Constraints
 
