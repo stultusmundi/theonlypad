@@ -52,7 +52,7 @@ The full test command was supervised by a private owned-process watchdog because
 
 ## Sequential request path — 2026-09-10
 
-Task3A source `f59522219c5698c66ec53045343bb8eef8a51e2c` implements bounded request metadata, hello/request writing and the sequential request reader. Independent specification/quality review is pending. The writer builds and returns the exact identity-bound index from its emitted UTF-16 chunks, validates scope before execute, and returns only after execute emission succeeds. The reader validates identity/ordinal, metadata, UTF-16, scope and acknowledgement phases before accepting another request.
+Task3A source `f59522219c5698c66ec53045343bb8eef8a51e2c` implements bounded request metadata, hello/request writing and the sequential request reader. Independent specification/quality review found one error-precedence defect; correction and re-review are pending. The writer builds and returns the exact identity-bound index from its emitted UTF-16 chunks, validates scope before execute, and returns only after execute emission succeeds. The reader validates identity/ordinal, metadata, UTF-16, scope and acknowledgement phases before accepting another request.
 
 Fresh checks pass: **28 request tests,19 framing regressions and20 UTF-16 regressions**, all with0 failures. The SearchExecution target build, strict scoped formatting, public-source pattern and whitespace checks pass. Root independently checked all three final source hashes against the implementation report.
 
