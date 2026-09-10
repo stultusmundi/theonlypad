@@ -4,6 +4,16 @@ TheOnlyPad is incomplete. Continue the full BUILD_PROMPT autonomously. Local wor
 
 ## Current state and exact next action
 
+Latest checkpoint supersedes historical running-session notes below. Task 1 lifecycle is approved and committed at `eb3f1e1`: 563 full tests/0 failures, 32 final lifecycle tests/0 failures; both independent reviews approved. See `docs/verification/search-child-lifecycle.md`. No Task 1 implementation awaits review.
+
+Root is running the private shortcut diagnostic through XCUITest in `.local/desktop-ui/shortcut-trace-cxjwb5zm/` (exec session 28451). App hash `079ac2ce2deab39d55c9ee8d9444118541101a504eb80667ac7e7d54b0fef91e`; source and provenance are in `.local/shortcut-reset-diagnostic/.local/shortcut-reset-diagnostic-evidence/`. Inspect its result and bounded JSONL attachment to determine whether the File/New sender belongs to the current menu. Root exclusively owns GUI execution.
+
+Private pane candidate in `.local/pane-origin-diagnostic` remains unintegrated. Baseline proves early clamp 240→0; viewport layout fixes that immediate clamp, but the peer later loses 940→222. `.local/pane-origin-peer-review.md` identifies the post-start settings pass and unconditional geometry setters as the strongest lead. Agent `/root/lifecycle_review` is preparing inert scoped geometry instrumentation and a private package, without GUI execution. Earlier event telemetry could reenter layout; do not use it as definitive setter attribution. Main harness fixes at `4572c29` pass both shared-pane workflows; persisted scrolling remains failing.
+
+Agent `/root/lifecycle_repair` prepares Task 2 SDK/launcher/channels/watchdog preflight only in `.local/search-child-lifecycle-task-2/brief.md`. Root must review before authorizing real process implementation. `/root/semantic_review_fallback` completed the shortcut diagnostic build and is idle.
+
+Next actions: finish the active shortcut trace, review Task 2 preflight, then run the inert pane trace serially. The old owned app PID84323 was normally terminated after exact bundle URL verification; it caused a previous LaunchServices copy-path collision. Cleanup-helper plan `.local/desktop-owned-app-cleanup-plan.md` still needs implementation/review. UI automation permission is available. Never terminate an app solely by bundle ID or process name.
+
 Branch `build/native-editor`. The three-task new-window transfer slice is implemented, independently approved and locally packaged at `55a7b1bb9ee50b6ea5f94b64cae5657a25e9dd5b`. It transfers the existing model/storage/undo/recovery authority into an existing or new window, with retained exact cleanup ownership and generation-fenced presentation. Aggregate F-02 and the full application remain incomplete. See `docs/verification/new-window-integrated.md`.
 
 A clean detached worktree `.local/new-window-integrated` contains that exact source. Provenance records 580 tracked files in `.local/new-window-integrated-evidence/source-provenance.json`. Final integrated tests: 404 core/0, 71 managed/0, 44 new-window/0; actual app build passed. Final chooser15/0 and existing transfer12/0 each have 126 production-source hashes matching that commit. Task2 process17/owner9/projection9 and monitor evidence remains applicable to unchanged components. Do not repeat these completed checks without relevant changes or failures.

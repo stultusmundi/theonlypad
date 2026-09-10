@@ -121,3 +121,5 @@ Request codec at `2a76168`: `scripts/swift.sh test --scratch-path .build/search-
 Response codec at `869de1f`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireResponseTests` passes28 tests; independent source review approves the scope. This is protocol evidence, not helper or desktop acceptance.
 
 Wire semantic handoff at `e04f466`: `scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireSemanticTests` passes9 tests and `--filter SearchWire` passes106. Clean committed-source full test531/0 and app build pass; see docs/verification/search-wire.md. Broad adversarial core tests still require the owned outer watchdog.
+
+Search lifecycle at `eb3f1e1`: `env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/search-child-lifecycle-repair --filter SearchChildLifecycleTests` passes32 deterministic tests; full suite563/0. Development runs used the owned outer watchdog. No real helper process or native search integration is claimed. See `docs/verification/search-child-lifecycle.md`. Real child fixtures must wait for the planned checked-in watchdog.
