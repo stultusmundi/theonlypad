@@ -10,7 +10,7 @@
 
 **Spec:** [native-document-transfer.md](../specs/native-document-transfer.md), extending its explicitly deferred new-window stage only. [document-transfer.md](../specs/document-transfer.md) remains the full F-02 scope.
 
-**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented with 21 passing hidden tests, awaiting independent review; handoff and chooser remain outstanding. Existing-window evidence does not certify this stage.
+**Status:** Root-reviewed plan in execution. Task 1 admission/preparation is implemented and independently approved after review fixes, with 23 preparation and 10 native-open tests passing; handoff and chooser remain outstanding. Existing-window evidence does not certify this stage.
 
 ## Constraints and current source mapping
 
@@ -83,12 +83,12 @@ Under the owner preparation gate, validate emptiness/identity, unregister the ex
 
 **Files:** new `Sources/TheOnlyPad/NativeNewWindowTransfer.swift`; narrow nonpresenting configuration split in `AppDelegate.swift`; narrow owner changes in `NativeApplicationDocuments.swift`; new `Tests/NativeIntegration/NativeNewWindowTransferTests.swift` and `scripts/test-native-new-window-transfer.sh` (new runner, not yet a verified command).
 
-- [ ] Freeze the existing-window production sources and agree exact operation/phase interfaces with root. Give nonoverlapping ownership to endpoint, chooser and owner contributors.
-- [ ] Add compiling refusal seams and tests using the actual SessionCoordinator/registry/publisher: 31 aggregate windows admits the 32nd; 32 refuses before controller construction; live/unresolved overlap counts once; unresolved-only windows count; >32 existing union refuses growth; 128 existing document IDs still permit a move when window capacity allows.
-- [ ] Add corrupt-session, pending-removal, foreign/stale source, source-selection/ownership ABA and capacity-revision change during held drain tests. Count controller construction and document-factory/adoption calls: refused admission creates none, successful new-window move creates one controller and zero models/adoptions.
-- [ ] Run actual behavioral reds, separating compilation/setup failures. Implement the minimal capacity/preparation gate and exact outer-pause lifecycle, then rerun unchanged assertions.
-- [ ] Reenter open/intake/close/quit/new-window move from admission/register/configuration callbacks. Assert one retained operation and no second endpoint; test publisher preparation refuses rather than waits.
-- [ ] Independently review before adding handoff behavior.
+- [x] Freeze the existing-window production sources and agree exact operation/phase interfaces with root. Give nonoverlapping ownership to endpoint, chooser and owner contributors.
+- [x] Add compiling refusal seams and tests using the actual SessionCoordinator/registry/publisher: 31 aggregate windows admits the 32nd; 32 refuses before controller construction; live/unresolved overlap counts once; unresolved-only windows count; >32 existing union refuses growth; 128 existing document IDs still permit a move when window capacity allows.
+- [x] Add corrupt-session, pending-removal, foreign/stale source, source-selection/ownership ABA and capacity-revision change during held drain tests. Count controller construction and document-factory/adoption calls: refused admission creates none, successful new-window move creates one controller and zero models/adoptions.
+- [x] Run actual behavioral reds, separating compilation/setup failures. Implement the minimal capacity/preparation gate and exact outer-pause lifecycle, then rerun unchanged assertions.
+- [x] Reenter open/intake/close/quit/new-window move from admission/register/configuration callbacks. Assert one retained operation and no second endpoint; test publisher preparation refuses rather than waits.
+- [x] Independently review before adding handoff behavior.
 
 ## Task 2 — Existing transfer handoff and exact cleanup
 
