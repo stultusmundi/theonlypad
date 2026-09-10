@@ -9,3 +9,9 @@ Initial compiled seam failed the named valid-detachment assertion. The first imp
 Private evidence: initial behavioral red `run.458SzTiu`, baseline red `run.rjDam9fY`, expanded green `run.CT2bRllm` under `.local/native-endpoint-bindings`. Earlier compiler isolation diagnostics are separate from behavioral reds. Final formatted runner `run.SD98o7or` also passed all 23 checks with compile/runtime exit 0. Strict formatter lint passed for the two owned Swift files. This establishes the component boundary, not application migration or physical GUI acceptance.
 
 Root independently passed all 23 native checks in `.local/native-endpoint-bindings/run.AT0wR6Sx` (`.local/native-endpoint-bindings-root.log`). Independent source review found no material issue within this component. Controller recreation and process integration remain separate acceptance work.
+
+## Close-time identity after transfer, 2026-09-10
+
+The expanded transfer harness passed 44 checks (the previous 36 plus eight close-lifecycle checks) in `.local/native-endpoint-bindings/run.cHsvgU7x`, compile/runtime exit zero. The actual behavioral red is `.local/native-binding-closed-red.log`. Completed transfer and ordinary reattachment wrappers now expose an exact closed/quitting identity for subsequent detachment; before delivery activation, both remain refused. Bridge action and attachment admission still reject closed/quitting contexts. Pointer, ownership, baseline and URL fences remain unchanged. Independent root review cleared this narrowly scoped change.
+
+A variant search covered both binding-wrapper context filters and both controller-exposed context helpers. Actual native file-backed terminal retry exercises the combined correction. This is lifecycle evidence, not desktop acceptance.

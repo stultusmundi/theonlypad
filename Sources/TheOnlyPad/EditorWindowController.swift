@@ -61,6 +61,7 @@ private enum EditorSaveFailure: Error {
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
   let sessionID: UUID
   private let applicationRouting: EditorApplicationRouting?
+  private var settledTransferProjection: EditorTransferEndpointReceipt?
   private var transferLayoutDepth = 0
   private var projectionToken: UUID?
   private var transferProjection:
@@ -69,6 +70,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var projectionValid = false
   private var applicationPreparation: UUID?
   private var pendingEndpointAttachments = Set<UUID>()
+  private var transferAttachmentOwner: (lease: DocumentTransferLease, ids: Set<UUID>)?
   private var emptyWindowClosePermit: (id: UUID, revision: UUID)?
   private var recoveryWorkGeneration = UUID()
   private var recoveryWorkError: Error?
@@ -354,10 +356,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       adoptFileState(document)
       return
     }
+    let transferReceipt = transferProjection?.receipt
+    let transferLease = transferReceipt?.lease
     try routing.reattachDocumentEndpoint(
       document,
-      { [weak self, weak document] in
+      { [weak self, weak document, weak transferReceipt] in
         guard let self, let document else { return nil }
+        if let transferLease,
+          self.applicationRouting?.registry.hasActiveTransferLease(transferLease) == true
+        {
+          guard let transferReceipt else { return nil }
+          return self.transferFileStateContext(document, receipt: transferReceipt)
+        }
         return self.fileStateContext(document)
       }, { [weak self] in self?.onDiskStateChange?() })
   }
@@ -2828,7 +2838,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         self.documents.contains(where: { $0 === document }),
         document.panePresentation.suppression == 0
       else { return }
-      if self.transferProjection != nil {
+      if self.transferProjection != nil || self.settledTransferProjection != nil {
         if self.transferLayoutDepth == 0 { document.panePresentation.invalidate(force: true) }
         return
       }
@@ -4117,12 +4127,20 @@ extension EditorWindowController {
         for pane in document.panePool { installCallbacks(for: pane) }
         if transferProjection?.snapshot.request.documentID != document.id {
           pendingEndpointAttachments.insert(document.id)
+          if let scope = transferProjection {
+            if transferAttachmentOwner?.lease != scope.snapshot.lease {
+              transferAttachmentOwner = (scope.snapshot.lease, [])
+            }
+            transferAttachmentOwner?.ids.insert(document.id)
+          }
         }
       }
       if pendingEndpointAttachments.contains(document.id) {
         try attachDocumentEndpoint(document)
         // Successful reattachment consumed its receipt; later projection refusal must not repeat it.
         pendingEndpointAttachments.remove(document.id)
+        transferAttachmentOwner?.ids.remove(document.id)
+        if transferAttachmentOwner?.ids.isEmpty == true { transferAttachmentOwner = nil }
         _ = try registryModels(expected, revision: revision, endpointID: endpointID)
       }
     }
@@ -4130,16 +4148,19 @@ extension EditorWindowController {
       if transferProjection != nil || oldCurrent !== selected
         || host.displayedIDs != selected.panePool.filter(\.isAttached).map(\.id)
       {
-        if transferProjection == nil, let oldCurrent, oldCurrent !== selected,
+        if transferProjection == nil, settledTransferProjection == nil, let oldCurrent,
+          oldCurrent !== selected,
           next.contains(where: { $0 === oldCurrent })
         {
           presentationInteraction(oldCurrent)
         }
         for pane in selected.panePool where pane.isAttached { installCallbacks(for: pane) }
-        if transferProjection == nil, !selected.settingsApplied { configureSettings(selected) }
+        if transferProjection == nil, settledTransferProjection == nil, !selected.settingsApplied {
+          configureSettings(selected)
+        }
         let wrap = !preferredPane(in: selected).editor.isHorizontallyResizable
         try presentPanes(selected, wrap: wrap)
-        if transferProjection == nil {
+        if transferProjection == nil, settledTransferProjection == nil {
           focusProjectedPane(preferredPane(in: selected))
           installPendingPresentationIfPossible(selected)
           selected.highlighter.update(language: selected.language)
@@ -4334,6 +4355,7 @@ extension EditorWindowController {
   let states: [UUID: DocumentTransferState]
   fileprivate var projected: DocumentWindowSnapshot
   fileprivate var projectionPending = false
+  fileprivate var acceptedState: DocumentTransferState?
   fileprivate init(
     endpointID: UUID, lease: DocumentTransferLease, original: DocumentWindowSnapshot,
     models: [EditorDocument], views: [UUID: NativeDocumentTransferViewReceipt],
@@ -4358,7 +4380,7 @@ extension EditorWindowController {
       receipt.endpointID == routing.endpointID, receipt.windowID == sessionID,
       receipt.models.contains(where: { $0 === document }),
       routing.registry.handle(id: document.id) === document,
-      (try? routing.requireEndpointCurrent()) != nil, !windowClosed
+      (try? routing.requireEndpointCurrent()) != nil
     else { return nil }
     return FileStateLiveContext(
       documentID: document.id, ownershipGeneration: document.ownershipGeneration,
@@ -4368,7 +4390,7 @@ extension EditorWindowController {
       dirty: true, pendingPublicationID: document.pendingPublication?.id,
       operationID: document.operationID,
       composing: document.composingPaneID != nil, recording: isRecordingMacro,
-      closed: !documents.contains(where: { $0 === document })
+      closed: windowClosed || !documents.contains(where: { $0 === document })
         || routing.registry.assignment(of: document.id) != routing.assignment,
       quitting: preparingToQuit || owner.isSuspended, deliveryGeneration: owner.deliveryGeneration)
   }
@@ -4377,13 +4399,13 @@ extension EditorWindowController {
       (try? routing.registry.captureWindows()) != nil,
       routing.registry.handle(id: document.id) === document,
       routing.registry.assignment(of: document.id) == routing.assignment,
-      documents.contains(where: { $0 === document }), !windowClosed,
+      documents.contains(where: { $0 === document }),
       (try? routing.requireEndpointCurrent()) != nil
     else { return nil }
     return fileStateContext(document)
   }
   private func withTransferNativeLayout<T>(_ body: () throws -> T) rethrows -> T {
-    guard transferProjection != nil else { return try body() }
+    guard transferProjection != nil || settledTransferProjection != nil else { return try body() }
     transferLayoutDepth += 1
     defer { transferLayoutDepth -= 1 }
     return try body()
@@ -4398,11 +4420,20 @@ extension EditorWindowController {
     return transferPreparation
   }
   private var transferPreparation: NativeDocumentTransferPreparation {
-    .init(
+    let owned: Set<UUID>
+    if let owner = transferAttachmentOwner,
+      applicationRouting?.registry.hasActiveTransferLease(owner.lease) == true
+    {
+      owned = owner.ids
+    } else {
+      owned = []
+    }
+    return .init(
       loading: loadingCount > 0,
       macroWork: recordingDocumentID != nil || macroSaving || replayCancellation != nil
         || !recordedCommands.isEmpty,
-      applicationPreparation: applicationPreparation != nil || !pendingEndpointAttachments.isEmpty
+      applicationPreparation: applicationPreparation != nil
+        || !pendingEndpointAttachments.subtracting(owned).isEmpty
         || (projectionToken != nil && transferProjection == nil), preparingQuit: preparingToQuit)
   }
   private func transferWindow(_ snapshot: DocumentTransferSnapshot) throws -> DocumentWindowSnapshot
@@ -4556,6 +4587,7 @@ extension EditorWindowController {
     }
     try validateTransferEndpoint(snapshot, receipt: receipt)
     let expected = try transferWindow(snapshot)
+    receipt.acceptedState = snapshot.expectedState
     transferProjection = (snapshot, receipt)
     defer { transferProjection = nil }
     // A refused native layout can be retried without recapturing or approving unrelated geometry.
@@ -4587,5 +4619,112 @@ extension EditorWindowController {
     try validateTransferEndpoint(snapshot, receipt: receipt)
     receipt.projectionPending = false
     try validateTransferEndpoint(snapshot, receipt: receipt)
+  }
+}
+
+extension EditorWindowController {
+  private func replacementTransferReceipt(
+    _ receipt: EditorTransferEndpointReceipt, endpointID: UUID
+  )
+    -> EditorTransferEndpointReceipt
+  {
+    let result = EditorTransferEndpointReceipt(
+      endpointID: endpointID, lease: receipt.lease,
+      original: receipt.original, models: receipt.models, views: receipt.views,
+      states: receipt.states)
+    result.acceptedState = receipt.acceptedState
+    return result
+  }
+  private func requireReplacementEndpoint(
+    _ receipt: EditorTransferEndpointReceipt,
+    endpointID: UUID, expected: DocumentWindowSnapshot
+  ) throws {
+    guard projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
+      !transferPreparation.isBusy, let routing = applicationRouting,
+      endpointID == routing.endpointID, receipt.windowID == sessionID, expected.id == sessionID,
+      expected.groups.count == 1, expected.groups[0].id == routing.assignment.groupID
+    else { throw NativeDocumentTransferError.changed }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    guard
+      documents.isEmpty && selectedID == nil && host.displayedIDs.isEmpty
+        || documents.map(\.id) == expected.groups[0].documentIDs
+          && selectedID == expected.groups[0].selectedDocumentID
+          && documents.allSatisfy({ model in receipt.models.contains(where: { $0 === model }) })
+    else { throw NativeDocumentTransferError.changed }
+  }
+  func reconcileTransferEndpoint(
+    _ snapshot: DocumentTransferSnapshot,
+    receipt: EditorTransferEndpointReceipt, endpointID: UUID
+  ) throws -> EditorTransferEndpointReceipt {
+    let expected = try transferWindow(snapshot)
+    try requireReplacementEndpoint(receipt, endpointID: endpointID, expected: expected)
+    guard receipt.lease == snapshot.lease else { throw NativeDocumentTransferError.changed }
+    let result = replacementTransferReceipt(receipt, endpointID: endpointID)
+    result.acceptedState = snapshot.expectedState
+    if documents.isEmpty {
+      result.projected = .init(
+        id: expected.id,
+        groups: [.init(id: expected.groups[0].id, documentIDs: [], selectedDocumentID: nil)],
+        focusedGroupID: expected.focusedGroupID, axis: expected.axis)
+    } else {
+      result.projected = expected
+    }
+    result.projectionPending = true
+    try validateTransferEndpoint(snapshot, receipt: result)
+    return result
+  }
+  func reconcileSettledTransferEndpoint(
+    receipt: EditorTransferEndpointReceipt,
+    expected: DocumentWindowSnapshot, endpointID: UUID
+  ) throws -> EditorTransferEndpointReceipt {
+    try requireReplacementEndpoint(receipt, endpointID: endpointID, expected: expected)
+    guard let routing = applicationRouting else { throw NativeDocumentTransferError.changed }
+    _ = try routing.registry.captureWindows()
+    let revision = routing.registry.workspaceRevision
+    let models = try registryModels(expected, revision: revision, endpointID: endpointID)
+    var states: [UUID: DocumentTransferState] = [:]
+    var views: [UUID: NativeDocumentTransferViewReceipt] = [:]
+    for model in receipt.models {
+      guard routing.registry.handle(id: model.id) === model, let original = receipt.states[model.id]
+      else {
+        throw NativeDocumentTransferError.changed
+      }
+      let authority =
+        receipt.acceptedState?.documentID == model.id ? receipt.acceptedState! : original
+      let current = try model.captureTransferState(preparation: transferPreparation)
+      guard current.ownershipGeneration == authority.ownershipGeneration,
+        current.recoveryAuthority == authority.recoveryAuthority,
+        !current.isBusy, !current.isComposing, !current.hasPendingTextEdits,
+        current.operationID == nil, current.pendingPublicationID == nil
+      else {
+        throw NativeDocumentTransferError.changed
+      }
+      states[model.id] = current
+      if model.id == expected.groups[0].selectedDocumentID || model === self.current {
+        views[model.id] = try model.captureTransferView(preparation: transferPreparation)
+      }
+    }
+    guard models.allSatisfy({ model in receipt.models.contains(where: { $0 === model }) }) else {
+      throw NativeDocumentTransferError.changed
+    }
+    let result = replacementTransferReceipt(receipt, endpointID: endpointID)
+    settledTransferProjection = result
+    defer { settledTransferProjection = nil }
+    try applyRegistryProjection(expected, revision: revision, endpointID: endpointID)
+    try validateRegistryProjection(expected, revision: revision, endpointID: endpointID)
+    for model in receipt.models {
+      guard try model.captureTransferState(preparation: transferPreparation) == states[model.id]
+      else {
+        throw NativeDocumentTransferError.changed
+      }
+      if let view = views[model.id], let state = states[model.id] {
+        // Current selection/pending presentation are preserved; no original transfer geometry is restored.
+        try model.validateTransferView(
+          transferViewWithLiveOrigins(view, model: model),
+          expectedState: state, preparation: transferPreparation)
+      }
+    }
+    result.projected = expected
+    return result
   }
 }

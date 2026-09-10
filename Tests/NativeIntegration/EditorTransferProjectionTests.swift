@@ -14,6 +14,10 @@ import XCTest
   var second: EditorWindowController!
   var sourceCheck: (() throws -> Void)?
   var detached = 0
+  var onDetach: ((EditorDocument) -> Void)?
+  var liveEndpoints: [UUID: UUID] = [:]
+  var reattachCalls = 0
+  var lastAttachmentContext: (() -> FileStateLiveContext?)?
   let idle = NativeDocumentTransferPreparation(
     loading: false, macroWork: false,
     applicationPreparation: false, preparingQuit: false)
@@ -50,6 +54,7 @@ import XCTest
     second = try endpoint(target, targetID)
   }
   func endpoint(_ a: DocumentAssignment, _ id: UUID) throws -> EditorWindowController {
+    liveEndpoints[a.windowID] = id
     let routing = EditorApplicationRouting(
       endpointID: id, assignment: a, registry: registry,
       requireEndpointCurrent: { if a == self.source { try self.sourceCheck?() } },
@@ -57,11 +62,17 @@ import XCTest
       wait: { _ in throw DocumentTransferError.unavailable },
       requestClose: { _ in throw DocumentTransferError.unavailable },
       requestReopen: { throw DocumentTransferError.unavailable },
-      detachDocumentEndpoint: { _ in
+      detachDocumentEndpoint: { model in
+        self.onDetach?(model)
         self.detached += 1
         throw DocumentTransferError.unavailable
       },
-      reattachDocumentEndpoint: { _, _, _ in throw DocumentTransferError.unavailable },
+      reattachDocumentEndpoint: { _, context, _ in
+        self.lastAttachmentContext = context
+        _ = context()
+        self.reattachCalls += 1
+        throw DocumentTransferError.unavailable
+      },
       endpointClosed: { _ in }, requestCheckpoint: {})
     return try EditorWindowController(id: a.windowID, application: routing, onError: { _ in })
   }
@@ -225,6 +236,130 @@ import XCTest
     XCTAssertThrowsError(try f.first.applyTransferProjection(snap, receipt: receipt))
     XCTAssertTrue(fired)
     XCTAssertNotEqual(neighbor.panePresentation.interaction, interaction)
+  }
+
+  func testExplicitActiveReplacementRetainsRollbackReceiptAndRefusesOldIncarnation() async throws {
+    let f = try TransferProjectionFixture()
+    let moved = try await f.add(f.source, text: "source")
+    try f.project()
+    let lease = try f.reserve(moved)
+    var snap = try f.registry.validateTransferSnapshot(lease)
+    let left = try f.first.captureTransferEndpoint(snap, endpointID: f.sourceID)
+    let right = try f.second.captureTransferEndpoint(snap, endpointID: f.targetID)
+    try f.registry.stageTransfer(lease)
+    snap = try f.registry.validateTransferSnapshot(lease)
+    try f.first.applyTransferProjection(snap, receipt: left)
+    let newID = UUID()
+    let replacement = try f.endpoint(f.target, newID)
+    XCTAssertThrowsError(try replacement.applyTransferProjection(snap, receipt: right))
+    let rebound = try replacement.reconcileTransferEndpoint(snap, receipt: right, endpointID: newID)
+    XCTAssertEqual(rebound.views, right.views)
+    XCTAssertEqual(rebound.states, right.states)
+    XCTAssertEqual(rebound.original, right.original)
+    try replacement.applyTransferProjection(snap, receipt: rebound)
+    XCTAssertEqual(replacement.selectedDocumentID, moved.id)
+    try f.registry.restoreTransferAssignment(lease)
+    snap = try f.registry.validateTransferSnapshot(lease)
+    try replacement.applyTransferProjection(snap, receipt: rebound)
+    try f.first.applyTransferProjection(snap, receipt: left)
+    XCTAssertEqual(f.first.selectedDocumentID, moved.id)
+    try f.registry.settleRestoredTransfer(lease, willNotify: {})
+  }
+  func testTerminalReplacementKeepsEditsAndCurrentSelectionWithoutOldLease() async throws {
+    let f = try TransferProjectionFixture()
+    let moved = try await f.add(f.source, text: "source")
+    try f.project()
+    let lease = try f.reserve(moved)
+    var snap = try f.registry.validateTransferSnapshot(lease)
+    let left = try f.first.captureTransferEndpoint(snap, endpointID: f.sourceID)
+    let right = try f.second.captureTransferEndpoint(snap, endpointID: f.targetID)
+    try f.registry.stageTransfer(lease)
+    snap = try f.registry.validateTransferSnapshot(lease)
+    try f.first.applyTransferProjection(snap, receipt: left)
+    try f.second.applyTransferProjection(snap, receipt: right)
+    try f.registry.completeTransfer(lease, willNotify: {})
+    moved.storage.mutableString.setString("after commit edit")
+    moved.editor.setSelectedRange(NSRange(location: 4, length: 2))
+    let revision = moved.editRevision
+    let newID = UUID()
+    let replacement = try f.endpoint(f.target, newID)
+    let result = try replacement.reconcileSettledTransferEndpoint(
+      receipt: right,
+      expected: f.registry.window(id: f.target.windowID)!, endpointID: newID)
+    XCTAssertEqual(result.endpointID, newID)
+    XCTAssertEqual(replacement.selectedDocumentID, moved.id)
+    XCTAssertEqual(moved.storage.string, "after commit edit")
+    XCTAssertEqual(moved.editRevision, revision)
+    XCTAssertEqual(moved.editor.selectedRange(), NSRange(location: 4, length: 2))
+    moved.advanceOwnershipGeneration()
+    XCTAssertThrowsError(
+      try replacement.reconcileSettledTransferEndpoint(
+        receipt: result,
+        expected: f.registry.window(id: f.target.windowID)!, endpointID: newID))
+    XCTAssertEqual(moved.storage.string, "after commit edit")
+  }
+
+  func testReplacementCanRetryItsOwnFailedNeighborAttachment() async throws {
+    let f = try TransferProjectionFixture()
+    let moved = try await f.add(f.source, text: "source")
+    let neighbor = try await f.add(f.source, text: "neighbor", select: false)
+    try f.project()
+    let monitor = ApplicationFileMonitoring()
+    neighbor.fileState = DocumentFileStateController(
+      documentID: neighbor.id, client: monitor.client,
+      liveContext: { nil }, onChange: {})
+    let lease = try f.reserve(moved)
+    var snap = try f.registry.validateTransferSnapshot(lease)
+    let original = try f.first.captureTransferEndpoint(snap, endpointID: f.sourceID)
+    try f.registry.stageTransfer(lease)
+    snap = try f.registry.validateTransferSnapshot(lease)
+    let id = UUID()
+    let replacement = try f.endpoint(f.source, id)
+    replacement.configureFileMonitoring(monitor)
+    let reads = neighbor.transferHarnessDirtyReads
+    var receipt: EditorTransferEndpointReceipt? = try replacement.reconcileTransferEndpoint(
+      snap, receipt: original, endpointID: id)
+    XCTAssertThrowsError(try replacement.applyTransferProjection(snap, receipt: receipt!))
+    XCTAssertEqual(f.reattachCalls, 1)
+    XCTAssertEqual(neighbor.transferHarnessDirtyReads, reads)
+    XCTAssertTrue(try XCTUnwrap(f.lastAttachmentContext?()).dirty)
+    XCTAssertEqual(neighbor.transferHarnessDirtyReads, reads)
+    receipt = nil
+    XCTAssertNil(f.lastAttachmentContext?())
+    XCTAssertEqual(neighbor.transferHarnessDirtyReads, reads)
+    // Retry must reach the real injected attachment failure again, not strand on its own pending flag.
+    let next = try replacement.reconcileTransferEndpoint(snap, receipt: original, endpointID: id)
+    XCTAssertThrowsError(try replacement.applyTransferProjection(snap, receipt: next))
+    XCTAssertEqual(f.reattachCalls, 2)
+    try f.registry.restoreTransferAssignment(lease)
+    try f.registry.settleRestoredTransfer(lease, willNotify: {})
+    XCTAssertTrue(try replacement.captureTransferPreparation().isBusy)
+    XCTAssertNotNil(f.lastAttachmentContext?())
+    XCTAssertEqual(neighbor.transferHarnessDirtyReads, reads + 1)
+    monitor.stop()
+  }
+
+  func testClosingEndpointRetainsClosedBindingContextForDetachment() async throws {
+    let f = try TransferProjectionFixture()
+    let model = try await f.add(f.source, text: "source")
+    try f.project()
+    let monitor = ApplicationFileMonitoring()
+    f.first.configureFileMonitoring(monitor)
+    let lease = try f.reserve(model)
+    let snapshot = try f.registry.validateTransferSnapshot(lease)
+    let receipt = try f.first.captureTransferEndpoint(snapshot, endpointID: f.sourceID)
+    try f.registry.cancelUnstagedTransfer(lease)
+    var observed = false
+    f.onDetach = { [weak f] document in
+      guard let f else { return }
+      observed = true
+      XCTAssertEqual(f.first.transferFileStateContext(document, receipt: receipt)?.closed, true)
+      XCTAssertEqual(f.first.ordinaryFileStateContext(document)?.closed, true)
+    }
+    f.first.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: f.first.window))
+    XCTAssertTrue(observed)
+    monitor.stop()
   }
 
 }

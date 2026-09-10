@@ -27,6 +27,9 @@ jobs:
           bash scripts/test-application-document-transfer-process.sh
           scripts/test-application-document-transfer-publisher.sh
           scripts/test-native-document-transfer.sh
+          scripts/test-editor-transfer-projection.sh
+          bash scripts/test-native-application-document-transfer.sh
+          bash scripts/test-document-move-destination.sh
           build_path=$(scripts/swift.sh build --show-bin-path)
           scripts/test-file-state-bridge.sh "$build_path"
           scripts/test-native-endpoint-bindings.sh "$build_path"

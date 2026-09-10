@@ -4,6 +4,9 @@ import PadCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var editors: [EditorWindowController] { documentOwner?.windows ?? [] }
+  private var moveDestination: DocumentMoveDestinationController?
+  private var movePresentationGeneration = UUID()
+  private let presentMoveDestination: @MainActor (DocumentMoveDestinationController) -> Void
   private var palette: CommandPaletteController?
   private var registry = CommandRegistry()
   private var shortcutController: ApplicationShortcutController?
@@ -36,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     session: SessionCoordinator, recovery: RecoveryCoordinator,
     presentEditorWindow: @escaping @MainActor (EditorWindowController) -> Void,
     reportDocumentError: @escaping @MainActor (Error) -> Void,
+    presentMoveDestination: @escaping @MainActor (DocumentMoveDestinationController) -> Void = {
+      $0.showWindow(nil)
+    },
     replyToTermination: @escaping @MainActor (Bool) -> Void = {
       NSApp.reply(toApplicationShouldTerminate: $0)
     },
@@ -51,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     self.documentRecovery = recovery
     self.presentEditorWindow = presentEditorWindow
     self.reportDocumentError = reportDocumentError
+    self.presentMoveDestination = presentMoveDestination
     self.replyToTermination = replyToTermination
     self.presentSessionAdjustment = presentSessionAdjustment
     super.init()
@@ -392,11 +399,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !preparingQuit else { return .terminateLater }
+    movePresentationGeneration = UUID()
     guard shortcutController?.canQuit != false else {
       shortcutController?.explainQuitVeto()
       return .terminateCancel
     }
     preparingQuit = true
+    moveDestination?.close()
+    moveDestination = nil
     fileMonitoring.suspend()
     recentFiles?.setSuspended(true)
     Task {
@@ -544,6 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return
       }
       editor.execute(id)
+    case "file.moveToWindow": showMoveDestination()
     case "file.newWindow": newWindow()
     case "view.palette":
       palette?.close()
@@ -590,6 +601,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
   }
 
+  private func showMoveDestination() {
+    movePresentationGeneration = UUID()
+    moveDestination?.close()
+    moveDestination = nil
+    do {
+      guard let owner = documentOwner, let documentID = activeEditor?.selectedDocumentID else {
+        throw Self.documentFlowError("Select an editable document to move.")
+      }
+      let choices = try owner.prepareMove(documentID: documentID)
+      weak var originating: DocumentMoveDestinationController?
+      let chooser = DocumentMoveDestinationController(
+        choices: choices,
+        onChoose: { [weak self, weak owner] destination in
+          guard let self, let owner, !self.preparingQuit,
+            let originating, self.moveDestination === originating
+          else { return }
+          self.moveDestination = nil
+          do {
+            let generation = UUID()
+            self.movePresentationGeneration = generation
+            let id = try owner.moveDocument(choices, to: destination)
+            Task { [weak self] in
+              do {
+                switch try await owner.waitForTransfer(id) {
+                case .moved:
+                  self?.presentMovedDocument(
+                    choices.documentID, destination: destination,
+                    owner: owner, generation: generation)
+                case .restored(let error), .retained(let error): throw error
+                }
+              } catch {
+                guard let self, !self.preparingQuit else { return }
+                self.reportDocumentError(error)
+              }
+            }
+          } catch { self.reportDocumentError(error) }
+        },
+        onCancel: { [weak self] in
+          guard let self, let originating, self.moveDestination === originating else { return }
+          self.moveDestination = nil
+        })
+      originating = chooser
+      moveDestination = chooser
+      presentMoveDestination(chooser)
+    } catch { reportDocumentError(error) }
+  }
+
+  private func presentMovedDocument(
+    _ documentID: UUID,
+    destination: NativeDocumentMoveDestination, owner: NativeApplicationDocuments, generation: UUID
+  ) {
+    guard !preparingQuit, documentOwner === owner, movePresentationGeneration == generation else {
+      return
+    }
+    do {
+      let target = try owner.movePresentation(documentID: documentID, destination: destination)
+      guard !preparingQuit, documentOwner === owner, movePresentationGeneration == generation else {
+        return
+      }
+      // Presentation follows completed ownership transfer; a refusal never rolls the move back.
+      presentEditorWindow(target)
+    } catch {
+      guard !preparingQuit, documentOwner === owner, movePresentationGeneration == generation else {
+        return
+      }
+      reportDocumentError(
+        Self.documentFlowError(
+          "The document was moved, but its destination could not be shown automatically. \(error.localizedDescription)"
+        ))
+    }
+  }
+
   private static let largeViewerCommands: Set<String> = [
     "file.close", "file.new", "file.newWindow", "file.open", "file.restoreSession", "file.recent",
     "file.retrySession",
@@ -608,6 +691,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     if id == "file.restoreSession" { return !session.unresolved.isEmpty }
     if NSApp.keyWindow?.windowController is LargeFileWindowController {
       return Self.largeViewerCommands.contains(id)
+    }
+    if id == "file.moveToWindow" {
+      guard let owner = documentOwner, let id = activeEditor?.selectedDocumentID else {
+        return false
+      }
+      return (try? owner.prepareMove(documentID: id)) != nil
     }
     if let activeEditor { return activeEditor.isCommandAvailable(id) }
     return [

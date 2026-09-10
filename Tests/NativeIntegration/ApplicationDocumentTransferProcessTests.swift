@@ -64,6 +64,8 @@ private enum TransferProcessFailure: Error { case injected }
   var rejectTargetOnce = false
   var rejectRestoredSource = false
   var rejectReleaseOnce = false
+  var targetInvalidatesSource = false
+  var nativeGeometryValid = true
   init(actor: RecoveryCoordinator) {
     registry = ApplicationDocuments(
       adoptionServices: .init(
@@ -145,7 +147,10 @@ private enum TransferProcessFailure: Error { case injected }
           if self.rejectCapture { throw TransferProcessFailure.injected }
           self.monitorPhase = 0
           return ProcessTransferReceipt()
-        }, validate: { _, _ in },
+        },
+        validate: { _, _ in
+          guard self.nativeGeometryValid else { throw TransferProcessFailure.injected }
+        },
         suspendMonitor: { _, _ in
           guard self.monitorPhase != 3 else { throw TransferProcessFailure.injected }
           self.monitorPhase = 1
@@ -160,6 +165,7 @@ private enum TransferProcessFailure: Error { case injected }
             throw TransferProcessFailure.injected
           }
           self.sourceProjection = snapshot.source
+          self.nativeGeometryValid = true
         },
         projectTarget: { snapshot, _ in
           if self.rejectTargetOnce {
@@ -167,6 +173,7 @@ private enum TransferProcessFailure: Error { case injected }
             throw TransferProcessFailure.injected
           }
           self.targetProjection = snapshot.target
+          if self.targetInvalidatesSource { self.nativeGeometryValid = false }
         },
         attachMonitor: { _, _ in
           guard self.monitorPhase == 1 else { throw TransferProcessFailure.injected }
@@ -281,6 +288,7 @@ private enum TransferProcessFailure: Error { case injected }
       fixture.rejectRestoredSource = true
       let owner = fixture.owner()
       let id = try owner.start(fixture.request)
+      XCTAssertThrowsError(try owner.retryLease(for: id), "In-flight repair is forbidden")
       guard case .retained = try await owner.wait(for: id) else {
         return XCTFail("Failure not retained")
       }
@@ -290,12 +298,17 @@ private enum TransferProcessFailure: Error { case injected }
         fixture.targetProjection?.groups[0].documentIDs, [],
         "Attempt target even when source rollback throws")
       let rollbackOwnership = fixture.handle.ownershipGeneration
+      let retainedLease = try XCTUnwrap(owner.retryLease(for: id))
+      XCTAssertTrue(fixture.registry.hasActiveTransferLease(retainedLease))
+      XCTAssertThrowsError(try owner.retryLease(for: .init(rawValue: UUID())))
       fixture.rejectRestoredSource = false
       try owner.retryLayout(id)
       guard case .restored = try await owner.wait(for: id) else {
         return XCTFail("Retry did not settle")
       }
       try owner.requireSettled()
+      XCTAssertThrowsError(try owner.retryLease(for: id), "Settled transaction cannot be repaired")
+      XCTAssertFalse(fixture.registry.hasActiveTransferLease(retainedLease))
       XCTAssertEqual(fixture.handle.ownershipGeneration, rollbackOwnership)
       XCTAssertTrue(fixture.registry.handle(id: fixture.handle.id) === fixture.handle)
       XCTAssertEqual(fixture.events.filter { $0 == "pause" }.count, 1)
@@ -312,6 +325,7 @@ private enum TransferProcessFailure: Error { case injected }
       }
       XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.target)
       XCTAssertThrowsError(try owner.requireSettled())
+      XCTAssertNil(try owner.retryLease(for: id), "Committed cleanup must not reuse the old lease")
       try owner.retryLayout(id)
       guard case .moved = try await owner.wait(for: id) else {
         return XCTFail("Committed move lost")
@@ -517,6 +531,8 @@ private enum TransferProcessFailure: Error { case injected }
       }
       XCTAssertEqual(fixture.monitorPhase, 2)
       XCTAssertEqual(fixture.handle.rotationCount, 0)
+      XCTAssertEqual(fixture.sourceProjection?.groups[0].documentIDs, [fixture.handle.id])
+      XCTAssertEqual(fixture.targetProjection?.groups[0].documentIDs, [])
       try owner.retryLayout(id)
       guard case .restored = try await owner.wait(for: id) else {
         return XCTFail("Prestage monitor cannot retry")
@@ -524,6 +540,27 @@ private enum TransferProcessFailure: Error { case injected }
       try owner.requireSettled()
       XCTAssertEqual(fixture.handle.ownershipGeneration, original)
       XCTAssertEqual(fixture.monitorPhase, 3)
+    }
+  }
+
+  func testPrestageCancellationValidatesBothNativeEndpointsBeforeReattaching() async throws {
+    try await withFixture { fixture in
+      fixture.rejectSuspendOnce = true
+      fixture.targetInvalidatesSource = true
+      let owner = fixture.owner()
+      let id = try owner.start(fixture.request)
+      guard case .retained = try await owner.wait(for: id) else {
+        return XCTFail("Changed source geometry must retain the transaction")
+      }
+      XCTAssertFalse(fixture.events.contains("attach"))
+      XCTAssertEqual(fixture.monitorPhase, 1)
+      fixture.targetInvalidatesSource = false
+      try owner.retryLayout(id)
+      guard case .restored = try await owner.wait(for: id) else {
+        return XCTFail("Exact original presentation could not be restored")
+      }
+      XCTAssertEqual(fixture.handle.rotationCount, 0)
+      try owner.requireSettled()
     }
   }
 

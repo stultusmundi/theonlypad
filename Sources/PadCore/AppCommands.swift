@@ -20,6 +20,7 @@ public enum AppCommands {
       .init(id: "file.reopenClosed", title: "Reopen Closed Tab", shortcut: "cmd+shift+t"),
       .init(id: "file.nextTab", title: "Next Tab", shortcut: "cmd+shift+]"),
       .init(id: "file.previousTab", title: "Previous Tab", shortcut: "cmd+shift+["),
+      .init(id: "file.moveToWindow", title: "Move Document to Window…"),
       .init(id: "file.duplicate", title: "Duplicate Document"),
       .init(id: "file.revert", title: "Revert to Saved…"),
       .init(id: "file.checkDisk", title: "Check File on Disk"),

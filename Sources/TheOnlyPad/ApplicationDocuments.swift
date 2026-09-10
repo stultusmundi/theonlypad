@@ -132,6 +132,10 @@ struct DocumentAdoptionState: Equatable {
     }
   }
   private var transfer: Transfer?
+  /// Identity only; does not authorize projection or invoke model callbacks.
+  func hasActiveTransferLease(_ lease: DocumentTransferLease) -> Bool {
+    transfer?.lease == lease
+  }
   private func transferRead(_ value: Transfer) throws -> DocumentTransferState {
     guard let services = transferServices,
       records[value.request.documentID]?.handle === value.record.handle,
@@ -752,6 +756,8 @@ struct DocumentAdoptionState: Equatable {
   func assignment(of documentID: UUID) -> DocumentAssignment? { records[documentID]?.assignment }
   func metadata(id: UUID) -> WorkspaceDocumentMetadata? { records[id]?.metadata }
   func window(id: UUID) -> DocumentWindowSnapshot? { windows[id] }
+  /// Endpoint enumeration only; available during transfer without authorizing model capture.
+  var windowIDs: [UUID] { windowOrder }
   func captureWindows() throws -> [DocumentWindowSnapshot] {
     guard !mutating, transfer == nil else { throw DocumentRegistryError.busy }
     return windowOrder.compactMap { windows[$0] }

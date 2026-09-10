@@ -9,6 +9,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     let id = UUID()
     let assignment: DocumentAssignment
     var controller: EditorWindowController?
+    var announced = false
     init(_ assignment: DocumentAssignment) { self.assignment = assignment }
   }
   let registry: ApplicationDocuments
@@ -31,13 +32,333 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   private var quitting = false
   private var preparingHistory = false
   var windows: [EditorWindowController] {
-    (try? registry.captureWindows())?.compactMap { endpoints[$0.id]?.controller } ?? []
+    registry.windowIDs.compactMap { endpoints[$0]?.controller }
+  }
+  @MainActor private final class TransferOwnerReference {
+    weak var owner: NativeApplicationDocuments?
+  }
+  private final class TransferPresentation: ApplicationDocumentTransferReceipt {
+    let transactionID = UUID()
+    let model: EditorDocument
+    let bridge: DocumentFileStateController?
+    let request: DocumentTransferRequest
+    var source: Endpoint
+    var target: Endpoint
+    var sourceView: EditorTransferEndpointReceipt
+    var targetView: EditorTransferEndpointReceipt
+    var monitor: NativeEndpointOwnershipTransferReceipt?
+    var ordinaryContext = false
+    init(
+      _ snapshot: DocumentTransferSnapshot, model: EditorDocument,
+      source: Endpoint, target: Endpoint, sourceView: EditorTransferEndpointReceipt,
+      targetView: EditorTransferEndpointReceipt
+    ) {
+      self.model = model
+      bridge = model.fileState
+      request = snapshot.request
+      self.source = source
+      self.target = target
+      self.sourceView = sourceView
+      self.targetView = targetView
+    }
+  }
+  private var transferID: ApplicationDocumentTransferID?
+  private var transferPresentation: TransferPresentation?
+  private lazy var transferring = ApplicationDocumentTransfer(
+    registry: registry,
+    publication: .init(
+      requireAdmission: {
+        guard self.ready, !self.quitting, !self.preparingHistory,
+          self.externalOpens.pendingCount == 0
+        else { throw NativeWorkspaceError.notReady }
+        try self.intake.requireSettled()
+        try self.closing.requireSettled()
+      }, acquirePause: { try self.checkpoints.acquirePause() },
+      drainPause: {
+        try await self.checkpoints.drainPause($0)
+        try await self.drainLegacy()
+      }, releasePause: { try self.checkpoints.releasePause($0) },
+      requestCheckpoint: { self.checkpoints.requestCheckpoint() }),
+    native: makeTransferNative())
+
+  func prepareMove(documentID: UUID) throws -> NativeDocumentMoveChoices {
+    try requireUserAdmission()
+    try transferring.requireSettled()
+    try intake.requireSettled()
+    try closing.requireSettled()
+    guard let model = registry.handle(id: documentID) as? EditorDocument,
+      let assignment = registry.assignment(of: documentID),
+      registry.window(id: assignment.windowID)?.groups.first?.selectedDocumentID == documentID
+    else { throw DocumentTransferError.invalidRequest }
+    let source = try endpoint(windowID: assignment.windowID)
+    _ = try validateTransferEndpoint(source)
+    let destinations = try registry.windowIDs.enumerated().compactMap {
+      index, id -> NativeDocumentMoveDestination? in
+      guard id != assignment.windowID, let value = endpoints[id] else { return nil }
+      let controller = try validateTransferEndpoint(value)
+      let title = controller.window?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      return .init(
+        windowID: id, endpointID: value.id,
+        title: title.isEmpty ? "Window \(index + 1)" : "\(title) (\(index + 1))")
+    }
+    return .init(
+      documentID: documentID, ownershipGeneration: model.ownershipGeneration,
+      sourceWindowID: assignment.windowID, sourceEndpointID: source.id, destinations: destinations)
+  }
+  func moveDocument(
+    _ choices: NativeDocumentMoveChoices, to destination: NativeDocumentMoveDestination
+  ) throws -> ApplicationDocumentTransferID {
+    guard choices.destinations.contains(destination),
+      let model = registry.handle(id: choices.documentID) as? EditorDocument,
+      model.ownershipGeneration == choices.ownershipGeneration,
+      registry.assignment(of: model.id)?.windowID == choices.sourceWindowID,
+      endpoints[choices.sourceWindowID]?.id == choices.sourceEndpointID,
+      endpoints[destination.windowID]?.id == destination.endpointID
+    else { throw NativeDocumentTransferError.changed }
+    return try moveDocument(choices.documentID, toWindowID: destination.windowID)
+  }
+  func movePresentation(documentID: UUID, destination: NativeDocumentMoveDestination) throws
+    -> EditorWindowController
+  {
+    try requireUserAdmission()
+    try transferring.requireSettled()
+    try intake.requireSettled()
+    try closing.requireSettled()
+    let value = try endpoint(windowID: destination.windowID)
+    guard value.id == destination.endpointID,
+      registry.assignment(of: documentID) == value.assignment,
+      registry.window(id: destination.windowID)?.groups.first?.selectedDocumentID == documentID,
+      registry.handle(id: documentID) is EditorDocument
+    else { throw NativeWorkspaceError.staleEndpoint }
+    return try validateTransferEndpoint(value)
+  }
+  func moveDocument(_ documentID: UUID, toWindowID: UUID) throws -> ApplicationDocumentTransferID {
+    try requireUserAdmission()
+    try transferring.requireSettled()
+    try intake.requireSettled()
+    try closing.requireSettled()
+    guard !preparingHistory, externalOpens.pendingCount == 0,
+      let model = registry.handle(id: documentID) as? EditorDocument,
+      let source = registry.assignment(of: documentID),
+      source.windowID != toWindowID,
+      let targetWindow = registry.window(id: toWindowID), targetWindow.groups.count == 1
+    else { throw DocumentTransferError.invalidRequest }
+    _ = try endpoint(windowID: source.windowID)
+    _ = try endpoint(windowID: toWindowID)
+    let group = targetWindow.groups[0]
+    if let url = model.url?.standardizedFileURL.absoluteString {
+      for id in group.documentIDs {
+        if let other = registry.handle(id: id) as? EditorDocument,
+          let otherURL = other.url?.standardizedFileURL.absoluteString,
+          url.utf8.elementsEqual(otherURL.utf8)
+        {
+          throw DocumentTransferError.invalidRequest
+        }
+      }
+    }
+    let pinned = registry.metadata(id: documentID)?.pinned == true
+    let index =
+      pinned
+      ? group.documentIDs.filter { registry.metadata(id: $0)?.pinned == true }.count
+      : group.documentIDs.count
+    let request = DocumentTransferRequest(
+      documentID: documentID, source: source,
+      target: .init(windowID: toWindowID, groupID: group.id), targetIndex: index,
+      workspaceRevision: registry.workspaceRevision, ownershipGeneration: model.ownershipGeneration)
+    let id = try transferring.start(request)
+    transferID = id
+    return id
+  }
+  func waitForTransfer(_ id: ApplicationDocumentTransferID) async throws
+    -> ApplicationDocumentTransferResult
+  {
+    let result = try await transferring.wait(for: id)
+    switch result {
+    case .moved, .restored:
+      if transferID == id {
+        transferID = nil
+        transferPresentation = nil
+      }
+    case .retained: break
+    }
+    return result
+  }
+  private func transferValue(_ value: any ApplicationDocumentTransferReceipt) throws
+    -> TransferPresentation
+  {
+    guard let value = value as? TransferPresentation,
+      transferPresentation === value,
+      registry.handle(id: value.model.id) === value.model,
+      value.model.fileState === value.bridge
+    else { throw NativeDocumentTransferError.changed }
+    return value
+  }
+  private func validateTransferEndpoint(_ value: Endpoint) throws -> EditorWindowController {
+    guard endpoints[value.assignment.windowID] === value, let controller = value.controller else {
+      throw NativeWorkspaceError.staleEndpoint
+    }
+    try validate(endpointID: value.id, assignment: value.assignment)
+    return controller
+  }
+  /// Rebind only explicit endpoint incarnations. Original transfer views remain in the receipt.
+  private func reconcileTransferEndpoints(
+    _ value: TransferPresentation, lease: DocumentTransferLease?
+  ) throws {
+    _ = try transferValue(value)
+    var failure: Error?
+    let windowIDs = [value.request.source.windowID, value.request.target.windowID]
+    // Both records must exist before strict model-state capture can consult the current owner.
+    for windowID in windowIDs where endpoints[windowID] == nil {
+      do { _ = try createEndpoint(windowID: windowID, forTransfer: true) } catch {
+        if failure == nil { failure = error }
+      }
+    }
+    for (index, windowID) in windowIDs.enumerated() {
+      do {
+        let current = try endpoint(windowID: windowID)
+        let original = index == 0 ? value.source : value.target
+        guard current !== original else { continue }
+        let controller = try validateTransferEndpoint(current)
+        let previous = index == 0 ? value.sourceView : value.targetView
+        let replacement: EditorTransferEndpointReceipt
+        if let lease {
+          let snapshot = try registry.transferSnapshot(lease)
+          replacement = try controller.reconcileTransferEndpoint(
+            snapshot, receipt: previous, endpointID: current.id)
+        } else {
+          guard transferring.allowsNativeAdmission, let expected = registry.window(id: windowID)
+          else { throw ApplicationDocumentTransferError.pendingLayout }
+          replacement = try controller.reconcileSettledTransferEndpoint(
+            receipt: previous, expected: expected, endpointID: current.id)
+        }
+        if index == 0 {
+          value.source = current
+          value.sourceView = replacement
+        } else {
+          value.target = current
+          value.targetView = replacement
+        }
+      } catch { if failure == nil { failure = error } }
+    }
+    if let failure { throw failure }
+  }
+  private func makeTransferNative() -> ApplicationDocumentTransferNative {
+    .init(
+      capture: { snapshot in
+        guard let model = snapshot.handle as? EditorDocument else {
+          throw DocumentTransferError.invalidRequest
+        }
+        let source = try self.endpoint(windowID: snapshot.request.source.windowID)
+        let target = try self.endpoint(windowID: snapshot.request.target.windowID)
+        let sourceView = try self.validateTransferEndpoint(source).captureTransferEndpoint(
+          snapshot, endpointID: source.id)
+        let targetView = try self.validateTransferEndpoint(target).captureTransferEndpoint(
+          snapshot, endpointID: target.id)
+        let value = TransferPresentation(
+          snapshot, model: model, source: source, target: target,
+          sourceView: sourceView, targetView: targetView)
+        self.transferPresentation = value
+        return value
+      },
+      validate: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        try self.validateTransferEndpoint(value.source).validateTransferEndpoint(
+          snapshot, receipt: value.sourceView)
+        try self.validateTransferEndpoint(value.target).validateTransferEndpoint(
+          snapshot, receipt: value.targetView)
+      },
+      suspendMonitor: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        if value.monitor == nil {
+          do {
+            value.monitor = try self.bindings.reserveTransfer(
+              value.model, transactionID: value.transactionID)
+          } catch {
+            if let retained = self.bindings.retainedTransfer(documentID: value.model.id),
+              retained.transactionID == value.transactionID
+            {
+              value.monitor = retained
+            }
+            throw error
+          }
+        }
+        if let monitor = value.monitor {
+          try self.bindings.suspendTransfer(monitor) {
+            _ = try self.registry.validateTransferSnapshot(snapshot.lease)
+          }
+        }
+      },
+      projectSource: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        try self.validateTransferEndpoint(value.source).applyTransferProjection(
+          snapshot, receipt: value.sourceView)
+      },
+      projectTarget: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        try self.validateTransferEndpoint(value.target).applyTransferProjection(
+          snapshot, receipt: value.targetView)
+      },
+      attachMonitor: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        guard let monitor = value.monitor else { return }
+        let destination = snapshot.phase == .staged ? value.target : value.source
+        let useTarget = snapshot.phase == .staged
+        let controller = try self.validateTransferEndpoint(destination)
+        let previous = try self.bindings.transferOwnership(monitor)
+        try self.bindings.attachTransfer(
+          monitor, expectedPreviousOwnership: previous,
+          newOwnership: snapshot.expectedState.ownershipGeneration,
+          liveContext: { [weak value, weak controller, weak model = value.model] in
+            guard let controller, let model else { return nil }
+            if let value, !value.ordinaryContext {
+              return controller.transferFileStateContext(
+                model, receipt: useTarget ? value.targetView : value.sourceView)
+            }
+            return controller.ordinaryFileStateContext(model)
+          },
+          onChange: { [weak value, weak controller] in
+            if let value, !value.ordinaryContext { return }
+            controller?.notifyTransferDiskStateChange()
+          }, validateLease: { _ = try self.registry.validateTransferSnapshot(snapshot.lease) })
+      },
+      refreshAdmission: { receipt in
+        let value = try self.transferValue(receipt)
+        value.ordinaryContext = true
+        var failure: Error?
+        // A missing peer must not leave an already committed live editor read-only.
+        for endpoint in [value.source, value.target] {
+          do {
+            _ = try self.validateTransferEndpoint(endpoint)
+            try self.project(windowID: endpoint.assignment.windowID)
+          } catch { if failure == nil { failure = error } }
+        }
+        do { try self.refreshAdmission() } catch { if failure == nil { failure = error } }
+        if let failure { throw failure }
+        for endpoint in [value.source, value.target] where !endpoint.announced {
+          let controller = try self.validateTransferEndpoint(endpoint)
+          endpoint.announced = true
+          self.onWindowCreated(controller)
+          _ = try self.validateTransferEndpoint(endpoint)
+        }
+      },
+      finishMonitor: { snapshot, receipt in
+        let value = try self.transferValue(receipt)
+        if let monitor = value.monitor {
+          try self.bindings.finishTransfer(monitor) {
+            _ = try self.registry.validateTransferSnapshot(snapshot.lease)
+          }
+        }
+      })
   }
 
   private lazy var checkpoints: ApplicationSessionCheckpoints = ApplicationSessionCheckpoints(
     session: session, recovery: recovery,
     managed: .init(
-      registry: registry, requireIntakeSettled: { try self.intake.requireSettled() },
+      registry: registry,
+      requireIntakeSettled: {
+        try self.intake.requireSettled()
+        try self.transferring.requireSettled()
+      },
       requireCloseSettled: { try self.closing.requireSettled() },
       validateProjection: { values in
         for value in values {
@@ -85,6 +406,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       requireAdmission: {
         guard self.activation != nil || self.ready else { throw NativeWorkspaceError.notReady }
         try self.closing.requireSettled()
+        try self.transferring.requireSettled()
       }, validate: { try self.validate(endpointID: $0, assignment: $1) },
       exists: { id in self.endpoints.values.contains { $0.id == id && $0.controller != nil } },
       resolveSelection: { id, assignment, selection in
@@ -108,6 +430,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
       requireApplicationAdmission: {
         try self.requireUserAdmission()
         try self.intake.requireSettled()
+        try self.transferring.requireSettled()
       },
       acquirePause: { try self.checkpoints.acquirePause() },
       drainPause: { try await self.checkpoints.drainPause($0) },
@@ -126,6 +449,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         guard self.ready else { throw NativeWorkspaceError.notReady }
         try self.intake.requireSettled()
         try self.closing.requireSettled()
+        try self.transferring.requireSettled()
         let chosen = self.windows.first { $0.window === NSApp.keyWindow } ?? self.windows.first
         let value =
           try chosen.map { try self.endpoint(windowID: $0.sessionMetadata.id) }
@@ -220,6 +544,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     self.onError = onError
     self.openLargeFile = openLargeFile
     bindings = try NativeDocumentEndpointBindings()
+    let transferOwner = TransferOwnerReference()
     registry = ApplicationDocuments(
       closeServices: .init(readState: { handle in
         guard let model = handle as? EditorDocument else { throw DocumentIntakeError.staleModel }
@@ -233,10 +558,34 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
             documentID: model.id, ownershipGeneration: model.ownershipGeneration,
             authority: model.recoveryAuthority,
             highestIssuedRevision: model.highestIssuedRecoveryRevision)
+        }),
+      transferServices: .init(
+        rotateOwnership: { handle in
+          guard let model = handle as? EditorDocument else {
+            return .init(
+              ownershipGeneration: handle.ownershipGeneration,
+              mutationGeneration: handle.ownershipGeneration)
+          }
+          let pair = model.rotateTransferOwnership()
+          return .init(
+            ownershipGeneration: pair.ownershipGeneration,
+            mutationGeneration: pair.mutationGeneration)
+        },
+        readState: { [transferOwner] handle in
+          guard let owner = transferOwner.owner, let model = handle as? EditorDocument,
+            let assignment = owner.registry.assignment(of: model.id)
+          else { throw DocumentTransferError.stale }
+          let endpoint = try owner.endpoint(windowID: assignment.windowID)
+          let preparation = try owner.validateTransferEndpoint(endpoint)
+            .captureTransferPreparation()
+          return try model.captureTransferState(preparation: preparation)
         }))
+    transferOwner.owner = self
   }
   private func requireUserAdmission() throws {
-    guard ready, !quitting else { throw NativeWorkspaceError.notReady }
+    guard ready, !quitting, transferring.allowsNativeAdmission else {
+      throw NativeWorkspaceError.notReady
+    }
   }
   private func endpoint(windowID: UUID) throws -> Endpoint {
     guard let value = endpoints[windowID], value.controller != nil else {
@@ -251,13 +600,15 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
     try value.controller!.requireEndpointIdentity(endpointID: endpointID, assignment: assignment)
   }
-  private func createEndpoint(windowID: UUID = UUID()) throws -> Endpoint {
+  private func createEndpoint(windowID: UUID = UUID(), forTransfer: Bool = false) throws -> Endpoint
+  {
     guard endpoints[windowID] == nil else { throw NativeWorkspaceError.staleEndpoint }
     let assignment: DocumentAssignment
     if let window = registry.window(id: windowID) {
       guard window.groups.count == 1 else { throw ApplicationCheckpointError.invalidProjection }
       assignment = .init(windowID: windowID, groupID: window.groups[0].id)
     } else {
+      guard !forTransfer else { throw NativeWorkspaceError.staleEndpoint }
       let live = Set(try registry.captureWindows().map(\.id))
       let reserved = Set(session.unresolved.map(\.windowID))
       guard live.union(reserved).union([windowID]).count <= 32 else {
@@ -304,8 +655,17 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         try current()
         return try await self.reopen(windowID: windowID)
       },
-      detachDocumentEndpoint: { [weak self] model in
-        guard let self else { throw NativeWorkspaceError.notReady }
+      detachDocumentEndpoint: { [weak self, weak value] model in
+        guard let self, let value else { throw NativeWorkspaceError.notReady }
+        try current()
+        if let presentation = self.transferPresentation, presentation.model === model,
+          presentation.source === value || presentation.target === value,
+          self.registry.hasActiveTransferLease(presentation.sourceView.lease)
+        {
+          // The live transaction owns monitor suspension, including before its first reservation.
+          // Ordinary detachment here would create a competing receipt that transfer cannot consume.
+          return
+        }
         try self.bindings.detach(model)
       },
       reattachDocumentEndpoint: { [weak self] model, context, change in
@@ -318,7 +678,8 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         }
         self.endpoints[windowID] = nil
         self.closing.endpointClosed(windowID: windowID)
-        if self.registry.window(id: windowID)?.groups.allSatisfy({ $0.documentIDs.isEmpty }) == true
+        if !self.transferring.hasUnsettledTransactions,
+          self.registry.window(id: windowID)?.groups.allSatisfy({ $0.documentIDs.isEmpty }) == true
         {
           do {
             try self.registry.unregisterEmptyWindow(
@@ -332,10 +693,15 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         id: windowID, application: routing, onError: onError)
       value.controller = controller
       controller.configureFileMonitoring(monitoring)
-      if registry.window(id: windowID)?.groups.allSatisfy({ $0.documentIDs.isEmpty }) == true {
+      if !forTransfer,
+        registry.window(id: windowID)?.groups.allSatisfy({ $0.documentIDs.isEmpty }) == true
+      {
         try project(windowID: windowID)
       }
-      onWindowCreated(controller)
+      if !forTransfer {
+        value.announced = true
+        onWindowCreated(controller)
+      }
       try current()
       return value
     } catch {
@@ -534,6 +900,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
     }
   }
   private func reopen(windowID: UUID) async throws -> DocumentIntakeID {
+    try transferring.requireSettled()
     try requireUserAdmission()
     try intake.requireSettled()
     try closing.requireSettled()
@@ -580,12 +947,24 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
 
   var canRetryRecovery: Bool {
-    activation != nil || admissionRefreshPending || externalOpens.hasRetainedRequest
+    (transferID != nil && transferring.hasUnsettledTransactions) || activation != nil
+      || admissionRefreshPending || externalOpens.hasRetainedRequest
       || intake.status?.stage == .failed || closing.status?.stage == .failed
       || checkpoints.lastError != nil
   }
   func retryRecovery() async throws {
     guard !quitting else { throw NativeWorkspaceError.notReady }
+    if let id = transferID, transferring.hasUnsettledTransactions {
+      let lease = try transferring.retryLease(for: id)
+      if let value = transferPresentation, lease != nil || transferring.allowsNativeAdmission {
+        try reconcileTransferEndpoints(value, lease: lease)
+      }
+      try transferring.retryLayout(id)
+      switch try await waitForTransfer(id) {
+      case .moved, .restored: return
+      case .retained(let error): throw error
+      }
+    }
     if activation != nil || admissionRefreshPending {
       try await retryStartup()
       return
@@ -624,6 +1003,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
 
   func createWindow(createDocument: Bool = true) throws -> EditorWindowController {
     try requireUserAdmission()
+    try transferring.requireSettled()
     try intake.requireSettled()
     try closing.requireSettled()
     if createDocument {
@@ -641,6 +1021,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   /// The panel supplies a worker-prepared seed; only managed intake resolves its exact claim.
   func acceptSession(_ entry: UnresolvedSessionEntry, file: SessionResolvedFile) async throws {
     try requireUserAdmission()
+    try transferring.requireSettled()
     try intake.requireSettled()
     guard let seed = file.seed, seed.id == entry.metadata.id else {
       throw DocumentIntakeError.invalidRequest
@@ -667,6 +1048,7 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
 
   func prepareQuit() async throws -> SessionCheckpointReceipt {
+    try transferring.requireSettled()
     guard !quitting else { throw NativeWorkspaceError.notReady }
     quitting = true
     externalOpens.beginQuit()

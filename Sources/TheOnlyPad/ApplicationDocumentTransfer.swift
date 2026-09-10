@@ -55,10 +55,17 @@ import Foundation
     guard !value.inFlight else { throw ApplicationDocumentTransferError.busy }
     launch(value)
   }
+  /// Exact idle transaction status for endpoint repair before retry. Not projection authority.
+  func retryLease(for id: ApplicationDocumentTransferID) throws -> DocumentTransferLease? {
+    guard let value = active, value.id == id else { throw ApplicationDocumentTransferError.expired }
+    guard !value.inFlight else { throw ApplicationDocumentTransferError.busy }
+    return value.lease
+  }
   private func launch(_ value: Transaction) {
     value.inFlight = true
     value.task = Task { await self.execute(value) }
   }
+  var hasUnsettledTransactions: Bool { active != nil }
   var allowsNativeAdmission: Bool {
     guard let value = active else { return true }
     return value.lease == nil && value.pause == nil && value.outcome != nil
@@ -133,8 +140,10 @@ import Foundation
       if let receipt = value.receipt, value.monitorSuspended {
         let snapshot = try registry.validateTransferSnapshot(lease)
         try native.suspendMonitor(snapshot, receipt)
-        try native.attachMonitor(snapshot, receipt)
-        try native.finishMonitor(snapshot, receipt)
+        try projectEndpoints(try registry.validateTransferSnapshot(lease), receipt: receipt)
+        try native.validate(try registry.validateTransferSnapshot(lease), receipt)
+        try native.attachMonitor(try registry.validateTransferSnapshot(lease), receipt)
+        try native.finishMonitor(try registry.validateTransferSnapshot(lease), receipt)
         value.monitorFinished = true
       }
       try registry.cancelUnstagedTransfer(lease)
@@ -157,14 +166,7 @@ import Foundation
       try native.suspendMonitor(snapshot, receipt)
     }
     guard snapshot.phase == .restored else { throw ApplicationDocumentTransferError.pendingLayout }
-    // Attempt both restorations; one endpoint failure cannot prevent the other's repair.
-    var projectionFailure: Error?
-    do { try native.projectSource(snapshot, receipt) } catch { projectionFailure = error }
-    do {
-      snapshot = try registry.validateTransferSnapshot(lease)
-      try native.projectTarget(snapshot, receipt)
-    } catch { if projectionFailure == nil { projectionFailure = error } }
-    if let projectionFailure { throw projectionFailure }
+    try projectEndpoints(snapshot, receipt: receipt)
     snapshot = try registry.validateTransferSnapshot(lease)
     try native.validate(snapshot, receipt)
     try native.attachMonitor(snapshot, receipt)
@@ -172,6 +174,18 @@ import Foundation
     try native.finishMonitor(snapshot, receipt)
     value.monitorFinished = true
     value.resume = .settleRestored
+  }
+  private func projectEndpoints(
+    _ snapshot: DocumentTransferSnapshot, receipt: any ApplicationDocumentTransferReceipt
+  ) throws {
+    // Repair both presentations, even when cancellation occurred before ownership rotation.
+    var failure: Error?
+    do { try native.projectSource(snapshot, receipt) } catch { failure = error }
+    do {
+      let current = try registry.validateTransferSnapshot(snapshot.lease)
+      try native.projectTarget(current, receipt)
+    } catch { if failure == nil { failure = error } }
+    if let failure { throw failure }
   }
   private func settle(_ value: Transaction, moved: Bool) throws {
     guard let lease = value.lease else { throw ApplicationDocumentTransferError.pendingLayout }

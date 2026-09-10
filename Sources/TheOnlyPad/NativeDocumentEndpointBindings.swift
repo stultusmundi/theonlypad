@@ -198,6 +198,8 @@ enum NativeEndpointBindingStatus {
         guard let model, let bridge, model.fileState === bridge, model.id == fence.id,
           model.ownershipGeneration == newOwnership
         else { return nil }
+        // Completed endpoints must expose closed identity for exact detachment.
+        // The bridge still rejects closed/quitting action and attachment admission.
         let expected = delivery.enabled ? Fence(model) : fence
         guard model.fileBindingID == expected.binding, model.baselineRevision == expected.revision,
           expected.sameURL(model.url)
@@ -208,7 +210,7 @@ enum NativeEndpointBindingStatus {
           expected.sameURL(model.url),
           let value, value.documentID == model.id, value.ownershipGeneration == newOwnership,
           value.bindingID == expected.binding, value.baselineRevision == expected.revision,
-          expected.sameURL(value.url), !value.closed, !value.quitting
+          expected.sameURL(value.url), delivery.enabled || (!value.closed && !value.quitting)
         else { return nil }
         return value
       }
@@ -370,7 +372,9 @@ enum NativeEndpointBindingStatus {
         let value = liveContext()
         let valid =
           document.fileState === bridge && expected.matches(document)
-          && value.map { expected.matches($0) && !$0.closed && !$0.quitting } == true
+          && value.map {
+            expected.matches($0) && (delivery.enabled || (!$0.closed && !$0.quitting))
+          } == true
         if !delivery.contextCalled {
           delivery.contextCalled = true
           delivery.firstContextAccepted = valid

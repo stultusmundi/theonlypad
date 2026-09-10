@@ -10,7 +10,7 @@
 
 **Spec:** [native-document-transfer.md](../specs/native-document-transfer.md).
 
-Status: root design review complete; registry interface approved and independent registry, monitor and bounded native-state work assigned. Every implementation checkbox below remains pending until evidence is recorded. No transfer tests have run yet. This supplements the [existing F-02 plan](2026-09-10-document-transfer.md) and uses [native integration contracts](../specs/native-document-transfer.md). Root integration freeze and independent design review are prerequisites. Existing unrelated owner/AppDelegate/controller work is not part of this task.
+Status: registry, process, monitor continuity and bounded native projection are implemented with dedicated test evidence. Existing-window native owner/command integration and endpoint-loss recovery are under final verification. Detailed checkboxes remain open when any listed clause lacks evidence; subsystem test counts alone do not satisfy every clause. This supplements the [existing F-02 plan](2026-09-10-document-transfer.md) and uses [native integration contracts](../specs/native-document-transfer.md). Root integration freeze and independent design review are prerequisites. Existing unrelated owner/AppDelegate/controller work is not part of this task.
 
 ## File responsibility map and execution evidence
 
@@ -74,3 +74,11 @@ For each stage, first compile a real failing behavioral test, retain unique red 
 - [ ] Add independent document groups with actual group host/routing/session schema tests; current single-group projection is not silently bypassed or flattened on save.
 - [ ] Add streaming document transfer with the existing reader/page task identities, separate byte-offset state and no editable recovery adapter.
 - [ ] Run actual desktop transfer/undo/close/restart acceptance when GUI access is available. Hidden AppKit semantic tests do not substitute for this gate. F-02 remains partial until all committed scope passes.
+
+## Integration progress, 2026-09-10
+
+- Implemented/tested foundations: registry 62 cases, process 14, paired publisher 2, native scalar adapter 12; see corresponding transfer verification records.
+- Native existing-window projection: five original cases plus active/settled endpoint replacement and owned attachment retry cases. Final close-time monitor-context regression is being resolved before the integration freeze.
+- Product command/chooser: three hidden actual AppDelegate tests passed; independent source review clear. No desktop acceptance implied.
+- Actual owner: scratch/file move, ownership ABA refusal, source/target loss before and after staging, terminal retry and post-settlement editing have passing hidden cases. File-backed terminal endpoint recreation exposed a close-time monitor detachment-context defect; regression remains enabled while controller and binding guards are corrected.
+- Remaining: final frozen compatibility checks, complete multi-pane/metadata clause coverage, visible focus/desktop acceptance, new-window targets, independent groups and streaming transfer. F-02 remains partial.

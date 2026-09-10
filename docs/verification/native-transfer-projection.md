@@ -11,3 +11,9 @@ Native first presentation of a zero-sized neighbor viewport can center its origi
 Independent source review found no material issue. A separate frozen integration snapshot passed the five projection tests again (0.647 seconds) and all 71 existing managed lifecycle tests (7.086 seconds). Its base and overlay hashes are retained in `.local/native-transfer-controller-integrated/source-provenance.json`; the copied projection runner changes only root-directory resolution for archive execution. Logs: `.local/native-transfer-controller-frozen.log` and `.local/native-transfer-managed-compatibility.log`.
 
 Outstanding: explicit active-lease endpoint replacement reconciliation and terminal cleanup endpoint replacement preserving current edits. The underlying owner has separate scratch/file transfer evidence; public command access and desktop acceptance remain incomplete.
+
+## Endpoint recreation and close context, 2026-09-10
+
+Explicit active-lease and settled endpoint replacement are implemented. Active reconciliation rebinds the original immutable views to an exact new endpoint and validates the live lease; terminal reconciliation retains current edits and presentation without restoring old geometry. Pending attachment exemptions are restricted to IDs owned by the exact still-active lease, and disappear at settlement. A weak receipt disappearing during that lease fails closed rather than invoking ordinary dirty classification.
+
+Final component run passed nine tests, zero failures, 1.123 seconds (`.local/editor-transfer-context-final-green.log`, run.Rh0dKWa4). Two close-time helper guards initially discarded the identity needed for detachment after windowWillClose; they now retain the exact closed identity while action guards remain unchanged. The focused context regression and weak-receipt regression failed before this correction. Independent source review is clear. Full owner/command integration and desktop evidence are recorded separately.

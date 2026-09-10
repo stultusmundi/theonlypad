@@ -6,7 +6,18 @@ enum ApplicationDocumentTransferResult {
   case restored(Error)
   case retained(Error)
 }
-enum ApplicationDocumentTransferError: Error { case busy, expired, pendingLayout }
+enum ApplicationDocumentTransferError: Error, LocalizedError {
+  case busy, expired, pendingLayout
+  var errorDescription: String? {
+    switch self {
+    case .busy: return "A document move is still running. Wait for it to finish before retrying."
+    case .expired: return "This move is no longer available. Select the document and try again."
+    case .pendingLayout:
+      return
+        "The document layout needs recovery. Use Retry Recovery before moving more documents or quitting."
+    }
+  }
+}
 /// Strong transaction-owned native receipt; concrete adapters keep endpoint and monitor phases here.
 @MainActor protocol ApplicationDocumentTransferReceipt: AnyObject {}
 @MainActor struct ApplicationDocumentTransferPublication {

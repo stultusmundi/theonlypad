@@ -96,6 +96,43 @@ import PadCore
         liveContext: { context(movingModel) }, onChange: {})
 
     } catch { check(false, "native ownership transfer succeeds: \(error)") }
+    for useTransfer in [true, false] {
+      let lifetimeStore = try NativeDocumentEndpointBindings()
+      let (document, box) = try model()
+      if useTransfer {
+        let receipt = try lifetimeStore.reserveTransfer(document, transactionID: UUID())!
+        let previous = document.ownershipGeneration
+        try lifetimeStore.suspendTransfer(receipt, validateLease: {})
+        document.advanceOwnershipGeneration()
+        box.value = context(document)
+        try lifetimeStore.attachTransfer(
+          receipt, expectedPreviousOwnership: previous, newOwnership: document.ownershipGeneration,
+          liveContext: { box.value }, onChange: {}, validateLease: {})
+        try lifetimeStore.finishTransfer(receipt, validateLease: {})
+      } else {
+        try lifetimeStore.detach(document)
+        try lifetimeStore.reattach(document, liveContext: { box.value }, onChange: {})
+      }
+      box.value?.closed = true
+      box.value?.quitting = true
+      check(
+        document.fileState!.captureAction(.reload) == nil,
+        "closed completed endpoint never admits disk action")
+      do { try lifetimeStore.detach(document) } catch {
+        check(
+          false,
+          "completed endpoint detach retains closed identity transfer=\(useTransfer): \(error)")
+      }
+      check(lifetimeStore.retainedCount == 1, "closed completed endpoint retains exact detachment")
+      refuses("new attachment still rejects closed/quitting context") {
+        try lifetimeStore.reattach(document, liveContext: { box.value }, onChange: {})
+      }
+      box.value?.closed = false
+      box.value?.quitting = false
+      try lifetimeStore.reattach(document, liveContext: { box.value }, onChange: {})
+      check(
+        lifetimeStore.retainedCount == 0, "live replacement consumes same closed endpoint receipt")
+    }
     let reentrantStore = try NativeDocumentEndpointBindings()
     let reentrantModel = try model().0
     let reentrantReceipt = try reentrantStore.reserveTransfer(
