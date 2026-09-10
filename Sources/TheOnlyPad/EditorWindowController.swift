@@ -1193,8 +1193,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.preferredPaneID = expectedPreferred
     try presentPanes(document, wrap: wrap)
     try validateAuthority()
-    window?.makeFirstResponder(panes[presentation.focusedPaneIndex].editor)
+    let focusTarget = panes[presentation.focusedPaneIndex]
+    let focusAccepted =
+      projectionToken != nil
+      ? focusProjectedPane(focusTarget)
+      : (window?.makeFirstResponder(focusTarget.editor) ?? false)
     try validateAuthority()
+    guard focusAccepted, window?.firstResponder === focusTarget.editor else {
+      throw PaneRoutingError.stale
+    }
     state.warning = nil
     for (index, pane) in panes.enumerated() {
       if !DocumentPanePresentation.applyOrigin(presentation.panes[index].scrollOrigin, to: pane) {
@@ -1202,6 +1209,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       try validateAuthority()
     }
+    guard window?.firstResponder === focusTarget.editor else { throw PaneRoutingError.stale }
     state.pending = nil
     committed = true
   }
@@ -3924,11 +3932,12 @@ extension EditorWindowController {
     else { return false }
     return projectionAllows(.select, document: pane.document)
   }
-  private func focusProjectedPane(_ pane: EditorPane) {
-    guard let token = projectionToken, projectionFocus == nil else { return }
+  @discardableResult
+  private func focusProjectedPane(_ pane: EditorPane) -> Bool {
+    guard let token = projectionToken, projectionFocus == nil else { return false }
     projectionFocus = (token, pane.id)
     defer { projectionFocus = nil }
-    _ = window?.makeFirstResponder(pane.editor)
+    return window?.makeFirstResponder(pane.editor) ?? false
   }
   /// Used only by synchronous owner layout/focus installation, never by user mutation sinks.
   private func projectionAllows(

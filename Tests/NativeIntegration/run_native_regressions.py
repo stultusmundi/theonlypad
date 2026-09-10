@@ -77,6 +77,18 @@ def discover(root,suite,prebuilt):
     for path in result: read_real(root,path)
     return result
 
+def projection_probe(text,access):
+    marker='  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {\n'
+    if text.count(marker)!=1: raise ValueError('focus probe marker changed')
+    text=text.replace(marker,marker+'    if let controller = windowController as? EditorWindowController,\n      let result = ProjectionFocusProbe.beforeFocus?(controller, responder) { return result }\n')
+    start=text.index('  private func installResolvedPanes(')
+    end=text.index('  private func installPendingPresentationIfPossible',start)
+    body=text[start:end];marker='      try validateAuthority()\n    }'
+    index=body.rfind(marker)
+    if index<0: raise ValueError('origin probe marker changed')
+    body=body[:index]+'      ProjectionFocusProbe.afterOrigin?(self)\n'+body[index:]
+    return text[:start]+body+text[end:]+'\n'+access
+
 def freeze(root,run,suite,prebuilt=False):
     root,run=Path(root),Path(run)
     paths=discover(root,suite,prebuilt);items=[];generated=[]
@@ -100,6 +112,9 @@ def freeze(root,run,suite,prebuilt=False):
                 generate('Package/'+name,(run/item['frozen']).read_bytes(),name)
             elif name.startswith('Sources/TheOnlyPad/') and path.name!='TheOnlyPadApplication.swift':
                 data=(run/item['frozen']).read_bytes()
+                if suite=='projection' and path.name=='EditorWindowController.swift':
+                    access=(run/'Original/Tests/NativeIntegration/EditorTransferProjectionTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
+                    data=projection_probe(data.decode(),access).encode()
                 if suite=='settings':
                     access=(run/'Original/Tests/NativeIntegration/DocumentAppliedSettingsTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
                     if path.name=='EditorWindowController.swift': data+=('\n'+access).encode()
@@ -115,7 +130,7 @@ def freeze(root,run,suite,prebuilt=False):
                 generate('Package/Sources/NativeRouting/'+path.name,data,name)
         name=SUITES[suite][0]+'.swift'
         test_data=(run/'Original/Tests/NativeIntegration'/name).read_bytes()
-        if suite=='settings':
+        if suite in ('settings','projection'):
             text=test_data.decode();start=text.index('// NATIVE-ACCESS-BEGIN');end=text.index('// NATIVE-ACCESS-END')+len('// NATIVE-ACCESS-END');test_data=(text[:start]+text[end:]).encode()
         generate('Package/Tests/NativeRoutingTests/'+name,test_data,
                  'Tests/NativeIntegration/'+name)
@@ -131,7 +146,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest

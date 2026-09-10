@@ -48,24 +48,25 @@ Implementation, hidden verification and independent re-review are complete for t
 
 Files: `EditorWindowController.swift`; `Tests/NativeIntegration/EditorTransferProjectionTests.swift` and its existing runner. Reference private candidate `.local/pane-origin-diagnostic`; copy only reviewed behavior, never diagnostic hooks.
 
-- [ ] Reproduce the startup responder loss with actual native insertion for single pane and both split orientations, plus the existing projection cases.
-- [ ] Make projected focus return acceptance; require exact actual first responder before committing and after origin callbacks. Installation outside a projection uses ordinary focus; installation inside a projection uses only its scoped helper.
-- [ ] Inject responder refusal and verify existing rollback preserves ownership, panes and session state. Keep general admission intact.
-- [ ] Run the focused regression and existing projection/transfer controls, then independent review and local commit.
+- [x] Reproduce the startup responder loss with actual native insertion for single pane and both split orientations, plus the existing projection cases.
+- [x] Make projected focus return acceptance; require exact actual first responder before committing and after origin callbacks. Installation outside a projection uses ordinary focus; installation inside a projection uses only its scoped helper.
+- [x] Inject responder refusal and verify existing rollback preserves ownership, panes and session state. Keep general admission intact.
+- [x] Run the focused regression and existing projection/transfer controls, then independent review.
+- [x] Record the reviewed implementation in a scoped local commit.
 
-Existing runner: `scripts/test-editor-transfer-projection.sh`. Passing hidden native tests does not establish real desktop input.
+Proven runner: `scripts/test-editor-transfer-projection.sh` (20 hidden native tests). Matching settings (24), transfer (12), close (106), factory (133) and shared-pane controls passed; the native coordinator pure suite passed 30 tests. Implementation, hidden verification and independent review are complete. See [preferred-focus evidence](../../verification/preferred-pane-focus.md) for the original 14-test/four-failure baseline, separate supplemental negative control, exact source hashes and receipt checks. Passing hidden native tests does not establish real desktop input.
 
 ## Task 3: Measured origin-layout eligibility
 
 Files: `DocumentPanePresentation.swift`; corresponding native presentation tests; sanitized cost evidence. Depends on reviewed measured eligibility, not an assumed viewport cost bound.
 
-- [ ] Complete the reviewed individual v2 layout risk batches, stopping on any failure,100ms per-call/summed-call or512MiB observed limit. Retain all receipts, including failures. Follow with separately selected combining-cluster and typography probes, then repeated exact-case measurements before selecting eligibility.
+- [ ] Complete the reviewed individual corrected-v4 layout risk batches, stopping on any failure,100ms per-call/summed-call or512MiB observed limit. Original v2 refused before timing because its font was wrong; preserve that result. The corrected first ASCII/low-origin/one-pane batch has12 accepted process records, but the other input classes remain outstanding. Retain all receipts, including failures. Follow with separately selected combining-cluster and typography probes, then repeated exact-case measurements before selecting eligibility.
 - [ ] Select/document a total UTF16 ceiling no greater than2M and any typography eligibility restriction justified by results. A requested viewport rectangle is not a work bound. Record remaining implicit AppKit work even when eager layout is skipped. If no tested input/typography class meets the budget, keep eager layout unpromoted, retain existing constrain/scroll behavior with honest clamped/unavailable results, and leave this requirement outstanding; do not choose a ceiling solely to finish the plan.
 - [ ] Add red tests for finite geometry, eligibility boundaries, attached pane/layout manager, skipped eager calls above the ceiling, and correct clamped/applied outcomes below it.
 - [ ] Implement the one viewport ensureLayout request only for admitted inputs before origin constraint. Do not introduce full layout or diagnostic glyph queries.
 - [ ] Verify neighboring pane selection/history/resize and transfer behavior, review, and commit. Do not describe post-return measurements as hard100ms cancellation.
 
-The v2 runner remains private until its source/receipt review completes. No unproven runner command is added to AGENTS.
+The corrected v4 runner and separately reviewed per-batch adapters remain private. The first batch is recorded in `docs/verification/pane-origin-layout-cost.md`; later batches require their own frozen review and controlled root execution. No unproven runner command is added to AGENTS.
 
 ## Task 4: Integrated desktop and package acceptance
 

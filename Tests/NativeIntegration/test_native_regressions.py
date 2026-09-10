@@ -100,6 +100,52 @@ class NativeRunnerTests(unittest.TestCase):
         (run/'Package/Sources/NativeRouting/EditorDocument.swift').write_text('changed')
         with self.assertRaises(ValueError): RUNNER.verify(run,manifest)
 
+    def test_projection_probe_preserves_focus_body_and_places_callback_after_origin(self):
+        source = """  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    return originalAdmissionAndFocus(responder)
+  }
+  private func installResolvedPanes() {
+    applyOrigin()
+      try validateAuthority()
+    }
+    state.pending = nil
+  }
+  private func installPendingPresentationIfPossible() {}
+"""
+        result = RUNNER.projection_probe(source, '// access')
+        self.assertIn('return originalAdmissionAndFocus(responder)', result)
+        self.assertLess(result.index('applyOrigin()'), result.index('ProjectionFocusProbe.afterOrigin?(self)'))
+        self.assertLess(result.index('ProjectionFocusProbe.afterOrigin?(self)'), result.index('try validateAuthority()'))
+        self.assertTrue(result.endswith('// access'))
+        for broken in [source.replace('override func makeFirstResponder', 'func changed'),
+                       source.replace('      try validateAuthority()', '      changed()')]:
+            with self.subTest(broken=broken), self.assertRaises(ValueError): RUNNER.projection_probe(broken, '')
+
+    def test_projection_access_is_frozen_separately_from_retained_assertions(self):
+        root,run=self.fixture()
+        original='import XCTest\n// NATIVE-ACCESS-BEGIN\n// focus access sentinel\n// NATIVE-ACCESS-END\n// retained original and focus assertions\n'
+        (root/'Tests/NativeIntegration/EditorTransferProjectionTests.swift').write_text(original)
+        controller="""  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    return super.makeFirstResponder(responder)
+  }
+  private func installResolvedPanes() {
+    for pane in panes {
+      applyOrigin(pane)
+      try validateAuthority()
+    }
+  }
+  private func installPendingPresentationIfPossible() {}
+"""
+        (root/'Sources/TheOnlyPad/EditorWindowController.swift').write_text(controller)
+        manifest=RUNNER.freeze(root,run,'projection')
+        self.assertEqual((run/'Original/Tests/NativeIntegration/EditorTransferProjectionTests.swift').read_text(),original)
+        self.assertEqual((run/'Original/Sources/TheOnlyPad/EditorWindowController.swift').read_text(),controller)
+        self.assertEqual((run/'Package/Tests/NativeRoutingTests/EditorTransferProjectionTests.swift').read_text(),
+                         'import XCTest\n\n// retained original and focus assertions\n')
+        self.assertIn('// focus access sentinel', (run/'Package/Sources/NativeRouting/EditorWindowController.swift').read_text())
+        self.assertIn('post-origin',manifest['transformation'])
+        RUNNER.verify(run,manifest)
+
     def test_settings_access_transform_is_frozen_and_tests_remain_separate(self):
         root,run=self.fixture(applied=True)
         (root/'scripts/test-document-applied-settings.sh').write_text('# fixed settings wrapper\n')
