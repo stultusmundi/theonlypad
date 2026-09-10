@@ -38,3 +38,10 @@ env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/search-child-
 Development verification wrapped every invocation in the private owned-process watchdog. Raw logs, manifests and reports remain ignored under `.local/search-child-lifecycle-task-1/` and `.local/search-child-lifecycle-repair-review/`. Full/adversarial suites continue to require an outer watchdog. Task 2 must add the checked-in real-process watchdog before running hostile child fixtures.
 
 No dependency, public helper executable, package, GUI routing or release changed in this slice. It does not demonstrate hard regex termination, real descriptor closure, 100 MB memory bounds, performance targets or complete C-07/C-08 acceptance.
+
+
+## Real-process watchdog bootstrap — incomplete
+
+Commit `17f57cd` adds the checked-in outer watchdog and 21 passing pure tests. Independent source review approved four fixed self-controls, with group cleanup before the direct leader is reaped, bounded capture and conservative SIGCHLD policy refusal.
+
+The first actual benign control failed safely: kqueue reported leader exit, the owned process-group SIGKILL returned `EPERM`, direct wait returned exit 0, and capture reached EOF. The watchdog returned 125 with cleanup unconfirmed. No hanging, ignored-TERM or lingering-descendant controls ran after that failure. Darwin zombie-group behavior is under investigation; `EPERM` is not being treated as success or as a request to change permissions. Real watchdog acceptance and the later launcher/channel tests remain outstanding.
