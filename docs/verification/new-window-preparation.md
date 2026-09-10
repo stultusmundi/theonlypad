@@ -1,6 +1,6 @@
 # New-window preparation — 2026-09-10
 
-Implementation commit: `f5b27f14cc530423da28c651435490db15b6fea1`. Independent specification/code review is pending. This internal foundation prepares an empty destination; it does not yet move a document or expose a New Window chooser action.
+Implementation commit: `f5b27f14cc530423da28c651435490db15b6fea1`. Independent specification/code review requires a fix: waiters can report cancellation intent as completed cancellation even when cleanup retains the operation. That result contract is under correction; the 21-test source below does not cover it. This internal foundation prepares an empty destination; it does not yet move a document or expose a New Window chooser action.
 
 ## Implemented
 
