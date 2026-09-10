@@ -398,6 +398,10 @@ private final class SearchChildLifecycleControl: @unchecked Sendable {
         Child(generation: generation, pid: launched.pid, connection: launched.connection))
       if stopRequested || shutDown || operation?.ticket.identity.generation != generation {
         stop(generation)
+      } else if let failure = launched.startupFailure {
+        // Spawn succeeded: keep its PID and cleanup ownership even when startup failed.
+        finish(.failed(failure))
+        stop(generation)
       } else {
         if var current = operation, let waiter = current.connector {
           current.connector = nil

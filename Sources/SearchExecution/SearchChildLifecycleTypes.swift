@@ -79,6 +79,8 @@ public enum SearchChildOutcome: Sendable, Equatable {
 }
 
 public enum SearchChildCleanup: Sendable, Equatable {
+  /// No spawned child is retained. This does not certify closure of descriptors
+  /// quarantined by a failed launcher setup before child/connection adoption.
   case noChild
   case pendingLaunch(generation: UUID)
   case stopping(generation: UUID)
@@ -88,8 +90,12 @@ public enum SearchChildCleanup: Sendable, Equatable {
 
 public struct SearchChildShutdown: Sendable, Equatable {
   public let cleanup: SearchChildCleanup
+  /// Confirms adopted connection cleanup, including its retained ancillary resources.
+  /// Pre-adoption launcher quarantine is outside this connection receipt.
   public let channelsClosed: Bool
 
+  /// Child/adopted-connection settlement, not complete process resource cleanup.
+  /// A launcher may retain pre-adoption quarantine and permanently refuse new launches.
   public var stopped: Bool {
     switch cleanup {
     case .noChild, .reaped:
@@ -115,6 +121,18 @@ protocol SearchChildTimer: AnyObject, Sendable {
 struct SearchLaunchedChild: Sendable {
   let pid: Int32
   let connection: any SearchChildConnection
+  /// A real child exists even when startup fails. Its connection retains every
+  /// adopted cleanup obligation; failure must not bypass PID adoption and reap.
+  let startupFailure: SearchChildFailure?
+
+  init(
+    pid: Int32, connection: any SearchChildConnection,
+    startupFailure: SearchChildFailure? = nil
+  ) {
+    self.pid = pid
+    self.connection = connection
+    self.startupFailure = startupFailure
+  }
 }
 
 enum SearchChildPoll: Sendable {

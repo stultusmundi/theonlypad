@@ -5,6 +5,152 @@ import XCTest
 @testable import SearchExecution
 
 final class SearchChildLifecycleTests: XCTestCase {
+  func testStartupFailureStopsOwnedChildWithoutPublishingConnection() async throws {
+    let h = try Harness()
+    let ticket = try await h.lifecycle.begin(requestID: UUID())
+    let operationTimer = try XCTUnwrap(h.timers.last(at: 1_000_000_000))
+    let refused = Gate()
+    func connect() async -> Error? {
+      let error = await caught { _ = try await h.lifecycle.connection(for: ticket) }
+      if error as? SearchChildFailure == .observerBusy { refused.open() }
+      return error
+    }
+    let first = Task { await connect() }
+    let second = Task { await connect() }
+    await refused.wait()  // One connector is now installed; the other was refused.
+    h.system.deliver(ticket, pid: 73, connection: h.connection, startupFailure: .launchFailed(EIO))
+    try await h.barrier(ticket)
+    XCTAssertEqual(h.system.signals, [.init(pid: 73, signal: SIGKILL)])
+    XCTAssertFalse(operationTimer.isActive, "Startup failure decides before the deadline callback")
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+
+    // Deterministic RED backstop: an ignored startupFailure must finish by this old
+    // timer, yielding the wrong outcome instead of hanging the expected-failure run.
+    h.clock.now = 1_000_000_000
+    operationTimer.forceFire()
+    try await h.barrier(ticket)
+    let errors = await [first.value, second.value]
+    XCTAssertEqual(errors.filter { $0 as? SearchChildFailure == .observerBusy }.count, 1)
+    XCTAssertEqual(errors.filter { $0 as? SearchChildFailure == .staleTicket }.count, 1)
+    XCTAssertEqual(errors.filter { $0 == nil }.count, 0, "No usable connection may escape")
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .failed(.launchFailed(EIO)))
+    await failure(.staleTicket) { try await h.lifecycle.cancel(ticket) }
+    await failure(.staleTicket) {
+      try await h.lifecycle.acceptedHandshake(generation: ticket.identity.generation)
+    }
+    await failure(.staleTicket) { try await h.lifecycle.acceptedTerminal(.success, ticket: ticket) }
+    let retained = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(retained, outcome)
+
+    await h.connection.started.wait()
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    h.clock.now = 1_100_000_000
+    h.timers.fireDue(at: h.clock.now)
+    try await h.barrier(ticket)
+    let cleanup = try await h.lifecycle.cleanup(for: ticket)
+    XCTAssertEqual(
+      cleanup, .reaped(generation: ticket.identity.generation, exit: .signaled(SIGKILL)))
+    XCTAssertFalse(h.system.polledPIDs.isEmpty)
+    XCTAssertTrue(h.system.polledPIDs.allSatisfy { $0 == 73 })
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+    let shutdown = Task { await h.lifecycle.shutdown() }
+    await h.timers.waitForDeadline(1_200_000_000)
+    let held = await h.lifecycle.shutdown()
+    XCTAssertEqual(held.cleanup, cleanup)
+    XCTAssertFalse(held.channelsClosed)
+    XCTAssertFalse(held.stopped)
+    let pollCount = h.system.polledPIDs.count
+    operationTimer.forceFire()
+    try await h.barrier(ticket)
+    XCTAssertEqual(h.system.polledPIDs.count, pollCount)
+    h.connection.release.open()
+    let settled = await shutdown.value
+    XCTAssertTrue(settled.stopped)
+    XCTAssertEqual(h.system.signals, [.init(pid: 73, signal: SIGKILL)])
+    XCTAssertEqual(h.connection.closeCalls, 1)
+  }
+
+  func testStartupFailurePreservesPriorCancelAndDeadline() async throws {
+    for deadline in [false, true] {
+      let h = try Harness()
+      let ticket = try await h.lifecycle.begin(requestID: UUID())
+      if deadline {
+        h.clock.now = 1_000_000_000
+        h.timers.fireDue(at: h.clock.now)
+        try await h.barrier(ticket)
+      } else {
+        try await h.lifecycle.cancel(ticket)
+      }
+      let before = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(before, .failed(deadline ? .deadline : .cancelled))
+      h.system.deliver(
+        ticket, pid: 79, connection: h.connection, startupFailure: .launchFailed(EIO))
+      try await h.barrier(ticket)
+      await h.connection.started.wait()
+      let after = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(after, before)
+      XCTAssertEqual(h.system.signals, [.init(pid: 79, signal: SIGKILL)])
+      XCTAssertEqual(h.system.polledPIDs, [79])
+      await failure(.staleTicket) {
+        try await h.lifecycle.acceptedHandshake(generation: ticket.identity.generation)
+      }
+      await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+      await h.dispose()
+      XCTAssertEqual(h.connection.closeCalls, 1)
+      XCTAssertEqual(h.system.signals.count, 1)
+    }
+  }
+
+  func testStartupFailureDuringShutdownPreservesGraceAndHeldCleanup() async throws {
+    let h = try Harness()
+    let ticket = try await h.lifecycle.begin(requestID: UUID())
+    let shutdown = Task { await h.lifecycle.shutdown() }
+    await h.timers.waitForDeadline(100_000_000)
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    h.system.deliver(ticket, pid: 83, connection: h.connection, startupFailure: .launchFailed(EIO))
+    try await h.barrier(ticket)
+    await h.connection.started.wait()
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .failed(.shutDown))
+    h.clock.now = 100_000_000
+    h.timers.fireDue(at: h.clock.now)
+    let held = await shutdown.value
+    XCTAssertEqual(
+      held.cleanup, .reaped(generation: ticket.identity.generation, exit: .signaled(SIGKILL)))
+    XCTAssertFalse(held.channelsClosed)
+    XCTAssertFalse(held.stopped)
+    let count = h.timers.count
+    let repeated = await h.lifecycle.shutdown()
+    XCTAssertEqual(repeated, held)
+    XCTAssertEqual(h.timers.count, count)
+    XCTAssertEqual(h.system.signals, [.init(pid: 83, signal: SIGKILL)])
+    XCTAssertEqual(h.system.polledPIDs, [83])
+    XCTAssertEqual(h.connection.closeCalls, 1)
+    h.connection.release.open()
+    await h.dispose()
+  }
+
+  func testStartupFailureAfterFacadeLossRetainsExactChildCleanup() async throws {
+    let system = ScriptedSystem()
+    let clock = ScriptedClock()
+    let timers = ScriptedTimers()
+    let connection = HeldCloseConnection()
+    var lifecycle: SearchChildLifecycle? = try makeLifecycle(system, clock, timers)
+    weak let facade = lifecycle
+    let ticket = try await lifecycle!.begin(requestID: UUID())
+    lifecycle = nil
+    XCTAssertNil(facade)
+    system.poll = .reaped(.signaled(SIGKILL))
+    system.deliver(ticket, pid: 89, connection: connection, startupFailure: .launchFailed(EIO))
+    await connection.started.wait()
+    await system.waitForPollCount(1)
+    XCTAssertEqual(system.signals, [.init(pid: 89, signal: SIGKILL)])
+    XCTAssertEqual(system.polledPIDs, [89])
+    XCTAssertEqual(connection.closeCalls, 1)
+    connection.release.open()
+  }
+
   func testCancelledHeldLaunchRetainsSlotUntilExactReapAndChannelClose() async throws {
     let h = try Harness()
     let ticket = try await h.lifecycle.begin(requestID: UUID())
@@ -826,6 +972,8 @@ private final class ScriptedSystem: SearchChildSystem, @unchecked Sendable {
   private struct State {
     var launches: [Launch] = []
     var signals: [Signal] = []
+    var polledPIDs: [Int32] = []
+    var pollWatchers: [(Int, Gate)] = []
     var poll: SearchChildPoll = .running
     var watchers: [(Int, Gate)] = []
     var inlineFailure = false
@@ -833,6 +981,7 @@ private final class ScriptedSystem: SearchChildSystem, @unchecked Sendable {
   private let state = Locked(State())
   var launches: [UUID] { state.withValue { $0.launches.map(\.generation) } }
   var signals: [Signal] { state.withValue { $0.signals } }
+  var polledPIDs: [Int32] { state.withValue { $0.polledPIDs } }
   var poll: SearchChildPoll {
     get { state.withValue { $0.poll } }
     set { state.withValue { $0.poll = newValue } }
@@ -859,8 +1008,31 @@ private final class ScriptedSystem: SearchChildSystem, @unchecked Sendable {
     state.withValue { $0.signals.append(Signal(pid: pid, signal: signal)) }
     return 0
   }
-  func pollExit(pid: Int32) -> SearchChildPoll { poll }
-  func deliver(_ ticket: SearchChildTicket, pid: Int32, connection: any SearchChildConnection) {
+  func pollExit(pid: Int32) -> SearchChildPoll {
+    let result = state.withValue { state in
+      precondition(state.polledPIDs.count < 256, "Injected poll log overflow")
+      state.polledPIDs.append(pid)
+      let ready = state.pollWatchers.filter { $0.0 <= state.polledPIDs.count }
+      state.pollWatchers.removeAll { item in ready.contains { $0.1 === item.1 } }
+      return (state.poll, ready.map { $0.1 })
+    }
+    for gate in result.1 { gate.open() }
+    return result.0
+  }
+  func waitForPollCount(_ count: Int) async {
+    let gate = Gate()
+    let ready = state.withValue { state in
+      if state.polledPIDs.count >= count { return true }
+      state.pollWatchers.append((count, gate))
+      return false
+    }
+    if ready { gate.open() }
+    await gate.wait()
+  }
+  func deliver(
+    _ ticket: SearchChildTicket, pid: Int32, connection: any SearchChildConnection,
+    startupFailure: SearchChildFailure? = nil
+  ) {
     let completion = state.withValue { state in
       guard
         let index = state.launches.firstIndex(where: { $0.generation == ticket.identity.generation }
@@ -870,7 +1042,7 @@ private final class ScriptedSystem: SearchChildSystem, @unchecked Sendable {
       state.launches[index].completion = nil
       return callback
     }
-    completion?(.success(.init(pid: pid, connection: connection)))
+    completion?(.success(.init(pid: pid, connection: connection, startupFailure: startupFailure)))
   }
   func failPending() {
     let callbacks = state.withValue { state in
@@ -895,9 +1067,12 @@ private final class ScriptedSystem: SearchChildSystem, @unchecked Sendable {
 private final class HeldCloseConnection: SearchChildConnection, Sendable {
   let started = Gate()
   let release = Gate()
+  private let calls = Locked(0)
+  var closeCalls: Int { calls.withValue { $0 } }
   func write(_ bytes: Data) async throws {}
   func read(maxBytes: Int) async throws -> Data { Data() }
   func close() async {
+    calls.withValue { $0 += 1 }
     started.open()
     await release.wait()
   }

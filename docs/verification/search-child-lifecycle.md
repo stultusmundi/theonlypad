@@ -159,3 +159,32 @@ e0b5a4707799afad754bfbd5a1d6f1e388d0cc28d1454489df73c8190e92cf38  SearchChildCha
 The repaired injected, first actual and full actual runs share source manifest SHA256 `9ffe0f0c45652a42500539085aac17371e042333fecc836d553f03fc2deac93a`. Raw synthetic evidence remains ignored: injected `run.dxc892a9`, first actual `run.a42pl2qz`, full actual `run.4kxr8u32`; the prior prefix run is `run.ta6hk71d`, build refusal `run.89aw_j8q`, and EOF-oracle red `run.ylb5rvbq`. Root source/runtime review accepted this component boundary.
 
 Real child process creation, descriptor inheritance across other app launchers, exact child reap, helper lifetime, wire/runtime integration, public lifecycle construction and production search routing remain outstanding. The existing Foundation external-command path still needs the planned inheritance audit. Direct pipe success establishes neither an OS sandbox nor packaged, desktop, large-input or performance acceptance.
+
+## Startup-failure ownership contract
+
+The internal launched-child value now carries optional `startupFailure`, defaulting to nil. The lifecycle stores the real child PID and connection before processing that failure. If no earlier cancellation/deadline/shutdown decision won, it fails the active operation immediately and uses the existing exact-child stop/reap/close path. It does not publish a usable connection or accept a handshake on that branch. Earlier outcomes remain unchanged, and physical ownership still requires both reap and connection cleanup before release.
+
+API comments distinguish child/adopted-connection settlement from complete process resource cleanup. `.noChild` does not certify closure of descriptors quarantined before child/connection adoption. A future launcher may retain such quarantine and permanently refuse new launches. Post-spawn ancillary cleanup must remain part of the connection's close acknowledgment; the optional failure field does not implement that ownership gate.
+
+The compiling behavioral red run added the field and tests while leaving lifecycle control unchanged. Four tests produced five failed assertions: no immediate stop, an active deadline timer, a published connection and a later deadline outcome instead of startup failure. The captured timer was forced only after immediate-state assertions, so the red completed without a watchdog timeout. Prior-outcome, pending-shutdown and facade-loss controls already passed.
+
+The four-line control addition then passed all 36 deterministic tests through the default harness. The original 32 test bodies remain byte-identical. New coverage verifies connector suppression, first-outcome order, exact simulated signal/poll PID, reaped child with held close, unchanged shutdown grace and ownership after facade loss. Effects are injected; no child was spawned.
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter SearchChildLifecycleTests/testStartupFailure
+scripts/test-search-child-lifecycle.sh
+```
+
+Both runs had complete frozen inventories and all three strictly validated exact-command watchdog receipts, including expected red exit, actual captured lengths and positive XCTest counts. Root independently verified the same inputs/results. Scoped strict Swift formatting, public-source and whitespace checks passed. Independent specification and code-quality review passed with no material findings; it also matched all three source hashes, both manifests, all six typed receipts and the unchanged original test bodies.
+
+Final hashes:
+
+```text
+ae9dd3dcd0de0c57a8bfc724f790777da8f489f68c923bc70d06779b6bc97130  SearchChildLifecycleTypes.swift
+8978bd2966ab34b3d17dc41962326809c3e99e68ba7f7088c6d56a202d342442  SearchChildLifecycle.swift
+1ea6e680c6a4b9bf6ff78047a8290eb8b713f85bb7d1bfc1c8594bac2fd676ea  SearchChildLifecycleTests.swift
+```
+
+Green manifest SHA256: `f1b3bf51839d5df51cc339bc7d5cabc3a33770a944a9e0de1f759082a4809e9d`. Raw red/green evidence is retained privately in `run.jv7ye2cz` and `run.tz0d347j`, with the three-file handoff under `.local/search-child-lifecycle-task-2/startup-failure/`. Accepted channel sources/tests are unchanged.
+
+The real launcher, process-wide setup quarantine, ancillary cleanup wrapper, SIGCHLD policy checks, no-external-reaper integration precondition and Foundation inheritance audit remain outstanding. No public lifecycle construction, helper, application routing, GUI or performance acceptance is added by this contract.
