@@ -21,6 +21,15 @@ jobs:
         run: scripts/test-native-integration.sh
       - name: Managed document lifecycle integration
         run: scripts/test-managed-documents.sh
+      - name: Document transfer foundations
+        run: |
+          scripts/test-document-transfer-registry.sh
+          bash scripts/test-application-document-transfer-process.sh
+          scripts/test-application-document-transfer-publisher.sh
+          scripts/test-native-document-transfer.sh
+          build_path=$(scripts/swift.sh build --show-bin-path)
+          scripts/test-file-state-bridge.sh "$build_path"
+          scripts/test-native-endpoint-bindings.sh "$build_path"
       - name: Shortcut ownership and native recording
         run: |
           scripts/test-application-shortcuts.sh
