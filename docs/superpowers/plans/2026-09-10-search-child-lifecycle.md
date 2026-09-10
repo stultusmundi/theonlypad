@@ -209,3 +209,14 @@ Self-review: lifecycle work is independent of the active framing implementation;
 - Task1 has only injected interfaces and deterministic test conformers; add public production construction with actual launch/channel code in Task2. This prevents unimplemented production stubs.
 - Actual Foundation external-command launch in `Sources/PadCore/ExternalCommand.swift` remains a required descriptor-inheritance integration check before production routing. No leak is claimed from source review alone.
 - Buffer accounting does not imply RSS containment. Allocation and native integration remain separately planned/verified work.
+
+
+## Task 2 implementation review, 2026-09-10
+
+SDK preflight typechecked the Darwin interfaces at the macOS 14 deployment target. `pipe2` and function-like wait-status macros are unavailable to Swift; use `pipe` with immediate close-on-exec setup and a tested terminal-status decoder. Dispatch source cancellation must acknowledge completion before its descriptor is closed. These are SDK/compile findings, not runtime evidence.
+
+Root accepted five bounded slices: A, checked-in watchdog and pure ordering tests; B, nonblocking channels; C, launcher and fixed synthetic fixture; D, timer/lifetime utility and temporary integration harness; E, real lifecycle integration and public construction. Move D's temporary-package infrastructure ahead of B's actual pipe tests. Keep production search routing disabled throughout this plan.
+
+Slice A is authorized first. Before real self-controls, independently review its pure tests and source: observe the unreaped group leader through kqueue, clean only its owned group, then wait; bounded fair output capture; signal/exception cleanup; no numeric process scan or early Popen polling. The existing private build watchdog is not a substitute. Expected timeout statuses belong only to explicit watchdog self-controls.
+
+Retain the reviewed 100 ms lifecycle polling cadence without adding another reaper. Channels admit one read, one active write and one queued bounded write; uncertain close remains unconfirmed. Launcher reads the parent SIGCHLD policy and refuses auto-reaping without changing it. The existing external-command Foundation.Process launch may overlap pipe-to-fcntl setup; descriptor inheritance remains a production-enablement audit requirement. No runtime inheritance result is claimed.
