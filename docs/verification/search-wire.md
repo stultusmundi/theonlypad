@@ -49,3 +49,26 @@ scripts/swift.sh build --scratch-path .build/integrated
 ```
 
 The full test command was supervised by a private owned-process watchdog because it includes adversarial regex. Source provenance and raw watchdog results remain ignored locally. This does not establish an in-app regex deadline or substitute for the planned checked-in helper lifecycle harness. Request/response implementation, desktop acceptance and the packaged helper remain outstanding. No package was promoted during this verification.
+
+## Sequential request path — 2026-09-10
+
+Task3A source `f59522219c5698c66ec53045343bb8eef8a51e2c` implements bounded request metadata, hello/request writing and the sequential request reader. Independent specification/quality review is pending. The writer builds and returns the exact identity-bound index from its emitted UTF-16 chunks, validates scope before execute, and returns only after execute emission succeeds. The reader validates identity/ordinal, metadata, UTF-16, scope and acknowledgement phases before accepting another request.
+
+Fresh checks pass: **28 request tests,19 framing regressions and20 UTF-16 regressions**, all with0 failures. The SearchExecution target build, strict scoped formatting, public-source pattern and whitespace checks pass. Root independently checked all three final source hashes against the implementation report.
+
+```sh
+scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireRequestTests
+scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireFrameTests
+scripts/swift.sh test --scratch-path .build/search-wire --filter SearchWireUTF16Tests
+scripts/swift.sh build --scratch-path .build/search-wire --target SearchExecution
+```
+
+Tests cover independent metadata bytes, bounded chunk writes, wrong lengths, malformed text, scalar scope, replayed/skipped ordinals, exact acknowledgement, callback failures/reentry and partial EOF. The principal short-input behavioral regression first returned invalidPhase at the compiling seam, then passed with lengthMismatch and no execute callback. An expanded fixture caught an external sink error incorrectly escaping as reader validation; that classification was corrected. A later regression proved that execute followed by a partial next header could return success and drive provisional work. The correction rejects those same-consume suffixes with invalidPhase and poisoned acknowledgement; all31 partial-header lengths now invoke no simulated engine. Later-arriving bytes cannot undo work scheduled after an earlier successful consume. A write-then-throw execute sink returns no index and receives no later call; no byte rollback is claimed.
+
+Final SHA256 values:
+
+- Types: `e7be9b26c5fa3d110d45d623529392acd6038815d6587bad2af975f1893757f8`.
+- Request codec: `2b99e84c46cb1bbcb7628f2a2b4e3a3a0fdecf3b968a75431861535d204d7860`.
+- Request tests: `b7ebce4cf5ce3c0a24bcdc4463989c537959322d3af62542b864cf02f65983e4`.
+
+Missing-API compilation was recorded separately from behavioral red. Raw check output remains in tool transcripts; no separate logfiles were retained for this task. Response/terminal codecs, helper execution, containment, allocation policy, native/folder routing and packaged acceptance remain outstanding. The earlier464-test integration snapshot does not include this request implementation.
