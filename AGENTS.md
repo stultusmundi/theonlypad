@@ -80,12 +80,20 @@ Shortcut components: `scripts/swift.sh test --scratch-path .build/shortcut-store
 
 `scripts/test-document-adoption.sh` passed 41 registry tests (11 adoption plus the original 30); `scripts/test-application-document-closing.sh` passed 19 process-owner tests including real paired publication and fresh same-process readers. These are Foundation integration tests, not native window-close acceptance.
 
-`scripts/test-document-factory.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 122 hidden factory checks plus the shared-pane ownership control. Use a verified core build; native intake routes remain unmodified.
+`scripts/test-document-factory.sh .build/native-ownership-integrated/arm64-apple-macosx/debug` passed 133 hidden factory checks plus the shared-pane ownership control. Use a verified core build; managed AppDelegate activation remains outstanding.
 
 `scripts/test-application-session-checkpoints.sh` passed 18 real-store publisher tests. The extracted legacy AppDelegate initializer builds; native managed activation remains outstanding.
 
-`scripts/test-application-document-intake.sh` passed 16 process-owner tests, including actual startup publisher integration and a paired receipt/reload. Native controller routing remains separate.
+`scripts/test-application-document-intake.sh` passed 26 process-owner tests, including actual startup publisher integration and a paired receipt/reload. Eight hidden actual-controller routing tests also pass; full process activation remains outstanding.
 
 `scripts/test-native-close-model.sh .build/adoption-close-integrated/arm64-apple-macosx/debug` passed 106 close-model checks plus factory/shared controls; process-close suite now passes 20 tests with pre-await repair context. Complete native close admission remains outstanding.
 
 `scripts/test-document-history.sh` passed 49 registry/history tests. History claims retain close-time source identity and require active replacement before consumption; native reopen remains separate.
+
+`scripts/test-application-open-requests.sh` passed 10 tests for bounded FIFO/startup/quit/retry behavior. `scripts/test-editor-application-routing.sh` passed 32 hidden controller/actor/publisher workflows. These do not replace desktop testing.
+
+`scripts/test-file-state-bridge.sh .build/native-ownership-integrated/arm64-apple-macosx/debug` passed 125 deterministic bridge, 25 real-service and 26 application-monitor checks. `scripts/test-native-admission-hooks.sh .build/native-ownership-integrated/arm64-apple-macosx/debug` passed 34 hidden selection/undo checks, including actual registry refusal during grouped replay.
+
+Current managed integration supersedes earlier outstanding adapter notes above: `scripts/test-native-application-documents.sh` passed eight hidden actual-owner tests, including startup, native close/reopen, unresolved file import, new-window adoption and final paired checkpoint readback. `scripts/test-native-application-close.sh` passed five hidden actual close tests including real interrupted-deletion repair. `scripts/test-native-history-preparation.sh .build/native-ownership-integrated/arm64-apple-macosx/debug` passed seven checks. These commands do not show windows; AppDelegate activation and desktop acceptance remain outstanding.
+
+`scripts/test-native-application-open.sh` passed ten hidden FIFO tests, including real intake/navigation and preserved imported documents on terminal positioning errors. Owner capacity tests include 32 unresolved windows and 128 unresolved documents. AppDelegate migration is in progress; use frozen source snapshots when agents edit shared files.
