@@ -24,7 +24,11 @@ import AppKit
     layout.allowsNonContiguousLayout = true
     editor = DocumentTextView(
       frame: NSRect(x: 0, y: 0, width: 900, height: 650), textContainer: container,
-      undoManager: document.undoManager)
+      undoManager: document.undoManager,
+      configurationAllowsInteraction: { [weak document] in
+        guard let document else { return false }
+        return document.nativeConfigurationToken == nil
+      })
     editor.minSize = NSSize(width: 0, height: 0)
     editor.maxSize = NSSize(
       width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -61,6 +65,25 @@ import AppKit
   }
   deinit {
     if let boundsObserver { NotificationCenter.default.removeObserver(boundsObserver) }
+  }
+  /// Geometry may need refreshing even when the semantic wrap proof is unchanged.
+  func configureWrapGeometry(enabled wrap: Bool, validate: () throws -> Void) throws {
+    try validate()
+    editor.isHorizontallyResizable = !wrap
+    try validate()
+    scroll.hasHorizontalScroller = !wrap
+    try validate()
+    textContainer.widthTracksTextView = wrap
+    try validate()
+    textContainer.containerSize = NSSize(
+      width: wrap ? max(100, scroll.contentSize.width) : CGFloat.greatestFiniteMagnitude,
+      height: CGFloat.greatestFiniteMagnitude)
+    try validate()
+    if wrap {
+      editor.setFrameSize(
+        NSSize(width: max(100, scroll.contentSize.width), height: editor.frame.height))
+      try validate()
+    }
   }
   func attach() {
     guard !isAttached else { return }

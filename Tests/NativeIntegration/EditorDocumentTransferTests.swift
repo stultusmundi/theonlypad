@@ -147,7 +147,7 @@ import XCTest
     XCTAssertThrowsError(
       try other.validateTransferView(receipt, expectedState: expected, preparation: idle))
     model.editor.setSelectedRange(NSRange(location: 0, length: 0))
-    model.settingsApplied.toggle()
+    model.appliedWrap = true
     XCTAssertThrowsError(
       try model.validateTransferView(receipt, expectedState: expected, preparation: idle))
   }

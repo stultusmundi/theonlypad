@@ -22,7 +22,7 @@ root=Path.cwd(); run=Path(sys.argv[1]).resolve(); binary=Path(sys.argv[2]).resol
 if not (binary/'Modules/PadCore.swiftmodule').exists() or not list((binary/'PadCore.build').glob('*.o')):
     raise SystemExit('Required existing PadCore module/objects are missing')
 source=run/'Sources'; source.mkdir(); hashes={}
-names=['NativeDocumentEndpointBindings','NativeFileMonitorClient','EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory','NativeDocumentSeed','EditorDocumentWorkspaceAdapter','ApplicationDocuments','DocumentTransferBoundary','WorkspaceDocumentRegistryTypes','EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost','NativeSyntaxHighlighter','LineNumberRuler','DocumentFileStateController','FileMonitorClient']
+names=['NativeDocumentEndpointBindings','NativeFileMonitorClient','DocumentAppliedSettings','EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory','NativeDocumentSeed','EditorDocumentWorkspaceAdapter','ApplicationDocuments','DocumentTransferBoundary','WorkspaceDocumentRegistryTypes','EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost','NativeSyntaxHighlighter','LineNumberRuler','DocumentFileStateController','FileMonitorClient']
 for name in names:
     path=root/'Sources/TheOnlyPad'/(name+'.swift'); data=path.read_bytes()
     (source/path.name).write_bytes(data); hashes[str(path.relative_to(root))]=hashlib.sha256(data).hexdigest()

@@ -5,12 +5,17 @@ enum SelectionInstallationError: Error { case nested, unauthorized }
 @MainActor
 final class DocumentTextView: NSTextView {
   let documentUndo: UndoManager
-  init(frame: NSRect, textContainer: NSTextContainer, undoManager: UndoManager) {
+  init(
+    frame: NSRect, textContainer: NSTextContainer, undoManager: UndoManager,
+    configurationAllowsInteraction: (() -> Bool)? = nil
+  ) {
     documentUndo = undoManager
+    self.configurationAllowsInteraction = configurationAllowsInteraction
     super.init(frame: frame, textContainer: textContainer)
   }
   required init?(coder: NSCoder) { fatalError("Use injected document undo manager") }
   var onFocus: (() -> Void)?
+  var configurationAllowsInteraction: (() -> Bool)?
   var canFocus: (() -> Bool)?
   var canMutate: (() -> Bool)?
   var canChangeSelection: (() -> Bool)?
@@ -26,14 +31,16 @@ final class DocumentTextView: NSTextView {
     return try body()
   }
   private func allowsSelection() -> Bool {
+    guard configurationAllowsInteraction?() ?? true else { return false }
     guard !checkingSelectionAdmission else { return false }
     checkingSelectionAdmission = true
     defer { checkingSelectionAdmission = false }
-    if let selectionInstallation { return selectionInstallation() }
-    return canChangeSelection?() ?? true
+    let allowed = selectionInstallation?() ?? (canChangeSelection?() ?? true)
+    return allowed && (configurationAllowsInteraction?() ?? true)
   }
   override func becomeFirstResponder() -> Bool {
-    guard canFocus?() ?? true else { return false }
+    guard configurationAllowsInteraction?() ?? true else { return false }
+    guard canFocus?() ?? true, configurationAllowsInteraction?() ?? true else { return false }
     let accepted = super.becomeFirstResponder()
     if accepted { onFocus?() }
     return accepted
@@ -48,7 +55,8 @@ final class DocumentTextView: NSTextView {
   // AppKit may call setMarkedText again inside unmarkText; finalize only at the outer boundary.
   private var compositionOperationDepth = 0
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-    guard canMutate?() ?? true else { return }
+    guard configurationAllowsInteraction?() ?? true else { return }
+    guard canMutate?() ?? true, configurationAllowsInteraction?() ?? true else { return }
     if !isComposingText {
       isComposingText = true
       onCompositionBegan?()
@@ -60,7 +68,8 @@ final class DocumentTextView: NSTextView {
     if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
   }
   override func insertText(_ insertString: Any, replacementRange: NSRange) {
-    guard canMutate?() ?? true else { return }
+    guard configurationAllowsInteraction?() ?? true else { return }
+    guard canMutate?() ?? true, configurationAllowsInteraction?() ?? true else { return }
     let previousInsertion = isOrdinaryTextInsertion
     isOrdinaryTextInsertion = !isComposingText && replacementRange.location == NSNotFound
     compositionOperationDepth += 1
@@ -70,6 +79,7 @@ final class DocumentTextView: NSTextView {
     if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
   }
   override func unmarkText() {
+    guard configurationAllowsInteraction?() ?? true else { return }
     compositionOperationDepth += 1
     super.unmarkText()
     compositionOperationDepth -= 1

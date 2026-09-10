@@ -48,6 +48,13 @@ class NativeRunnerTests(unittest.TestCase):
         for text in ["Executed 0 tests, with 0 failures", "Executed 12 tests, with 0 failures",
                      "Test Suite 'EditorDocumentTransferTests' passed\nExecuted 12 tests, with 1 failures"]:
             with self.subTest(text=text),self.assertRaises(ValueError): RUNNER.parse_success('transfer',text)
+    def test_applied_settings_result_requires_its_own_positive_suite(self):
+        text="Test Suite 'DocumentAppliedSettingsTests' passed\nExecuted 5 tests, with 0 failures\n"
+        self.assertEqual(RUNNER.parse_success('settings',text),{'tests':5,'failures':0})
+        for text in ["Test Suite 'DocumentAppliedSettingsTests' passed\nExecuted 0 tests, with 0 failures",
+                     "Test Suite 'EditorDocumentTransferTests' passed\nExecuted 5 tests, with 0 failures"]:
+            with self.subTest(text=text),self.assertRaises(ValueError): RUNNER.parse_success('settings',text)
+
     def test_native_summary_and_shared_smoke_are_distinct(self):
         self.assertEqual(RUNNER.parse_success('NativeCloseModelHarness','Native close model checks: 106, failures: 0'),{'checks':106,'failures':0})
         self.assertEqual(RUNNER.parse_success('DocumentFactoryHarness','Factory checks: 133, failures: 0'),{'checks':133,'failures':0})
@@ -91,6 +98,24 @@ class NativeRunnerTests(unittest.TestCase):
                          (root/'Tests/NativeIntegration/EditorDocumentTransferTests.swift').read_bytes())
         RUNNER.verify(run,manifest)
         (run/'Package/Sources/NativeRouting/EditorDocument.swift').write_text('changed')
+        with self.assertRaises(ValueError): RUNNER.verify(run,manifest)
+
+    def test_settings_access_transform_is_frozen_and_tests_remain_separate(self):
+        root,run=self.fixture(applied=True)
+        (root/'scripts/test-document-applied-settings.sh').write_text('# fixed settings wrapper\n')
+        original='import XCTest\n// NATIVE-ACCESS-BEGIN\n// native access sentinel\n// NATIVE-ACCESS-END\n// retained test assertions\n'
+        (root/'Tests/NativeIntegration/DocumentAppliedSettingsTests.swift').write_text(original)
+        (root/'Sources/TheOnlyPad/EditorWindowController.swift').write_text('// original controller\n')
+        (root/'Sources/TheOnlyPad/DocumentTextView.swift').write_text('class View {\n  let documentUndo: UndoManager\n}\n')
+        manifest=RUNNER.freeze(root,run,'settings')
+        self.assertEqual((run/'Original/Tests/NativeIntegration/DocumentAppliedSettingsTests.swift').read_text(),original)
+        self.assertEqual((run/'Package/Tests/NativeRoutingTests/DocumentAppliedSettingsTests.swift').read_text(),
+                         'import XCTest\n\n// retained test assertions\n')
+        self.assertEqual((run/'Package/Sources/NativeRouting/EditorWindowController.swift').read_text(),
+                         '// original controller\n\n// native access sentinel\n')
+        self.assertTrue((run/'Package/Sources/NativeRouting/DocumentAppliedSettings.swift').is_file())
+        RUNNER.verify(run,manifest)
+        (run/'Package/Sources/NativeRouting/DocumentTextView.swift').write_text('unrecorded mutation')
         with self.assertRaises(ValueError): RUNNER.verify(run,manifest)
 
     def test_close_snapshot_includes_optional_applied_source_and_full_build_prerequisite(self):

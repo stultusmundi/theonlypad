@@ -27,7 +27,7 @@ enum NativeCloseModelError: Error { case busy, changed }
 @MainActor extension EditorDocument {
   /// Exact dirty classification is reused; no new text snapshot or layout is requested here.
   func captureCloseState() throws -> DocumentCloseState {
-    guard !undoManager.isUndoing, !undoManager.isRedoing,
+    guard nativeConfigurationToken == nil, !undoManager.isUndoing, !undoManager.isRedoing,
       !(saving && operationID == nil),
       !storage.editedMask.contains(.editedCharacters), pendingBookmarks == nil,
       !pendingBookmarksHaveUndo

@@ -11,7 +11,8 @@ import re
 import sys
 import tempfile
 
-SUITES={'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
+SUITES={'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
+        'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
         'close':(None,'native-close-model')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
@@ -57,6 +58,7 @@ def parse_args(argv):
 
 def discover(root,suite,prebuilt):
     paths={root/name for name in FIXED}
+    if suite=='settings': paths.add(root/'scripts/test-document-applied-settings.sh')
     if suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
         if suite=='close':
@@ -98,13 +100,24 @@ def freeze(root,run,suite,prebuilt=False):
                 generate('Package/'+name,(run/item['frozen']).read_bytes(),name)
             elif name.startswith('Sources/TheOnlyPad/') and path.name!='TheOnlyPadApplication.swift':
                 data=(run/item['frozen']).read_bytes()
+                if suite=='settings':
+                    access=(run/'Original/Tests/NativeIntegration/DocumentAppliedSettingsTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
+                    if path.name=='EditorWindowController.swift': data+=('\n'+access).encode()
+                    if path.name=='DocumentTextView.swift':
+                        marker='  let documentUndo: UndoManager'
+                        if data.decode().count(marker)!=1: raise ValueError('font probe marker changed')
+                        probe='  override var defaultParagraphStyle: NSParagraphStyle? {\n    get { super.defaultParagraphStyle }\n    set { AppliedSettingsProbe.paragraphWrites += 1; super.defaultParagraphStyle = newValue }\n  }\n  override var typingAttributes: [NSAttributedString.Key: Any] {\n    get { super.typingAttributes }\n    set { AppliedSettingsProbe.typingWrites += 1; super.typingAttributes = newValue }\n  }\n  override var isHorizontallyResizable: Bool {\n    get { super.isHorizontallyResizable }\n    set { AppliedSettingsProbe.beforeWrap?(self); super.isHorizontallyResizable = newValue }\n  }\n  override var font: NSFont? {\n    get { super.font }\n    set { AppliedSettingsProbe.fontWrites += 1; AppliedSettingsProbe.beforeFont?(self); super.font = newValue }\n  }\n'
+                        data=data.decode().replace(marker,probe+marker).encode()
                 if path.name=='EditorDocument.swift':
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
                 generate('Package/Sources/NativeRouting/'+path.name,data,name)
         name=SUITES[suite][0]+'.swift'
-        generate('Package/Tests/NativeRoutingTests/'+name,(run/'Original/Tests/NativeIntegration'/name).read_bytes(),
+        test_data=(run/'Original/Tests/NativeIntegration'/name).read_bytes()
+        if suite=='settings':
+            text=test_data.decode();start=text.index('// NATIVE-ACCESS-BEGIN');end=text.index('// NATIVE-ACCESS-END')+len('// NATIVE-ACCESS-END');test_data=(text[:start]+text[end:]).encode()
+        generate('Package/Tests/NativeRoutingTests/'+name,test_data,
                  'Tests/NativeIntegration/'+name)
         generate('Package/Package.swift',PACKAGE.encode())
     else:
@@ -118,7 +131,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation='One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None)
+        transformation=('Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -222,7 +235,7 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
-    if kind in ('transfer','projection'):
+    if kind in ('transfer','projection','settings'):
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or any(n<=0 or failures!=0 for n,failures in counts): raise ValueError('missing positive XCTest result')
         if "Test Suite '"+SUITES[kind][0]+"' passed" not in text: raise ValueError('expected suite did not pass')

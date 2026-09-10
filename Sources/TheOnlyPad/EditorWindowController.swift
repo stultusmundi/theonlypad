@@ -195,18 +195,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     presentationInteraction(document)
     let selection = source.editor.selectedRange()
     let wrap = !source.editor.isHorizontallyResizable
-    // Constructing another NSTextView can change attributes in its already-shared storage.
-    let font = source.editor.font
-    let paragraph = source.editor.defaultParagraphStyle
-    let typingAttributes = source.editor.typingAttributes
     source.editor.breakUndoCoalescing()
     if attached.count == 1 {
-      let additional = try document.makePane()
+      let additional = try makeConfiguredPane(document)
       additional.attach()
       installCallbacks(for: additional)
-      additional.editor.font = font
-      additional.editor.defaultParagraphStyle = paragraph
-      additional.editor.typingAttributes = typingAttributes
       additional.editor.setSelectedRange(selection)
       document.highlighter.applyCachedTokens(to: additional.layoutManager)
     }
@@ -243,6 +236,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard let other = document.panePool.first(where: { $0.isAttached && $0 !== source })
     else { throw PaneRoutingError.stale }
     try focusPane(id: other.id)
+  }
+
+  private func makeConfiguredPane(_ document: EditorDocument) throws -> EditorPane {
+    let endpoint = applicationRouting?.endpointID
+    let policy = settingsPolicyRevision
+    return try document.makePane { [self] in
+      guard !windowClosed, !preparingToQuit, applicationRouting?.endpointID == endpoint,
+        settingsPolicyRevision == policy, documents.contains(where: { $0 === document })
+      else { return false }
+      return projectionAllows(
+        .paneInstall, document: document,
+        configurationToken: document.nativeConfigurationToken)
+        && settingsPolicyRevision == policy && applicationRouting?.endpointID == endpoint
+    }
   }
 
   private func presentPanes(_ document: EditorDocument, wrap: Bool) throws {
@@ -289,6 +296,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     pane.editor.scrollRangeToVisible(range)
   }
   private var settings = EditorSettings.defaults
+  private var settingsPolicyRevision = UUID()
   private var loadingCount = 0
   private var preparingToQuit = false
   private var windowClosed = false
@@ -1143,13 +1151,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       else { throw PaneRoutingError.stale }
     }
     let slot = state.pending?.liveSlot ?? 0
-    let font = live.editor.font
-    let paragraph = live.editor.defaultParagraphStyle
-    let attributes = live.editor.typingAttributes
     var panes = [live]
     if presentation.panes.count == 2 {
       guard document.storage.length <= 2_000_000 else { throw EditorPaneError.limit }
-      let second = try document.makePane()
+      let second = try makeConfiguredPane(document)
       additional = second
       expectedPanes = document.panePool.filter { $0.isAttached || $0 === second }
       expectedRanges[second.id] = second.editor.selectedRange()
@@ -1160,10 +1165,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       second.attach()
       try validateAuthority()
       installCallbacks(for: second)
-      second.editor.font = font
-      try validateAuthority()
-      second.editor.defaultParagraphStyle = paragraph
-      second.editor.typingAttributes = attributes
       document.highlighter.applyCachedTokens(to: second.layoutManager)
       try validateAuthority()
       panes = slot == 0 ? [live, second] : [second, live]
@@ -2743,60 +2744,172 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func applySettings(_ value: EditorSettings) {
-    guard !preparingToQuit,
-      documents.allSatisfy({ applicationUserAllows(.paneInstall, document: $0) })
+    guard !preparingToQuit, !windowClosed,
+      documents.allSatisfy({
+        $0.nativeConfigurationToken == nil && applicationUserAllows(.paneInstall, document: $0)
+      })
     else { return }
-    do { settings = try value.validated() } catch {
+    let validated: EditorSettings
+    do { validated = try value.validated() } catch {
       present(error)
       return
     }
-    documents.forEach(configureSettings)
+    if WindowPresentationPolicy(settings) != WindowPresentationPolicy(validated) {
+      settingsPolicyRevision = UUID()
+    }
+    settings = validated
+    let policyRevision = settingsPolicyRevision
+    for document in documents {
+      guard settingsPolicyRevision == policyRevision else { return }
+      configureSettings(document)
+    }
     refresh()
   }
 
   private func configureSettings(_ document: EditorDocument) {
-    guard projectionAllows(.paneInstall, document: document) else { return }
-    let font =
-      settings.fontName == EditorSettings.systemMonospacedFontName
-      ? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
-      : NSFont(name: settings.fontName, size: settings.fontSize)
-        ?? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.tabStops = []
-    paragraph.defaultTabInterval =
-      (" " as NSString).size(withAttributes: [.font: font]).width * CGFloat(settings.tabWidth)
-    for pane in document.panePool {
-      pane.editor.font = font
-      pane.editor.defaultParagraphStyle = paragraph
-      pane.editor.typingAttributes[.paragraphStyle] = paragraph
-    }
-    document.storage.addAttribute(
-      .paragraphStyle, value: paragraph,
-      range: NSRange(location: 0, length: document.storage.length))
-    configureWrap(document, enabled: settings.wrap)
-    document.settingsApplied = true
-  }
-  private func configureWrap(_ document: EditorDocument, enabled wrap: Bool) {
-    guard projectionAllows(.paneInstall, document: document) else { return }
-    withTransferNativeLayout {
-      for pane in document.panePool {
-        let editor = pane.editor
-        editor.isHorizontallyResizable = !wrap
-        pane.scroll.hasHorizontalScroller = !wrap
-        editor.textContainer?.widthTracksTextView = wrap
-        editor.textContainer?.containerSize = NSSize(
-          width: wrap ? max(100, pane.scroll.contentSize.width) : CGFloat.greatestFiniteMagnitude,
-          height: CGFloat.greatestFiniteMagnitude)
-        if wrap {
-          editor.setFrameSize(
-            NSSize(width: max(100, pane.scroll.contentSize.width), height: editor.frame.height))
-        }
-      }
+    guard transferProjection == nil, settledTransferProjection == nil,
+      projectionAllows(.paneInstall, document: document), document.nativeConfigurationToken == nil
+    else { return }
+    let plan = ResolvedDocumentTypography(settings)
+    let typographyChanged = document.appliedTypography != plan.signature
+    let wrapChanged = document.appliedWrap != settings.wrap
+    guard typographyChanged || wrapChanged else { return }
+    let desiredWrap = settings.wrap
+    do {
+      try withDocumentConfiguration(
+        document, invalidateTypography: typographyChanged,
+        invalidateWrap: wrapChanged,
+        publish: {
+          if typographyChanged { document.appliedTypography = plan.signature }
+          if wrapChanged { document.appliedWrap = desiredWrap }
+        },
+        write: { validate in
+          if typographyChanged {
+            for pane in document.panePool {
+              try validate()
+              pane.editor.font = plan.font
+              try validate()
+              pane.editor.defaultParagraphStyle = plan.paragraph
+              try validate()
+              pane.editor.typingAttributes[.paragraphStyle] = plan.paragraph
+              try validate()
+            }
+            document.storage.addAttribute(
+              .paragraphStyle, value: plan.paragraph,
+              range: NSRange(location: 0, length: document.storage.length))
+            try validate()
+          }
+          if wrapChanged {
+            try writeWrap(document, enabled: desiredWrap, validate: validate)
+          }
+        })
+    } catch {
+      document.panePresentation.warning =
+        "Document settings changed during native configuration. Apply settings again to retry."
     }
   }
 
+  /// Native callbacks may reenter without suspension. The token fences user sinks while
+  /// the captured endpoint, policy, revision and exact pane attachments fence publication.
+  private func withDocumentConfiguration(
+    _ document: EditorDocument, invalidateTypography: Bool = false, invalidateWrap: Bool = false,
+    publish: () -> Void, write body: (_ validate: () throws -> Void) throws -> Void
+  ) throws {
+    guard projectionAllows(.paneInstall, document: document),
+      documents.contains(where: { $0 === document })
+    else { throw NativeConfigurationError.changed }
+    let endpoint = applicationRouting?.endpointID
+    let ownership = document.ownershipGeneration
+    let revision = document.editRevision
+    let policy = settingsPolicyRevision
+    let panes = document.panePool
+    let attached = panes.map(\.isAttached)
+    let token = try document.beginNativeConfiguration()
+    defer { document.endNativeConfiguration(token) }
+    if invalidateTypography { document.appliedTypography = nil }
+    if invalidateWrap { document.appliedWrap = nil }
+    let mutation = document.closeMutationGeneration
+    func validate() throws {
+      guard document.nativeConfigurationToken == token,
+        document.closeMutationGeneration == mutation,
+        !windowClosed, !preparingToQuit,
+        applicationRouting?.endpointID == endpoint, settingsPolicyRevision == policy,
+        document.ownershipGeneration == ownership, document.editRevision == revision,
+        documents.contains(where: { $0 === document }), document.panePool.count == panes.count,
+        zip(document.panePool, panes).allSatisfy({ $0 === $1 }),
+        zip(panes, attached).allSatisfy({ $0.isAttached == $1 }),
+        panes.allSatisfy({
+          $0.document === document
+            && ($0.isAttached
+              ? $0.layoutManager.textStorage === document.storage
+              : $0.layoutManager.textStorage == nil)
+        }),
+        projectionAllows(.paneInstall, document: document, configurationToken: token)
+      else { throw NativeConfigurationError.changed }
+      // Endpoint admission callbacks above may themselves change the exact captured facts.
+      guard document.nativeConfigurationToken == token,
+        document.closeMutationGeneration == mutation,
+        document.editRevision == revision, document.ownershipGeneration == ownership,
+        settingsPolicyRevision == policy, applicationRouting?.endpointID == endpoint,
+        document.panePool.count == panes.count,
+        zip(document.panePool, panes).allSatisfy({ $0 === $1 }),
+        zip(panes, attached).allSatisfy({ $0.isAttached == $1 })
+      else { throw NativeConfigurationError.changed }
+    }
+    do {
+      try validate()
+      try body(validate)
+      try validate()
+      // This private closure only publishes scalar proof; it performs no native calls.
+      publish()
+    } catch {
+      // Never invalidate proof belonging to a later operation that replaced this token.
+      if document.nativeConfigurationToken == token {
+        document.appliedTypography = nil
+        document.appliedWrap = nil
+      }
+      throw error
+    }
+  }
+  private func writeWrap(
+    _ document: EditorDocument, enabled wrap: Bool,
+    validate: () throws -> Void
+  ) throws {
+    try withTransferNativeLayout {
+      for pane in document.panePool {
+        try validate()
+        try pane.configureWrapGeometry(enabled: wrap, validate: validate)
+        try validate()
+      }
+    }
+  }
+  private func configureWrap(_ document: EditorDocument, enabled wrap: Bool) {
+    // Layout refresh still updates host-size geometry even if the semantic proof matches.
+    do {
+      // Transfer preserves even unknown original proof. Presenting an inactive neighbor
+      // may refresh geometry, but must not manufacture a new semantic receipt.
+      let changed =
+        transferProjection == nil && settledTransferProjection == nil
+        && document.appliedWrap != wrap
+      try withDocumentConfiguration(
+        document, invalidateWrap: changed,
+        publish: { if changed { document.appliedWrap = wrap } },
+        write: { validate in
+          try writeWrap(document, enabled: wrap, validate: validate)
+        })
+    } catch {
+      // The transfer owner already validates/refuses its projection. A transient endpoint
+      // refusal must not rewrite the captured warning and poison an otherwise valid retry.
+      if transferProjection == nil, settledTransferProjection == nil {
+        document.panePresentation.warning =
+          "Document wrap could not be configured. Apply settings again to retry."
+      }
+    }
+  }
   private func toggleWrap() {
-    guard let document = current, applicationAllows(.select, document: document) else { return }
+    guard let document = current, document.nativeConfigurationToken == nil,
+      applicationAllows(.select, document: document)
+    else { return }
     configureWrap(document, enabled: preferredPane(in: document).editor.isHorizontallyResizable)
     refresh()
   }
@@ -3792,15 +3905,18 @@ extension EditorWindowController {
     return routing
   }
   private func applicationAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool {
+    guard document.nativeConfigurationToken == nil else { return false }
     if transferProjection != nil { return false }
     guard let routing = applicationRouting else { return true }
     guard (try? requireApplicationEndpoint()) != nil,
       routing.registry.handle(id: document.id) === document,
       routing.registry.assignment(of: document.id) == routing.assignment
     else { return false }
-    return routing.registry.allows(action, documentID: document.id)
+    let allowed = routing.registry.allows(action, documentID: document.id)
+    return allowed && document.nativeConfigurationToken == nil
   }
   private func mayFocus(_ pane: EditorPane) -> Bool {
+    guard pane.document.nativeConfigurationToken == nil else { return false }
     if applicationUserAllows(.select, document: pane.document) { return true }
     guard let scope = projectionFocus, projectionToken == scope.token, scope.paneID == pane.id,
       current === pane.document, pane.isAttached,
@@ -3815,9 +3931,21 @@ extension EditorWindowController {
     _ = window?.makeFirstResponder(pane.editor)
   }
   /// Used only by synchronous owner layout/focus installation, never by user mutation sinks.
-  private func projectionAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool {
-    guard projectionToken != nil, let routing = applicationRouting else {
-      return applicationAllows(action, document: document)
+  private func projectionAllows(
+    _ action: DocumentAdmission, document: EditorDocument,
+    configurationToken: UUID? = nil
+  ) -> Bool {
+    guard
+      document.nativeConfigurationToken == nil
+        || (configurationToken != nil && document.nativeConfigurationToken == configurationToken)
+    else { return false }
+    guard let routing = applicationRouting else { return !windowClosed && !preparingToQuit }
+    if projectionToken == nil {
+      guard transferProjection == nil, (try? requireApplicationEndpoint()) != nil,
+        routing.registry.handle(id: document.id) === document,
+        routing.registry.assignment(of: document.id) == routing.assignment
+      else { return false }
+      return routing.registry.allows(action, documentID: document.id)
     }
     guard action == .paneInstall || action == .select,
       (try? requireApplicationEndpoint(userInitiated: false)) != nil,
@@ -3825,17 +3953,41 @@ extension EditorWindowController {
       routing.registry.assignment(of: document.id) == routing.assignment
     else { return false }
     if let scope = transferProjection {
-      guard let live = try? routing.registry.validateTransferSnapshot(scope.snapshot.lease),
+      // An identity-only registry snapshot is insufficient authority. During configuration
+      // compare the complete live native state below, excluding only this exact token's
+      // busy bit; ordinary validation/capture remains busy until the operation ends.
+      let liveSnapshot =
+        configurationToken == nil
+        ? try? routing.registry.validateTransferSnapshot(scope.snapshot.lease)
+        : try? routing.registry.transferSnapshot(scope.snapshot.lease)
+      guard let live = liveSnapshot, !live.requiresReconciliation,
         live.phase == scope.snapshot.phase, live.expectedState == scope.snapshot.expectedState,
         scope.receipt.endpointID == routing.endpointID,
         current === document, documents.contains(where: { $0 === document })
       else { return false }
+      if let configurationToken {
+        guard live.handle === scope.snapshot.handle, live.source == scope.snapshot.source,
+          live.target == scope.snapshot.target,
+          scope.receipt.presentationPolicy == WindowPresentationPolicy(settings)
+        else { return false }
+        for model in scope.receipt.models {
+          guard routing.registry.handle(id: model.id) === model,
+            let expected = model.id == live.request.documentID
+              ? live.expectedState : scope.receipt.states[model.id],
+            let actual = try? model.captureTransferState(
+              preparation: transferPreparation,
+              configurationToken: model === document ? configurationToken : nil),
+            actual == expected
+          else { return false }
+        }
+      }
       return true
     }
     return routing.registry.allows(action, documentID: document.id)
   }
   private func applicationUserAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool
   {
+    guard document.nativeConfigurationToken == nil else { return false }
     if transferProjection != nil { return false }
     guard applicationRouting != nil else { return true }
     guard (try? requireApplicationEndpoint()) != nil else { return false }
@@ -4353,13 +4505,14 @@ extension EditorWindowController {
   let models: [EditorDocument]
   let views: [UUID: NativeDocumentTransferViewReceipt]
   let states: [UUID: DocumentTransferState]
+  let presentationPolicy: WindowPresentationPolicy
   fileprivate var projected: DocumentWindowSnapshot
   fileprivate var projectionPending = false
   fileprivate var acceptedState: DocumentTransferState?
   fileprivate init(
     endpointID: UUID, lease: DocumentTransferLease, original: DocumentWindowSnapshot,
     models: [EditorDocument], views: [UUID: NativeDocumentTransferViewReceipt],
-    states: [UUID: DocumentTransferState]
+    states: [UUID: DocumentTransferState], presentationPolicy: WindowPresentationPolicy
   ) {
     self.endpointID = endpointID
     self.windowID = original.id
@@ -4368,6 +4521,7 @@ extension EditorWindowController {
     self.models = models
     self.views = views
     self.states = states
+    self.presentationPolicy = presentationPolicy
     self.projected = original
   }
 }
@@ -4455,6 +4609,7 @@ extension EditorWindowController {
     guard projectionToken == nil, transferProjection == nil, !transferPreparation.isBusy,
       applicationRouting?.endpointID == endpointID, snapshot.phase == .reserved
     else { throw NativeDocumentTransferError.busy }
+    let capturedPolicy = WindowPresentationPolicy(settings)
     let expected = try transferWindow(snapshot)
     try validateRegistryProjection(
       expected, revision: applicationRouting!.registry.workspaceRevision,
@@ -4490,7 +4645,8 @@ extension EditorWindowController {
     }
     let receipt = EditorTransferEndpointReceipt(
       endpointID: endpointID, lease: snapshot.lease,
-      original: expected, models: models, views: views, states: states)
+      original: expected, models: models, views: views, states: states,
+      presentationPolicy: capturedPolicy)
     try validateTransferEndpoint(snapshot, receipt: receipt)
     return receipt
   }
@@ -4508,7 +4664,9 @@ extension EditorWindowController {
       throw NativeDocumentTransferError.changed
     }
     guard receipt.lease == snapshot.lease, receipt.endpointID == applicationRouting?.endpointID,
-      receipt.windowID == sessionID, !transferPreparation.isBusy
+      receipt.windowID == sessionID,
+      receipt.presentationPolicy == WindowPresentationPolicy(settings),
+      !transferPreparation.isBusy
     else { throw NativeDocumentTransferError.changed }
     _ = try transferWindow(snapshot)
     let ids = receipt.projected.groups[0].documentIDs
@@ -4556,7 +4714,7 @@ extension EditorWindowController {
     return .init(
       model: view.model, state: view.state, panes: panes, preferredPaneID: view.preferredPaneID,
       axis: view.axis, pending: view.pending, interaction: view.interaction, warning: view.warning,
-      settingsApplied: view.settingsApplied)
+      appliedTypography: view.appliedTypography, appliedWrap: view.appliedWrap)
   }
   private func constrainedTransferView(
     _ view: NativeDocumentTransferViewReceipt,
@@ -4587,7 +4745,7 @@ extension EditorWindowController {
     return .init(
       model: view.model, state: view.state, panes: panes, preferredPaneID: view.preferredPaneID,
       axis: view.axis, pending: view.pending, interaction: view.interaction, warning: view.warning,
-      settingsApplied: view.settingsApplied)
+      appliedTypography: view.appliedTypography, appliedWrap: view.appliedWrap)
   }
   func applyTransferProjection(
     _ snapshot: DocumentTransferSnapshot,
@@ -4642,7 +4800,7 @@ extension EditorWindowController {
     let result = EditorTransferEndpointReceipt(
       endpointID: endpointID, lease: receipt.lease,
       original: receipt.original, models: receipt.models, views: receipt.views,
-      states: receipt.states)
+      states: receipt.states, presentationPolicy: receipt.presentationPolicy)
     result.acceptedState = receipt.acceptedState
     return result
   }
@@ -4653,6 +4811,7 @@ extension EditorWindowController {
     guard projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
       !transferPreparation.isBusy, let routing = applicationRouting,
       endpointID == routing.endpointID, receipt.windowID == sessionID, expected.id == sessionID,
+      receipt.presentationPolicy == WindowPresentationPolicy(settings),
       expected.groups.count == 1, expected.groups[0].id == routing.assignment.groupID
     else { throw NativeDocumentTransferError.changed }
     try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)

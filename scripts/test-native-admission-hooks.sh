@@ -20,7 +20,7 @@ from pathlib import Path
 import os, subprocess, signal, json, hashlib, platform, sys
 root=Path.cwd(); run=Path(sys.argv[1]).resolve(); binary=Path(sys.argv[2]).resolve()
 source=run/'Sources'; source.mkdir(); hashes={}
-names=['EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory','NativeDocumentSeed','EditorDocumentWorkspaceAdapter','ApplicationDocuments','DocumentTransferBoundary','WorkspaceDocumentRegistryTypes','EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost','NativeSyntaxHighlighter','LineNumberRuler','DocumentFileStateController','FileMonitorClient']
+names=['DocumentAppliedSettings','EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory','NativeDocumentSeed','EditorDocumentWorkspaceAdapter','ApplicationDocuments','DocumentTransferBoundary','WorkspaceDocumentRegistryTypes','EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost','NativeSyntaxHighlighter','LineNumberRuler','DocumentFileStateController','FileMonitorClient']
 for name in names:
     path=root/'Sources/TheOnlyPad'/(name+'.swift'); data=path.read_bytes()
     (source/path.name).write_bytes(data); hashes[str(path.relative_to(root))]=hashlib.sha256(data).hexdigest()

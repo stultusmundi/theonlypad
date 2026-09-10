@@ -32,15 +32,24 @@ struct NativeDocumentTransferViewReceipt: Equatable {
   let pending: NativeTransferPendingPresentation?
   let interaction: UUID
   let warning: String?
-  let settingsApplied: Bool
+  let appliedTypography: AppliedTypography?
+  let appliedWrap: Bool?
 }
 enum NativeDocumentTransferError: Error { case busy, changed, invalidGeometry, unmanaged }
 
 @MainActor extension EditorDocument {
   /// Bounded scalar inspection. In particular, this never evaluates exact dirty classification.
-  func captureTransferState(preparation: NativeDocumentTransferPreparation) throws
+  func captureTransferState(
+    preparation: NativeDocumentTransferPreparation,
+    configurationToken: UUID? = nil
+  ) throws
     -> DocumentTransferState
   {
+    // Only the exact synchronous native owner may exclude its own configuration busy bit.
+    // Every other busy reason and every scalar remains in the returned state.
+    if let configurationToken, nativeConfigurationToken != configurationToken {
+      throw NativeDocumentTransferError.changed
+    }
     guard (1...2).contains(panePool.count) else {
       throw NativeDocumentTransferError.invalidGeometry
     }
@@ -49,7 +58,8 @@ enum NativeDocumentTransferError: Error { case busy, changed, invalidGeometry, u
       mutationGeneration: closeMutationGeneration, editRevision: editRevision,
       baselineRevision: baselineRevision, operationID: operationID,
       pendingPublicationID: pendingPublication?.id,
-      isBusy: preparation.isBusy || saving || undoManager.isUndoing || undoManager.isRedoing
+      isBusy: (nativeConfigurationToken != nil && nativeConfigurationToken != configurationToken)
+        || preparation.isBusy || saving || undoManager.isUndoing || undoManager.isRedoing
         || panePresentation.installing != nil || panePresentation.suppression != 0
         || panePresentation.frozenCapture != nil,
       hasPendingTextEdits: storage.editedMask.contains(.editedCharacters)
@@ -111,7 +121,7 @@ enum NativeDocumentTransferError: Error { case busy, changed, invalidGeometry, u
       model: ObjectIdentifier(self), state: state,
       panes: panes, preferredPaneID: preferredPaneID, axis: splitAxis, pending: pending,
       interaction: panePresentation.interaction, warning: panePresentation.warning,
-      settingsApplied: settingsApplied)
+      appliedTypography: appliedTypography, appliedWrap: appliedWrap)
     guard try captureTransferState(preparation: preparation) == state else {
       throw NativeDocumentTransferError.changed
     }
@@ -148,7 +158,8 @@ enum NativeDocumentTransferError: Error { case busy, changed, invalidGeometry, u
       current.panes == receipt.panes, current.preferredPaneID == receipt.preferredPaneID,
       current.axis == receipt.axis, current.pending == receipt.pending,
       current.interaction == receipt.interaction, current.warning == receipt.warning,
-      current.settingsApplied == receipt.settingsApplied
+      current.appliedTypography == receipt.appliedTypography,
+      current.appliedWrap == receipt.appliedWrap
     else { throw NativeDocumentTransferError.changed }
   }
 }

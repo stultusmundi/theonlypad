@@ -155,11 +155,77 @@ final class EditorDocument {
   // Compatibility accessors; interactive controller commands resolve their originating pane.
   var editor: DocumentTextView { panePool[0].editor }
   var scroll: NSScrollView { panePool[0].scroll }
-  func makePane() throws -> EditorPane {
-    if let detached = panePool.first(where: { !$0.isAttached }) { return detached }
-    guard panePool.count < 2 else { throw EditorPaneError.limit }
-    let pane = EditorPane(document: self)
-    panePool.append(pane)
+  /// Construction can mutate shared storage. Inheritance is one fenced native operation,
+  /// including reuse of a detached pane. Callers provide their endpoint authority as well.
+  func makePane(authorizedBy: () -> Bool = { true }) throws -> EditorPane {
+    guard authorizedBy() else { throw NativeConfigurationError.changed }
+    let token = try beginNativeConfiguration()
+    defer { endNativeConfiguration(token) }
+    let revision = editRevision
+    let ownership = ownershipGeneration
+    let original = panePool
+    var attached = original.map(\.isAttached)
+    let typography = appliedTypography
+    let wrapProof = appliedWrap
+    guard let source = original.first(where: \.isAttached) else {
+      throw NativeConfigurationError.changed
+    }
+    let font = source.editor.font
+    let paragraph = source.editor.defaultParagraphStyle
+    let attributes = source.editor.typingAttributes
+    let wrap = wrapProof ?? !source.editor.isHorizontallyResizable
+    let reused = original.first(where: { !$0.isAttached })
+    guard reused != nil || original.count < 2 else { throw EditorPaneError.limit }
+    appliedTypography = nil
+    appliedWrap = nil
+    let mutation = closeMutationGeneration
+    var expected = original
+    func validate() throws {
+      guard nativeConfigurationToken == token, editRevision == revision,
+        closeMutationGeneration == mutation, ownershipGeneration == ownership, authorizedBy(),
+        panePool.count == expected.count,
+        zip(panePool, expected).allSatisfy({ $0 === $1 }),
+        zip(original, attached).allSatisfy({ $0.isAttached == $1 }),
+        expected.allSatisfy({
+          $0.document === self
+            && ($0.isAttached
+              ? $0.layoutManager.textStorage === storage : $0.layoutManager.textStorage == nil)
+        })
+      else { throw NativeConfigurationError.changed }
+      guard nativeConfigurationToken == token, editRevision == revision,
+        closeMutationGeneration == mutation, ownershipGeneration == ownership
+      else { throw NativeConfigurationError.changed }
+    }
+    let pane: EditorPane
+    if let reused {
+      pane = reused
+    } else {
+      pane = EditorPane(document: self)
+      panePool.append(pane)
+      expected.append(pane)
+    }
+    try validate()
+    if !pane.isAttached {
+      guard let index = original.firstIndex(where: { $0 === pane }) else {
+        throw NativeConfigurationError.changed
+      }
+      attached[index] = true
+      pane.attach()
+      try validate()
+    }
+    // Restore the source too: NSTextView initialization can rewrite its shared font.
+    for view in expected {
+      view.editor.font = font
+      try validate()
+      view.editor.defaultParagraphStyle = paragraph
+      try validate()
+      view.editor.typingAttributes = attributes
+      try validate()
+    }
+    try pane.configureWrapGeometry(enabled: wrap, validate: validate)
+    try validate()
+    appliedTypography = typography
+    appliedWrap = wrapProof
     return pane
   }
   /// Restored saved slots determine visual order; existing view/history objects are retained.
@@ -309,14 +375,35 @@ final class EditorDocument {
     didSet { if language != oldValue { noteCloseMutation() } }
   }
   var manualLanguage = false { didSet { if manualLanguage != oldValue { noteCloseMutation() } } }
-  var settingsApplied = false
+  var appliedTypography: AppliedTypography? {
+    didSet { if appliedTypography != oldValue { noteCloseMutation() } }
+  }
+  var appliedWrap: Bool? { didSet { if appliedWrap != oldValue { noteCloseMutation() } } }
+  var settingsApplied: Bool { appliedTypography != nil && appliedWrap != nil }
+  private(set) var nativeConfigurationToken: UUID?
+  func beginNativeConfiguration() throws -> UUID {
+    guard nativeConfigurationToken == nil, !saving, operationID == nil,
+      composingPaneID == nil, !undoManager.isUndoing, !undoManager.isRedoing,
+      !panePool.contains(where: { $0.editor.isComposingText || $0.editor.hasMarkedText() })
+    else { throw NativeConfigurationError.busy }
+    let token = UUID()
+    nativeConfigurationToken = token
+    return token
+  }
+  func endNativeConfiguration(_ token: UUID) {
+    if nativeConfigurationToken == token { nativeConfigurationToken = nil }
+  }
   lazy var highlighter = NativeSyntaxHighlighter(storage: storage)
   var recoveryRevision: UInt64 = 0
   var recoveredName: String? { didSet { noteCloseMutation() } }
 
   init(id: UUID = UUID()) {
     self.id = id
-    undoManager.admission = { [weak self] in self?.canUndoRedo?() ?? (self != nil) }
+    undoManager.admission = { [weak self] in
+      guard let self, self.nativeConfigurationToken == nil else { return false }
+      let allowed = self.canUndoRedo?() ?? true
+      return allowed && self.nativeConfigurationToken == nil
+    }
     panePool.append(EditorPane(document: self))
     storageObserver = NotificationCenter.default.addObserver(
       forName: NSTextStorage.didProcessEditingNotification, object: storage, queue: nil
