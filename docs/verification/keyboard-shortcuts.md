@@ -1,6 +1,6 @@
 # Keyboard shortcut component verification
 
-Status: partial. Core/profile/store/import/export and native recorder components exist; application ownership, native editor and menu wiring are integrated. No physical keyboard, active-window interception or current packaged acceptance is claimed.
+Status: partial. Core/profile/store/import/export and native recorder components exist; application ownership, native editor and menu wiring are integrated. Actual packaged XCUITest has now run and exposed a shortcut-reset failure; acceptance remains incomplete. Physical keyboard/layout variants remain unverified.
 
 ## Core and persistence
 
@@ -30,7 +30,7 @@ The native editor's first29 checks missed real owner notifications during Apply:
 
 After retained failing regressions and independent re-review, production-copy `scripts/test-shortcut-editor.sh .build/shortcut-native-integration/arm64-apple-macosx/debug` passed38 checks in `.local/shortcut-editor-native/run.ZYC2LFey`, compile/runtime exit0. A documented test-only extension is appended to frozen controller source; original and combined hashes are retained. Tests cover actual table/buttons/search plus injected async callbacks, protected/unavailable rows, swaps/conflicts, Cancel/no-write, Apply exactly once, busy/close behavior, recovery, import/export and the notification fixes. A bounded scrollable status view and horizontal table scrolling keep controls and the last conflict/column reachable at the declared650×500 minimum content size. This is hidden geometry evidence, not physical/VoiceOver acceptance. A subsequent initial-focus regression failed before explicitly assigning the search field as the window’s initial responder. The final production-copy run `.local/shortcut-editor-native/run.SW7q5Ws4` passed39 checks, including the prior38; this verifies the native declaration, not actual focus delivery in a shown window. See the integrated application evidence below.
 
-Current GUI access is blocked. Do not infer desktop success from these hidden or core checks. The requirements matrix retains H-01 as partial.
+GUI access is now available. The later packaged run below supersedes the earlier access blocker; H-01 remains partial.
 
 ## Integrated application
 
@@ -40,6 +40,15 @@ The tests exercise actual menu construction/validation, removal of registered eq
 
 The actual application build plus368 core tests passed in14.402 seconds (`.local/shortcut-wired-integration.log`, no warnings). The existing hidden monitor lifecycle suite also passed against this build in `.local/native-monitor-lifecycle-retained/run._9gs7uny`, covering open/save/suspend, checked Reload/Copy/Locate, dirty undo and pending-publication preservation. Strict repository formatting and public-source/diff checks passed after replacing one disallowed block comment with a line comment.
 
-CI now includes the retained shortcut owner, recorder, editor and application commands. Local execution is verified; remote CI has not been run or claimed. Native physical shortcuts, field-editor routing, customized-key macro invocation, visible dialogs and the newly compiled desktop tests remain acceptance work. The local package was subsequently rebuilt from `b25a07a`; see packaging.md for its verified hash and archive checks. No packaged desktop execution occurred.
+CI now includes the retained shortcut owner, recorder, editor and application commands. Local execution is verified; remote CI has not been run or claimed. Native physical shortcuts, field-editor routing, customized-key macro invocation, visible dialogs and the newly compiled desktop tests remain acceptance work. The local package was subsequently rebuilt from `b25a07a`; see packaging.md for its verified hash and archive checks. That package had no desktop execution at that checkpoint; later runs are recorded below.
 
 After the presentation-call-site fixes, the final actual native build/core suite passed368 tests in14.580 seconds without warnings. The final production application snapshot `.local/shortcut-application-tests/run.ZVGPxM6y` passed12 tests in0.473 seconds after an11.39-second build. These supersede the earlier integration snapshots for current-source verification.
+
+
+## Packaged reset failure and diagnostic evidence — 2026-09-10
+
+Actual XCUITest on the source `55a7b1b` package applies Option-Command-N, verifies it after restart, then restores defaults. The final Option-Command-N incorrectly adds a tab. The test fails its unchanged tab-count assertion; Xcode subsequently times out during failure reporting. This is not evidence of an editor deadlock.
+
+An isolated diagnostic build reproduced the failure. Its bounded trace records the current default Command-N menu item dispatching while the current event is Option-Command-N, key code 45, character `~`. The sender is the current menu item, so a stale menu reference does not explain this run. Native probes with the actual owner/reset/apply path pass 15 checks, and direct NSMenu matching rejects the same extra-Option event shape. Application-level routing remains under investigation; no production workaround is integrated.
+
+Private source hashes, traces and results remain under `.local/shortcut-reset-diagnostic/`, `.local/desktop-ui/shortcut-trace-cxjwb5zm/`, `.local/desktop-shortcut-native-diagnosis/` and `.local/desktop-shortcut-tilde-diagnosis/`. These findings establish a failing desktop requirement, not completed shortcut acceptance. Field-editor, macro, VoiceOver and layout-variant workflows remain outstanding.

@@ -46,7 +46,7 @@ Worker-only hold/drain assertions were retired only after this suspension was re
 
 ## Remaining verification
 
-Two desktop restart tests and their project membership compiled and their source hashes still match. They have not executed. A fresh read-only console check on 2026-09-10 confirmed the screen remains locked; no security settings or credentials were used. Hidden AppKit tests do not establish physical IME, VoiceOver, visible scroll/focus, packaged restart or performance acceptance.
+At the earlier native checkpoint, the two desktop restart tests compiled but could not execute on the locked console. GUI access is now available and the later packaged failures below supersede that blocker. Physical IME, VoiceOver and performance acceptance remain outstanding.
 
 Strict source formatting, public-source checks, diff checks and runner syntax passed. CI includes the retained tests but hosted CI has not run. The existing verified package still predates this work until local packaging is completed and recorded separately. F-02 transfer, linked scrolling and broader workspace/performance scope remain outstanding.
 
@@ -56,4 +56,6 @@ The source55a7b1b package was exercised with actual XCUITest keyboard/menu actio
 
 A fresh run with that corrected ordering passed the stacked geometry checks, then exposed restored scroll102 instead of240. The final quit persisted the wrong origin. This is a production restoration failure, not a passing pane acceptance result; tolerances and requested values remain unchanged. Both shared-pane content/undo/restart tests passed separately within that run, as recorded in [shared-pane verification](shared-document-panes.md).
 
-The internal mechanism is still being diagnosed with a private instrumented copy; early layout clamping is a hypothesis until geometry traces establish it. No speculative scroll fix or delayed replay has been shipped. Raw synthetic evidence and source manifests remain ignored under `.local/desktop-ui/`.
+Private geometry traces now prove the new pane clamps 240 to zero before TextKit has established its document height. A private viewport-layout candidate preserves that initial origin, but a second failure remains: after both origins are installed, the post-start font/paragraph settings pass changes the peer's origin. The inert trace records 940 before that pass and 1026 afterward, retained at quit capture. Its 102 geometry-only records remain below the 512-record cap and avoid the earlier reentrant font/layout probes.
+
+The individual typography setter and appropriate idempotent-settings remedy remain under investigation. No private candidate, speculative delayed replay or instrumentation has been promoted into production. Raw synthetic evidence and source manifests remain ignored under `.local/desktop-ui/`, including `pane-origin-inert-hq9u8uei/`. Native and packaged regressions must pass before restoration acceptance is claimed.
