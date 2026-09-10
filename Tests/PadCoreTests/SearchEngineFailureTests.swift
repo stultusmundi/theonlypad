@@ -47,6 +47,19 @@ final class SearchEngineFailureTests: XCTestCase {
     ) { XCTAssertEqual($0 as? SearchError, .engineFailure) }
   }
 
+  func testExecuteReplacementRejectsEarlierPartialMatchOnEngineFailure() {
+    let service = SearchService { expression, text, _, range, block in
+      self.callback(block, result: self.firstMatch(expression, text: text, range: range), flags: [])
+      self.callback(block, flags: [.completed, .internalError])
+    }
+
+    XCTAssertThrowsError(
+      try service.execute(
+        SearchQuery(pattern: "a", mode: .regex), in: "aa",
+        operation: .replace(template: "b"))
+    ) { XCTAssertEqual($0 as? SearchError, .engineFailure) }
+  }
+
   func testResultInternalErrorWinsBeforeMatchLimit() {
     let service = SearchService(maxMatches: 0) { expression, text, _, range, block in
       self.callback(

@@ -15,6 +15,18 @@ public struct SearchQuery: Sendable {
     self.wholeWord = wholeWord
   }
 }
+public enum SearchExecutionOperation: Sendable, Equatable {
+  case find
+  case replace(template: String)
+}
+public struct SearchExecutionOutput: Sendable, Equatable {
+  public let matches: [NSRange]
+  public let replacement: String?
+  public init(matches: [NSRange], replacement: String?) {
+    self.matches = matches
+    self.replacement = replacement
+  }
+}
 public enum SearchError: Error, Equatable {
   case invalidScope, invalidEscape, invalidPattern, invalidReplacement, textLimit, matchLimit,
     outputLimit, cancelled, timedOut, engineFailure
@@ -66,20 +78,42 @@ public struct SearchService {
   public func matches(_ query: SearchQuery, in text: String, scope: NSRange? = nil) throws
     -> [NSRange]
   {
+    try execute(query, in: text, scope: scope, operation: .find).matches
+  }
+
+  public func execute(
+    _ query: SearchQuery, in text: String, scope: NSRange? = nil,
+    operation: SearchExecutionOperation
+  ) throws -> SearchExecutionOutput {
     let deadline = ProcessInfo.processInfo.systemUptime + timeLimit
-    return try search(query, text: text, scope: scope, deadline: deadline).1.map(\.range)
+    let (regex, results) = try search(query, text: text, scope: scope, deadline: deadline)
+    let replacement: String?
+    switch operation {
+    case .find:
+      replacement = nil
+    case .replace(let template):
+      replacement = try buildReplacement(
+        mode: query.mode, regex: regex, results: results, text: text, template: template,
+        deadline: deadline)
+    }
+    return SearchExecutionOutput(matches: results.map(\.range), replacement: replacement)
   }
 
   public func replacing(_ query: SearchQuery, in text: String, with replacement: String) throws
     -> String
   {
-    let deadline = ProcessInfo.processInfo.systemUptime + timeLimit
-    let (regex, matches) = try search(query, text: text, scope: nil, deadline: deadline)
-    guard replacement.utf16.count <= 4096 else { throw SearchError.outputLimit }
+    try execute(query, in: text, operation: .replace(template: replacement)).replacement!
+  }
+
+  private func buildReplacement(
+    mode: SearchMode, regex: NSRegularExpression, results: [NSTextCheckingResult], text: String,
+    template: String, deadline: TimeInterval
+  ) throws -> String {
+    guard template.utf16.count <= 4096 else { throw SearchError.outputLimit }
     let parts =
-      query.mode == .regex
-      ? try replacementParts(replacement, groups: regex.numberOfCaptureGroups)
-      : [.literal(replacement)]
+      mode == .regex
+      ? try replacementParts(template, groups: regex.numberOfCaptureGroups)
+      : [.literal(template)]
     let original = text as NSString
     var output = ""
     var outputCount = 0
@@ -97,7 +131,7 @@ public struct SearchService {
       // Check the length before Foundation allocates a substring of a capture.
       try append(original.substring(with: range))
     }
-    for result in matches {
+    for result in results {
       try appendRange(NSRange(location: position, length: result.range.location - position))
       for part in parts {
         switch part {
