@@ -6,10 +6,12 @@ import PadCore
   let assignment: DocumentAssignment
   let registry: ApplicationDocuments
   let requireEndpointCurrent: () throws -> Void
+  let requireUserAdmission: () throws -> Void
   let submit: (EditorPreparedSubmission) throws -> DocumentIntakeID
   let wait: (DocumentIntakeID) async throws -> DocumentIntakeResult
   let requestClose: (Set<UUID>) throws -> DocumentClosingID
   let requestReopen: () throws -> DocumentIntakeID
+  let detachDocumentEndpoint: (EditorDocument) throws -> Void
   let endpointClosed: (UUID) -> Void
   let requestCheckpoint: () -> Void
 }
@@ -24,6 +26,7 @@ enum EditorIntakeSelection {
   let provenance: DocumentIntakeProvenance
   let selection: EditorIntakeSelection
   let requireDestinationCurrent: () throws -> Void
+  var insertionIndex: Int? = nil
 }
 enum EditorApplicationRoutingError: Error, LocalizedError {
   case staleEndpoint, invalidProjection, preparedSeedRequired, applicationOwned, unsupportedSeed

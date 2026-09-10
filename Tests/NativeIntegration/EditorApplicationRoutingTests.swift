@@ -31,6 +31,10 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
   var lastIntake: DocumentIntakeID?
   var gate: RoutingGate?
   var endpointLive = true
+  var userAdmission = true
+  var chooseSave: ((URL?, String) -> URL?)?
+  var detached: [UUID: (EditorDocument, DocumentFileStateController, FileStateEndpointDetachment)] =
+    [:]
   var submissions: [UUID: EditorPreparedSubmission] = [:]
   var errors: [Error] = []
   var characterEvents = 0
@@ -52,6 +56,7 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     session = SessionCoordinator(
       loadSession: { initialSession }, claimRecovery: { .init(snapshots: [], quarantinedCount: 0) })
     registry = ApplicationDocuments(
+      closeServices: .init(readState: { try ($0 as! EditorDocument).captureCloseState() }),
       adoptionServices: .init(
         coordinatorID: recovery.coordinatorID,
         readState: { handle in
@@ -123,6 +128,7 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
         if !self.endpointLive { throw RoutingFixtureFailure.stale }
         try self.endpointCheck?()
       },
+      requireUserAdmission: { if !self.userAdmission { throw RoutingFixtureFailure.stale } },
       submit: { submission in
         self.submissions[submission.seed.id] = submission
         let selected: Bool
@@ -136,7 +142,8 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
           .init(
             documentID: submission.seed.id, assignment: submission.assignment,
             metadata: .init(pinned: submission.seed.pinned),
-            index: self.registry.window(id: self.assignment.windowID)!.groups[0].documentIDs.count,
+            index: submission.insertionIndex
+              ?? self.registry.window(id: self.assignment.windowID)!.groups[0].documentIDs.count,
             select: selected, utf16Count: submission.seed.textUTF16Count,
             originalByteCount: submission.seed.originalByteCount, provenance: submission.provenance,
             makeHandle: { try EditorDocumentFactory.make(submission.seed) }))
@@ -145,10 +152,21 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
       }, wait: { try await self.intake.wait(for: $0) },
       requestClose: { _ in throw RoutingFixtureFailure.unsupportedDependency },
       requestReopen: { throw RoutingFixtureFailure.unsupportedDependency },
+      detachDocumentEndpoint: { model in
+        guard let bridge = model.fileState else { return }
+        if let retained = self.detached[model.id] {
+          guard retained.0 === model, retained.1 === bridge else {
+            throw RoutingFixtureFailure.stale
+          }
+          return
+        }
+        self.detached[model.id] = (model, bridge, try bridge.detachEndpoint())
+      },
       endpointClosed: { _ in self.endpointLive = false },
       requestCheckpoint: { self.publisher.requestCheckpoint() })
     controller = try EditorWindowController(
-      id: assignment.windowID, application: routing, onError: { self.errors.append($0) })
+      id: assignment.windowID, application: routing,
+      chooseSaveDestination: { self.chooseSave?($0, $1) }, onError: { self.errors.append($0) })
     try project()
     let a = try publisher.beginManagedActivation()
     try await publisher.drainManagedActivation(a)
@@ -455,6 +473,329 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     XCTAssertTrue(source.fileState === bridge)
     try f.project()
     XCTAssertTrue(source.fileState === bridge)
+    await f.stop()
+  }
+
+  func testRegistryCloseLeaseRefusesPaneAndCommandMutation() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let request = try f.registry.requestClose(documentID: model.id)
+    let ticket = try f.registry.beginClose(request, disposition: .retainCleanHistory)
+    let state = try model.captureCloseState()
+    let geometry = model.captureCloseGeometry()
+    XCTAssertFalse(f.controller.isCommandAvailable("file.save"))
+    XCTAssertFalse(f.controller.isCommandAvailable("view.splitVertical"))
+    XCTAssertThrowsError(try f.controller.splitCurrent(.sideBySide))
+    XCTAssertEqual(model.captureCloseGeometry(), geometry)
+    XCTAssertEqual(try model.captureCloseState(), state)
+    _ = try f.registry.completeClose(ticket, result: .notRemoved(RoutingFixtureFailure.stale))
+    await f.stop()
+  }
+  func testUserGateDoesNotBlockProjectionOrFrozenCapture() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let before = f.controller.sessionMetadata.tabs.map(\.id)
+    f.userAdmission = false
+    XCTAssertFalse(f.controller.isCommandAvailable("file.save"))
+    f.controller.newDocument()
+    for _ in 0..<10 { await Task.yield() }
+    XCTAssertEqual(f.controller.sessionMetadata.tabs.map(\.id), before)
+    try f.project()
+    let frozen = await f.controller.prepareToQuit(persistRecovery: false)
+    XCTAssertTrue(frozen)
+    let capture = try f.controller.captureManagedSessionCheckpoint(
+      expected: XCTUnwrap(f.registry.window(id: f.assignment.windowID)))
+    XCTAssertEqual(capture.liveTabIDs, Set(before))
+    f.controller.cancelPreparedQuit()
+    await f.stop()
+  }
+
+  func testCloseAdmissionPreservesSemanticStateAndCleanHistory() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let request = try f.registry.requestClose(documentID: model.id)
+    let disposition = try await f.controller.confirmManagedClose(
+      request, endpointID: f.endpointID,
+      decide: { _ in
+        XCTFail("clean close must not ask")
+        return .alertFirstButtonReturn
+      })
+    XCTAssertEqual(disposition, .retainCleanHistory)
+    let ticket = try f.registry.beginClose(request, disposition: .retainCleanHistory)
+    let state = try model.captureCloseState()
+    let geometry = model.captureCloseGeometry()
+    try f.controller.applyManagedAdmission(to: model, endpointID: f.endpointID)
+    XCTAssertFalse(model.panePool[0].editor.isEditable)
+    XCTAssertFalse(model.panePool[0].editor.isSelectable)
+    XCTAssertEqual(try model.captureCloseState(), state)
+    XCTAssertEqual(model.captureCloseGeometry(), geometry)
+    guard case .closed = try f.registry.completeClose(ticket, result: .removed) else {
+      return XCTFail("registry fixture close")
+    }
+    // This projection fixture tests registry settlement only; it does not claim a real actor deletion receipt.
+    try f.project()
+    XCTAssertEqual(try model.captureCloseState(), state)
+    XCTAssertEqual(model.captureCloseGeometry(), geometry)
+    XCTAssertTrue(f.controller.sessionMetadata.tabs.isEmpty)
+    _ = try f.registry.peekHistory(windowID: f.assignment.windowID, replacementID: UUID())
+    await f.stop()
+  }
+
+  func testSaveChooserReentryCannotWriteAfterCloseLease() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let target = f.directory.appendingPathComponent("must-not-exist.txt")
+    var ticket: DocumentCloseTicket?
+    f.chooseSave = { _, _ in
+      ticket = try! f.registry.beginClose(
+        f.registry.requestClose(documentID: model.id), disposition: .retainCleanHistory)
+      return target
+    }
+    f.controller.execute("file.saveAs")
+    for _ in 0..<30 { await Task.yield() }
+    XCTAssertNotNil(ticket)
+    XCTAssertNil(model.operationID)
+    XCTAssertNil(model.url)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+    _ = try f.registry.completeClose(
+      XCTUnwrap(ticket), result: .notRemoved(RoutingFixtureFailure.stale))
+    await f.stop()
+  }
+  func testDirtyCloseCancelAndStaleConfirmationKeepBuffer() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    model.panePool[0].editor.insertText(
+      "unsaved😀", replacementRange: NSRange(location: 0, length: 0))
+    let request = try f.registry.requestClose(documentID: model.id)
+    let result = try await f.controller.confirmManagedClose(
+      request, endpointID: f.endpointID,
+      decide: { alert in
+        XCTAssertEqual(alert.buttons.map(\.title), ["Cancel", "Discard Changes"])
+        return .alertFirstButtonReturn
+      })
+    XCTAssertNil(result)
+    XCTAssertEqual(model.storage.string, "unsaved😀")
+    do {
+      _ = try await f.controller.confirmManagedClose(
+        request, endpointID: f.endpointID,
+        decide: { _ in
+          model.panePool[0].editor.insertText(
+            "new", replacementRange: NSRange(location: 0, length: 0))
+          return .alertSecondButtonReturn
+        })
+      XCTFail("stale affirmative response accepted")
+    } catch {}
+    XCTAssertTrue(f.registry.handle(id: model.id) === model)
+    XCTAssertEqual(model.storage.string, "newunsaved😀")
+    await f.stop()
+  }
+
+  func testActualNativeSelectionAndUndoStayFrozenUnderLease() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let editor = try XCTUnwrap(f.controller.focusedPane?.editor)
+    model.undoManager.beginUndoGrouping()
+    editor.insertText("abc😀", replacementRange: NSRange(location: 0, length: 0))
+    editor.breakUndoCoalescing()
+    model.undoManager.endUndoGrouping()
+    let request = try f.registry.requestClose(documentID: model.id)
+    let ticket = try f.registry.beginClose(request, disposition: .discardWithoutHistory)
+    let before = model.storage.string
+    let selection = editor.selectedRange()
+    try f.controller.applyManagedAdmission(to: model, endpointID: f.endpointID)
+    editor.setSelectedRange(NSRange(location: 0, length: 0))
+    editor.insertText("blocked", replacementRange: NSRange(location: 0, length: 0))
+    model.undoManager.undo()
+    XCTAssertEqual(editor.selectedRange(), selection)
+    XCTAssertEqual(model.storage.string, before)
+    XCTAssertTrue(model.undoManager.canUndo)
+    _ = try f.registry.completeClose(ticket, result: .notRemoved(RoutingFixtureFailure.stale))
+    try f.controller.applyManagedAdmission(to: model, endpointID: f.endpointID)
+    XCTAssertTrue(editor.isEditable)
+    XCTAssertTrue(editor.isSelectable)
+    model.undoManager.undo()
+    XCTAssertEqual(model.storage.string, "")
+    let clean = try f.registry.beginClose(
+      f.registry.requestClose(documentID: model.id), disposition: .retainCleanHistory)
+    model.undoManager.redo()
+    XCTAssertEqual(model.storage.string, "")
+    _ = try f.registry.completeClose(clean, result: .notRemoved(RoutingFixtureFailure.stale))
+    await f.stop()
+  }
+  func testHistoryProjectionToSurvivingTabPreservesRetiredPresentation() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    for _ in 0..<2 {
+      f.controller.newDocument()
+      _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    }
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let state = try model.captureCloseState()
+    let geometry = model.captureCloseGeometry()
+    let interaction = model.panePresentation.interaction
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: model.id), disposition: .retainCleanHistory)
+    _ = try f.registry.completeClose(ticket, result: .removed)
+    try f.project()
+    XCTAssertTrue(f.controller.isCommandAvailable("file.reopenClosed"))
+    XCTAssertEqual(f.controller.sessionMetadata.tabs.count, 1)
+    XCTAssertEqual(try model.captureCloseState(), state)
+    XCTAssertEqual(model.captureCloseGeometry(), geometry)
+    XCTAssertEqual(model.panePresentation.interaction, interaction)
+    XCTAssertNotNil(
+      try f.registry.peekHistory(windowID: f.assignment.windowID, replacementID: UUID()))
+    await f.stop()
+  }
+  func testEmptyWindowPermitClosesOnlyEmptyExactEndpoint() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    XCTAssertThrowsError(try f.controller.closeEmptyManagedWindow(endpointID: f.endpointID))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let ticket = try f.registry.beginClose(
+      f.registry.requestClose(documentID: model.id), disposition: .retainCleanHistory)
+    _ = try f.registry.completeClose(ticket, result: .removed)
+    try f.project()
+    f.userAdmission = false
+    try f.controller.closeEmptyManagedWindow(endpointID: f.endpointID)
+    XCTAssertFalse(f.endpointLive)
+    XCTAssertThrowsError(try f.controller.closeEmptyManagedWindow(endpointID: f.endpointID))
+    await f.stop()
+  }
+
+  func testUnconfirmedPublicationCannotCloseEvenAtSavedText() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let bytes = Data("attempted save".utf8)
+    let target = f.directory.appendingPathComponent("uncertain.txt")
+    do {
+      try AtomicFileStore().save(bytes, to: target, expected: nil, fault: .directorySync)
+      XCTFail("fault missing")
+    } catch FileStoreError.publicationUncertain(let evidence) {
+      model.pendingPublication = .init(evidence: evidence, bytes: bytes)
+    }
+    XCTAssertEqual(model.storage.string, model.savedText)
+    let pending = try XCTUnwrap(model.pendingPublication)
+    XCTAssertThrowsError(try f.registry.requestClose(documentID: model.id))
+    XCTAssertEqual(model.pendingPublication?.id, pending.id)
+    XCTAssertEqual(model.pendingPublication?.bytes, bytes)
+    XCTAssertTrue(f.registry.handle(id: model.id) === model)
+    XCTAssertTrue(f.controller.isCommandAvailable("file.saveAs"))
+    await f.stop()
+  }
+  func testNativeResourceValidationAndLegacyDrainDoNotCaptureOrWrite() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let token = try f.publisher.acquirePause()
+    try await f.publisher.drainPause(token)
+    let model = try XCTUnwrap(f.controller.focusedPane?.document)
+    let revision = model.highestIssuedRecoveryRevision
+    let state = try model.captureCloseState()
+    try f.controller.validateManagedResources(
+      expected: XCTUnwrap(f.registry.window(id: f.assignment.windowID)))
+    try await f.controller.drainLegacyRecoveryWrites(endpointID: f.endpointID)
+    XCTAssertEqual(model.highestIssuedRecoveryRevision, revision)
+    XCTAssertEqual(try model.captureCloseState(), state)
+    await f.stop()
+  }
+
+  func testProjectionCannotGrantUserEditAdmissionDuringCallback() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    let editor = try XCTUnwrap(f.controller.focusedPane?.editor)
+    f.userAdmission = false
+    var attempting = false
+    f.endpointCheck = {
+      guard !attempting else { return }
+      attempting = true
+      editor.insertText("must refuse", replacementRange: NSRange(location: 0, length: 0))
+      attempting = false
+    }
+    try f.project()
+    XCTAssertEqual(editor.string, "")
+    f.endpointCheck = nil
+    await f.stop()
+  }
+  func testEmptyClosePermitRejectsRevisionChangeDuringEndpointCheck() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    var checks = 0
+    f.endpointCheck = {
+      checks += 1
+      if checks == 3 {
+        try f.registry.setGroupAxis(
+          .stacked, windowID: f.assignment.windowID, expectedRevision: f.registry.workspaceRevision)
+      }
+    }
+    try f.controller.closeEmptyManagedWindow(endpointID: f.endpointID)
+    XCTAssertEqual(checks, 3)
+    XCTAssertTrue(f.endpointLive)
+    f.endpointCheck = nil
+    await f.stop()
+  }
+
+  func testProjectionCallbackCannotFocusUnrelatedPaneWithUserGateClosed() async throws {
+    let f = try RoutingFixture()
+    try await f.connect()
+    defer { try? FileManager.default.removeItem(at: f.directory) }
+    f.controller.newDocument()
+    _ = try await f.intake.wait(for: XCTUnwrap(f.lastIntake))
+    try f.controller.splitCurrent(.sideBySide)
+    let current = try XCTUnwrap(f.controller.focusedPane)
+    let other = try XCTUnwrap(current.document.panePool.first { $0 !== current })
+    XCTAssertTrue(f.controller.window?.firstResponder === current.editor)
+    XCTAssertTrue(f.controller.window?.makeFirstResponder(other.editor) == true)
+    XCTAssertTrue(f.controller.window?.firstResponder === other.editor)
+    XCTAssertTrue(f.controller.window?.makeFirstResponder(current.editor) == true)
+    f.userAdmission = false
+    var attempting = false
+    f.endpointCheck = {
+      guard !attempting else { return }
+      attempting = true
+      _ = f.controller.window?.makeFirstResponder(other.editor)
+      attempting = false
+    }
+    try f.project()
+    XCTAssertTrue(f.controller.window?.firstResponder === current.editor)
+    XCTAssertEqual(current.document.preferredPaneID, current.id)
+    f.endpointCheck = nil
     await f.stop()
   }
 

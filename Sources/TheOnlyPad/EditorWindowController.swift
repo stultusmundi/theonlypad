@@ -41,13 +41,33 @@ private enum EditorSaveFailure: Error {
   case uncertain(PendingDocumentPublication)
 }
 
+/// Refuse known-denied editor focus before AppKit resigns the current responder.
+@MainActor private final class EditorAdmissionWindow: NSWindow {
+  private var checkingFocusAdmission = false
+  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+    guard !checkingFocusAdmission else { return false }
+    if let editor = responder as? DocumentTextView, let canFocus = editor.canFocus {
+      checkingFocusAdmission = true
+      let admitted = canFocus()
+      checkingFocusAdmission = false
+      guard admitted else { return false }
+    }
+    // AppKit still performs becomeFirstResponder and its final admission check.
+    return super.makeFirstResponder(responder)
+  }
+}
+
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
   let sessionID: UUID
   private let applicationRouting: EditorApplicationRouting?
   private var projectionToken: UUID?
+  private var projectionFocus: (token: UUID, paneID: UUID)?
   private var projectionValid = false
   private var applicationPreparation: UUID?
+  private var emptyWindowClosePermit: (id: UUID, revision: UUID)?
+  private var recoveryWorkGeneration = UUID()
+  private var recoveryWorkError: Error?
   var onClose: (() -> Void)?
   var onOpenLargeFile: ((URL) -> Void)?
   var onOpenedURL: ((URL) -> Void)?
@@ -96,6 +116,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard !windowClosed, !preparingToQuit,
       let document = documents.first(where: { $0.id == context.documentID }),
       !document.saving, document.composingPaneID == nil,
+      applicationAllows(.select, document: document),
       document.editRevision == context.editRevision,
       let pane = document.panePool.first(where: { $0.id == context.paneID && $0.isAttached })
     else { return false }
@@ -112,12 +133,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       && (document.composingPaneID == nil || document.composingPaneID == pane.id)
   }
   private func refreshInteractivity(_ document: EditorDocument) {
-    for pane in document.panePool { pane.editor.isEditable = mayMutate(pane) }
+    for pane in document.panePool {
+      pane.editor.isEditable = mayMutate(pane)
+      pane.editor.isSelectable =
+        applicationAllows(.select, document: document) && !preparingToQuit && !windowClosed
+    }
     renderDiskStatus()
   }
   func focusPane(id: UUID) throws {
     guard !windowClosed, !preparingToQuit,
       let document = current, document.panePresentation.installing == nil,
+      applicationAllows(.select, document: document),
       let pane = document.panePool.first(where: { $0.id == id && $0.isAttached })
     else { throw PaneRoutingError.stale }
     guard document.composingPaneID == nil || document.composingPaneID == id
@@ -134,7 +160,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   private func admitPaneChange() throws -> (EditorDocument, EditorPane) {
     guard !windowClosed, !preparingToQuit, let document = current, let pane = focusedPane,
-      !document.saving, document.panePresentation.installing == nil, pane.isAttached
+      !document.saving, document.panePresentation.installing == nil, pane.isAttached,
+      applicationAllows(.paneInstall, document: document)
     else { throw PaneRoutingError.stale }
     guard document.composingPaneID == nil else { throw PaneRoutingError.composition }
     return (document, pane)
@@ -292,7 +319,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func fileStateContext(_ document: EditorDocument) -> FileStateLiveContext? {
     guard let owner = fileMonitoring else { return nil }
     return FileStateLiveContext(
-      documentID: document.id, bindingID: document.fileBindingID,
+      documentID: document.id, ownershipGeneration: document.ownershipGeneration,
+      bindingID: document.fileBindingID,
       baselineRevision: document.baselineRevision, url: document.url,
       editRevision: document.editRevision, encoding: document.encoding, hasBOM: document.hasBOM,
       dirty: document.dirty, pendingPublicationID: document.pendingPublication?.id,
@@ -342,11 +370,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       failure: bridge?.lastFailure,
       hasSource: fileMonitoring != nil && document?.url != nil,
       enabled: !windowClosed && !preparingToQuit && fileMonitoring?.isSuspended != true
-        && document?.saving == false && document?.composingPaneID == nil)
+        && document?.saving == false && document?.composingPaneID == nil
+        && document.map({ applicationAllows(.fileOperation, document: $0) }) == true)
   }
   private func performDiskStatusAction(_ action: DocumentDiskStatusView.Action) {
     guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
       let document = current, !document.saving, document.composingPaneID == nil,
+      applicationAllows(.fileOperation, document: document),
       let bridge = document.fileState
     else { return }
     switch action {
@@ -362,7 +392,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   private func makeDiskConflict(_ document: EditorDocument) -> DocumentDiskConflictController? {
     guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
-      documents.contains(where: { $0 === document }), let bridge = document.fileState,
+      documents.contains(where: { $0 === document }),
+      applicationAllows(.fileOperation, document: document), let bridge = document.fileState,
       bridge.state.observation != nil
     else { return nil }
     var actions: [DocumentDiskConflictController.Action] = []
@@ -370,7 +401,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       actions.append(
         .init(title: "Keep Buffer", accessibilityID: "document.keepBuffer") {
           [weak self, weak document] in
-          guard let self, let document, self.documents.contains(where: { $0 === document }) else {
+          guard let self, let document, self.documents.contains(where: { $0 === document }),
+            self.applicationAllows(.fileOperation, document: document)
+          else {
             return
           }
           guard bridge.keepBuffer(context) else {
@@ -383,7 +416,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       actions.append(
         .init(title: "Save As…", accessibilityID: "document.diskSaveAs") {
           [weak self, weak document] in
-          guard let self, let document, self.documents.contains(where: { $0 === document }) else {
+          guard let self, let document, self.documents.contains(where: { $0 === document }),
+            self.applicationAllows(.fileOperation, document: document)
+          else {
             return
           }
           guard bridge.isCurrent(context) else {
@@ -418,6 +453,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
+          self.applicationAllows(.fileOperation, document: document),
           self.documents.contains(where: { $0 === document })
         else { return }
         bridge.checkAgain()
@@ -427,6 +463,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
+          self.applicationAllows(.fileOperation, document: document),
           self.documents.contains(where: { $0 === document })
         else { return }
         bridge.retryRegistration()
@@ -436,6 +473,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
+          self.applicationAllows(.fileOperation, document: document),
           self.documents.contains(where: { $0 === document })
         else { return }
         bridge.useManualFallback()
@@ -448,7 +486,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       actions: actions)
   }
   private func locateFile(_ document: EditorDocument, context: FileStateActionContext) {
-    guard context.action == .locate, let bridge = document.fileState,
+    guard applicationUserAllows(.fileOperation, document: document), context.action == .locate,
+      let bridge = document.fileState,
       bridge.isCurrent(context), !isRecordingMacro, document.pendingPublication == nil,
       let originalURL = document.url, let bytes = document.originalBytes,
       let coordinator = locateActions
@@ -485,7 +524,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       callbacks: DocumentLocateCallbacks(
         beginOperation: { [weak self, weak document] in
           guard let self, let document, !self.isRecordingMacro, bridge.isCurrent(context),
-            !document.saving, document.pendingPublication == nil
+            !document.saving, document.pendingPublication == nil,
+            self.applicationAllows(.fileOperation, document: document)
           else { return nil }
           let operation = document.beginFileOperation()
           document.saving = true
@@ -550,7 +590,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func performCheckedDiskAction(
     _ document: EditorDocument, context: FileStateActionContext
   ) {
-    guard let bridge = document.fileState, bridge.isCurrent(context),
+    guard applicationUserAllows(.fileOperation, document: document),
+      let bridge = document.fileState, bridge.isCurrent(context),
       let url = document.url, let observation = bridge.state.observation,
       let coordinator = diskActions,
       context.action == .reload || context.action == .openDiskCopy
@@ -572,7 +613,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       input,
       callbacks: DocumentDiskActionCallbacks(
         beginOperation: { [weak self, weak document] in
-          guard let self, let document, bridge.isCurrent(context), !document.saving else {
+          guard let self, let document, bridge.isCurrent(context), !document.saving,
+            self.applicationAllows(.fileOperation, document: document)
+          else {
             return nil
           }
           let operation = document.beginFileOperation()
@@ -789,7 +832,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     self.chooseSaveDestination = chooseSaveDestination
     self.errorHandler = onError
     sessionID = id
-    let window = NSWindow(
+    let window = EditorAdmissionWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
     )
@@ -916,6 +959,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     discardPanePresentationButton.isHidden = !deferred
     let eligible =
       !windowClosed && !preparingToQuit && !document.saving
+      && applicationAllows(.paneInstall, document: document)
       && document.composingPaneID == nil && document.operationID == nil && state.installing == nil
       && !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
     restorePanePresentationButton.isEnabled = eligible && document.storage.length <= 2_000_000
@@ -924,6 +968,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   @objc private func discardSavedPanePresentation() {
     guard let document = current, !windowClosed, !preparingToQuit, !document.saving,
+      applicationAllows(.paneInstall, document: document),
       document.composingPaneID == nil, document.operationID == nil,
       document.panePresentation.installing == nil,
       !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
@@ -936,11 +981,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   @objc private func restoreSavedPanePresentation() {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     restorePendingPresentation(document)
   }
 
   private func restorePendingPresentation(_ document: EditorDocument) {
+    guard projectionAllows(.paneInstall, document: document) else { return }
     let state = document.panePresentation
     guard canInstallPresentation(document), state.installing == nil, state.pending != nil,
       state.pending?.presentation.panes.count == 1 || document.storage.length <= 2_000_000
@@ -976,6 +1022,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func canInstallPresentation(_ document: EditorDocument) -> Bool {
     !windowClosed && !preparingToQuit && current === document
+      && projectionAllows(.paneInstall, document: document)
       && documents.contains(where: { $0 === document })
       && !document.saving && document.operationID == nil && document.composingPaneID == nil
       && !document.panePool.contains(where: { $0.isAttached && $0.editor.hasMarkedText() })
@@ -1085,7 +1132,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     for (index, pane) in panes.enumerated() {
       if pane === live { expectedSelection = presentation.panes[index].selection }
       expectedRanges[pane.id] = presentation.panes[index].selection
-      pane.editor.setSelectedRange(presentation.panes[index].selection)
+      try pane.editor.withSelectionInstallation(
+        authorizedBy: { [weak self, weak document] in
+          guard let self, let document else { return false }
+          return state.installing == token && self.canInstallPresentation(document)
+        },
+        {
+          pane.editor.setSelectedRange(presentation.panes[index].selection)
+        })
       try validateAuthority()
       guard pane.editor.selectedRange() == presentation.panes[index].selection else {
         throw PaneRoutingError.stale
@@ -1494,6 +1548,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func execute(_ id: String) {
+    guard applicationCommandAllowed(id) else { return }
     guard !preparingToQuit, !windowClosed,
       !documents.contains(where: { $0.panePresentation.installing != nil })
     else { return }
@@ -1563,7 +1618,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       manager.showWindow(nil)
     case "file.print":
-      guard let document = current else { return }
+      guard let document = current, applicationAllows(.select, document: document) else { return }
       guard document.storage.string.utf16.count <= 2_000_000 else {
         present(
           NSError(
@@ -1602,7 +1657,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
     case "tool.formatJSON": formatJSON()
     case "edit.commentLine", "edit.commentBlock":
-      guard let document = current else { return }
+      guard let document = current, applicationAllows(.select, document: document) else { return }
       let language = document.language
       performDocumentCommand(id == "edit.commentLine" ? "Line Comment" : "Block Comment") {
         text, selection in
@@ -1643,7 +1698,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "tool.textUtilities": showTextUtilities()
     case "tool.statistics": showStatistics()
     case "tool.outline":
-      guard let document = current else { return }
+      guard let document = current, applicationAllows(.select, document: document) else { return }
       let source = preferredPane(in: document)
       outline?.close()
       let panel = OutlineController(text: document.storage.string, language: document.language) {
@@ -1672,7 +1727,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       panel.showWindow(nil)
     case "tool.previewMarkdown":
-      guard let document = current else { return }
+      guard let document = current, applicationAllows(.select, document: document) else { return }
       markdownPreview?.close()
       let preview = MarkdownPreviewController(text: document.storage.string)
       preview.window?.title = "Markdown Preview — " + document.name
@@ -1682,7 +1737,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       preview.showWindow(nil)
     case "tool.compare":
-      guard let document = current else { return }
+      guard let document = current, applicationAllows(.select, document: document) else { return }
       guard document.storage.string.utf8.count <= 2_000_000 else {
         present(
           NSError(
@@ -1734,6 +1789,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func isCommandAvailable(_ id: String) -> Bool {
+    guard applicationCommandAllowed(id) else { return false }
     guard !preparingToQuit, !windowClosed, current?.composingPaneID == nil else { return false }
     if id.hasPrefix("bookmark.") { return current != nil && current?.saving == false }
     switch id {
@@ -1756,7 +1812,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case "macro.discard":
       return !macroSaving && (recordingDocumentID != nil || !recordedCommands.isEmpty)
     case "macro.cancel": return replayCancellation != nil
-    case "file.reopenClosed": return !closedDocuments.isEmpty
+    case "file.reopenClosed":
+      if let routing = applicationRouting {
+        return routing.registry.closedHistoryCount(windowID: sessionID) > 0
+      }
+      return !closedDocuments.isEmpty
     case "file.nextTab", "file.previousTab": return documents.count > 1
     case "file.save", "file.saveAs", "file.revert", "document.encoding", "tool.formatJSON",
       "tool.textUtilities", "edit.commentLine", "edit.commentBlock":
@@ -1782,6 +1842,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func save(_ document: EditorDocument, saveAs: Bool) {
+    guard applicationAllows(.fileOperation, document: document) else { return }
     guard !document.saving, !windowClosed, !preparingToQuit else { return }
     let retry = saveAs ? nil : document.pendingPublication
     var destination = retry?.evidence.destination ?? document.url
@@ -1800,6 +1861,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     // Native dialogs run a nested event loop; the target may have closed or frozen meanwhile.
     guard let destination, !windowClosed, !preparingToQuit, !document.saving,
+      applicationAllows(.fileOperation, document: document),
       documents.contains(where: { $0 === document })
     else { return }
     let sameDestination = destination.standardizedFileURL == document.url?.standardizedFileURL
@@ -1920,12 +1982,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     guard let document = current, let url = document.url, !document.saving,
+      applicationAllows(.fileOperation, document: document),
       document.composingPaneID == nil
     else {
       fail(CancellationError())
       return
     }
     guard confirmDiscard([document]), !windowClosed, !preparingToQuit, !isRecordingMacro,
+      applicationAllows(.fileOperation, document: document),
       document.composingPaneID == nil, !document.saving,
       documents.contains(where: { $0 === document }), shouldAccept?() != false
     else {
@@ -2036,6 +2100,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ document: EditorDocument, source: EditorPane, to ending: LineEnding
   ) {
     guard !document.saving, !windowClosed, !preparingToQuit,
+      applicationAllows(.fileOperation, document: document),
       document.composingPaneID == nil, source.isAttached,
       documents.contains(where: { $0 === document })
     else { return }
@@ -2064,6 +2129,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     onFinish: (() -> Void)? = nil
   ) {
     guard !document.saving, !preparingToQuit, !windowClosed, document.composingPaneID == nil,
+      applicationAllows(.fileOperation, document: document),
       documents.contains(where: { $0 === document })
     else { return }
     let snapshot = DecodedDocument(text: document.storage.string, encoding: encoding, hasBOM: bom)
@@ -2097,6 +2163,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func setEncoding(_ document: EditorDocument, encoding: DocumentEncoding, bom: Bool) {
+    guard applicationAllows(.edit, document: document) else { return }
     guard document.encoding != encoding || document.hasBOM != bom else {
       refresh()
       return
@@ -2120,6 +2187,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     edit: TextEdit? = nil
   ) -> Bool {
     guard !preparingToQuit, !windowClosed, !document.saving, source.isAttached,
+      applicationAllows(.edit, document: document),
       source.document === document, document.composingPaneID == nil,
       documents.contains(where: { $0 === document }),
       document.storage.string.utf16.elementsEqual(expected.utf16),
@@ -2160,6 +2228,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func setBookmarks(_ document: EditorDocument, value: DocumentBookmarks) {
+    guard applicationAllows(.edit, document: document) else { return }
     let previous = document.bookmarks
     guard previous != value else { return }
     document.typingBookmarkNextLocation = nil
@@ -2175,7 +2244,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func performBookmarkCommand(_ id: String) {
-    guard let document = current, !document.saving, !preparingToQuit else { return }
+    guard let document = current, !document.saving, !preparingToQuit,
+      applicationAllows(.edit, document: document)
+    else { return }
     let source = preferredPane(in: document)
     let sourceContext = context(for: source)
     guard accepts(sourceContext) else { return }
@@ -2253,7 +2324,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func performDocumentCommand(
     _ action: String, operation: @escaping @Sendable (String, NSRange) throws -> LineCommandResult
   ) {
-    guard let document = current, !document.saving else { return }
+    guard let document = current, !document.saving, applicationAllows(.edit, document: document)
+    else { return }
     let source = preferredPane(in: document)
     let sourceContext = context(for: source)
     guard accepts(sourceContext) else { return }
@@ -2307,7 +2379,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func navigate(line: Int, column: Int, requireFocus: Bool = true) {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     let source = preferredPane(in: document)
     let sourceContext = context(for: source)
     let snapshot = document.storage.string
@@ -2345,7 +2417,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func showStatistics() {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     let snapshot = document.storage.string
     let selection = preferredPane(in: document).editor.selectedRange()
     let name = document.name
@@ -2375,7 +2447,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func showTextUtilities() {
-    guard let document = current, !document.saving else { return }
+    guard let document = current, !document.saving, applicationAllows(.edit, document: document)
+    else { return }
     let source = preferredPane(in: document)
     let sourceContext = context(for: source)
     guard accepts(sourceContext) else { return }
@@ -2415,7 +2488,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func showSearch() {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     let source = preferredPane(in: document)
     let panel = SearchPanelController(
       snapshot: { [weak self, weak document] in
@@ -2510,6 +2583,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   @objc private func selectLanguage() {
     guard !preparingToQuit, !windowClosed, let document = current,
+      applicationAllows(.edit, document: document),
       let title = languagePicker.titleOfSelectedItem,
       let language = DocumentLanguage(rawValue: title)
     else { return }
@@ -2525,7 +2599,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     },
     onFinish: (() -> Void)? = nil
   ) {
-    guard let document = current, !document.saving else { return }
+    guard let document = current, !document.saving, applicationAllows(.edit, document: document)
+    else { return }
     let source = preferredPane(in: document)
     let sourceContext = context(for: source)
     guard accepts(sourceContext, requireFocus: false) else { return }
@@ -2567,7 +2642,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func applySettings(_ value: EditorSettings) {
-    guard !preparingToQuit else { return }
+    guard !preparingToQuit,
+      documents.allSatisfy({ applicationUserAllows(.paneInstall, document: $0) })
+    else { return }
     do { settings = try value.validated() } catch {
       present(error)
       return
@@ -2577,6 +2654,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func configureSettings(_ document: EditorDocument) {
+    guard projectionAllows(.paneInstall, document: document) else { return }
     let font =
       settings.fontName == EditorSettings.systemMonospacedFontName
       ? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
@@ -2598,6 +2676,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     document.settingsApplied = true
   }
   private func configureWrap(_ document: EditorDocument, enabled wrap: Bool) {
+    guard projectionAllows(.paneInstall, document: document) else { return }
     for pane in document.panePool {
       let editor = pane.editor
       editor.isHorizontallyResizable = !wrap
@@ -2614,7 +2693,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func toggleWrap() {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     configureWrap(document, enabled: preferredPane(in: document).editor.isHorizontallyResizable)
     refresh()
   }
@@ -2629,9 +2708,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let document = pane.document
     let editor = pane.editor
     editor.delegate = self
+    editor.canChangeSelection = { [weak self, weak document, weak pane] in
+      guard let self, let document, let pane else { return false }
+      return !self.preparingToQuit && !self.windowClosed && pane.isAttached
+        && self.applicationUserAllows(.select, document: document)
+    }
+    document.canUndoRedo = { [weak self, weak document] in
+      guard let self, let document else { return false }
+      return !self.preparingToQuit && !self.windowClosed && !document.saving
+        && document.composingPaneID == nil
+        && self.applicationUserAllows(.undoRedo, document: document)
+    }
     editor.canFocus = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane else { return false }
-      return self.applicationAllows(.select, document: document)
+      return self.mayFocus(pane)
         && !self.windowClosed && !self.preparingToQuit && pane.isAttached
         && (document.composingPaneID == nil || document.composingPaneID == pane.id)
         && (self.current?.composingPaneID == nil || self.current === document)
@@ -2643,13 +2733,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     pane.onBoundsChanged = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane, pane.isAttached,
         self.documents.contains(where: { $0 === document }),
-        document.panePresentation.suppression == 0
+        document.panePresentation.suppression == 0,
+        self.applicationAllows(.select, document: document)
       else { return }
       self.presentationInteraction(document)
       self.notifySessionChange()
     }
     editor.onFocus = { [weak self, weak document, weak pane] in
-      guard let self, let document, let pane, self.current === document else { return }
+      guard let self, let document, let pane, self.current === document,
+        self.applicationAllows(.select, document: document)
+      else { return }
       if self.focusedPane !== pane {
         self.focusedPane?.editor.breakUndoCoalescing()
         pane.editor.breakUndoCoalescing()
@@ -2752,14 +2845,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func closeDocument() {
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     closeDocuments(ids: [document.id])
   }
 
   private func closeDocuments(ids: Set<UUID>) {
     if let routing = applicationRouting {
       do {
-        try routing.requireEndpointCurrent()
+        _ = try requireApplicationEndpoint()
         _ = try routing.requestClose(ids)
       } catch { present(error) }
       return
@@ -2885,8 +2978,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if let routing = applicationRouting {
+      if let permit = emptyWindowClosePermit {
+        emptyWindowClosePermit = nil
+        guard sender === window, !windowClosed, documents.isEmpty,
+          (try? requireApplicationEndpoint(userInitiated: false)) != nil,
+          !windowClosed, documents.isEmpty, routing.registry.workspaceRevision == permit.revision,
+          routing.registry.window(id: sessionID)?.groups.allSatisfy({ $0.documentIDs.isEmpty })
+            == true
+        else { return false }
+        return true
+      }
       do {
-        try routing.requireEndpointCurrent()
+        _ = try requireApplicationEndpoint()
         _ = try routing.requestClose(Set(documents.map(\.id)))
       } catch { present(error) }
       return false
@@ -2921,8 +3024,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     diskConflict?.close()
     diskConflict = nil
     for document in documents {
-      document.panePresentation.invalidate(force: true)
-      invalidateFileState(document)
+      if let routing = applicationRouting {
+        do { try routing.detachDocumentEndpoint(document) } catch { errorHandler?(error) }
+      } else {
+        document.panePresentation.invalidate(force: true)
+        invalidateFileState(document)
+      }
     }
     markdownPreview?.close()
     backupManager?.close()
@@ -3154,6 +3261,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func replay(_ macro: EditorMacro, repeatCount: Int) {
     guard let document = current, !document.saving, !preparingToQuit, !isRecordingMacro,
+      applicationAllows(.fileOperation, document: document),
       replayCancellation == nil
     else { return }
     let source = preferredPane(in: document)
@@ -3252,7 +3360,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func updateStatus() {
     notifySessionChange()
-    guard let document = current else { return }
+    guard let document = current, applicationAllows(.select, document: document) else { return }
     let text = document.storage.string as NSString
     let caret = min(preferredPane(in: document).editor.selectedRange().location, text.length)
     // Status on very large text avoids a full-buffer scan for every caret movement.
@@ -3379,11 +3487,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     let batch = recoveryBatch()
     let previous = recoveryWork
+    recoveryWorkGeneration = UUID()
     recoveryWork = Task { [weak self, recovery] in
       await previous?.value
       do {
         try await recovery.persistBatch(batch)
-      } catch { self?.reportRecoveryFailure(error) }
+      } catch {
+        self?.recoveryWorkError = error
+        self?.reportRecoveryFailure(error)
+      }
     }
   }
 
@@ -3403,8 +3515,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       } catch { return error }
     }
     Self.pendingCloses[id] = (recovery, cleanup)
+    recoveryWorkGeneration = UUID()
     recoveryWork = Task { [weak self] in
       let error = await cleanup.value
+      if let error { self?.recoveryWorkError = error }
       if let self, self.onSessionChange != nil {
         self.onSessionChange?()
       } else if let error {
@@ -3539,23 +3653,78 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
 // Application mode: one process owns models; this window only projects their registry placement.
 extension EditorWindowController {
-  private func requireApplicationEndpoint() throws -> EditorApplicationRouting {
-    guard let routing = applicationRouting, !windowClosed, !preparingToQuit else {
+  private func requireApplicationEndpoint(userInitiated: Bool = true) throws
+    -> EditorApplicationRouting
+  {
+    guard let routing = applicationRouting, !windowClosed, !userInitiated || !preparingToQuit else {
       throw EditorApplicationRoutingError.staleEndpoint
     }
     try routing.requireEndpointCurrent()
-    guard !windowClosed, !preparingToQuit, routing.assignment.windowID == sessionID else {
+    if userInitiated { try routing.requireUserAdmission() }
+    guard !windowClosed, !userInitiated || !preparingToQuit,
+      routing.assignment.windowID == sessionID
+    else {
       throw EditorApplicationRoutingError.staleEndpoint
     }
     return routing
   }
   private func applicationAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool {
     guard let routing = applicationRouting else { return true }
-    guard (try? routing.requireEndpointCurrent()) != nil,
+    guard (try? requireApplicationEndpoint()) != nil,
       routing.registry.handle(id: document.id) === document,
       routing.registry.assignment(of: document.id) == routing.assignment
     else { return false }
     return routing.registry.allows(action, documentID: document.id)
+  }
+  private func mayFocus(_ pane: EditorPane) -> Bool {
+    if applicationUserAllows(.select, document: pane.document) { return true }
+    guard let scope = projectionFocus, projectionToken == scope.token, scope.paneID == pane.id,
+      current === pane.document, pane.isAttached,
+      pane.document.panePool.contains(where: { $0 === pane })
+    else { return false }
+    return projectionAllows(.select, document: pane.document)
+  }
+  private func focusProjectedPane(_ pane: EditorPane) {
+    guard let token = projectionToken, projectionFocus == nil else { return }
+    projectionFocus = (token, pane.id)
+    defer { projectionFocus = nil }
+    _ = window?.makeFirstResponder(pane.editor)
+  }
+  /// Used only by synchronous owner layout/focus installation, never by user mutation sinks.
+  private func projectionAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool {
+    guard projectionToken != nil, let routing = applicationRouting else {
+      return applicationAllows(action, document: document)
+    }
+    guard action == .paneInstall || action == .select,
+      (try? requireApplicationEndpoint(userInitiated: false)) != nil,
+      routing.registry.handle(id: document.id) === document,
+      routing.registry.assignment(of: document.id) == routing.assignment
+    else { return false }
+    return routing.registry.allows(action, documentID: document.id)
+  }
+  private func applicationUserAllows(_ action: DocumentAdmission, document: EditorDocument) -> Bool
+  {
+    guard applicationRouting != nil else { return true }
+    guard (try? requireApplicationEndpoint()) != nil else { return false }
+    return applicationAllows(action, document: document)
+  }
+  private func applicationCommandAllowed(_ id: String) -> Bool {
+    guard applicationRouting != nil else { return true }
+    guard (try? requireApplicationEndpoint()) != nil else { return false }
+    guard let document = current else { return true }
+    let action: DocumentAdmission
+    switch id {
+    case "file.save", "file.saveAs", "file.revert", "file.checkDisk", "file.resolveDiskChange",
+      "document.encoding":
+      action = .fileOperation
+    case "view.splitVertical", "view.splitHorizontal", "view.closeSplit", "view.wrap":
+      action = .paneInstall
+    case "file.nextTab", "file.previousTab", "view.focusOtherPane": action = .select
+    case "edit.undo", "edit.redo": action = .undoRedo
+    case "file.close", "file.closeAll", "file.closeOthers": action = .close
+    default: action = .edit
+    }
+    return applicationAllows(action, document: document)
   }
   private func beginApplicationPreparation() throws -> UUID {
     _ = try requireApplicationEndpoint()
@@ -3570,9 +3739,15 @@ extension EditorWindowController {
   }
   private func submitApplicationSeed(
     _ seed: NativeDocumentSeed, provenance: DocumentIntakeProvenance,
-    selection: EditorIntakeSelection, additionalAdmission: (() -> Bool)? = nil
+    selection: EditorIntakeSelection, additionalAdmission: (() -> Bool)? = nil,
+    insertionIndex: Int? = nil
   ) throws -> DocumentIntakeID {
-    let routing = try requireApplicationEndpoint()
+    let userInitiated: Bool
+    switch provenance {
+    case .fresh, .history: userInitiated = true
+    case .session, .recovery: userInitiated = false
+    }
+    let routing = try requireApplicationEndpoint(userInitiated: userInitiated)
     guard projectionToken == nil, additionalAdmission?() != false else { throw CancellationError() }
     let endpoint = routing.endpointID
     return try routing.submit(
@@ -3581,15 +3756,15 @@ extension EditorWindowController {
         seed: seed, provenance: provenance, selection: selection,
         requireDestinationCurrent: { [weak self] in
           guard let self else { throw CancellationError() }
-          let current = try self.requireApplicationEndpoint()
+          let current = try self.requireApplicationEndpoint(userInitiated: userInitiated)
           guard current.endpointID == endpoint, additionalAdmission?() != false else {
             throw EditorApplicationRoutingError.staleEndpoint
           }
-        }))
+        }, insertionIndex: insertionIndex))
   }
   func acceptPreparedSessionSeed(
     _ seed: NativeDocumentSeed, provenance: DocumentIntakeProvenance,
-    selection: EditorIntakeSelection
+    selection: EditorIntakeSelection, insertionIndex: Int? = nil
   ) throws -> DocumentIntakeID {
     guard seed.kind == .restored else { throw EditorApplicationRoutingError.unsupportedSeed }
     switch provenance {
@@ -3601,10 +3776,11 @@ extension EditorWindowController {
       }
     case .fresh, .history: throw EditorApplicationRoutingError.unsupportedSeed
     }
-    return try submitApplicationSeed(seed, provenance: provenance, selection: selection)
+    return try submitApplicationSeed(
+      seed, provenance: provenance, selection: selection, insertionIndex: insertionIndex)
   }
   private func validateApplicationResult(_ result: DocumentIntakeResult) throws {
-    let routing = try requireApplicationEndpoint()
+    let routing = try requireApplicationEndpoint(userInitiated: false)
     switch result {
     case .imported(let id):
       guard let model = routing.registry.handle(id: id) as? EditorDocument,
@@ -3790,6 +3966,10 @@ extension EditorWindowController {
     }
     let old = documents
     projectionValid = false
+    for removed in old where !next.contains(where: { $0 === removed }) {
+      try applicationRouting!.detachDocumentEndpoint(removed)
+      _ = try registryModels(expected, revision: revision, endpointID: endpointID)
+    }
     documents = next
     selectedID = selection
     for document in next {
@@ -3807,12 +3987,14 @@ extension EditorWindowController {
       if oldCurrent !== selected
         || host.displayedIDs != selected.panePool.filter(\.isAttached).map(\.id)
       {
-        if let oldCurrent, oldCurrent !== selected { presentationInteraction(oldCurrent) }
+        if let oldCurrent, oldCurrent !== selected, next.contains(where: { $0 === oldCurrent }) {
+          presentationInteraction(oldCurrent)
+        }
         for pane in selected.panePool where pane.isAttached { installCallbacks(for: pane) }
         if !selected.settingsApplied { configureSettings(selected) }
         let wrap = !preferredPane(in: selected).editor.isHorizontallyResizable
         try presentPanes(selected, wrap: wrap)
-        _ = window?.makeFirstResponder(preferredPane(in: selected).editor)
+        focusProjectedPane(preferredPane(in: selected))
         installPendingPresentationIfPossible(selected)
         selected.highlighter.update(language: selected.language)
       }
@@ -3866,5 +4048,127 @@ extension EditorWindowController {
     let metadata = sessionMetadata
     try validateRegistryProjection(expected, revision: revision, endpointID: routing.endpointID)
     return .init(window: metadata, liveTabIDs: Set(documents.map(\.id)), recovery: items)
+  }
+}
+
+// Native adapters for the process-owned close transaction. No filesystem authority is created here.
+enum NativeManagedCloseError: LocalizedError {
+  case stale, busy, pendingPublication, drainFailed
+  var errorDescription: String? {
+    switch self {
+    case .stale: return "Document ownership changed. Keep it open and retry closing."
+    case .busy: return "Finish composition, file operations, and macro recording before closing."
+    case .pendingPublication:
+      return
+        "A file save is unconfirmed. Use Save to verify and retry, or Save As before closing. The destination may already contain the attempted bytes."
+    case .drainFailed:
+      return "Earlier recovery work failed. Resolve recovery before changing document ownership."
+    }
+  }
+}
+extension EditorWindowController {
+  func requireEndpointIdentity(endpointID: UUID, assignment: DocumentAssignment) throws {
+    let routing = try requireApplicationEndpoint(userInitiated: false)
+    guard routing.endpointID == endpointID, routing.assignment == assignment else {
+      throw NativeManagedCloseError.stale
+    }
+  }
+  private func closeModel(_ request: DocumentCloseRequest, endpointID: UUID) throws
+    -> EditorDocument
+  {
+    guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: request.assignment)
+    guard let model = routing.registry.handle(id: request.documentID) as? EditorDocument,
+      documents.contains(where: { $0 === model }),
+      routing.registry.assignment(of: model.id) == request.assignment,
+      routing.registry.allows(.close, documentID: model.id),
+      try model.captureCloseState() == request.state,
+      !model.undoManager.isUndoing, !model.undoManager.isRedoing,
+      !macroSaving, !isRecordingMacro, recordedCommands.isEmpty, replayCancellation == nil,
+      loadingCount == 0, applicationPreparation == nil
+    else { throw NativeManagedCloseError.busy }
+    if model.pendingPublication != nil { throw NativeManagedCloseError.pendingPublication }
+    let fresh = try routing.registry.requestClose(documentID: model.id)
+    guard fresh.admissionGeneration == request.admissionGeneration,
+      fresh.assignment == request.assignment, fresh.metadata == request.metadata,
+      fresh.state == request.state
+    else { throw NativeManagedCloseError.stale }
+    return model
+  }
+  func confirmManagedClose(
+    _ request: DocumentCloseRequest, endpointID: UUID,
+    decide: ((NSAlert) async -> NSApplication.ModalResponse)? = nil
+  ) async throws -> DocumentCloseDisposition? {
+    let model = try closeModel(request, endpointID: endpointID)
+    if !request.state.isDirty, !request.state.hasPendingPublication,
+      request.state.canRetainCleanHistory
+    {
+      return .retainCleanHistory
+    }
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Discard unsaved changes?"
+    alert.informativeText = "\(model.name) has unsaved changes. Cancel to save your work first."
+    alert.addButton(withTitle: "Cancel")
+    alert.addButton(withTitle: "Discard Changes")
+    let response: NSApplication.ModalResponse
+    if let decide { response = await decide(alert) } else { response = alert.runModal() }
+    _ = try closeModel(request, endpointID: endpointID)
+    return response == .alertSecondButtonReturn ? .discardWithoutHistory : nil
+  }
+  func applyManagedAdmission(to document: EditorDocument, endpointID: UUID) throws {
+    guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    guard routing.registry.handle(id: document.id) === document,
+      routing.registry.assignment(of: document.id) == routing.assignment,
+      documents.contains(where: { $0 === document })
+    else { throw NativeManagedCloseError.stale }
+    let before = try document.captureCloseState()
+    let geometry = document.captureCloseGeometry()
+    refreshInteractivity(document)
+    renderPanePresentationStatus()
+    guard try document.captureCloseState() == before, document.captureCloseGeometry() == geometry
+    else { throw NativeManagedCloseError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+  }
+  func drainLegacyRecoveryWrites(endpointID: UUID) async throws {
+    guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    // Application-created endpoints never start legacy timers. A nonempty queue is drained conservatively.
+    recoveryDebounce?.cancel()
+    recoveryPeriodic?.cancel()
+    while true {
+      let generation = recoveryWorkGeneration
+      await recoveryWork?.value
+      try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+      if generation == recoveryWorkGeneration { break }
+    }
+    if let error = recoveryWorkError { throw error }
+    try Self.assertNoPendingCloses()
+  }
+  func validateManagedResources(expected: DocumentWindowSnapshot) throws {
+    guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }
+    try validateRegistryProjection(
+      expected, revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
+    var budget = SessionStartupBudget()
+    for document in documents {
+      try budget.admit(
+        utf16Count: document.storage.length, originalByteCount: document.originalBytes?.count ?? 0)
+    }
+  }
+  func closeEmptyManagedWindow(endpointID: UUID) throws {
+    guard let routing = applicationRouting, let window else { throw NativeManagedCloseError.stale }
+    try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    guard let expected = routing.registry.window(id: sessionID) else {
+      throw NativeManagedCloseError.stale
+    }
+    try validateRegistryProjection(
+      expected, revision: routing.registry.workspaceRevision, endpointID: endpointID)
+    guard documents.isEmpty, expected.groups.allSatisfy({ $0.documentIDs.isEmpty }),
+      emptyWindowClosePermit == nil
+    else { throw NativeManagedCloseError.busy }
+    emptyWindowClosePermit = (UUID(), routing.registry.workspaceRevision)
+    defer { emptyWindowClosePermit = nil }
+    window.performClose(nil)
   }
 }
