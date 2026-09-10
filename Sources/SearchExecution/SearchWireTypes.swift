@@ -8,16 +8,13 @@ let searchWireMaximumRequestBlobUTF16 = 4_096
 let searchWireMaximumCooperativeMilliseconds: UInt32 = 60_000
 let searchWireSemanticVersion: UInt32 = 1
 
-private let searchWireZeroUUID = UUID(
-  uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-
 public struct SearchWireIdentity: Equatable, Sendable {
   public let generation: UUID
   public let requestID: UUID
   public let ordinal: UInt64
 
   public init(generation: UUID, requestID: UUID, ordinal: UInt64) throws {
-    guard generation != searchWireZeroUUID, requestID != searchWireZeroUUID else {
+    guard generation != SearchWireBinary.zeroUUID, requestID != SearchWireBinary.zeroUUID else {
       throw SearchWireError.identityMismatch
     }
     guard ordinal != 0 else {
@@ -27,6 +24,35 @@ public struct SearchWireIdentity: Equatable, Sendable {
     self.requestID = requestID
     self.ordinal = ordinal
   }
+}
+
+public struct SearchWireResponse: Equatable, Sendable {
+  public let identity: SearchWireIdentity
+  public let matchCount: Int
+  public let replacementUTF16: Int?
+
+  public init(
+    identity: SearchWireIdentity,
+    matchCount: Int,
+    replacementUTF16: Int?
+  ) throws {
+    guard (0...searchWireGlobalMaximumMatches).contains(matchCount) else {
+      throw SearchWireError.invalidMetadata
+    }
+    if let replacementUTF16 {
+      guard (0...searchWireGlobalMaximumUTF16).contains(replacementUTF16) else {
+        throw SearchWireError.invalidMetadata
+      }
+    }
+    self.identity = identity
+    self.matchCount = matchCount
+    self.replacementUTF16 = replacementUTF16
+  }
+}
+
+public enum SearchWireTerminal: Equatable, Sendable {
+  case success
+  case failure(SearchError)
 }
 
 public struct SearchWireLimits: Equatable, Sendable {
@@ -148,7 +174,69 @@ public struct SearchWireFrame: Sendable {
 
 func validateSearchWireFrameIdentity(kind: SearchWireKind, requestID: UUID) throws {
   let isHello = kind == .parentHello || kind == .childHello
-  guard isHello == (requestID == searchWireZeroUUID) else {
+  guard isHello == (requestID == SearchWireBinary.zeroUUID) else {
     throw SearchWireError.identityMismatch
+  }
+}
+
+enum SearchWireBinary {
+  static let zeroUUID = UUID(
+    uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
+  static func writeFrame(
+    kind: SearchWireKind,
+    requestID: UUID,
+    payload: Data,
+    emit: (Data) throws -> Void
+  ) throws {
+    let frame = try SearchWireFrame(kind: kind, requestID: requestID, payload: payload)
+    try SearchWireFrameEncoder.write(frame, emit: emit)
+  }
+
+  static func decodeUInt16(_ data: Data, at offset: Int) -> UInt16 {
+    UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
+  }
+
+  static func decodeUInt32(_ data: Data, at offset: Int) -> UInt32 {
+    var result: UInt32 = 0
+    for byteOffset in 0..<4 {
+      result |= UInt32(data[offset + byteOffset]) << UInt32(byteOffset * 8)
+    }
+    return result
+  }
+
+  static func decodeUInt64(_ data: Data, at offset: Int) -> UInt64 {
+    var result: UInt64 = 0
+    for byteOffset in 0..<8 {
+      result |= UInt64(data[offset + byteOffset]) << UInt64(byteOffset * 8)
+    }
+    return result
+  }
+
+  static func decodeUUID(_ data: Data, at offset: Int) -> UUID {
+    UUID(
+      uuid: (
+        data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+        data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11],
+        data[offset + 12], data[offset + 13], data[offset + 14], data[offset + 15]
+      ))
+  }
+
+  static func append(_ value: UInt16, to data: inout Data) {
+    data.append(UInt8(truncatingIfNeeded: value))
+    data.append(UInt8(truncatingIfNeeded: value >> 8))
+  }
+
+  static func append(_ value: UInt32, to data: inout Data) {
+    for offset in 0..<4 {
+      data.append(UInt8(truncatingIfNeeded: value >> UInt32(offset * 8)))
+    }
+  }
+
+  static func append(_ value: UInt64, to data: inout Data) {
+    for offset in 0..<8 {
+      data.append(UInt8(truncatingIfNeeded: value >> UInt64(offset * 8)))
+    }
   }
 }

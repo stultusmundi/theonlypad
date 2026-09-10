@@ -29,7 +29,7 @@ public final class SearchWireRequestReader {
   private var phase = Phase.awaitingHello
 
   public init(generation: UUID) throws {
-    guard generation != searchWireZeroRequestID else {
+    guard generation != SearchWireBinary.zeroUUID else {
       throw SearchWireError.identityMismatch
     }
     self.generation = generation
@@ -163,13 +163,13 @@ public final class SearchWireRequestReader {
     guard frame.payload.count == 24 else {
       throw RequestReaderFailure(.invalidMetadata)
     }
-    guard decodeUUID(frame.payload, at: 0) == generation else {
+    guard SearchWireBinary.decodeUUID(frame.payload, at: 0) == generation else {
       throw RequestReaderFailure(.identityMismatch)
     }
-    guard decodeUInt32(frame.payload, at: 16) == searchWireSemanticVersion else {
+    guard SearchWireBinary.decodeUInt32(frame.payload, at: 16) == searchWireSemanticVersion else {
       throw RequestReaderFailure(.unsupportedVersion)
     }
-    guard decodeUInt32(frame.payload, at: 20) == 0 else {
+    guard SearchWireBinary.decodeUInt32(frame.payload, at: 20) == 0 else {
       throw RequestReaderFailure(.invalidMetadata)
     }
 
@@ -192,20 +192,20 @@ public final class SearchWireRequestReader {
       throw RequestReaderFailure(.invalidMetadata)
     }
 
-    let ordinal = decodeUInt64(frame.payload, at: 0)
+    let ordinal = SearchWireBinary.decodeUInt64(frame.payload, at: 0)
     guard let expectedOrdinal, ordinal == expectedOrdinal else {
       throw RequestReaderFailure(.ordinalMismatch)
     }
 
-    let inputUTF16 = decodeUInt64(frame.payload, at: 8)
-    let scopeLocation = decodeUInt64(frame.payload, at: 16)
-    let scopeLength = decodeUInt64(frame.payload, at: 24)
-    let maxTextUTF16 = decodeUInt64(frame.payload, at: 32)
-    let maxOutputUTF16 = decodeUInt64(frame.payload, at: 40)
-    let maxMatches = decodeUInt32(frame.payload, at: 48)
-    let cooperativeMilliseconds = decodeUInt32(frame.payload, at: 52)
-    let patternUTF16 = Int(decodeUInt16(frame.payload, at: 56))
-    let templateUTF16 = Int(decodeUInt16(frame.payload, at: 58))
+    let inputUTF16 = SearchWireBinary.decodeUInt64(frame.payload, at: 8)
+    let scopeLocation = SearchWireBinary.decodeUInt64(frame.payload, at: 16)
+    let scopeLength = SearchWireBinary.decodeUInt64(frame.payload, at: 24)
+    let maxTextUTF16 = SearchWireBinary.decodeUInt64(frame.payload, at: 32)
+    let maxOutputUTF16 = SearchWireBinary.decodeUInt64(frame.payload, at: 40)
+    let maxMatches = SearchWireBinary.decodeUInt32(frame.payload, at: 48)
+    let cooperativeMilliseconds = SearchWireBinary.decodeUInt32(frame.payload, at: 52)
+    let patternUTF16 = Int(SearchWireBinary.decodeUInt16(frame.payload, at: 56))
+    let templateUTF16 = Int(SearchWireBinary.decodeUInt16(frame.payload, at: 58))
     let modeCode = frame.payload[60]
     let operationCode = frame.payload[61]
     let options = frame.payload[62]
@@ -389,17 +389,17 @@ public enum SearchWireWriter {
     fromChild: Bool,
     emit: (Data) throws -> Void
   ) throws {
-    guard generation != searchWireZeroRequestID else {
+    guard generation != SearchWireBinary.zeroUUID else {
       throw SearchWireError.identityMismatch
     }
 
     var payload = Data()
     append(generation, to: &payload)
-    append(searchWireSemanticVersion, to: &payload)
-    append(0 as UInt32, to: &payload)
+    SearchWireBinary.append(searchWireSemanticVersion, to: &payload)
+    SearchWireBinary.append(0 as UInt32, to: &payload)
     let frame = try SearchWireFrame(
       kind: fromChild ? .childHello : .parentHello,
-      requestID: searchWireZeroRequestID,
+      requestID: SearchWireBinary.zeroUUID,
       payload: payload)
     try SearchWireFrameEncoder.write(frame, emit: emit)
   }
@@ -410,7 +410,7 @@ public enum SearchWireWriter {
     emit: (Data) throws -> Void
   ) throws -> SearchWireBoundaryIndex {
     let metadata = try encodeRequestMetadata(request)
-    try writeFrame(
+    try SearchWireBinary.writeFrame(
       kind: .requestStart,
       requestID: request.identity.requestID,
       payload: metadata,
@@ -421,7 +421,7 @@ public enum SearchWireWriter {
       identity: request.identity, expectedUTF16: request.inputUTF16)
     while let chunk = try encoder.nextChunk() {
       try index.append(chunk)
-      try writeFrame(
+      try SearchWireBinary.writeFrame(
         kind: .inputChunk,
         requestID: request.identity.requestID,
         payload: chunk,
@@ -432,7 +432,7 @@ public enum SearchWireWriter {
       try index.validate(scope, within: nil)
     }
 
-    try writeFrame(
+    try SearchWireBinary.writeFrame(
       kind: .execute,
       requestID: request.identity.requestID,
       payload: Data(),
@@ -455,16 +455,16 @@ public enum SearchWireWriter {
 
     var payload = Data()
     payload.reserveCapacity(64 + pattern.count + template.count)
-    append(request.identity.ordinal, to: &payload)
-    append(UInt64(request.inputUTF16), to: &payload)
-    append(UInt64(request.scope?.location ?? 0), to: &payload)
-    append(UInt64(request.scope?.length ?? 0), to: &payload)
-    append(UInt64(request.limits.maxTextUTF16), to: &payload)
-    append(UInt64(request.limits.maxOutputUTF16), to: &payload)
-    append(UInt32(request.limits.maxMatches), to: &payload)
-    append(request.limits.cooperativeMilliseconds, to: &payload)
-    append(UInt16(pattern.count / 2), to: &payload)
-    append(UInt16(template.count / 2), to: &payload)
+    SearchWireBinary.append(request.identity.ordinal, to: &payload)
+    SearchWireBinary.append(UInt64(request.inputUTF16), to: &payload)
+    SearchWireBinary.append(UInt64(request.scope?.location ?? 0), to: &payload)
+    SearchWireBinary.append(UInt64(request.scope?.length ?? 0), to: &payload)
+    SearchWireBinary.append(UInt64(request.limits.maxTextUTF16), to: &payload)
+    SearchWireBinary.append(UInt64(request.limits.maxOutputUTF16), to: &payload)
+    SearchWireBinary.append(UInt32(request.limits.maxMatches), to: &payload)
+    SearchWireBinary.append(request.limits.cooperativeMilliseconds, to: &payload)
+    SearchWireBinary.append(UInt16(pattern.count / 2), to: &payload)
+    SearchWireBinary.append(UInt16(template.count / 2), to: &payload)
     payload.append(modeCode(request.query.mode))
     payload.append(operation)
     payload.append(
@@ -479,7 +479,7 @@ public enum SearchWireWriter {
     var encoded = Data()
     encoded.reserveCapacity(text.utf16.count * 2)
     for unit in text.utf16 {
-      append(unit, to: &encoded)
+      SearchWireBinary.append(unit, to: &encoded)
     }
     return encoded
   }
@@ -492,72 +492,13 @@ public enum SearchWireWriter {
     }
   }
 
-  private static func writeFrame(
-    kind: SearchWireKind,
-    requestID: UUID,
-    payload: Data,
-    emit: (Data) throws -> Void
-  ) throws {
-    let frame = try SearchWireFrame(kind: kind, requestID: requestID, payload: payload)
-    try SearchWireFrameEncoder.write(frame, emit: emit)
-  }
 }
-
-private let searchWireZeroRequestID = UUID(
-  uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 private struct RequestReaderFailure: Error {
   let error: SearchWireError
 
   init(_ error: SearchWireError) {
     self.error = error
-  }
-}
-
-private func decodeUInt32(_ data: Data, at offset: Int) -> UInt32 {
-  var result: UInt32 = 0
-  for byteOffset in 0..<4 {
-    result |= UInt32(data[offset + byteOffset]) << UInt32(byteOffset * 8)
-  }
-  return result
-}
-
-private func decodeUInt16(_ data: Data, at offset: Int) -> UInt16 {
-  UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
-}
-
-private func decodeUInt64(_ data: Data, at offset: Int) -> UInt64 {
-  var result: UInt64 = 0
-  for byteOffset in 0..<8 {
-    result |= UInt64(data[offset + byteOffset]) << UInt64(byteOffset * 8)
-  }
-  return result
-}
-
-private func decodeUUID(_ data: Data, at offset: Int) -> UUID {
-  UUID(
-    uuid: (
-      data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
-      data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
-      data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11],
-      data[offset + 12], data[offset + 13], data[offset + 14], data[offset + 15]
-    ))
-}
-
-private func append(_ value: UInt16, to data: inout Data) {
-  data.append(UInt8(truncatingIfNeeded: value))
-  data.append(UInt8(truncatingIfNeeded: value >> 8))
-}
-
-private func append(_ value: UInt32, to data: inout Data) {
-  for offset in 0..<4 {
-    data.append(UInt8(truncatingIfNeeded: value >> UInt32(offset * 8)))
-  }
-}
-
-private func append(_ value: UInt64, to data: inout Data) {
-  for offset in 0..<8 {
-    data.append(UInt8(truncatingIfNeeded: value >> UInt64(offset * 8)))
   }
 }
 
