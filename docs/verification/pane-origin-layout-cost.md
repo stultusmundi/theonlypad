@@ -67,3 +67,49 @@ Private evidence: `.local/pane-layout-cost/typography-matrix-v4/batch-ascii256-l
 Before execution, the Python coordinator's manifest resolver, fixture hash, receipt boundary, input inventory and progress controls were corrected. The receipt validator is an exact copy of the accepted v3 implementation. Eight expanded pure tests pass, including injected coordinator traversal and12-item order, first-failure stop, input additions before/between children, typed receipt rejection and a consistent two-pane summed-duration threshold control. Original faulty Python, manifests, binaries and compile receipts remain preserved; no failed attempt was relabeled a success.
 
 Deep origins, two panes, Unicode shaping/fallback fixtures and repeated exact cases remain unmeasured in v4. These results do not select a production ceiling or justify unbounded eager layout. In particular, the long wrapped line already costs24.603ms at this small size.
+
+## Corrected v4 deep-origin request batch — actual execution
+
+The separately frozen `ascii256-deep-p1` adapter ran the original twelve-case batch with requested origin(2048,20000), the same262144-unit fixtures and binaries, one pane and one sample per case/variant. All workers were explicitly command-idle; all12 native receipts, records and input inventories passed independent root validation. The interval ended and workers resumed.
+
+| Shape / wrap | Baseline origin ms | Candidate origin ms | Candidate actual origin | Largest peak MiB in pair |
+| --- | ---: | ---: | --- | ---: |
+| Dense / off | 0.096709 | 0.121334 | (-68,20000) clamped | 57.563 |
+| Dense / on | 0.041083 | 0.062708 | (0,20000) clamped | 57.547 |
+| Long line / off | 0.103166 | 0.149000 | (-68,20000) clamped | 68.031 |
+| Long line / on | 0.056959 | 0.081875 | (0,20000) clamped | 67.922 |
+| Mixed / off | 0.098667 | 0.111167 | (-68,20000) clamped | 57.703 |
+| Mixed / on | 0.044667 | 0.066042 | (0,20000) clamped | 57.641 |
+
+Every baseline also clamped to the coordinates shown for its candidate. Setup ranged98.258–149.490ms. No process reached the100ms call/sum or512MiB expansion stop; no timeout, interruption or truncation occurred.
+
+These fast results do **not** establish the cost of laying out deep visible text. Source inspection shows the candidate sends the requested horizontal coordinate to the layout rectangle before constraining scrolling. The horizontal request2048 can lie beyond a wrapped container, but the nowrap fixture assigns an effectively unlimited container width. Clamped scroll coordinates alone therefore do not prove container exclusion. The single unwrapped long line also does not populate the requested vertical region. No glyph/layout instrumentation was added to identify the actual work. A separate vertical-only deep request, useful first-line control and remaining two-pane/Unicode/repeated cases are required before selecting production eligibility. Accepted receipt validation does not imply exact restoration or useful layout work.
+
+Private evidence: `.local/pane-layout-cost/typography-matrix-next/batch-ascii256-deep-p1-20260910-123434/`, including `root-verified-summary.json` and retained adapter hashes. Own manifest SHA256: `d82035640c0722b92260f62516cafa7509a1b83a3ad75d72234f9ee2bf176e30`; selected batch SHA256: `b42784afaa151ea1d486befe6a099616bee2e7d74ca0c76e7c6dd168131f7ea8`. The accepted v4 execution manifest and binaries are unchanged.
+
+Five pure adapter tests passed before execution, including actual temporary-file config drift before admission and input/manifest drift between dispatches. The adapter pins the accepted v4 manifest, checks its own captured manifest/config bytes at each boundary, and rejects deferred batches. The original insufficient local-freeze draft remains preserved.
+
+## Corrected v4 two-pane low-origin batch — actual execution
+
+The exact `ascii256-low-p2` batch completed twelve processes with two independent layout managers sharing one document, requested origin(0,240), verified13pt nominal typography and262144 UTF16 units. Root independently validated all records,12 strict receipts, selected ordering and the unchanged v4/adapter input inventories. Workers were command-idle during the interval and resumed afterward.
+
+| Shape / wrap | Baseline combined origin ms | Candidate combined origin ms | Candidate pane calls ms | Largest peak MiB in pair |
+| --- | ---: | ---: | --- | ---: |
+| Dense / off | 0.153500 | 0.909500 | 0.481625 + 0.427875 | 57.797 |
+| Dense / on | 0.048417 | 1.136541 | 0.612458 + 0.524083 | 57.766 |
+| Long line / off | 0.165583 | 21.665750 | 10.999958 + 10.665792 | 70.344 |
+| Long line / on | 0.072167 | 49.743750 | 24.229667 + 25.514083 | 71.234 |
+| Mixed / off | 0.163458 | 0.934083 | 0.491250 + 0.442833 | 57.938 |
+| Mixed / on | 0.049708 | 1.156626 | 0.610792 + 0.545834 | 57.984 |
+
+Both candidate panes reached(0,240) except long-nowrap, where both clamped to(0,0). Both nowrap baseline panes clamped to(-68,240); wrapped baselines reached(0,240). Setup ranged101.126–179.594ms. All call/summed-call100ms and observed512MiB stops remained below threshold, with no timeout, truncation or interruption. The two-pane long-wrapped call total already approaches50ms at this size; one observation establishes neither p95 nor a safe production ceiling. Empty-region, implicit-layout and nominal-font limitations still apply.
+
+Private evidence: `.local/pane-layout-cost/typography-matrix-next-two-pane/batch-ascii256-low-p2-20260910-124457/`, including per-pane records and `root-verified-summary.json`. Adapter manifest SHA256: `c44f148f2f198287cd0f825c1c23e93c183cc13f6b845bcf01bd608078cff9a7`; exact selected-batch SHA256: `6131623cb48a7b4401b4ad8e8aadae7b963a9b4b339922b0913ecbcc4655f6b5`. Five pure adapter controls passed before execution. No binary was recompiled for this batch and no production layout change was made.
+
+## Unicode batch stopped at the first process
+
+The unchanged v4 baseline for `s262144-shaping-long-nowrap-low-p1` exceeded the unchanged 15-second watchdog limit. The coordinator stopped after one attempted process: no measurement record was produced and none of the remaining seven selected processes ran. Both captured streams were empty. The watchdog reported timeout, signaled its owned process group, completed its sole wait and captured both streams without truncation; child return was -9. Elapsed watchdog time was 15.024074 seconds. This is a failed experiment, not a usable timing or an accepted Unicode result.
+
+Root independently verified the failure receipt, exact argv, unchanged complete input inventory and adapter hashes. Private evidence is `.local/pane-layout-cost/typography-matrix-unicode-low/batch-unicode256-low-p1-20260910-125019/root-verified-stop.json`; adapter manifest SHA256 `235430407bfac3c734b727f76798081bdba7966751965e9d214e621deff20d49`, selected-case hash `e8595d7eab22237a33259692bfef11902be473b94f8c7c55af9dbd64df216d1c`.
+
+The original probe emits only its final record, so empty output does not identify the delayed operation. A separate private diagnostic adds fixed phase markers around existing work, preserving operation order and the 15-second deadline. An initial proposed explicit application initialization was removed during review because it would change that order. Diagnostic output cannot count as accepted performance evidence. Measurement expansion remains paused pending diagnosis.
