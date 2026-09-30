@@ -11,19 +11,24 @@ Branch: `build/native-editor`. Current accepted resumption commits:
 - `d7262a8`: monotonic timer and independent busy-child parent EOF,60 injected tests and one actual child test.
 - `219ede9`: exact per-request Foundation engine adapter,42 combined tests.
 - `c065153`: bootstrap and bounded FD-channel component,60 combined injected tests.
-- `363f5fd`: independently reviewed shared spawn-gate design/plan, implementation not yet accepted.
+- `363f5fd`: independently reviewed shared spawn-gate design/plan.
+- `a33430d`: native TextKit diagnostics and continuation evidence.
+- `886cd4f`: reviewed pure worker Program composition,72 component tests.
+- `f4d9207`: reviewed shared spawn gate and pending-admission cancellation. Matching real external-command6 and child3 regression tests passed. Real unrelated-peer overlap remains outstanding.
 
 Read `docs/verification/search-child-lifecycle.md` and `docs/verification/search-worker-runtime.md` for exact source hashes, failed attempts, proof boundaries and reproduction. The helper executable, production search routing and hard regex containment remain outstanding.
 
 ## Current ownership and next actions
 
-Root owns actual child/GUI runs, layout diagnostics, public records and commits. No root GUI or child test is currently active. Serialize builds and reserve exclusive CPU/GUI ownership for performance measurements.
+Root exclusively owns actual child/GUI runs, public records and commits. The user's latest request is actual computer-use testing. Five visible XCUITests passed against packaged `f4d9207` under `.local/integrated-search-20260930/desktop/`, with0 failures/skips and no remaining editor instances. No GUI/test process is active. Agents are idle with source checkpoints; explicitly assign the next serial build slot before resuming. See `docs/verification/packaged-desktop-2026-09-30.md`.
 
-- `worker_engine_adapter` completed the pure `SearchWorkerProgram.swift` and matching tests; independent review pending. Frozen `.local/search-worker-program-task3/green-final` has72/0 (12 new+60 prior), behavioral RED12/35. Red/green dependencies are identical; later concurrent gate changes are deliberately excluded. No actual thread/FD/helper was executed.
-- `search_lifetime_timer` implements shared spawn-gate Task1 under the reviewed September30 spec/plan. It owns new PadCore gate/tests, ExternalCommand consumer and search launcher/injected tests. Build slot belongs to this worker. Require exact-lock contention and poison mutants, matching inventories and independent review before any actual peer test.
-- `worker_runtime_review` reconciles the already reviewed September10 parent-wire-driver plan against current source, then reviews Program. The existing driver plan must be reused; no competing second architecture.
+Fresh frozen integrated verification:650 tests/0 failures; package build and archive/SBOM verification passed. Inventory661 files in `.local/integrated-search-20260930/inputs.json`; full test and package owned-process receipts are retained alongside. The private package is in `source/dist/` below that directory; the tested package has now been promoted to root `dist/` and revalidated; the previous package is preserved privately.
 
-Exact next integration actions: review Program and shared-gate implementation, then add the separately reviewed actual unrelated-child EOF test. Do not expose public lifecycle construction before these gates. Program composition candidate follows accepted bootstrap/channel/lifetime interfaces. The parent synchronous-codec/asynchronous-channel driver needs a separately reviewed bounded rendezvous design before the allocation GateA matrix. No production accumulator or helper executable before that matrix qualifies.
+- `worker_engine_adapter` prepares private parent-wire Task1 candidates under `.local/search-parent-wire-task1/`; reviewer identified payload-release-before-ACK and duplicate producer-exit defects to resolve with regression tests. No live implementation adopted.
+- `search_lifetime_timer` prepares Task2 real unrelated-peer inheritance tests, new live test/peer files and pure harness RED fixture under `.local/search-spawn-gate-task2/`. Harness behavior changes and all execution wait for root's desktop interval to end.
+- `worker_runtime_review` completed source-only review; available for independent review without runtime ownership.
+
+Exact next action: resume the peer worker for pure harness RED, then reviewed harness changes and root-owned real unrelated-peer tests. Resume bounded bridge work under the existing reviewed September10 parent-wire plan. Program and gate components are accepted; helper executable, production routing, budget/RSS acceptance and regex containment are not.
 
 ## Accepted runtime evidence
 
@@ -49,13 +54,13 @@ The minimal native comparison is now executed in `.local/textkit-comparison-2026
 
 ## Package and desktop state
 
-Current bundle still source `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0`, ARM64/ad-hoc, with no DeveloperID signing, notarization or publication:
+Current locally tested bundle source `f4d9207dd78813853bd4e1f9312db9fa1d73a223`, ARM64/ad-hoc, with no DeveloperID signing, notarization or publication:
 
 - `dist/TheOnlyPad.app`
 - `dist/TheOnlyPad-0.1.0-dev-arm64.zip`
 - `dist/TheOnlyPad.sbom.json`
 
-Launch with `open dist/TheOnlyPad.app`. Executable SHA256 `8f5fe6c898b4c60ceff367fefc3ccdd2ad67ef3b89e1b0ce9ea414d5057613de`. Packaging evidence `.local/shortcut-modifier-integrated-evidence/`. Subsequent settings, focus, launcher and runtime changes are **not** in this package.
+Launch with `open dist/TheOnlyPad.app`. Executable SHA256 `5556069aad3d15fb0178137394587afa2c8b4188818414a52f2f99a6cabae3fb`. Packaging and five passing desktop workflows: `.local/integrated-search-20260930/`. Settings/focus and integrated source are current; the standalone worker components still are not production search routing.
 
 Ordinary XCUITest works. Packaged `.local/desktop-ui/shortcut-production-5aq_v27w/` passed customization/persistence/reset, open/edit/save/quit/relaunch/reopen and Option-held File/New. Private pane candidate passed both desktop orientations but does not establish current production remedy. Actual Locate still has an unresolved intermittent stale-context failure; preserve it rather than retrying to hide it.
 
