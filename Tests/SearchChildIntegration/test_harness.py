@@ -24,6 +24,8 @@ class HarnessTests(unittest.TestCase):
             'Sources/SearchExecution/Child.swift': 'import PadCore\n',
             'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift': 'import XCTest\n',
             'Tests/SearchChildIntegration/SearchChildChannelTests.swift': '// real channel test source\n',
+            'Tests/SearchChildIntegration/SearchChildLauncherTests.swift': '// launcher controls\n',
+            'Tests/SearchChildIntegration/FixtureMain.swift': '// benign fixture\n',
             'scripts/swift.sh': '#!/bin/sh\nexec swift "$@"\n',
             'scripts/run-owned-search-tests.py': '# accepted watchdog snapshot\n',
             'scripts/test-search-child-lifecycle.sh': '# entry\n',
@@ -45,6 +47,10 @@ class HarnessTests(unittest.TestCase):
         command = argv[argv.index('--') + 1:]
         text = ('Executed 32 tests, with 0 failures (0 unexpected)\n'
                 'Test run with 0 tests in 0 suites passed\n') if 'test' in command else 'compiled\n'
+        if '--show-bin-path' in command:
+            folder = output.parent / 'Build/arch/debug'; folder.mkdir(parents=True, exist_ok=True)
+            binary = folder / 'SearchChildFixture'; binary.write_bytes(b'actual fake compiled fixture'); binary.chmod(0o700)
+            text = str(folder) + '\n'
         (output / 'stdout.log').write_text(text)
         (output / 'stderr.log').write_bytes(b'')
         receipt = dict(command=command, pid=91, processGroup=91, exitObserved=True,
@@ -76,8 +82,9 @@ class HarnessTests(unittest.TestCase):
         package = (self.run / 'Package/Package.swift').read_text()
         self.assertIn('swiftLanguageModes: [.v5]', package)
         self.assertIn('SearchExecutionTests', package)
-        self.assertNotIn('executableTarget', package)
-        self.assertNotIn('Fixture', package)
+        self.assertIn('executableTarget(name: "SearchChildFixture")', package)
+        self.assertEqual((self.run / 'Package/Sources/SearchChildFixture/main.swift').read_bytes(),
+                         (self.root / 'Tests/SearchChildIntegration/FixtureMain.swift').read_bytes())
 
     def test_channel_test_is_frozen_into_existing_test_target(self):
         manifest = self.freeze()
@@ -88,6 +95,109 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual((self.run / item['frozen']).read_bytes(),
                          (self.root / item['source']).read_bytes())
         self.assertEqual(HARNESS.parse_args([]).filter, 'SearchChildLifecycleTests')
+
+
+    def test_fixture_metadata_and_binary_are_pinned_and_build_contained(self):
+        self.assertEqual(self.execute(), 0)
+        value = json.loads((self.run / 'fixture.json').read_text())
+        self.assertEqual(Path(value['executable']), self.run / 'Build/FrozenFixture/SearchChildFixture')
+        self.assertEqual(value['sourceManifestSHA256'], HARNESS.digest((self.run / 'sources.json').read_bytes()))
+        self.assertEqual(HARNESS.digest(Path(value['executable']).read_bytes()), value['sha256'])
+        self.assertEqual(HARNESS.digest(Path(value['builtExecutable']).read_bytes()), value['sha256'])
+        self.assertEqual(json.loads((self.run / 'status.json').read_text())['fixtureManifestSHA256'],
+                         HARNESS.digest((self.run / 'fixture.json').read_bytes()))
+
+    def test_missing_changed_extra_symlink_fixture_artifact_is_refused(self):
+        def change_bytes(path):
+            path.chmod(0o700); path.write_bytes(b'changed')
+        def replace_symlink(path):
+            path.unlink(); path.symlink_to(self.run / 'sources.json')
+        mutations = [
+            lambda run, value: Path(value['executable']).unlink(),
+            lambda run, value: change_bytes(Path(value['executable'])),
+            lambda run, value: change_bytes(Path(value['builtExecutable'])),
+            lambda run, value: replace_symlink(Path(value['executable'])),
+            lambda run, value: replace_symlink(run / 'fixture.json'),
+            lambda run, value: (Path(value['executable']).parent / 'extra').write_bytes(b'extra'),
+            lambda run, value: (run / 'fixture.json').write_text('{}'),
+            lambda run, value: (run / 'fixture.json').write_text(json.dumps(dict(value, extra=True))),
+        ]
+        for index, mutation in enumerate(mutations):
+            with self.subTest(index=index):
+                self.run = Path(self.temporary.name) / ('variant' + str(index)); self.run.mkdir()
+                changed = []
+                def change_after_test(argv):
+                    code = self.fake_watchdog(argv)
+                    if 'test' in argv:
+                        value = json.loads((self.run / 'fixture.json').read_text()); mutation(self.run, value)
+                        changed.append(True)
+                    return code
+                self.assertNotEqual(self.execute(watchdog=change_after_test), 0)
+                self.assertEqual(changed, [True], 'mutation must actually occur before admission rejects it')
+                self.assertEqual(json.loads((self.run / 'status.json').read_text())['failure'], 'ValueError')
+
+    def test_binpath_outside_build_missing_binary_and_symlink_are_refused_before_test(self):
+        for index, mode in enumerate(['outside', 'missing', 'symlink', 'multiple']):
+            with self.subTest(mode=mode):
+                self.run = Path(self.temporary.name) / ('pathvariant' + str(index)); self.run.mkdir()
+                self.calls.clear()
+                def invalid_binpath(argv):
+                    code = self.fake_watchdog(argv)
+                    if '--show-bin-path' in argv:
+                        output = Path(argv[argv.index('--output') + 1])
+                        folder = self.run / 'Build/arch/debug'; binary = folder / 'SearchChildFixture'
+                        if mode == 'outside':
+                            folder = self.run / 'Outside'; folder.mkdir(); (folder / binary.name).write_bytes(b'outside')
+                        elif mode == 'missing': binary.unlink()
+                        elif mode == 'symlink':
+                            binary.unlink(); binary.symlink_to(self.run / 'sources.json')
+                        text = str(folder) + ('\nextra' if mode == 'multiple' else '') + '\n'
+                        (output / 'stdout.log').write_text(text)
+                        receipt = json.loads((output / 'status.json').read_text())
+                        receipt['captured']['stdout'] = dict(received=len(text.encode()), stored=len(text.encode()), discarded=0)
+                        (output / 'status.json').write_text(json.dumps(receipt))
+                    return code
+                self.assertNotEqual(self.execute(watchdog=invalid_binpath), 0)
+                self.assertFalse(any('test' in call for call in self.calls))
+
+
+    def test_binpath_cli_zero_cannot_hide_command_mismatch_or_incomplete_receipt(self):
+        for index, mutation in enumerate([{'command': ['forged']}, {'captureComplete': False},
+                                           {'waitError': 1}, {'groupQuery': {}}, {'pid': True}]):
+            with self.subTest(mutation=mutation):
+                self.run = Path(self.temporary.name) / ('receiptvariant' + str(index)); self.run.mkdir()
+                self.calls.clear()
+                def invalid(argv):
+                    code = self.fake_watchdog(argv)
+                    if '--show-bin-path' in argv:
+                        path = Path(argv[argv.index('--output') + 1]) / 'status.json'
+                        value = json.loads(path.read_text()); value.update(mutation); path.write_text(json.dumps(value))
+                    return code
+                self.assertNotEqual(self.execute(watchdog=invalid), 0)
+                self.assertFalse(any('test' in call for call in self.calls))
+                self.assertFalse((self.run / 'fixture.json').exists())
+
+    def test_missing_metadata_or_extra_binary_refuses_before_test_dispatch(self):
+        original = HARNESS.freeze_fixture
+        for index, mode in enumerate(['metadata-missing', 'binary-extra', 'metadata-symlink']):
+            with self.subTest(mode=mode):
+                self.run = Path(self.temporary.name) / ('predispatch' + str(index)); self.run.mkdir()
+                self.calls.clear()
+                def change_after_capture(run, output, manifest_hash):
+                    pinned = original(run, output, manifest_hash)
+                    metadata = run / 'fixture.json'
+                    if mode == 'metadata-missing': metadata.unlink()
+                    elif mode == 'metadata-symlink':
+                        metadata.unlink(); metadata.symlink_to(run / 'sources.json')
+                    else: (run / 'Build/FrozenFixture/extra').write_bytes(b'extra')
+                    return pinned
+                HARNESS.freeze_fixture = change_after_capture
+                try:
+                    self.assertNotEqual(self.execute(), 0)
+                    self.assertEqual(len(self.calls), 3)
+                    self.assertFalse(any('test' in call for call in self.calls))
+                finally:
+                    HARNESS.freeze_fixture = original
 
     def test_rejects_symlink_source_and_intermediate_directory(self):
         path = self.root / 'Sources/PadCore/Core.swift'
@@ -113,15 +223,15 @@ class HarnessTests(unittest.TestCase):
 
     def test_build_only_invokes_direct_watchdog_without_test(self):
         self.assertEqual(self.execute(['--build-only']), 0)
-        self.assertEqual(len(self.calls), 2)
-        build = self.calls[-1]
+        self.assertEqual(len(self.calls), 3)
+        build = self.calls[-2]
         self.assertIn('--build-tests', build)
         self.assertNotIn('test', build)
         self.assertEqual(build[build.index('--') + 1], str(self.run / 'Runner/scripts/swift.sh'))
 
     def test_default_actual_test_filter_and_nonzero_count(self):
         self.assertEqual(self.execute(), 0)
-        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(len(self.calls), 4)
         self.assertEqual(self.calls[-1][-2:], ['--filter', 'SearchChildLifecycleTests'])
         self.assertIn('--skip-build', self.calls[-1])
         self.assertEqual(json.loads((self.run / 'status.json').read_text())['testsExecuted'], 32)

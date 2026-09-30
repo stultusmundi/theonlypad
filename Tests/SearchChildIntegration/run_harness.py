@@ -17,12 +17,15 @@ let package = Package(
   targets: [
     .target(name: "PadCore"),
     .target(name: "SearchExecution", dependencies: ["PadCore"]),
+    .executableTarget(name: "SearchChildFixture"),
     .testTarget(name: "SearchExecutionTests", dependencies: ["SearchExecution", "PadCore"]),
   ], swiftLanguageModes: [.v5])
 '''
 FIXED = (
     'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift',
     'Tests/SearchChildIntegration/SearchChildChannelTests.swift',
+    'Tests/SearchChildIntegration/SearchChildLauncherTests.swift',
+    'Tests/SearchChildIntegration/FixtureMain.swift',
     'scripts/swift.sh', 'scripts/run-owned-search-tests.py',
     'scripts/test-search-child-lifecycle.sh',
     'Tests/SearchChildIntegration/run_harness.py',
@@ -99,8 +102,11 @@ def freeze(root, run):
         relative = source.relative_to(root).as_posix()
         prefix = 'Package' if relative.startswith(('Sources/', 'Tests/SearchExecutionTests/')) else 'Runner'
         target = run / prefix / relative
-        if relative == 'Tests/SearchChildIntegration/SearchChildChannelTests.swift':
-            target = run / 'Package/Tests/SearchExecutionTests/SearchChildChannelTests.swift'
+        if relative in ('Tests/SearchChildIntegration/SearchChildChannelTests.swift',
+                        'Tests/SearchChildIntegration/SearchChildLauncherTests.swift'):
+            target = run / 'Package/Tests/SearchExecutionTests' / source.name
+        if relative == 'Tests/SearchChildIntegration/FixtureMain.swift':
+            target = run / 'Package/Sources/SearchChildFixture/main.swift'
         copy_source(source, target)
         items.append(dict(source=relative, frozen=target.relative_to(run).as_posix(),
                           sha256=digest(target.read_bytes())))
@@ -196,6 +202,67 @@ def receipt_success(output,command,expected_code=0):
         return True
     except (OSError,ValueError,TypeError,KeyError,AttributeError): return False
 
+
+def freeze_fixture(run, binpath_output, source_manifest_hash):
+    lines = (binpath_output / 'stdout.log').read_text().splitlines()
+    if len(lines) != 1 or not lines[0] or '\0' in lines[0]:
+        raise ValueError('invalid bin-path output')
+    directory = Path(lines[0])
+    if not directory.is_absolute() or '..' in directory.parts:
+        raise ValueError('noncanonical bin-path')
+    directory.relative_to(run / 'Build')
+    built = real_path(run, directory / 'SearchChildFixture')
+    if not built.is_file() or not os.access(built, os.X_OK):
+        raise ValueError('missing executable fixture')
+    data = read_source(built)
+    if not data:
+        raise ValueError('empty fixture binary')
+    frozen_directory = run / 'Build/FrozenFixture'
+    frozen_directory.mkdir(mode=0o700)
+    frozen = frozen_directory / 'SearchChildFixture'
+    frozen.write_bytes(data)
+    frozen.chmod(0o500)
+    value = dict(version=1, executable=str(frozen), builtExecutable=str(built),
+                 sha256=digest(data), sourceManifestSHA256=source_manifest_hash)
+    metadata = run / 'fixture.json'
+    metadata.write_text(json.dumps(value, indent=2) + '\n')
+    pinned = digest(metadata.read_bytes())
+    verify_fixture(run, pinned, source_manifest_hash)
+    return pinned
+
+
+def verify_fixture(run, pinned, source_manifest_hash):
+    metadata = real_path(run, run / 'fixture.json')
+    data = read_source(metadata)
+    if digest(data) != pinned:
+        raise ValueError('fixture metadata changed')
+    value = json.loads(data)
+    if not isinstance(value, dict) or set(value) != {
+            'version', 'executable', 'builtExecutable', 'sha256', 'sourceManifestSHA256'}:
+        raise ValueError('invalid fixture metadata fields')
+    if type(value['version']) is not int or value['version'] != 1:
+        raise ValueError('invalid fixture version')
+    if value['sourceManifestSHA256'] != source_manifest_hash:
+        raise ValueError('fixture source binding changed')
+    if type(value['sha256']) is not str or not re.fullmatch('[0-9a-f]{64}', value['sha256']):
+        raise ValueError('invalid fixture digest')
+    expected = run / 'Build/FrozenFixture/SearchChildFixture'
+    if value['executable'] != str(expected):
+        raise ValueError('unexpected frozen fixture path')
+    folder = real_path(run, expected.parent)
+    if set(folder.iterdir()) != {expected}:
+        raise ValueError('fixture binary inventory changed')
+    for key in ('executable', 'builtExecutable'):
+        if type(value[key]) is not str:
+            raise ValueError('invalid fixture path type')
+        path = Path(value[key])
+        if not path.is_absolute() or '..' in path.parts or path.name != 'SearchChildFixture':
+            raise ValueError('invalid fixture path')
+        path.relative_to(run / 'Build')
+        real_path(run, path)
+        if not path.is_file() or not os.access(path, os.X_OK) or digest(read_source(path)) != value['sha256']:
+            raise ValueError('fixture binary changed')
+
 def execute(run, options, watchdog_main):
     run = Path(run)
     manifest = json.loads((run / 'sources.json').read_text())
@@ -203,16 +270,20 @@ def execute(run, options, watchdog_main):
     common = ['--package-path', str(run / 'Package'), '--scratch-path', str(run / 'Build')]
     swift = str(run / 'Runner/scripts/swift.sh')
     stages = [('toolchain', 30, ['/usr/bin/xcrun', 'swift', '--version']),
-              ('build', 180, [swift, 'build', *common, '--build-tests'])]
+              ('build', 180, [swift, 'build', *common, '--build-tests']),
+              ('binpath', 30, [swift, 'build', *common, '--show-bin-path'])]
     if not options.build_only:
         stages.append(('test', 90, [swift, 'test', *common, '--skip-build', '--filter', options.filter]))
     result = dict(exit=125, stages=[], testsExecuted=None, testFailures=None,
-                  buildOnly=options.build_only, sourceManifestSHA256=manifest_hash)
+                  buildOnly=options.build_only, sourceManifestSHA256=manifest_hash,
+                  fixtureManifestSHA256=None)
     try:
         for stage, timeout, command in stages:
             verify_frozen(run, manifest)
             if digest((run / 'sources.json').read_bytes()) != manifest_hash:
                 raise ValueError('manifest changed')
+            if result['fixtureManifestSHA256'] is not None:
+                verify_fixture(run, result['fixtureManifestSHA256'], manifest_hash)
             output = run / stage
             # Same-process call: watchdog directly owns the stage leader/session.
             # Its installed signal handlers settle ownership before returning.
@@ -221,11 +292,15 @@ def execute(run, options, watchdog_main):
             verify_frozen(run, manifest)
             if digest((run / 'sources.json').read_bytes()) != manifest_hash:
                 raise ValueError('manifest changed')
+            if result['fixtureManifestSHA256'] is not None:
+                verify_fixture(run, result['fixtureManifestSHA256'], manifest_hash)
             if code != 0:
                 result['exit'] = code if type(code) is int and 0 < code < 256 else 125
                 return result['exit']
             if not receipt_success(output, command):
                 raise ValueError('stage receipt incomplete')
+            if stage == 'binpath':
+                result['fixtureManifestSHA256'] = freeze_fixture(run, output, manifest_hash)
             if stage == 'test':
                 text = (output / 'stdout.log').read_text(errors='replace') + (output / 'stderr.log').read_text(errors='replace')
                 counts = re.findall(r'Executed (\d+) tests?, with (\d+) failures', text)
