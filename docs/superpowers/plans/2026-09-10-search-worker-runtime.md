@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-supervised-search.md`; wire contract `docs/superpowers/plans/2026-09-10-search-wire-protocol.md`; lifecycle contract `docs/superpowers/plans/2026-09-10-search-child-lifecycle.md`; allocation gate `docs/superpowers/specs/2026-09-10-search-text-allocation.md`; packaging handoff `docs/superpowers/specs/2026-09-10-search-helper-packaging.md`.
 
-**Status:** Task1 injected loop/collector implemented and independently approved2026-09-30, with21/0 final tests and actual public-target build; see `docs/verification/search-worker-runtime.md`. Tasks2–6 and GateA remain outstanding. Historical reviewed-plan baseline follows: Independent drafting and root review resolved dependency ordering, error classification, test seams and bootstrap decisions. No runtime, executable, process evidence, allocator choice, RSS ceiling, deadline policy, packaging or production routing is implemented by this plan. Wire and lifecycle prerequisites remain outstanding.
+**Status:** Task1 injected loop/collector implemented and independently approved2026-09-30, with21/0 final tests and actual public-target build; see `docs/verification/search-worker-runtime.md`. Task2 exact engine adapter independently approved2026-09-30 with42/0 combined tests and compiling RED21/19. Tasks3–6 and GateA remain outstanding. Historical reviewed-plan baseline follows: Independent drafting and root review resolved dependency ordering, error classification, test seams and bootstrap decisions. No runtime, executable, process evidence, allocator choice, RSS ceiling, deadline policy, packaging or production routing is implemented by this plan. Wire and lifecycle prerequisites remain outstanding.
 
 ## Global constraints
 

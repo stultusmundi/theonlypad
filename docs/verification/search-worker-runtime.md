@@ -11,3 +11,16 @@ Final frozen source inventory has60 entries with exact source/test/runner member
 Private evidence: `.local/search-worker-runtime-task1/`, including `review-package.json`, `root-verification.json`, `review.md`, `red-expanded-run`, `final-run` and `public-build-run`. Production runtime SHA256: `95dbe5c8ca3000b9d8e64647cf1963f3c355889b487c7d9c7c3092a2c3415541`. The public build does not certify later concurrently added lifecycle files.
 
 This is a working injected runtime, not a shipped helper. The fixed SearchService adapter, fd/bootstrap/lifetime composition, bounded parent async bridge, full allocation selection matrix, production accumulator/executable, packaging and app routing remain separate requirements. No hard-regex, memory/RSS, GUI or performance acceptance is claimed.
+
+
+## Task2 exact engine adapter (2026-09-30)
+
+`FoundationSearchWorkerEngine` constructs `SearchService` with each request's three size/count limits and `TimeInterval(cooperativeMilliseconds) / 1_000`, preserving zero. It calls `execute` exactly once with the original query, scope and operation. No additional match/replacement pass, error translation or retained engine state is added. Hard cancellation remains the parent's responsibility.
+
+Behavioral RED used the real service with implicit defaults:21 tests produced19 failed assertions across five explicit-limit/deadline cases. Supplying all limits passed42 tests (21 new adapter plus21 unchanged runtime tests). Coverage includes Unicode/scalar scopes, transparent lookbehind, whole-word context, optional capture substitution, escaped NUL/newline, zero-length EOF, exact match/output bounds, malformed pattern/escape/template, and zero cooperative timeout. Invalid input-limit/surrogate-scope wire requests fail before any engine call. Nonzero milliseconds conversion is source-reviewed, not a timing benchmark.
+
+The actual adapter's replacement body completes while its accumulator owner remains alive; that owner is gone before the terminal header. A terminal-payload failure that throws `SearchError` remains an output failure and prevents another read/engine call. These are logical ownership observations, not proof of Foundation heap release or RSS bounds. Actual Foundation engineFailure is not artificially claimed; the prior injected runtime test retains that separate error-mapping coverage.
+
+Independent review approved the scope with no material findings. Root verified all62 frozen inputs against live source, the generated minimal manifest, positive RED/GREEN XCTest counts and strict owned-watchdog receipts. Scoped formatting, public-source and whitespace checks pass. Private evidence: `.local/search-worker-engine-task2/{red-final,red-run,green,green-run,review.md,root-verification.json}`. Adapter SHA256: `a83c11d0bc48cf73f09902775ea4ac5fe79dc77199cec7b6d1aeb2181d6a976d`; tests SHA256: `2cbc5f3e4e67b70600189daee26b1f80309c7954ab9c0f022f540a2a5e83bbb3`.
+
+The proven frozen command uses the accepted watchdog directly around `scripts/swift.sh test --package-path .local/search-worker-engine-task2/green --scratch-path .build/search-worker-engine-task2 --filter SearchWorker`. No helper was launched. Bootstrap/I/O/program composition, parent driver, allocation GateA, executable, packaging and native search routing remain outstanding.
