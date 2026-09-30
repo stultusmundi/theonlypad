@@ -1,6 +1,6 @@
 # Parent wire driver implementation plan
 
-> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; Task2 codec session is implemented and independently reviewed with21 behavior tests plus114 wire tests passing; Task3 driver implementation remains pending. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
+> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; Task2 codec session is implemented and independently reviewed with21 behavior tests plus114 wire tests passing; Task3 driver is under private implementation and review, with25 focused tests passing at the accepted ownership-fix checkpoint; broader cases and the checked-in instrumented runner remain outstanding. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
 
 **Goal:** Connect the synchronous search wire codecs to the asynchronous owned-child connection with bounded backpressure, preserve lifecycle first-outcome rules, and make a persistent generation reusable only after the prior codec, result, and read handoff are settled.
 
