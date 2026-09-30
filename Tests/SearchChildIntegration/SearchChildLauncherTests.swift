@@ -294,7 +294,8 @@ final class SearchChildLauncherStateTests: XCTestCase {
     h.fake.failAt = "nonblocking:11"
     h.fake.closeErrorFD = 10
     var launcher: SearchChildLauncher? = h.makeLauncher()
-    weak var released = launcher
+    weak var released: SearchChildLauncher?
+    released = launcher
     let first = await withCheckedContinuation { continuation in
       launcher!.launch(executable: h.url, generation: h.generation) {
         continuation.resume(returning: $0)
@@ -457,7 +458,13 @@ final class SearchChildLauncherStateTests: XCTestCase {
   }
 
   func testMalformedURLGenerationAndArgumentsRefusedBeforeFilesystem() async {
-    for url in [URL(string: "https://example.invalid/f")!, URL(string: "file:///x%00hidden")!] {
+    let base = URL(fileURLWithPath: "/synthetic-base/", isDirectory: true)
+    for url in [
+      URL(string: "https://example.invalid/f")!, URL(string: "file:///x%00hidden")!,
+      URL(string: "file:relative")!, URL(string: "relative", relativeTo: base)!,
+      URL(string: "file://remote.invalid/helper")!, URL(string: "file:///helper?override=x")!,
+      URL(string: "file:///helper#fragment")!,
+    ] {
       let h = LaunchHarness()
       assertFailure(await h.launch(url: url), .invalidExecutable)
       XCTAssertTrue(h.fake.log.isEmpty)
@@ -475,6 +482,14 @@ final class SearchChildLauncherStateTests: XCTestCase {
       assertFailure(await h.launch(), .launchFailed(EINVAL))
       XCTAssertTrue(h.fake.log.isEmpty)
     }
+  }
+
+  func testExplicitAbsoluteURLWithBaseRemainsAccepted() async throws {
+    let base = URL(fileURLWithPath: "/synthetic-base/", isDirectory: true)
+    let absolute = URL(string: "file:///synthetic-helper", relativeTo: base)!
+    let h = LaunchHarness()
+    _ = try await h.launch(url: absolute).get()
+    XCTAssertTrue(h.fake.log.contains("validate"))
   }
 
   func testFixedFixtureModePreservesMandatoryBootstrap() async throws {
@@ -994,4 +1009,98 @@ private final class LauncherFixtureTimer: SearchChildTimer, @unchecked Sendable 
   }
   func cancel() { source.cancel() }
   deinit { source.cancel() }
+}
+
+/// Real Darwin validation only: inert filesystem entries, no child or descriptor setup.
+final class SearchChildLauncherResolverTests: XCTestCase {
+  func testDefaultValidationPreservesMissingAndNonDirectoryErrno() async throws {
+    let root = try temporaryRoot()
+    await expectFailure(root.appendingPathComponent("missing").path, ENOENT)
+    let file = try inertFile(in: root)
+    await expectFailure(file.appendingPathComponent("child").path, ENOTDIR)
+  }
+
+  func testDefaultValidationAcceptsExactRegularExecutableWithoutExecutingIt() async throws {
+    let file = try inertFile(in: temporaryRoot())
+    try await validate(file.path)
+    XCTAssertEqual(try Data(contentsOf: file), Data("inert forwarding marker".utf8))
+  }
+
+  func testDefaultValidationRejectsDirectoryFIFOAndLinkedEntries() async throws {
+    let root = try temporaryRoot()
+    await expectFailure(root.path, EACCES)
+    let fifo = root.appendingPathComponent("fifo")
+    XCTAssertEqual(mkfifo(fifo.path, 0o700), 0)
+    await expectFailure(fifo.path, EACCES)
+    let file = try inertFile(in: root)
+    let link = root.appendingPathComponent("link")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+    await expectFailure(link.path, EACCES)
+    try FileManager.default.removeItem(at: file)
+    await expectFailure(link.path, EACCES)
+  }
+
+  func testDefaultValidationRejectsNoExecuteBit() async throws {
+    let file = try inertFile(in: temporaryRoot())
+    XCTAssertEqual(chmod(file.path, 0o600), 0)
+    await expectFailure(file.path, EACCES)
+  }
+
+  func testDefaultValidationRefusesRelativeAndNULBeforeURLConversion() async throws {
+    let file = try inertFile(in: temporaryRoot())
+    await expectFailure("relative-forwarding-" + UUID().uuidString, EINVAL)
+    await expectFailure("", EINVAL)
+    await expectFailure(file.path + "\0suffix", EINVAL)
+  }
+
+  func testDefaultLauncherPreservesMissingExecutableFailure() async throws {
+    let file = try temporaryRoot().appendingPathComponent("missing")
+    let launcher = SearchChildLauncher()
+    let result = await withCheckedContinuation { continuation in
+      launcher.launch(executable: file, generation: UUID()) { continuation.resume(returning: $0) }
+    }
+    switch result {
+    case .failure(let failure): XCTAssertEqual(failure, .launchFailed(ENOENT))
+    case .success: XCTFail("missing inert path must never produce a child")
+    }
+  }
+
+  private func validate(_ path: String) async throws {
+    let launcher = SearchChildLauncher()
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      launcher.coordinator.queue.async {
+        do {
+          try launcher.operations.validateExecutable(path)
+          continuation.resume()
+        } catch { continuation.resume(throwing: error) }
+      }
+    }
+  }
+
+  private func expectFailure(
+    _ path: String, _ code: Int32,
+    file: StaticString = #filePath, line: UInt = #line
+  ) async {
+    do {
+      try await validate(path)
+      XCTFail("expected validation refusal", file: file, line: line)
+    } catch {
+      XCTAssertEqual((error as? LaunchError)?.code, code, file: file, line: line)
+    }
+  }
+
+  private func temporaryRoot() throws -> URL {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "search-forwarding-" + UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    addTeardownBlock { try FileManager.default.removeItem(at: root) }
+    return root
+  }
+
+  private func inertFile(in root: URL) throws -> URL {
+    let file = root.appendingPathComponent("inert-worker")
+    try Data("inert forwarding marker".utf8).write(to: file)
+    XCTAssertEqual(chmod(file.path, 0o700), 0)
+    return file
+  }
 }

@@ -135,10 +135,16 @@ private final class LaunchUnconfirmedConnection: SearchChildConnection, @uncheck
 
 private struct DarwinLaunchOperations: LaunchOperations {
   func validateExecutable(_ path: String) throws {
-    var info = stat()
-    guard lstat(path, &info) == 0 else { throw LaunchError(code: errno) }
-    guard info.st_mode & S_IFMT == S_IFREG else { throw LaunchError(code: EACCES) }
-    guard access(path, X_OK) == 0 else { throw LaunchError(code: errno) }
+    // URL(fileURLWithPath:) normalizes relative strings; it is not input validation.
+    guard path.hasPrefix("/"), !path.utf8.contains(0) else { throw LaunchError(code: EINVAL) }
+    do {
+      _ = try SearchWorkerBundleResolver.validateForLaunch(
+        URL(fileURLWithPath: path, isDirectory: false))
+    } catch SearchWorkerBundleResolverError.filesystem(let code) {
+      throw LaunchError(code: code)
+    } catch {
+      throw LaunchError(code: EINVAL)
+    }
   }
   func reaperPolicy() throws -> LaunchReaperPolicy {
     var action = sigaction()
@@ -340,7 +346,8 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
   > {
     if let quarantine = coordinator.quarantine { return .failure(.launchFailed(quarantine.error)) }
     guard executable.isFileURL,
-      let components = URLComponents(url: executable, resolvingAgainstBaseURL: true),
+      let components = URLComponents(url: executable, resolvingAgainstBaseURL: false),
+      components.scheme?.lowercased() == "file",
       components.host == nil || components.host == "" || components.host == "localhost",
       components.query == nil, components.fragment == nil,
       let path = components.percentEncodedPath.removingPercentEncoding,

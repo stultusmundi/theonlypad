@@ -405,7 +405,8 @@ final class SearchChildChannelStateTests: XCTestCase {
   func testFacadeLossRetainsCloseAndStaleHandlersCannotUseConsumedFD() async {
     let h = ChannelHarness()
     var c: SearchChildChannels? = h.make()
-    weak var weakFacade = c
+    weak var weakFacade: SearchChildChannels?
+    weakFacade = c
     await h.barrier()
     c = nil
     XCTAssertNil(weakFacade)

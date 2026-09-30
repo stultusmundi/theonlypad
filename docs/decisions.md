@@ -23,3 +23,7 @@
 The actual controller's shaping-paragraph delay was localized to scroll-view host presentation. A separate reviewed hidden native comparison used matched content, typography and geometry for TextKit1 and TextKit2. Both had second-scale65,536-unit work; TextKit2's262,144-unit initial layout and insertion remained roughly27 seconds each. TextKit1 exceeded the60-second diagnostic allowance during undo. See `verification/pane-origin-layout-cost.md` for exact scope, retained failures and source hashes.
 
 A direct TextKit2 switch is therefore not adopted as a proven fix. The current native implementation remains provisional; the performance requirement is still outstanding. No wrap default, input-size contract or target was silently reduced. Further engine/paragraph controls must preserve Unicode editing, shared undo, recovery, selection and accessibility before any architectural change.
+
+## 2026-09-30 — Search allocation evidence and uncertainty
+
+Compare helper and parent sink algorithms independently against a fixed counterpart, then validate the selected pair across the complete cold/warm matrix. Record exact explicit capacities and known simultaneous representations; disclose opaque Swift spare capacity and transient allocations. Sampled RSS informs suitability and never becomes an exact reservation credit or hard memory guarantee. This reviewed clarification permits the first bounded two-process experiment without claiming unknowable framework internals. No sink, budget or production routing is selected; see the search-text-allocation specification.

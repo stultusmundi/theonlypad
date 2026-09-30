@@ -1,6 +1,6 @@
 # Search helper packaging implementation plan
 
-> Status: the fixed resolver component is implemented and independently reviewed; focused64/0 and integrated738/0 pass. A private Python validator/SBOM/CLI subset passes32/0 but is not adopted. Default launcher forwarding, actual helper assembly and relocated protocol smoke remain outstanding. The current app-only package remains usable; it does not contain the planned helper. See [resolver evidence](../../verification/search-worker-resolver.md).
+> Status: the fixed resolver component is implemented and independently reviewed; focused64/0 and integrated738/0 pass. A private Python validator/SBOM/CLI subset passes32/0 but is not adopted. Default launcher forwarding now passes a combined83/0 selection including two actual child tests. Actual helper assembly and relocated protocol smoke remain outstanding. The current app-only package remains usable; it does not contain the planned helper. See [resolver evidence](../../verification/search-worker-resolver.md).
 
 **Goal:** Package the reviewed `PadSearchWorker` at its fixed bundle path, validate the app/helper/SBOM/archive through one shared side-effect-free validator before promotion, and prove the relocated packaged helper can complete the real wire protocol under the owned lifecycle watchdog.
 
