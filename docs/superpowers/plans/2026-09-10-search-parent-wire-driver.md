@@ -1,6 +1,6 @@
 # Parent wire driver implementation plan
 
-> Status: independently reviewed planned work; no driver implementation is dispatched. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, launch a helper during drafting, or establish process/RSS acceptance.
+> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; codec-session and driver implementation remain pending. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
 
 **Goal:** Connect the synchronous search wire codecs to the asynchronous owned-child connection with bounded backpressure, preserve lifecycle first-outcome rules, and make a persistent generation reusable only after the prior codec, result, and read handoff are settled.
 
@@ -140,6 +140,10 @@ The driver also owns one retained coordinator task for the operation and at most
 
 `SearchParentCodecLane` owns one dedicated `Thread` (or another reviewed blocking-capable OS-thread primitive), one condition, and one nonqueueing job cell. It is outside MainActor, the lifecycle control queue, the connection I/O queue, and Swift cooperative tasks needed by async connection methods. It accepts a job only while both the cell and active-job flag are empty; there is never an active plus queued source-bearing job.
 
+The implemented lane exposes synchronous nonblocking `submit(token, body)`, returning a one-shot `SearchParentCodecWork` whose async `value()` observes completion. The receipt retains only result/waiter state, never the source-bearing body; the thread-owned job retains the receipt one-way. The thread releases its job/body and drains that scope before clearing busy or publishing completion. Generic results are intentional ownership transfers; mutable codec/index instances must remain lane-confined through the later session API.
+
+One internal value observer is allowed. An overlapping observer is rejected; result/error transfers once and later calls are stale. Cancellation of this internal coordinator observer leaves it attached until completion and does not cancel work. Dropping the caller's receipt cannot orphan admitted work. The driver's detachable public observer remains separate. `loopStopped` acknowledges the final loop branch after work release, not a physical pthread join.
+
 All instances of `SearchWireResponseReader`, handshake/request writers while executing, boundary indexes, and response accumulators are created or used only on this lane. Every lane operation has a generation/session epoch and operation token. Calls into mutable codecs never overlap and never reenter from callbacks. The lane's completion is transferred through one continuation after the job and every callback return. No condition/driver lock spans `await connection.write`, `read`, lifecycle entry, or result observer delivery.
 
 The retained thread can run short hello encode/parse jobs, one request writer job, `ResponseReader.expect`, and one response consume job at a time. During a writer's blocked emit the lane cannot parse responses; the read owner therefore keeps at most one completed read behind the expect gate. After cancellation, no later job is accepted until the current writer/consume closure actually returns. The thread is not force-cancelled.
@@ -161,7 +165,11 @@ The synchronous `emit` validates `1...65_536` bytes, deposits only into an empty
 
 The async consumer takes one offered item, marks it in flight, releases the lock, awaits exactly one write, and then resolves that token under the lock. A matching success changes the slot to acknowledged/empty and wakes the producer exactly once. A write error stores the first bridge error, closes the bridge, wakes both sides exactly once, and is reported to lifecycle. No second write begins until resolution, so the connection's allowed queued-write position is never populated by this driver.
 
+Token delivery carries metadata only; the consumer then claims a payload lease. The write helper releases its Data before publishing lease release. Resolution detaches the bridge slot into a payload-owning helper while retaining metadata-only retirement state, releases payload outside the condition, and returns before publishing the exact acknowledgement. A concurrent close preserves another active retirement until its helper returns. Bridge failures retain only bounded typed bridge/child/wire reasons; unknown producer/write errors normalize to compact failures.
+
 Close is idempotent and preserves the first linearized bridge error. Close before deposit makes the next emit fail. Close while a write is in flight wakes the producer immediately; a later success/error for that token is ignored after dropping its references. Generation, bridge epoch, and sequence must all match, so a late acknowledgement cannot release a later emission in the same generation. Producer exit records its result, closes an otherwise clean stream after the final acknowledgement, wakes a waiting consumer, and is a separate settlement latch from merely waking the producer. Consumer exit is a second independent latch: closing/emptying the bridge or observing producer exit never establishes that the async write scope has returned. A late write result cannot acknowledge a new token, but it must still settle the old consumer and release its exact old Data ownership. Keep that consumer retained until it exits; no task cancellation, lifecycle decision, channel-close request or child reap substitutes for this receipt.
+
+The owner records producer exit only after `Work.value()` confirms the source-bearing job/body and callbacks returned, never at the tail of a still-running lane body. Repeated producer-exit notifications cannot rewrite the first completion. An active emit independently prevents settlement.
 
 If execute bytes partially escape and the complete write then throws, `SearchWireWriter.request` returns no boundary index, no later sink call is permitted, `expect` is never called, and the generation is retired. No rollback is claimed. A cancellation while the writer is constructing its next bounded UTF-16 chunk closes the bridge, but the source/index/producer credits remain until construction reaches emit/failure and the writer closure exits.
 
@@ -273,6 +281,8 @@ Bridge/source credit is released only after both producer exit and upload-consum
 ## Task 1 — Blocking lane and acknowledged upload bridge
 
 **Files:** create `SearchParentWireBridge.swift` and `SearchParentWireBridgeTests.swift`. Add only bridge/lane declarations used by this implementation and its tests.
+
+**Implemented/tested:** the two component files are independently reviewed. A frozen minimal package containing actual production sources passed 20 tests; early-deposit acknowledgement and missing-consumer-exit mutants each failed one explicit assertion, and a missing-token-fence mutant failed its explicit assertion plus cleanup cancellation. The repeated-producer-exit regression failed before its fix. Held producer/consumer and deallocator-reentry tests establish logical ownership and settlement predicates only. Lifecycle/driver publication, discard, admission and shutdown enforcement remain Task 3; actual capacities remain Gate A. The public-manifest command below remains an integration check until separately run.
 
 - [ ] First behavioral red: a fake producer emits A and then attempts B while the async writer holds A. Assert B is never deposited and producer remains blocked until the entire A write gate succeeds. Deposit acknowledgement must fail this test.
 - [ ] Implement the retained one-job codec thread and fresh bridge state machine. No task per chunk, no second job cell, no lock across await, and no executor needed by the consumer may be blocked.
