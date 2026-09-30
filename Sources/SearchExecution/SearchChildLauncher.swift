@@ -1,6 +1,7 @@
 import Darwin
 import Dispatch
 import Foundation
+import PadCore
 
 struct LaunchError: Error { let code: Int32 }
 enum LaunchFlag: Equatable { case closeOnExec, nonblocking, noSigPipe }
@@ -40,7 +41,12 @@ private final class LaunchDescriptor {
   }
   let fd: Int32
   private var state = State.owned
-  init(_ fd: Int32) { self.fd = fd }
+  private(set) var closeOnExecConfirmed: Bool
+  init(_ fd: Int32, protected: Bool = false) {
+    self.fd = fd
+    closeOnExecConfirmed = protected
+  }
+  func confirmCloseOnExec() { closeOnExecConfirmed = true }
   var isOwned: Bool {
     if case .owned = state { return true }
     return false
@@ -252,8 +258,10 @@ protocol LaunchOperations: Sendable {
   func validateExecutable(_ path: String) throws
   func reaperPolicy() throws -> LaunchReaperPolicy
   func pipe() throws -> (Int32, Int32)
+  /// Successful creation is atomically close-on-exec.
   func openNull() throws -> Int32
   func setAndVerify(_ flag: LaunchFlag, fd: Int32) throws
+  /// Successful duplication is atomically close-on-exec.
   func duplicateAboveStdio(_ fd: Int32) throws -> Int32
   func close(_ fd: Int32) -> Int32
   func makeSpawn() -> any LaunchSpawnOperations
@@ -264,6 +272,8 @@ protocol LaunchOperations: Sendable {
 final class SearchLaunchCoordinator: @unchecked Sendable {
   static let process = SearchLaunchCoordinator()
   let queue = DispatchQueue(label: "TheOnlyPad.search.spawn")
+  let spawnGate: ProcessSpawnGate
+  init(spawnGate: ProcessSpawnGate = .process) { self.spawnGate = spawnGate }
   // Queue confined, deliberately retained for the process lifetime after uncertainty.
   fileprivate var quarantine: LaunchQuarantine?
 }
@@ -350,27 +360,47 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
       if attributesReady { spawn?.destroyAttributes() }
       if actionsReady { spawn?.destroyActions() }
     }
-    func own(_ fd: Int32) -> LaunchDescriptor {
-      let cell = LaunchDescriptor(fd)
+    func own(_ fd: Int32, protected: Bool = false) -> LaunchDescriptor {
+      let cell = LaunchDescriptor(fd, protected: protected)
       cells.append(cell)
       return cell
     }
     func normalize(_ cell: LaunchDescriptor, protected: Bool = false) throws -> LaunchDescriptor {
-      if !protected { try operations.setAndVerify(.closeOnExec, fd: cell.fd) }
+      if !protected {
+        try operations.setAndVerify(.closeOnExec, fd: cell.fd)
+        cell.confirmCloseOnExec()
+      }
       guard cell.fd <= 3 else { return cell }
-      let duplicate = own(try operations.duplicateAboveStdio(cell.fd))
+      let duplicate = own(try operations.duplicateAboveStdio(cell.fd), protected: true)
       let closeError = cell.close(using: operations)
       guard closeError == 0 else { throw LaunchError(code: closeError) }
       try operations.setAndVerify(.closeOnExec, fd: duplicate.fd)
       return duplicate
     }
     func pipe() throws -> (LaunchDescriptor, LaunchDescriptor) {
-      let pair = try operations.pipe()
-      // Adopt BOTH results before any fallible flag or normalization operation.
-      let read = own(pair.0)
-      let write = own(pair.1)
-      try operations.setAndVerify(.closeOnExec, fd: read.fd)
-      try operations.setAndVerify(.closeOnExec, fd: write.fd)
+      let (read, write) = try coordinator.spawnGate.withCriticalRegion { permit in
+        let pair = try operations.pipe()
+        // Adopt BOTH results before any fallible flag or normalization operation.
+        let read = own(pair.0)
+        let write = own(pair.1)
+        do {
+          try operations.setAndVerify(.closeOnExec, fd: read.fd)
+          read.confirmCloseOnExec()
+          try operations.setAndVerify(.closeOnExec, fd: write.fd)
+          write.confirmCloseOnExec()
+          return (read, write)
+        } catch {
+          // Settle unprotected ownership BEFORE releasing shared admission.
+          // Outer cleanup retains uncertainty but cannot retry these integers.
+          for cell in [read, write] {
+            let closeError = cell.close(using: operations)
+            if closeError != 0 && !cell.closeOnExecConfirmed {
+              permit.quarantine(closeError)
+            }
+          }
+          throw error
+        }
+      }
       return (try normalize(read, protected: true), try normalize(write, protected: true))
     }
     func cleanup(primaryError: Int32? = nil) -> LaunchQuarantine? {
@@ -387,7 +417,7 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
       let request = try pipe()
       let response = try pipe()
       let lifetime = try pipe()
-      let null = try normalize(own(try operations.openNull()))
+      let null = try normalize(own(try operations.openNull(), protected: true))
       try operations.setAndVerify(.nonblocking, fd: request.1.fd)
       try operations.setAndVerify(.nonblocking, fd: response.0.fd)
       try operations.setAndVerify(.noSigPipe, fd: request.1.fd)
@@ -404,9 +434,11 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
       for attribute in [LaunchAttribute.flags, .emptyMask, .defaultSignals] {
         try setup.configure(attribute)
       }
-      let result = setup.spawn(
-        path: path, arguments: [path, "--generation", generation.uuidString] + arguments,
-        environment: ["LANG=C", "LC_ALL=C"])
+      let result = try coordinator.spawnGate.withCriticalRegion { _ in
+        setup.spawn(
+          path: path, arguments: [path, "--generation", generation.uuidString] + arguments,
+          environment: ["LANG=C", "LC_ALL=C"])
+      }
       guard result.code == 0 else { throw LaunchError(code: result.code) }
       // A zero spawn return is irrevocable child ownership, even for immediate exit.
       let connection = adopt(request.1.transfer(), response.0.transfer(), lifetime.1.transfer())
@@ -421,7 +453,12 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
       }
       return .success(.init(pid: result.pid, connection: connection))
     } catch {
-      let code = (error as? LaunchError)?.code ?? EIO
+      let code: Int32
+      if case ProcessSpawnGateError.quarantined(let unsafeError) = error {
+        code = unsafeError
+      } else {
+        code = (error as? LaunchError)?.code ?? EIO
+      }
       _ = cleanup(primaryError: code)
       return .failure(.launchFailed(code))
     }

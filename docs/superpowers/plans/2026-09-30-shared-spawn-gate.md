@@ -22,7 +22,7 @@
 
 **Files:** create `Sources/PadCore/ProcessSpawnGate.swift`, `Tests/PadCoreTests/ProcessSpawnGateTests.swift`; modify `Sources/PadCore/ExternalCommand.swift`, `Sources/SearchExecution/SearchChildLauncher.swift`, and `Tests/SearchChildIntegration/SearchChildLauncherTests.swift`; add external-runner admission tests in its existing test target. Keep existing package targets unchanged.
 
-**Interfaces:** package `ProcessSpawnGate.process`, fresh `init()`, `withCriticalRegion<T>((inout ProcessSpawnPermit) throws -> T) throws -> T`, `run(Process) throws`. Permit exposes only `quarantine(Int32)`; initialization/state remain fileprivate. `ProcessSpawnGateError.quarantined(Int32)` preserves first unsafe error. External command maps shared refusal to actionable `spawnSafetyUnavailable`; search maps it to `.launchFailed(error)`.
+**Interfaces:** package `ProcessSpawnGate.process`, fresh `init()`, `withCriticalRegion<T>((inout ProcessSpawnPermit) throws -> T) throws -> T`, `run(Process, unlessCancelled: () -> Bool = { false }) throws -> Bool`. Permit exposes only `quarantine(Int32)`; initialization/state remain fileprivate. `ProcessSpawnGateError.quarantined(Int32)` preserves first unsafe error. External command maps shared refusal to actionable `spawnSafetyUnavailable`; search maps it to `.launchFailed(error)`.
 
 - [ ] Write compiling behavioral gate tests before implementation. A region setting poison then throwing must prevent a following region from setting an admission flag. A healthy throw must release the lock and permit a following region.
 
@@ -37,7 +37,7 @@ XCTAssertThrowsError(try gate.withCriticalRegion { _ in admitted = true })
 XCTAssertFalse(admitted)
 ```
 
-- [ ] Implement lock admission and defer ordering. Acquire lock, reject existing poison before body, create permit, then defer copies first poison before unlock on every exit. `run(Process)` invokes only `Process.run()` in the admitted region.
+- [ ] Implement lock admission and defer ordering. Acquire lock, reject existing poison before body, create permit, then defer copies first poison before unlock on every exit. `run(Process, unlessCancelled:)` checks the bounded private cancellation query in the admitted region and returns false without spawning if cancelled; otherwise calls `Process.run()` and returns true.
 - [ ] Inject one gate into the search coordinator and external runner; default both to `.process`. External used/cancelled lock must be released before shared admission. Keep Process output/cancel/wait behavior after shared admission. Add a narrow internal launch seam only if deterministic consumer tests need it; real default must call the reviewed Process adapter.
 - [ ] Add `closeOnExecConfirmed` to each search descriptor cell. Each raw pipe transaction acquires the gate before allocation, adopts both results, verifies each flag and records its fact. On any failure, consume close authority for both new cells inside the gate, then poison if any unprotected cell has uncertain closure. Preserve the outer search quarantine and diagnostic origin; later cleanup cannot retry consumed cells.
 - [ ] Leave low-FD normalization outside the gate once both originals are protected; O_CLOEXEC/F_DUPFD_CLOEXEC results are protected by construction. Only verified-protected uncertainty must retain search quarantine without blocking Foundation launches.
@@ -83,3 +83,14 @@ An outside-gate “attempt submitted” signal alone does not prove the competin
 Use a narrow optional test-only contention observer on a fresh package gate: production's default nil takes the normal `NSLock.lock()` path; an observed test path first tries the same lock with `try()`, calls the observer only after a failed try, then blocks on that same lock. A successful try already owns the lock and must not acquire twice. The observer only records/signals and must not reenter, wait or mutate gate ownership. It is not part of the public app API. The held owner releases only after the fixture distinguishes confirmed contention from early body entry; gate-removal mutation produces an explicit wrong-event assertion. A missing poison-commit mutation still produces a direct incorrect-admission assertion.
 
 Real overlapping-child fixtures use this observation too; outside submission signals remain bookkeeping, never exclusion evidence. No timing sleep becomes an ordering oracle. Preserve default-nil production behavior and test both healthy/poisoned unlock paths.
+
+
+### Additional Task1 cancellation regression
+
+- [ ] Hold the shared gate, start ExternalCommandRunner, wait for its exact lock-contention observation, cancel it and release. Assert no fake Process.run call and the existing cancelled result with no PID or output. Capture behavioral RED for the missing query.
+- [ ] Add the bounded internal cancellation query to the exact shared Process adapter; no public closure or state lock held through Process.run. Root reviewed lock ordering and the non-atomic post-query cancellation boundary in the spec. Rerun the complete core admission controls and preserve the original shared-poison priority.
+
+
+## Task1 accepted component checkpoint
+
+Implemented and independently reviewed2026-09-30. Core11/0, launcher/lifecycle/timer68/0, explicit lock/poison mutants and cancellation RED verified. Root actual external regressions6/0 and existing real launcher/lifetime3/0 also pass on matching frozen sources. See `docs/verification/shared-spawn-gate.md` for precise inputs and limitations. Task2 controlled real unrelated-peer overlap remains outstanding; no full search/helper claim.

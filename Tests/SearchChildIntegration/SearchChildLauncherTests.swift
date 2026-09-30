@@ -2,11 +2,197 @@ import CryptoKit
 import Darwin
 import Dispatch
 import Foundation
+import PadCore
 import XCTest
 
 @testable import SearchExecution
 
 final class SearchChildLauncherStateTests: XCTestCase {
+  func testPipeProtectionExcludesFoundationAdmissionUntilBothEndsAreProtected() async throws {
+    let events = SpawnGateEvents()
+    let gate = ProcessSpawnGate(onContention: { events.record("contended") })
+    let h = LaunchHarness(spawnGate: gate)
+    let entered = expectation(description: "raw pipe returned")
+    let release = DispatchSemaphore(value: 0)
+    let protected = LaunchLocked<Set<Int32>>([])
+    h.fake.onFlag = { flag, fd in
+      if flag == .closeOnExec { protected.withValue { _ = $0.insert(fd) } }
+    }
+    h.fake.onPipe = { read, _ in
+      if read == 10 {
+        entered.fulfill()
+        XCTAssertEqual(release.wait(timeout: .now() + 3), .success)
+      }
+    }
+    defer { release.signal() }
+    let child = Task { await h.launch() }
+    await fulfillment(of: [entered], timeout: 2)
+    let completed = expectation(description: "Foundation admission settled")
+    DispatchQueue.global().async {
+      defer { completed.fulfill() }
+      do {
+        try gate.withCriticalRegion { _ in
+          events.record("entered")
+          XCTAssertTrue(protected.withValue { $0.isSuperset(of: [10, 11]) })
+        }
+      } catch { XCTFail("Unexpected admission failure: \(error)") }
+    }
+    XCTAssertEqual(events.next(), "contended")
+    release.signal()
+    _ = try await child.value.get()
+    await fulfillment(of: [completed], timeout: 2)
+  }
+
+  func testActiveFoundationAdmissionExcludesRawPipeCreation() async throws {
+    let events = SpawnGateEvents()
+    let gate = ProcessSpawnGate(onContention: { events.record("contended") })
+    let h = LaunchHarness(spawnGate: gate)
+    h.fake.onPipe = { read, _ in if read == 10 { events.record("pipe") } }
+    let held = expectation(description: "Foundation region held")
+    let finished = expectation(description: "Foundation region released")
+    let release = DispatchSemaphore(value: 0)
+    defer { release.signal() }
+    DispatchQueue.global().async {
+      defer { finished.fulfill() }
+      do {
+        try gate.withCriticalRegion { _ in
+          held.fulfill()
+          XCTAssertEqual(release.wait(timeout: .now() + 3), .success)
+        }
+      } catch { XCTFail("Unexpected admission failure: \(error)") }
+    }
+    await fulfillment(of: [held], timeout: 2)
+    let child = Task { await h.launch() }
+    XCTAssertEqual(events.next(), "contended")
+    release.signal()
+    _ = try await child.value.get()
+    await fulfillment(of: [finished], timeout: 2)
+    XCTAssertEqual(events.next(), "pipe")
+  }
+
+  func testUnprotectedUncertainClosePoisonsQueuedFoundationBeforeUnlock() async {
+    let events = SpawnGateEvents()
+    let gate = ProcessSpawnGate(onContention: { events.record("contended") })
+    let h = LaunchHarness(spawnGate: gate)
+    h.fake.failAt = "closeOnExec:10"
+    h.fake.closeErrorFD = 11
+    h.fake.closeErrorCode = EBADF
+    let held = expectation(description: "unsafe pipe held")
+    let release = DispatchSemaphore(value: 0)
+    h.fake.onPipe = { _, _ in
+      held.fulfill()
+      XCTAssertEqual(release.wait(timeout: .now() + 3), .success)
+    }
+    defer { release.signal() }
+    let child = Task { await h.launch() }
+    await fulfillment(of: [held], timeout: 2)
+    let finished = expectation(description: "queued Foundation refusal")
+    DispatchQueue.global().async {
+      defer { finished.fulfill() }
+      do { try gate.withCriticalRegion { _ in events.record("entered") } } catch {
+        XCTAssertEqual(error as? ProcessSpawnGateError, .quarantined(EBADF))
+        events.record("refused")
+      }
+    }
+    XCTAssertEqual(events.next(), "contended")
+    release.signal()
+    assertFailure(await child.value, .launchFailed(EIO))
+    await fulfillment(of: [finished], timeout: 2)
+    XCTAssertEqual(events.next(), "refused")
+  }
+
+  func testFlagFailureAndUncertainCloseMatrixPreservesSafetyAndFirstError() async throws {
+    for failedFD: Int32 in [10, 11] {
+      for stage in ["get", "set", "verify"] {
+        for closeFD: Int32 in [10, 11] {
+          for closeError in [EINTR, EBADF, EIO] {
+            let gate = ProcessSpawnGate()
+            let h = LaunchHarness(spawnGate: gate)
+            h.fake.flagFailure = (failedFD, stage)
+            h.fake.closeErrorFD = closeFD
+            h.fake.closeErrorCode = closeError
+            assertFailure(await h.launch(), .launchFailed(EACCES))
+            XCTAssertEqual(h.fake.created, [10, 11])
+            XCTAssertEqual(h.fake.closed, [10, 11])
+            XCTAssertFalse(h.fake.log.contains("spawn"))
+            let unsafe = failedFD == 10 || closeFD == 11
+            if unsafe {
+              XCTAssertThrowsError(try gate.withCriticalRegion { _ in XCTFail("unsafe admission") })
+              {
+                XCTAssertEqual($0 as? ProcessSpawnGateError, .quarantined(closeError))
+              }
+              let replacement = LaunchHarness(spawnGate: gate)
+              assertFailure(await replacement.launch(), .launchFailed(closeError))
+              XCTAssertTrue(replacement.fake.created.isEmpty)
+            } else {
+              XCTAssertEqual(try gate.withCriticalRegion { _ in 17 }, 17)
+            }
+            // The original search owner stays quarantined for either uncertainty.
+            let calls = h.fake.log.count
+            assertFailure(await h.launch(), .launchFailed(closeError))
+            XCTAssertEqual(h.fake.log.count, calls)
+          }
+        }
+      }
+    }
+  }
+
+  func testFlagFailureWithConfirmedClosesAllowsNextFoundationAndSearch() async throws {
+    for fd: Int32 in [10, 11] {
+      let gate = ProcessSpawnGate()
+      let h = LaunchHarness(spawnGate: gate)
+      h.fake.failAt = "closeOnExec:\(fd)"
+      assertFailure(await h.launch(), .launchFailed(EIO))
+      XCTAssertEqual(h.fake.closed, [10, 11])
+      XCTAssertEqual(try gate.withCriticalRegion { _ in 17 }, 17)
+      _ = try await LaunchHarness(spawnGate: gate).launch().get()
+    }
+  }
+
+  func testProtectedNormalizationAndAncillaryUncertaintyDoNotPoisonFoundation() async throws {
+    for lowFD in [false, true] {
+      let gate = ProcessSpawnGate()
+      let h = LaunchHarness(spawnGate: gate)
+      h.fake.nextFD = lowFD ? 0 : 10
+      h.fake.closeErrorFD = lowFD ? 0 : 10
+      if lowFD {
+        assertFailure(await h.launch(), .launchFailed(EBADF))
+      } else {
+        let child = try await h.launch().get()
+        XCTAssertEqual(child.startupFailure, .launchFailed(EBADF))
+      }
+      XCTAssertEqual(try gate.withCriticalRegion { _ in 17 }, 17)
+      let calls = h.fake.log.count
+      assertFailure(await h.launch(), .launchFailed(EBADF))
+      XCTAssertEqual(h.fake.log.count, calls)
+    }
+  }
+
+  func testPoisonBetweenSetupAndSpawnRefusesChildAndClosesProtectedDescriptors() async throws {
+    let gate = ProcessSpawnGate()
+    let h = LaunchHarness(spawnGate: gate)
+    h.fake.onConfigure = { attribute in
+      if attribute == .defaultSignals {
+        try gate.withCriticalRegion { $0.quarantine(ENFILE) }
+      }
+    }
+    assertFailure(await h.launch(), .launchFailed(ENFILE))
+    XCTAssertFalse(h.fake.log.contains("spawn"))
+    XCTAssertTrue(h.fake.adopted.isEmpty)
+    XCTAssertEqual(h.fake.closed.sorted(), h.fake.created.sorted())
+  }
+
+  func testPoisonBeforeAllocationRefusesFreshSearchFacade() async throws {
+    let gate = ProcessSpawnGate()
+    try gate.withCriticalRegion { $0.quarantine(ENFILE) }
+    for _ in 0..<2 {
+      let h = LaunchHarness(spawnGate: gate)
+      assertFailure(await h.launch(), .launchFailed(ENFILE))
+      XCTAssertTrue(h.fake.created.isEmpty)
+      XCTAssertFalse(h.fake.log.contains("spawn"))
+    }
+  }
+
   func testHealthyTransactionTransfersOnlyParentEndsAndClosesAllAncillaryOnce() async throws {
     let h = LaunchHarness()
     let child = try await h.launch().get()
@@ -337,14 +523,18 @@ final class SearchChildLauncherStateTests: XCTestCase {
 
 private final class LaunchHarness: @unchecked Sendable {
   let fake = FakeLaunchOperations()
-  let coordinator = SearchLaunchCoordinator()
+  let coordinator: SearchLaunchCoordinator
   let connection = LaunchTestConnection()
   let generation = UUID()
   let url = URL(fileURLWithPath: "/synthetic/fixture")
   let arguments: [String]
   let closeObservation: (@Sendable (LaunchCloseEvent) -> Void)?
   lazy var launcher = makeLauncher()
-  init(arguments: [String] = [], closeObservation: (@Sendable (LaunchCloseEvent) -> Void)? = nil) {
+  init(
+    arguments: [String] = [], closeObservation: (@Sendable (LaunchCloseEvent) -> Void)? = nil,
+    spawnGate: ProcessSpawnGate = ProcessSpawnGate()
+  ) {
+    coordinator = SearchLaunchCoordinator(spawnGate: spawnGate)
     self.arguments = arguments
     self.closeObservation = closeObservation
   }
@@ -388,7 +578,12 @@ private final class FakeLaunchOperations: LaunchOperations, LaunchSpawnOperation
   var environment: [String] = []
   var policy = LaunchReaperPolicy.standard
   var closeErrorFD: Int32?
+  var closeErrorCode: Int32 = EBADF
+  var flagFailure: (Int32, String)?
   var onValidate: (@Sendable () -> Void)?
+  var onPipe: (@Sendable (Int32, Int32) -> Void)?
+  var onFlag: (@Sendable (LaunchFlag, Int32) -> Void)?
+  var onConfigure: (@Sendable (LaunchAttribute) throws -> Void)?
   var spawnResult = LaunchSpawnResult(code: 0, pid: 719)
   var waitResult = LaunchWaitResult(value: 0, status: 0, error: 0)
   var waitPIDs: [Int32] = []
@@ -414,13 +609,27 @@ private final class FakeLaunchOperations: LaunchOperations, LaunchSpawnOperation
   }
   func pipe() throws -> (Int32, Int32) {
     try step("pipe:\(created.count)")
-    return (allocate(), allocate())
+    let pair = (allocate(), allocate())
+    onPipe?(pair.0, pair.1)
+    return pair
   }
   func openNull() throws -> Int32 {
     try step("null")
     return allocate()
   }
-  func setAndVerify(_ flag: LaunchFlag, fd: Int32) throws { try step("\(flag):\(fd)") }
+  func setAndVerify(_ flag: LaunchFlag, fd: Int32) throws {
+    try step("\(flag):\(fd)")
+    if flag == .closeOnExec {
+      // Inject the composite collaborator's failure before/after its flag write;
+      // this does not claim actual Darwin fcntl error-path execution.
+      for stage in ["get", "set", "verify"] {
+        if let failure = flagFailure, failure.0 == fd && failure.1 == stage {
+          throw LaunchError(code: EACCES)
+        }
+      }
+    }
+    onFlag?(flag, fd)
+  }
   func duplicateAboveStdio(_ fd: Int32) throws -> Int32 {
     try step("normalize:\(fd)")
     nextFD = max(20, nextFD)
@@ -429,7 +638,7 @@ private final class FakeLaunchOperations: LaunchOperations, LaunchSpawnOperation
   func close(_ fd: Int32) -> Int32 {
     log.append("close:\(fd)")
     closed.append(fd)
-    return fd == closeErrorFD ? EBADF : 0
+    return fd == closeErrorFD ? closeErrorCode : 0
   }
   func makeSpawn() -> any LaunchSpawnOperations { self }
   func initializeActions() throws {
@@ -451,6 +660,7 @@ private final class FakeLaunchOperations: LaunchOperations, LaunchSpawnOperation
   func configure(_ attribute: LaunchAttribute) throws {
     try step("attribute:\(attribute)")
     attributes.append(attribute)
+    try onConfigure?(attribute)
   }
   func spawn(path: String, arguments: [String], environment: [String]) -> LaunchSpawnResult {
     log.append("spawn")
@@ -501,6 +711,19 @@ private final class LaunchLocked<Value>: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return body(&value)
+  }
+}
+
+private final class SpawnGateEvents: @unchecked Sendable {
+  private let values = LaunchLocked<[String]>([])
+  private let available = DispatchSemaphore(value: 0)
+  func record(_ value: String) {
+    values.withValue { $0.append(value) }
+    available.signal()
+  }
+  func next() -> String? {
+    guard available.wait(timeout: .now() + 2) == .success else { return nil }
+    return values.withValue { $0.removeFirst() }
   }
 }
 

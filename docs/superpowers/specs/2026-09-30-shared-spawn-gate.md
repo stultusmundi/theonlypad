@@ -75,7 +75,8 @@ package final class ProcessSpawnGate: @unchecked Sendable {
   package func withCriticalRegion<T>(
     _ body: (inout ProcessSpawnPermit) throws -> T
   ) throws -> T
-  package func run(_ process: Process) throws
+  @discardableResult
+  package func run(_ process: Process, unlessCancelled: () -> Bool = { false }) throws -> Bool
 }
 
 package struct ProcessSpawnPermit {
@@ -94,8 +95,9 @@ the process has been cleaned up. The existing launcher quarantine retains its
 separate ownership evidence.
 
 The small `run(Process)` method is the production Foundation integration point:
-enter gate, call Process.run synchronously, release. It contains no callbacks or
-waits. It can be exercised with a real Foundation process in the isolated
+enter gate, check the bounded internal cancellation query, call Process.run
+synchronously only if still admitted, then release. False means no child was
+launched. It contains no waits or arbitrary client callbacks. It can be exercised with a real Foundation process in the isolated
 integration composition, while deterministic ExternalCommandRunner tests verify
 that the runner uses this same integration point. No arbitrary launch closure
 or fake implementation becomes a public default.
@@ -297,3 +299,10 @@ An outside-gate “attempt submitted” signal alone does not prove the competin
 Use a narrow optional test-only contention observer on a fresh package gate: production's default nil takes the normal `NSLock.lock()` path; an observed test path first tries the same lock with `try()`, calls the observer only after a failed try, then blocks on that same lock. A successful try already owns the lock and must not acquire twice. The observer only records/signals and must not reenter, wait or mutate gate ownership. It is not part of the public app API. The held owner releases only after the fixture distinguishes confirmed contention from early body entry; gate-removal mutation produces an explicit wrong-event assertion. A missing poison-commit mutation still produces a direct incorrect-admission assertion.
 
 Real overlapping-child fixtures use this observation too; outside submission signals remain bookkeeping, never exclusion evidence. No timing sleep becomes an ordering oracle. Preserve default-nil production behavior and test both healthy/poisoned unlock paths.
+
+
+## Review correction: cancellation while awaiting admission
+
+The preexisting external-command cancellation check occurs before gate acquisition. A command cancelled while contending must not launch when the gate eventually opens. `run(_:unlessCancelled:)` checks the runner's private cancellation state after healthy admission and immediately before `Process.run`; false maps to the existing cancelled result with no PID/exit/output. Shared poison is checked first. Admission linearizes at this query; cancellation after it may race with spawn and follows the existing termination path, not an atomic syscall-cancellation promise.
+
+This permits exactly one short internal gate→runner-state query. Every runner-state-lock path releases before acquiring the shared gate, and the query releases that state lock before Process.run, so no inverse held-lock path exists. No client-defined callback is exposed publicly. Test holds the actual gate, observes exact lock contention, cancels, releases, then requires zero fake Process.run calls and a cancelled result. Preserve compiling RED before adding the query.

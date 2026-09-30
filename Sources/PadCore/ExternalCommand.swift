@@ -28,6 +28,7 @@ public enum ExternalCommandError: Error, LocalizedError {
   case unavailableVariable(String)
   case unknownVariable(String)
   case reusedRunner
+  case spawnSafetyUnavailable
   public var errorDescription: String? {
     switch self {
     case .invalidExecutable: return "Choose an absolute executable path without NUL characters."
@@ -40,6 +41,9 @@ public enum ExternalCommandError: Error, LocalizedError {
     case .unknownVariable(let name):
       return "Unknown command variable ${\(name)}. Use path, selection, or text."
     case .reusedRunner: return "Create a new runner for each command."
+    case .spawnSafetyUnavailable:
+      return
+        "Restart \(AppIdentity.name) before running commands because process cleanup could not be confirmed."
     }
   }
 }
@@ -50,7 +54,15 @@ public final class ExternalCommandRunner: @unchecked Sendable {
   private let lock = NSLock()
   private var cancelled = false
   private var used = false
-  public init() {}
+  private let spawnGate: ProcessSpawnGate
+  private let makeProcess: @Sendable () -> Process
+  public convenience init() {
+    self.init(spawnGate: .process, makeProcess: { Process() })
+  }
+  init(spawnGate: ProcessSpawnGate, makeProcess: @escaping @Sendable () -> Process) {
+    self.spawnGate = spawnGate
+    self.makeProcess = makeProcess
+  }
 
   public func cancel() {
     lock.lock()
@@ -88,7 +100,7 @@ public final class ExternalCommandRunner: @unchecked Sendable {
         stdout: Data(), stderr: Data(), termination: .cancelled, exitCode: nil, signal: nil,
         outputTruncated: false)
     }
-    let process = Process()
+    let process = makeProcess()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = expanded
     process.standardInput = FileHandle.nullDevice
@@ -108,7 +120,18 @@ public final class ExternalCommandRunner: @unchecked Sendable {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
       }
     }
-    try process.run()
+    do {
+      // No state-lock holder acquires spawnGate: this bounded gate -> state query
+      // cannot invert cancellation. A cancelled admission never installs waits
+      // or termination cleanup for an unstarted Process.
+      guard try spawnGate.run(process, unlessCancelled: { self.isCancelled }) else {
+        return ExternalCommandResult(
+          stdout: Data(), stderr: Data(), termination: .cancelled, exitCode: nil, signal: nil,
+          outputTruncated: false)
+      }
+    } catch ProcessSpawnGateError.quarantined {
+      throw ExternalCommandError.spawnSafetyUnavailable
+    }
     try? output.fileHandleForWriting.close()
     try? errors.fileHandleForWriting.close()
     defer {
