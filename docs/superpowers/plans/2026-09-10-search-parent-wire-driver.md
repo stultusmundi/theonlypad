@@ -1,6 +1,6 @@
 # Parent wire driver implementation plan
 
-> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; codec-session and driver implementation remain pending. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
+> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; Task2 codec session is implemented and independently reviewed with21 behavior tests plus114 wire tests passing; Task3 driver implementation remains pending. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
 
 **Goal:** Connect the synchronous search wire codecs to the asynchronous owned-child connection with bounded backpressure, preserve lifecycle first-outcome rules, and make a persistent generation reusable only after the prior codec, result, and read handoff are settled.
 
@@ -11,6 +11,8 @@
 ## Review and inputs
 
 Reviewed against the supervised-search, wire, lifecycle, worker-runtime and allocation plans. Wire response source869de1f is independently approved; semantic Task4 is active. Root review resolved handshake fragmentation, codec-inclusive staging, accepted-result preservation after idle-read failure and one-shot result ownership. Final independent review found an asynchronous upload-consumer lifetime gap; the explicit consumer-exit latch and combined release/publication/admission/shutdown predicates below resolve it. No implementation or runtime acceptance follows from plan review.
+
+The typed channel-observation seam was independently extracted and implemented as a Task3 prerequisite at `5e562fc`: nine added tests,45 lifecycle cases and the final80-case peer/lifecycle selection pass. The full driver remains unimplemented; this early prerequisite does not imply Task3 completion.
 
 Recheck dependency source and interface hashes at dispatch. The internal typed channel-observation addition below is approved for driver Task3 only if the implemented lifecycle lacks an equivalent; avoid duplicate events.
 

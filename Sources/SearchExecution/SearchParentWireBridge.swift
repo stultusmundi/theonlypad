@@ -106,6 +106,8 @@ final class SearchParentWireUploadBridge: @unchecked Sendable {
     self.observeWriteScopeExit = observeWriteScopeExit
   }
 
+  var writerIdentity: SearchParentWriterIdentity { identity }
+
   var snapshot: SearchParentUploadSnapshot {
     condition.lock()
     defer { condition.unlock() }

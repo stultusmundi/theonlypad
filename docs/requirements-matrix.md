@@ -6,6 +6,10 @@ IDs are permanent. The A–I, PUB and T row numbers follow the source bullets in
 
 Status has four separate fields: **Plan**, **Implementation**, **Validation**, **Blocker**. Proposed subsystem locations below are planning ownership, not claims that files exist. Replace them with exact source/test paths as work lands. `None recorded` means no blocker has been evidenced, not that validation is possible. All rows start outstanding and unverified. The evidence column describes required evidence, not tests already run. Verified status requires dated actual results, real-app validation where applicable, and resolved material review findings. Record partial implementation explicitly; never treat a build as proof of parity.
 
+## Latest bounded evidence (2026-09-30)
+
+The76 A–I aggregate requirements remain64 partial and12 outstanding; no aggregate is signed off across all its clauses. This count is not a percentage of completed work. The current frozen integrated source passes721 automated tests. Five actual packaged desktop workflows pass on `f4d9207`; see [desktop evidence](verification/packaged-desktop-2026-09-30.md). New internal search infrastructure is covered separately by [channel/lifecycle evidence](verification/search-child-lifecycle.md), [real child inheritance evidence](verification/shared-spawn-gate.md), and [parent bridge evidence](verification/search-parent-wire-bridge.md). Production search isolation remains outstanding. Counts and old source checkpoints in individual rows below retain their historical scope.
+
 ## Public repository
 
 | ID | Requirement | Observable acceptance criteria | Planned implementation location | Required tests/evidence | Plan | Implementation | Validation | Blocker |
