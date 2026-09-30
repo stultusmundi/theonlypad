@@ -41,3 +41,30 @@ Next work: verify owned-helper counter sampling, compare five fixed-counterpart 
 The private adapter's nine deterministic admission tests passed after a retained behavioral RED (nine tests, eleven assertions). One actual benign-child test then passed in0.419 seconds. It uses the real launcher, lifecycle, channels and sole reaper, reads parent/child counters while the echo fixture is held, rejects an intentionally stale start identity without changing output, verifies the exact64-byte response and exit0, and revokes the sampling token before any later query. No extra process-control authority was added.
 
 Root independently verified88 frozen inputs and current origins, identical deterministic/actual source inventories, the exact XCTest binary, five complete watchdog receipts, selected positive test count, warning-free diagnostics and current SDK headers. Evidence: `.local/search-memory-probe/owned-child/run.w2lot_ar/` and `root-actual-review.json`. This establishes the counter prerequisite for that owned process; it is not search-helper phase coverage, sampled combined peak or performance acceptance.
+
+## Instrumented accumulator smoke
+
+A subsequent actual A/A parent/helper smoke passed with the same1 MB supplementary fixture, exact input/output digests and full cleanup predicates. Three helper and five parent capacity records passed the strict numeric schema; both roles retained five valid self-memory samples. Root independently checked96 source inputs, four generated inputs, unchanged serializer tests (RED11/2, GREEN11/0), warning-free release compilation, exact built/copied executables and all command receipts. Evidence: `.local/search-allocation-preparation/five-pair/run.knzvtros/root-verification.json`.
+
+The records distinguish requested reservation/malloc quantities, observable range-array capacity and builder ownership states. They do not expose Swift String spare capacity or prove allocator pages were returned. The separate paired sampler passed nine deterministic tests after RED9/27, including active-query settlement, stale admission, cadence/caps and bounded sidecar serialization; concrete timer/helper integration remains outstanding. The instrumented smoke is not one of the three comparison repetitions and selects no accumulator or memory budget.
+
+## Actual healthy helper reuse
+
+A separate fixed actual-helper scenario passed four requests in one generation: an exact match, a malformed pattern returning `invalidPattern`, a zero cooperative budget returning `timedOut`, and an exact capture-group replacement. All four had their own accepted protocol terminal. Shutdown verified the owned signal, exact consuming reap, channel closure, settled parent and zero retained lanes. Its18-event history, full101-input/four-generated source inventory, four build/test receipts and actual execution receipt were independently verified. The inert evidence validator passed14 tests before execution. Actual scenario elapsed time was0.231 seconds; this is a functional observation, not a repeated benchmark.
+
+Evidence: `.local/search-real-cancellation-plan/run.1tp3k1d7/root-verification.json`. Source inventory: `626665049e719ec80b9f6aaa244e62ea5fbb5f1aab338ceb5f0488369892ac9c`. The actual command uses preserved release executables bound before `swift test`; that later test command rebuilt mutable scratch products with testing enabled. The preserved copies remained unchanged and were verified immediately before and after execution. This scenario does not establish hard cancellation/deadline isolation, large-input memory acceptance or production editor routing.
+
+## Actual cancellation and deadline isolation
+
+Two separately compiled fixed scenarios now pass against the same reviewed sources. Each first completes a benign match, then submits `(a+)+$` against200 `a` characters followed by `!`. A narrowly added numeric marker proves Foundation's enumeration-progress callback ran in the exact owned child before the parent accepts the interruption test. The marker does not alter protocol frames or replace the actual engine. Its cooperative budget is60 seconds; the independent parent deadline is five seconds.
+
+The explicit-cancel scenario records progress, the cancellation command, the exact `cancelled` parent failure, successful owned SIGKILL, consuming reap, channel closure and session release. Only after cleanup does a different generation accept ordinal1 and complete an exact capture replacement. The deadline scenario sends no cancellation command and requires the exact `deadline` failure, followed by the same cleanup and fresh-helper recovery. Neither interrupted request has an accepted wire terminal. Final shutdown of the replacement helper also verifies exact cleanup and zero retained parent lanes.
+
+Both actual invocations passed their30-second outer watchdog without timeout, truncation, interruption or stderr. The full scenarios took0.381 and5.348 seconds respectively; these are individual functional observations, not cancellation-latency percentiles. Each source freeze also passed14 inert evidence tests, with warning-free compilation. Root independently verified101 source/four generated inputs, immutable binaries, all command receipts and21/20-event histories.
+
+| Scenario | Private verified evidence | Source inventory SHA256 |
+| --- | --- | --- |
+| Cancellation | `.local/search-real-cancellation-plan/run.qfwu835l/root-verification.json` | `a241d77d3e7c389cb348089334b7180bf5da65bdb63ae1576697715250b140a6` |
+| Deadline | `.local/search-real-cancellation-plan/run.ysxc_d5c/root-verification.json` | `cddcfb1973629907052ea33cc832c0a1ea258cd3f89ee79b015e6a6a751b39b1` |
+
+This establishes these fixed real-process scenarios, not arbitrary-pattern performance, an OS memory cap, production helper packaging or native search integration. The editor remains on its in-process service. Public reproducible adoption of the experimental harness, allocation selection and production routing remain necessary.
