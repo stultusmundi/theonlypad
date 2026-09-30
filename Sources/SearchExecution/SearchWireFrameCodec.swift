@@ -24,8 +24,10 @@ public final class SearchWireFrameDecoder {
 
   public init() {}
 
+  /// Wire bytes consumed for the current incomplete frame, including a parsed
+  /// header awaiting payload. This is not an allocation or retained-capacity count.
   public var bufferedByteCount: Int {
-    headerBytes.count + payloadBytes.count
+    headerBytes.count + (header == nil ? 0 : Self.headerByteCount) + payloadBytes.count
   }
 
   public func consume(

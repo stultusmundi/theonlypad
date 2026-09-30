@@ -38,19 +38,22 @@ final class SearchWorkerRuntimeTests: XCTestCase {
     try invalidTrailing(partial: false)
   }
   func testCoalescedPartialNextHeaderDiscardsExecute() throws { try invalidTrailing(partial: true) }
-  func invalidTrailing(partial: Bool) throws {
+  func testCoalescedParsedNextHeaderDiscardsExecuteBeforeEngineRuns() throws {
+    try invalidTrailing(partial: true, prefixCount: 32)
+  }
+  func invalidTrailing(partial: Bool, prefixCount: Int = 3) throws {
     // Verify the real collector receives the provisional execute before the
     // outer reader rejects the trailing frame. Runtime must discard that event.
     let collector = SearchWorkerRequestCollector(makeAccumulator: { _ in Accumulator() })
     let recorder = RecordingSink(collector)
     let reader = try SearchWireRequestReader(generation: generation)
     let next = try bytes(2, hello: false)
-    let invalid = try bytes() + (partial ? Data(next.prefix(3)) : next)
+    let invalid = try bytes() + (partial ? Data(next.prefix(prefixCount)) : next)
     XCTAssertThrowsError(try invalid.withUnsafeBytes { try reader.consume($0, sink: recorder) })
     XCTAssertEqual(recorder.executions, 1)
     XCTAssertNotNil(collector.takeSealedRequest())
     collector.discard()
-    let channel = Channel([try bytes() + (partial ? Data(next.prefix(3)) : next)])
+    let channel = Channel([try bytes() + (partial ? Data(next.prefix(prefixCount)) : next)])
     let engine = Engine()
     weak var owner: Accumulator?
     var created = 0

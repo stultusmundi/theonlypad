@@ -107,3 +107,15 @@ Focused semantic9/0 and all-wire106/0 pass, along with target build, strict recu
 A clean detached snapshot at that commit records605 tracked-file hashes. Its complete **531-test suite passed with0 failures** (15.731 seconds XCTest,29.544 seconds guarded command, no timeout). The actual application build also passed on that snapshot (incremental0.508 seconds, no timeout). Commands were `scripts/swift.sh test --scratch-path .build/integrated` and `scripts/swift.sh build --scratch-path .build/integrated`, supervised by the existing private owned-process harness. Timings describe verification, not UI or performance benchmarks.
 
 Raw provenance and results remain ignored locally. This completes the bounded wire plan; it does not implement the helper lifecycle/runtime, memory policy, hard cancellation, native/folder routing or a packaged helper. Existing packaged desktop verification concerns source55a7b1b, which predates the search changes.
+
+## Parsed header at a phase boundary — 2026-09-30
+
+Codec-session integration found an existing framing defect: after parsing a complete32-byte header for a nonempty payload, the frame decoder cleared its header-byte array. Before any payload byte arrived, `bufferedByteCount` returned0. Request execute and response hello/terminal suffix checks therefore missed exactly that partial frame.
+
+The fix includes the parsed header's32 logical wire bytes until the frame completes. The property's documentation explicitly distinguishes this count from retained/allocated capacity. Eight new regressions produced13 assertion failures against unchanged production, then all114 wire tests passed after the fix. Valid active-phase fragmentation still works. The earlier partial-body expectation changes from1 to33 because the header belongs to the incomplete wire frame; no validation check was weakened.
+
+Final independently reviewed snapshot `.local/search-wire-header-fix/final` binds63 inputs. Decoder SHA256: `1db20ee679b9fa6ecd284fb1ad01a2f5fa8a59936c9c51f4ecf95b5939864ebb`. Final formatting moved one test comment only; the final114/0 run and all inventories/owned-watchdog receipts were verified.
+
+A separate runtime regression proves why the phase check matters. The old decoder produced1 test/3 failures: the reader accepted the malformed stream, the engine ran once and response bytes escaped. With only the decoder changed, all73 worker-runtime tests passed; this regression now asserts zero engine calls/output and discarded accumulator ownership. Both frozen input inventories and strict receipts were verified under `.local/search-worker-header-regression/`.
+
+Reproduce the focused wire suite with `scripts/swift.sh test --filter SearchWire` and worker runtime with `scripts/swift.sh test --filter PadSearchWorkerRuntimeTests`. These are in-process protocol/runtime tests; the shipped app has not yet adopted isolated search.

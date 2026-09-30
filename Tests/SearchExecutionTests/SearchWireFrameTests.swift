@@ -291,7 +291,7 @@ final class SearchWireFrameTests: XCTestCase {
     try consume(Data(body.dropLast()), with: decoder) { _ in
       XCTFail("partial body must not emit")
     }
-    XCTAssertEqual(decoder.bufferedByteCount, 1)
+    XCTAssertEqual(decoder.bufferedByteCount, 33)  // Parsed header plus one payload byte.
 
     XCTAssertThrowsError(try decoder.finish()) {
       XCTAssertEqual($0 as? SearchWireError, .truncated)
