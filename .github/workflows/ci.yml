@@ -12,11 +12,15 @@ jobs:
         with:
           persist-credentials: false
       - name: Unit and temporary-file tests
-        run: scripts/swift.sh test
+        run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/ci-core -- scripts/swift.sh test
       - name: Owned search test infrastructure
         run: |
           python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'
           scripts/test-search-child-lifecycle.sh
+      - name: Parent search driver ownership integration
+        run: |
+          python3 -m unittest discover -s Tests/SearchParentDriverIntegration -p 'test_*.py'
+          scripts/test-search-parent-driver.sh
       - name: Public-source checks
         run: python3 scripts/check-public.py
       - name: Source formatting

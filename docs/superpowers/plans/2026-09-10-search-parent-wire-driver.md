@@ -1,6 +1,6 @@
 # Parent wire driver implementation plan
 
-> Status: Task 1 bridge/lane is implemented and independently reviewed with 20 passing injected tests; Task2 codec session is implemented and independently reviewed with21 behavior tests plus114 wire tests passing; Task3 driver is under private implementation and review, with25 focused tests passing at the accepted ownership-fix checkpoint; broader cases and the checked-in instrumented runner remain outstanding. This plan defines the parent wire driver only. It does not select an allocator, set production byte/deadline policy, add native or folder routing, or establish process/RSS acceptance.
+> Status: Tasks1–3 are implemented and independently reviewed. Final driver evidence:27 ordinary tests,44 with explicit frozen instrumentation,142 combined component tests, and765 integrated application tests all pass. The reusable runner passes19 pure checks and44 actual XCTest cases in an isolated repository layout. See [driver evidence](../../verification/search-parent-driver.md). This establishes parent protocol/ownership behavior only; allocator selection, production policy, actual helper and native/folder routing remain outstanding.
 
 **Goal:** Connect the synchronous search wire codecs to the asynchronous owned-child connection with bounded backpressure, preserve lifecycle first-outcome rules, and make a persistent generation reusable only after the prior codec, result, and read handoff are settled.
 
@@ -12,7 +12,7 @@
 
 Reviewed against the supervised-search, wire, lifecycle, worker-runtime and allocation plans. Wire response source869de1f is independently approved; semantic Task4 is active. Root review resolved handshake fragmentation, codec-inclusive staging, accepted-result preservation after idle-read failure and one-shot result ownership. Final independent review found an asynchronous upload-consumer lifetime gap; the explicit consumer-exit latch and combined release/publication/admission/shutdown predicates below resolve it. No implementation or runtime acceptance follows from plan review.
 
-The typed channel-observation seam was independently extracted and implemented as a Task3 prerequisite at `5e562fc`: nine added tests,45 lifecycle cases and the final80-case peer/lifecycle selection pass. The full driver remains unimplemented; this early prerequisite does not imply Task3 completion.
+The typed channel-observation seam was independently extracted and implemented as a Task3 prerequisite at `5e562fc`: nine added tests,45 lifecycle cases and the final80-case peer/lifecycle selection pass. That prerequisite is now included in the reviewed driver; its original result alone did not establish Task3 completion.
 
 Recheck dependency source and interface hashes at dispatch. The internal typed channel-observation addition below is approved for driver Task3 only if the implemented lifecycle lacks an equivalent; avoid duplicate events.
 
