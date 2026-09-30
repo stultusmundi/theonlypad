@@ -88,6 +88,10 @@ public final class SearchChildLifecycle: @unchecked Sendable {
     try await control.perform { try $0.acceptedTerminal(terminal, ticket: ticket) }
   }
 
+  func rejectedChannel(_ observation: SearchChildChannelObservation, generation: UUID) async {
+    _ = try? await control.perform { $0.rejectedChannel(observation, generation: generation) }
+  }
+
   func rejectedProtocol(generation: UUID) async {
     _ = try? await control.perform { $0.rejectedProtocol(generation) }
   }
@@ -324,6 +328,24 @@ private final class SearchChildLifecycleControl: @unchecked Sendable {
     slot = .owned(ready)
     finish(.completed(terminal))
     armMaintenance(ready.generation)
+  }
+
+  func rejectedChannel(_ observation: SearchChildChannelObservation, generation: UUID) {
+    // No channel has been delivered for absent/launching/foreign generations.
+    guard case .owned(let child) = slot, child.generation == generation else { return }
+    if operation?.ticket.identity.generation == generation {
+      let failure: SearchChildFailure
+      switch observation {
+      case .endOfFile:
+        failure = child.handshake ? .unexpectedExit : .handshakeFailure
+      case .failure(let errorNumber):
+        failure = errorNumber > 0 ? .channelFailure(errorNumber) : .protocolFailure
+      }
+      finish(.failed(failure))
+    }
+    // Retire physical ownership even when a previous terminal already won.
+    // During recycling the reserved operation can belong to a NEW generation.
+    stop(generation)
   }
 
   func rejectedProtocol(_ generation: UUID) {

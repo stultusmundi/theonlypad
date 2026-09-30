@@ -154,3 +154,9 @@ protocol SearchChildSystem: AnyObject, Sendable {
   func signal(pid: Int32, signal: Int32) -> Int32
   func pollExit(pid: Int32) -> SearchChildPoll
 }
+
+/// Generation-tagged observation from the sole channel consumer.
+enum SearchChildChannelObservation: Sendable, Equatable {
+  case endOfFile
+  case failure(Int32)
+}

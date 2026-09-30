@@ -26,6 +26,8 @@ class HarnessTests(unittest.TestCase):
             'Tests/SearchChildIntegration/SearchChildChannelTests.swift': '// real channel test source\n',
             'Tests/SearchChildIntegration/SearchChildLauncherTests.swift': '// launcher controls\n',
             'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift': '// lifetime controls\n',
+            'Tests/SearchChildIntegration/SearchChildSpawnInheritanceTests.swift': '// inheritance controls\n',
+            'Tests/SearchChildIntegration/SpawnPeerMain.swift': '// fixed unrelated peer\n',
             'Tests/SearchChildIntegration/FixtureMain.swift': '// benign fixture\n',
             'scripts/swift.sh': '#!/bin/sh\nexec swift "$@"\n',
             'scripts/run-owned-search-tests.py': '# accepted watchdog snapshot\n',
@@ -51,6 +53,7 @@ class HarnessTests(unittest.TestCase):
         if '--show-bin-path' in command:
             folder = output.parent / 'Build/arch/debug'; folder.mkdir(parents=True, exist_ok=True)
             binary = folder / 'SearchChildFixture'; binary.write_bytes(b'actual fake compiled fixture'); binary.chmod(0o700)
+            peer = folder / 'SpawnPeerFixture'; peer.write_bytes(b'actual fake compiled peer'); peer.chmod(0o700)
             text = str(folder) + '\n'
         (output / 'stdout.log').write_text(text)
         (output / 'stderr.log').write_bytes(b'')
@@ -96,6 +99,69 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual((self.run / item['frozen']).read_bytes(),
                          (self.root / item['source']).read_bytes())
         self.assertEqual(HARNESS.parse_args([]).filter, 'SearchChildLifecycleTests')
+
+    def test_peer_source_and_inheritance_test_are_exact_compiler_inputs(self):
+        manifest = self.freeze()
+        expected = {
+            'Tests/SearchChildIntegration/SpawnPeerMain.swift': 'Package/Sources/SpawnPeerFixture/main.swift',
+            'Tests/SearchChildIntegration/SearchChildSpawnInheritanceTests.swift':
+                'Package/Tests/SearchExecutionTests/SearchChildSpawnInheritanceTests.swift',
+        }
+        observed = {item['source']: item['frozen'] for item in manifest['sources']}
+        for source, frozen in expected.items():
+            self.assertEqual(observed.get(source), frozen)
+
+    def test_peer_is_bound_separately_to_same_source_inventory(self):
+        self.assertEqual(self.execute(), 0)
+        metadata = self.run / 'peer.json'
+        self.assertTrue(metadata.is_file(), 'successful suite must bind the unrelated peer')
+        if not metadata.is_file(): return
+        value = json.loads(metadata.read_text())
+        self.assertEqual(Path(value['executable']), self.run / 'Build/FrozenPeer/SpawnPeerFixture')
+        self.assertEqual(value['sourceManifestSHA256'], HARNESS.digest((self.run / 'sources.json').read_bytes()))
+        self.assertEqual(HARNESS.digest(Path(value['executable']).read_bytes()), value['sha256'])
+        self.assertEqual(HARNESS.digest(Path(value['builtExecutable']).read_bytes()), value['sha256'])
+        self.assertEqual(json.loads((self.run / 'status.json').read_text()).get('peerManifestSHA256'),
+                         HARNESS.digest(metadata.read_bytes()))
+
+    def test_missing_or_symlink_peer_prevents_test_dispatch(self):
+        for index, mode in enumerate(['missing', 'symlink']):
+            with self.subTest(mode=mode):
+                self.run = Path(self.temporary.name) / ('peer-path-' + str(index)); self.run.mkdir()
+                self.calls.clear()
+                def changed(argv):
+                    code = self.fake_watchdog(argv)
+                    if '--show-bin-path' in argv:
+                        peer = self.run / 'Build/arch/debug/SpawnPeerFixture'
+                        peer.unlink()
+                        if mode == 'symlink': peer.symlink_to(self.run / 'sources.json')
+                    return code
+                self.assertNotEqual(self.execute(watchdog=changed), 0)
+                self.assertFalse(any('test' in call for call in self.calls))
+
+    def test_peer_changes_after_capture_are_rejected(self):
+        def change(path):
+            path.chmod(0o700); path.write_bytes(b'changed-peer')
+        mutations = [
+            lambda run, value: Path(value['executable']).unlink(),
+            lambda run, value: change(Path(value['executable'])),
+            lambda run, value: change(Path(value['builtExecutable'])),
+            lambda run, value: (Path(value['executable']).parent / 'extra').write_bytes(b'extra'),
+            lambda run, value: (run / 'peer.json').write_text('{}'),
+            lambda run, value: (run / 'peer.json').write_text(json.dumps(dict(value, extra=True))),
+        ]
+        for index, mutation in enumerate(mutations):
+            with self.subTest(index=index):
+                self.run = Path(self.temporary.name) / ('peer-change-' + str(index)); self.run.mkdir()
+                changed = []
+                def altered(argv):
+                    code = self.fake_watchdog(argv)
+                    if 'test' in argv and (self.run / 'peer.json').is_file():
+                        value = json.loads((self.run / 'peer.json').read_text())
+                        mutation(self.run, value); changed.append(True)
+                    return code
+                self.assertNotEqual(self.execute(watchdog=altered), 0)
+                self.assertEqual(changed, [True])
 
 
     def test_fixture_metadata_and_binary_are_pinned_and_build_contained(self):

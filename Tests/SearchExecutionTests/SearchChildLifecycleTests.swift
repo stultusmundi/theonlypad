@@ -1077,3 +1077,170 @@ private final class HeldCloseConnection: SearchChildConnection, Sendable {
     await release.wait()
   }
 }
+
+extension SearchChildLifecycleTests {
+  func testChannelEOFBeforeHandshakeReportsHandshakeFailure() async throws {
+    let h = try Harness()
+    let ticket = try await h.lifecycle.begin(requestID: UUID())
+    h.system.deliver(ticket, pid: 41, connection: h.connection)
+    _ = try await h.lifecycle.connection(for: ticket)
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: ticket.identity.generation)
+    // RED backstop: a missing decision produces cancellation instead of hanging.
+    try? await h.lifecycle.cancel(ticket)
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .failed(.handshakeFailure))
+    await h.dispose()
+  }
+
+  func testChannelErrorPreservesCapturedErrnoInBothHandshakePhases() async throws {
+    for accepted in [false, true] {
+      let h = try Harness()
+      let ticket = try await h.lifecycle.begin(requestID: UUID())
+      h.system.deliver(ticket, pid: 41, connection: h.connection)
+      _ = try await h.lifecycle.connection(for: ticket)
+      if accepted {
+        try await h.lifecycle.acceptedHandshake(generation: ticket.identity.generation)
+      }
+      await h.lifecycle.rejectedChannel(.failure(EPIPE), generation: ticket.identity.generation)
+      try? await h.lifecycle.cancel(ticket)
+      let outcome = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(outcome, .failed(.channelFailure(EPIPE)))
+      await h.dispose()
+    }
+  }
+
+  func testChannelEOFReadyRequestStopsButKeepsPhysicalSlotUntilCloseAndReap() async throws {
+    let h = try Harness()
+    let ticket = try await h.ready()
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: ticket.identity.generation)
+    try? await h.lifecycle.cancel(ticket)
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .failed(.unexpectedExit))
+    XCTAssertEqual(h.system.signals, [.init(pid: 41, signal: SIGKILL)])
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+    await h.connection.started.wait()
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    h.clock.now += 100_000_000
+    h.timers.fireDue(at: h.clock.now)
+    try await h.barrier(ticket)
+    let reaped = try await h.lifecycle.cleanup(for: ticket)
+    XCTAssertEqual(
+      reaped, .reaped(generation: ticket.identity.generation, exit: .signaled(SIGKILL)))
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+    h.connection.release.open()
+    await h.dispose()
+  }
+
+  func testIdleChannelFailurePreservesAcceptedTerminalAndRetiresGeneration() async throws {
+    for terminal: SearchWireTerminal in [.success, .failure(.invalidPattern)] {
+      for observation: SearchChildChannelObservation in [.endOfFile, .failure(EIO)] {
+        let h = try Harness()
+        let ticket = try await h.ready()
+        try await h.lifecycle.acceptedTerminal(terminal, ticket: ticket)
+        await h.lifecycle.rejectedChannel(observation, generation: ticket.identity.generation)
+        let outcome = try await h.lifecycle.wait(for: ticket)
+        XCTAssertEqual(outcome, .completed(terminal))
+        XCTAssertEqual(h.system.signals, [.init(pid: 41, signal: SIGKILL)])
+        let admission = await caught { _ = try await h.lifecycle.begin(requestID: UUID()) }
+        XCTAssertEqual(admission as? SearchChildFailure, .busy)
+        await h.dispose()
+      }
+    }
+  }
+
+  func testChannelObservationsDoNotOverwritePriorCancellationOrDeadline() async throws {
+    for deadline in [false, true] {
+      let h = try Harness()
+      let ticket = try await h.ready()
+      if deadline {
+        h.clock.now = 1_000_000_000
+        h.timers.fireDue(at: h.clock.now)
+        try await h.barrier(ticket)
+      } else {
+        try await h.lifecycle.cancel(ticket)
+      }
+      await h.lifecycle.rejectedChannel(.endOfFile, generation: ticket.identity.generation)
+      await h.lifecycle.rejectedChannel(.failure(EIO), generation: ticket.identity.generation)
+      let outcome = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(outcome, .failed(deadline ? .deadline : .cancelled))
+      XCTAssertEqual(h.system.signals.count, 1)
+      await h.dispose()
+    }
+  }
+
+  func testForeignChannelObservationCannotAffectCurrentRequest() async throws {
+    let h = try Harness()
+    let ticket = try await h.ready()
+    let foreign = UUID()
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: foreign)
+    await h.lifecycle.rejectedChannel(.failure(EIO), generation: foreign)
+    await h.lifecycle.rejectedChannel(.failure(0), generation: foreign)
+    await h.lifecycle.rejectedChannel(.failure(-1), generation: foreign)
+    XCTAssertTrue(h.system.signals.isEmpty)
+    try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .completed(.success))
+    await h.dispose()
+  }
+}
+
+extension SearchChildLifecycleTests {
+  func testInvalidChannelErrnoIsProtocolFailureInsteadOfInventedSystemError() async throws {
+    for errno: Int32 in [0, -1] {
+      let h = try Harness()
+      let ticket = try await h.ready()
+      await h.lifecycle.rejectedChannel(.failure(errno), generation: ticket.identity.generation)
+      try? await h.lifecycle.cancel(ticket)
+      let outcome = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(outcome, .failed(.protocolFailure))
+      await h.dispose()
+    }
+  }
+
+  func testIdleReadFailureAfterNextAdmissionAppliesToNewTicketOnly() async throws {
+    let h = try Harness()
+    let first = try await h.ready()
+    try await h.lifecycle.acceptedTerminal(.success, ticket: first)
+    let accepted = try await h.lifecycle.wait(for: first)
+    let next = try await h.lifecycle.begin(requestID: UUID())
+    XCTAssertEqual(first.identity.generation, next.identity.generation)
+    XCTAssertNotEqual(first.identity.requestID, next.identity.requestID)
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: next.identity.generation)
+    try? await h.lifecycle.cancel(next)
+    let failed = try await h.lifecycle.wait(for: next)
+    XCTAssertEqual(accepted, .completed(.success))
+    XCTAssertEqual(failed, .failed(.unexpectedExit))
+    await h.dispose()
+  }
+}
+
+extension SearchChildLifecycleTests {
+  func testOldGenerationChannelObservationCannotFinishReservedOrReplacementRequest() async throws {
+    let h = try Harness(maximum: 1)
+    let first = try await h.ready()
+    try await h.lifecycle.acceptedTerminal(.success, ticket: first)
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    let second = try await h.lifecycle.begin(requestID: UUID())
+    XCTAssertNotEqual(first.identity.generation, second.identity.generation)
+    await h.connection.started.wait()
+    // The old physical child still holds its close receipt while the NEW ticket is reserved.
+    await h.lifecycle.rejectedChannel(.failure(EIO), generation: first.identity.generation)
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: first.identity.generation)
+    h.connection.release.open()
+    await h.system.waitForLaunchCount(2)
+    let replacement = HeldCloseConnection()
+    h.system.poll = .running
+    h.system.deliver(second, pid: 73, connection: replacement)
+    _ = try await h.lifecycle.connection(for: second)
+    try await h.lifecycle.acceptedHandshake(generation: second.identity.generation)
+    let signals = h.system.signals
+    await h.lifecycle.rejectedChannel(.endOfFile, generation: first.identity.generation)
+    await h.lifecycle.rejectedChannel(.failure(-1), generation: first.identity.generation)
+    XCTAssertEqual(h.system.signals, signals)
+    try await h.lifecycle.acceptedTerminal(.success, ticket: second)
+    let outcome = try await h.lifecycle.wait(for: second)
+    XCTAssertEqual(outcome, .completed(.success))
+    replacement.release.open()
+    await h.dispose()
+  }
+}

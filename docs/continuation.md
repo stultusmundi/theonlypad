@@ -20,15 +20,17 @@ Read `docs/verification/search-child-lifecycle.md` and `docs/verification/search
 
 ## Current ownership and next actions
 
-Root exclusively owns actual child/GUI runs, public records and commits. The user's latest request is actual computer-use testing. Five visible XCUITests passed against packaged `f4d9207` under `.local/integrated-search-20260930/desktop/`, with0 failures/skips and no remaining editor instances. No GUI/test process is active. Agents are idle with source checkpoints; explicitly assign the next serial build slot before resuming. See `docs/verification/packaged-desktop-2026-09-30.md`.
+Root exclusively owns actual child/GUI runs, public records and commits. The user reiterated continuous execution after a premature desktop-test handoff; do not stop at internal checkpoints. Five visible XCUITests passed against packaged `f4d9207` under `.local/integrated-search-20260930/desktop/`, with0 failures/skips and no remaining editor instances. No GUI/test process is active. The bridge primitive is reviewed20/0 and being adopted. Root completed final combined lifecycle/peer80/0; no GUI or child run is active. Codec Task2 design review/source work is next; serialize subsequent builds. See `docs/verification/packaged-desktop-2026-09-30.md`.
 
 Fresh frozen integrated verification:650 tests/0 failures; package build and archive/SBOM verification passed. Inventory661 files in `.local/integrated-search-20260930/inputs.json`; full test and package owned-process receipts are retained alongside. The private package is in `source/dist/` below that directory; the tested package has now been promoted to root `dist/` and revalidated; the previous package is preserved privately.
 
-- `worker_engine_adapter` prepares private parent-wire Task1 candidates under `.local/search-parent-wire-task1/`; reviewer identified payload-release-before-ACK and duplicate producer-exit defects to resolve with regression tests. No live implementation adopted.
-- `search_lifetime_timer` prepares Task2 real unrelated-peer inheritance tests, new live test/peer files and pure harness RED fixture under `.local/search-spawn-gate-task2/`. Harness behavior changes and all execution wait for root's desktop interval to end.
+- `worker_engine_adapter` runs private parent-wire Task1 RED/GREEN/mutants under `.local/search-parent-wire-task1/`, with exclusive build slot. Reviewed payload/ACK fixes remain private pending final verification.
+- `search_lifetime_timer` completed Task2 peer fixture/harness: pure54/0 and frozen no-child70/0 at `run.q8kxe49t`; root verified inventories, both executable artifacts and four receipts. Actual peer1/0 and final combined80/0 passed; source/artifact receipts independently verified.
 - `worker_runtime_review` completed source-only review; available for independent review without runtime ownership.
 
-Exact next action: resume the peer worker for pure harness RED, then reviewed harness changes and root-owned real unrelated-peer tests. Resume bounded bridge work under the existing reviewed September10 parent-wire plan. Program and gate components are accepted; helper executable, production routing, budget/RSS acceptance and regex containment are not.
+Root also prepares the approved typed channel-observation prerequisite in private `.local/search-channel-observation/`: nine added tests; RED9/15, GREEN45/0; reviewed implementation adopted and final combined80/0 passed.
+
+Exact next action: commit reviewed peer/channel work, finish adopting the reviewed bridge primitive, then implement the reviewed codec-session task. Continue bounded codec/driver integration under the existing reviewed September10 parent-wire plan. Program and gate components are accepted; helper executable, production routing, budget/RSS acceptance and regex containment are not.
 
 ## Accepted runtime evidence
 

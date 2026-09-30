@@ -224,3 +224,11 @@ scripts/test-search-child-lifecycle.sh --filter SearchChildLifetimeProcessTests
 ```
 
 The actual process filter requires exclusive root ownership and the approved toolchain execution profile. Shared Foundation-spawn descriptor inheritance, public lifecycle construction, forced-kill fault cases, persistent helper reuse, helper composition, allocation measurement, application routing and packaged search acceptance remain outstanding.
+
+## Typed channel-observation prerequisite, 2026-09-30
+
+The parent driver plan's internal `rejectedChannel` event is implemented. Matching owned generation is checked before error classification. EOF before handshake yields handshake failure; after handshake it yields unexpected exit. A positive captured errno is retained as channel failure; zero/negative values are protocol contract violations. A prior terminal/cancel/deadline is never replaced. An old physical generation being recycled cannot fail a pending replacement-generation request. Existing stop/reap/channel-close ownership remains authoritative.
+
+Nine new deterministic tests first produced15 explicit failed assertions using a private no-op contract overlay, then all45 lifecycle tests passed with the implementation. Both65-file frozen inventories and complete watchdog receipts were independently verified. Tests include both semantic and successful accepted terminals, invalid errno, explicit reap with held close, a same-generation subsequent request, and a genuinely reserved/replaced generation. No stub was adopted into production. Private evidence: `.local/search-channel-observation/`.
+
+This is lifecycle behavior evidence only. The parent driver, real channel-to-event adapter and production search routing remain outstanding. Formatted combined-source validation in `run.ueklpf9q` passed80/0, including all45 lifecycle cases,34 other deterministic cases and the actual unrelated-peer test. See `verification/shared-spawn-gate.md` for the initial narrower filter and corrected command evidence.
