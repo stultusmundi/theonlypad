@@ -339,7 +339,7 @@ final class SearchChildLauncher: SearchChildSystem, @unchecked Sendable {
     guard generation.uuidString != "00000000-0000-0000-0000-000000000000",
       arguments.isEmpty
         || (arguments.count == 2 && arguments[0] == "--mode"
-          && ["echo", "exit17"].contains(arguments[1]))
+          && ["echo", "exit17", "parent-lifetime-busy-main"].contains(arguments[1]))
     else { return .failure(.launchFailed(EINVAL)) }
 
     var cells: [LaunchDescriptor] = []

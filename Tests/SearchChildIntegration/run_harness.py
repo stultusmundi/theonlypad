@@ -17,7 +17,7 @@ let package = Package(
   targets: [
     .target(name: "PadCore"),
     .target(name: "SearchExecution", dependencies: ["PadCore"]),
-    .executableTarget(name: "SearchChildFixture"),
+    .executableTarget(name: "SearchChildFixture", dependencies: ["SearchExecution"]),
     .testTarget(name: "SearchExecutionTests", dependencies: ["SearchExecution", "PadCore"]),
   ], swiftLanguageModes: [.v5])
 '''
@@ -25,6 +25,7 @@ FIXED = (
     'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift',
     'Tests/SearchChildIntegration/SearchChildChannelTests.swift',
     'Tests/SearchChildIntegration/SearchChildLauncherTests.swift',
+    'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift',
     'Tests/SearchChildIntegration/FixtureMain.swift',
     'scripts/swift.sh', 'scripts/run-owned-search-tests.py',
     'scripts/test-search-child-lifecycle.sh',
@@ -103,7 +104,8 @@ def freeze(root, run):
         prefix = 'Package' if relative.startswith(('Sources/', 'Tests/SearchExecutionTests/')) else 'Runner'
         target = run / prefix / relative
         if relative in ('Tests/SearchChildIntegration/SearchChildChannelTests.swift',
-                        'Tests/SearchChildIntegration/SearchChildLauncherTests.swift'):
+                        'Tests/SearchChildIntegration/SearchChildLauncherTests.swift',
+                        'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift'):
             target = run / 'Package/Tests/SearchExecutionTests' / source.name
         if relative == 'Tests/SearchChildIntegration/FixtureMain.swift':
             target = run / 'Package/Sources/SearchChildFixture/main.swift'

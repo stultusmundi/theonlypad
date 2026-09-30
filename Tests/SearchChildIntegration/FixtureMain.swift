@@ -1,7 +1,8 @@
-// Synthetic bootstrap/transport fixture, not a search worker or lifetime watcher.
-// Only the two named modes exist. The owning test watchdog bounds blocking I/O.
+// Synthetic bootstrap/transport/lifetime fixture, not a search worker.
+// Only fixed named modes exist. The owning test watchdog bounds blocking I/O.
 import Darwin
 import Foundation
+import SearchExecution
 
 func refuse() -> Never { Darwin._exit(70) }
 let arguments = CommandLine.arguments
@@ -12,7 +13,9 @@ guard arguments.count == 3 || arguments.count == 5,
 else { refuse() }
 let mode: String
 if arguments.count == 5 {
-  guard arguments[3] == "--mode", ["echo", "exit17"].contains(arguments[4]) else { refuse() }
+  guard arguments[3] == "--mode",
+    ["echo", "exit17", "parent-lifetime-busy-main"].contains(arguments[4])
+  else { refuse() }
   mode = arguments[4]
 } else {
   mode = "echo"
@@ -69,6 +72,30 @@ func writeAll(_ bytes: Data) {
     }
   }
   refuse()
+}
+if mode == "parent-lifetime-busy-main" {
+  let started = DispatchSemaphore(value: 0)
+  Thread.detachNewThread {
+    started.signal()
+    SearchParentLifetime.run(controlFD: 3)
+  }
+  started.wait()
+  // Occupy main without reading request EOF or servicing a run loop. The
+  // dedicated lifetime reader must terminate the whole process independently.
+  var announced = false
+  while true {
+    _ = Darwin.getpid()
+    if !announced {
+      var readiness = metadata
+      readiness["mainLoopEntered"] = true
+      guard
+        let bytes = try? JSONSerialization.data(withJSONObject: readiness, options: [.sortedKeys]),
+        bytes.count < 2_048
+      else { refuse() }
+      writeAll(bytes + Data([10]))
+      announced = true
+    }
+  }
 }
 writeAll(encoded + Data([10]))
 var payload = Data(count: 64)

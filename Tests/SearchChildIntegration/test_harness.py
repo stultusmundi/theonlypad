@@ -25,6 +25,7 @@ class HarnessTests(unittest.TestCase):
             'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift': 'import XCTest\n',
             'Tests/SearchChildIntegration/SearchChildChannelTests.swift': '// real channel test source\n',
             'Tests/SearchChildIntegration/SearchChildLauncherTests.swift': '// launcher controls\n',
+            'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift': '// lifetime controls\n',
             'Tests/SearchChildIntegration/FixtureMain.swift': '// benign fixture\n',
             'scripts/swift.sh': '#!/bin/sh\nexec swift "$@"\n',
             'scripts/run-owned-search-tests.py': '# accepted watchdog snapshot\n',
@@ -82,7 +83,7 @@ class HarnessTests(unittest.TestCase):
         package = (self.run / 'Package/Package.swift').read_text()
         self.assertIn('swiftLanguageModes: [.v5]', package)
         self.assertIn('SearchExecutionTests', package)
-        self.assertIn('executableTarget(name: "SearchChildFixture")', package)
+        self.assertIn('executableTarget(name: "SearchChildFixture", dependencies: ["SearchExecution"])', package)
         self.assertEqual((self.run / 'Package/Sources/SearchChildFixture/main.swift').read_bytes(),
                          (self.root / 'Tests/SearchChildIntegration/FixtureMain.swift').read_bytes())
 

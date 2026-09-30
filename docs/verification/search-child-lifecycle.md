@@ -204,3 +204,23 @@ After independent source review, root ran two separately selected **real child**
 These elapsed times identify these fixture executions, not throughput or application-latency benchmarks. Reusing the already reviewed compiled package avoided another duplicate build while disk space was constrained. Before and after runtime, root verified complete frozen input membership, both fixture binary/metadata bindings, actual test-bundle hashes, exact commands, positive test counts and strict bounded capture/group/wait receipts. Raw evidence: `.local/search-child-integration/run.zfhadph_/{actual-exit17,actual-echo,actual-launcher-root-verification.json}`. Source manifest: `9ee38ad0771849312c77c79a78236d2c1a2f1ce94d83ae071179a77e374d02af`. Launcher SHA256: `e17e89bd438a2b7af09ca5a7a6ccbf928739157e66f32fb81f2a71253cb87fcf`; test SHA256: `8c862ad5f89fdbc44bfe4d669a43471673521c0af75986615cab16246a677c6f`.
 
 The fixture is deliberately limited to echo/exit17; it is not the search helper and implements no parent-lifetime watcher. Real forced termination, busy-child parent EOF, concurrent Foundation.Process descriptor inheritance, low-descriptor real-host integration, production timer/factory, runtime/wire bridging, allocator selection, packaging and application routing remain outstanding. The launcher serial lane alone does not protect the temporary pipe-to-CLOEXEC window from the separate ExternalCommandRunner launch site. This slice adds no hard-regex-containment or complete C-08 claim.
+
+
+## Monotonic timer and independent parent EOF (2026-09-30)
+
+The internal Dispatch timer schedules one absolute uptime deadline on an explicit queue. Cancellation is idempotent and destruction cancels the source; already-running callbacks still require lifecycle generation/token fencing. `SearchParentLifetime.run(controlFD:)` reads the blocking lifetime descriptor on its caller's dedicated thread, retries EINTR, exits the whole child with status0 on EOF, and fails closed with70 for data or other errors. No process-global signal policy changes.
+
+The compiling behavioral red had9 tests/11 failed assertions. Final frozen injected verification passed60 tests:10 timer/read-loop controls,14 launcher controls and36 lifecycle controls. This includes a near-future absolute deadline and separate cancellation/destruction checks; it is not a real-time scheduling guarantee. Harness/watchdog controls passed50.
+
+After root source review, the separately filtered actual child test passed1/0 (0.523s XCTest). The fixed synthetic fixture starts a dedicated lifetime thread, enters a busy main loop and emits bounded readiness from inside that loop. The startup semaphore proves thread startup, not entry into the blocking read syscall. Closing the parent connection produces exact child exit0, lifecycle-owned reap, and acknowledged channel shutdown despite the occupied main lane. The fixture is not the production search helper or evidence of Foundation regex entry.
+
+Root reused the verified frozen build with `--skip-build`, verified all source/fixture bindings and four test-bundle file hashes before/after, and validated all six stage receipts. An initial relative-path invocation failed before tests because the Swift wrapper changes directory; its exit1 receipt is preserved separately. The corrected absolute-path run passed. Private evidence: `.local/search-child-integration/run.e279qdnw/{actual-lifetime,actual-lifetime-absolute,actual-lifetime-root-verification.json}`. Source manifest SHA256: `3b67001cff97df27fafa9c2d7ff12b3029918ad2b2b872eeed92c2fc9d60169b`; fixture manifest SHA256: `126f1ba0ddf6998d00935fe3ae0f3462df0059160b8fc1a061cd793effb04ff8`.
+
+Reproduction through the accepted frozen harness (do not nest another process-group watchdog):
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter 'SearchChildLifetimeStateTests|SearchChildDispatchTimerTests|SearchChildLauncherStateTests|SearchChildLifecycleTests'
+scripts/test-search-child-lifecycle.sh --filter SearchChildLifetimeProcessTests
+```
+
+The actual process filter requires exclusive root ownership and the approved toolchain execution profile. Shared Foundation-spawn descriptor inheritance, public lifecycle construction, forced-kill fault cases, persistent helper reuse, helper composition, allocation measurement, application routing and packaged search acceptance remain outstanding.
