@@ -1244,3 +1244,120 @@ extension SearchChildLifecycleTests {
     await h.dispose()
   }
 }
+
+extension SearchChildLifecycleTests {
+  func testIdleRetirementPreservesSuccessfulAndSemanticReceipts() async throws {
+    for terminal: SearchWireTerminal in [.success, .failure(.invalidPattern)] {
+      let h = try Harness()
+      let ticket = try await h.ready()
+      try await h.lifecycle.acceptedTerminal(terminal, ticket: ticket)
+      let accepted = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+      XCTAssertTrue(accepted)
+      let outcome = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(outcome, .completed(terminal))
+      XCTAssertEqual(h.system.signals, [.init(pid: 41, signal: SIGKILL)])
+      let repeated = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+      XCTAssertFalse(repeated)
+      XCTAssertEqual(h.system.signals.count, 1)
+      await h.dispose()
+    }
+  }
+
+  func testIdleRetirementRefusesActiveAndPreHandshakeRequests() async throws {
+    let h = try Harness()
+    let ticket = try await h.lifecycle.begin(requestID: UUID())
+    let launching = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+    XCTAssertFalse(launching)
+    h.system.deliver(ticket, pid: 41, connection: h.connection)
+    _ = try await h.lifecycle.connection(for: ticket)
+    let unaccepted = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+    XCTAssertFalse(unaccepted)
+    try await h.lifecycle.acceptedHandshake(generation: ticket.identity.generation)
+    let active = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+    XCTAssertFalse(active)
+    XCTAssertTrue(h.system.signals.isEmpty)
+    try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+    let outcome = try await h.lifecycle.wait(for: ticket)
+    XCTAssertEqual(outcome, .completed(.success))
+    await h.dispose()
+  }
+
+  func testIdleRetirementCannotReplaceChildBeforeReapAndHeldChannelClose() async throws {
+    let h = try Harness()
+    let ticket = try await h.ready()
+    try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+    let accepted = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+    XCTAssertTrue(accepted)
+    // RED cleanup backstop: ensure close starts without requiring missing behavior.
+    if !accepted { await h.lifecycle.rejectedProtocol(generation: ticket.identity.generation) }
+    await h.connection.started.wait()
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    h.clock.now = 100_000_000
+    h.timers.fireDue(at: h.clock.now)
+    try await h.barrier(ticket)
+    let cleanup = try await h.lifecycle.cleanup(for: ticket)
+    XCTAssertEqual(
+      cleanup, .reaped(generation: ticket.identity.generation, exit: .signaled(SIGKILL)))
+    await failure(.busy) { _ = try await h.lifecycle.begin(requestID: UUID()) }
+    XCTAssertEqual(h.system.launches.count, 1)
+    h.connection.release.open()
+    let stopped = await h.lifecycle.shutdown()
+    XCTAssertTrue(stopped.stopped)
+    XCTAssertTrue(stopped.channelsClosed)
+  }
+
+  func testIdleRetirementForeignGenerationIsIgnored() async throws {
+    let h = try Harness()
+    let absent = await h.lifecycle.requestIdleRetirement(generation: UUID())
+    XCTAssertFalse(absent)
+    let ticket = try await h.ready()
+    try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+    let foreign = await h.lifecycle.requestIdleRetirement(generation: UUID())
+    XCTAssertFalse(foreign)
+    XCTAssertTrue(h.system.signals.isEmpty)
+    let next = try await h.lifecycle.begin(requestID: UUID())
+    XCTAssertEqual(next.identity.generation, ticket.identity.generation)
+    await h.dispose()
+  }
+
+  func testIdleRetirementCannotAffectCountReservedReplacement() async throws {
+    let h = try Harness(maximum: 1)
+    let first = try await h.ready()
+    try await h.lifecycle.acceptedTerminal(.success, ticket: first)
+    h.system.poll = .reaped(.signaled(SIGKILL))
+    let next = try await h.lifecycle.begin(requestID: UUID())
+    let before = h.system.signals
+    let old = await h.lifecycle.requestIdleRetirement(generation: first.identity.generation)
+    let reserved = await h.lifecycle.requestIdleRetirement(generation: next.identity.generation)
+    XCTAssertFalse(old)
+    XCTAssertFalse(reserved)
+    XCTAssertEqual(h.system.signals, before)
+    h.connection.release.open()
+    await h.system.waitForLaunchCount(2)
+    XCTAssertEqual(h.system.launches[1], next.identity.generation)
+    await h.dispose()
+  }
+
+  func testIdleDeadlineAndExplicitRetirementHaveOneStop() async throws {
+    for deadlineFirst in [true, false] {
+      let h = try Harness()
+      let ticket = try await h.ready()
+      try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+      if deadlineFirst {
+        h.clock.now = 2_000_000_000
+        h.timers.fireDue(at: h.clock.now)
+        try await h.barrier(ticket)
+      }
+      let accepted = await h.lifecycle.requestIdleRetirement(generation: ticket.identity.generation)
+      XCTAssertEqual(accepted, !deadlineFirst)
+      h.clock.now = 2_000_000_000
+      h.timers.fireDue(at: h.clock.now)
+      try await h.barrier(ticket)
+      XCTAssertEqual(h.system.signals, [.init(pid: 41, signal: SIGKILL)])
+      let outcome = try await h.lifecycle.wait(for: ticket)
+      XCTAssertEqual(outcome, .completed(.success))
+      await h.dispose()
+    }
+  }
+}

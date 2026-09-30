@@ -1,0 +1,11 @@
+# Search wire-byte recycling execution plan
+
+Status: component implementation independently reviewed;57 focused tests and721 integrated tests pass. Driver and actual byte-retirement acceptance remain outstanding. Requirements C-07/C-08/I-01 and the supervised-search persistent-child contract. No default runtime budget or allocator is selected here.
+
+1. Root adds deterministic lifecycle tests for healthy idle retirement, active/handshake/stale refusal, first-outcome preservation, held close/reap and competing triggers. Compile the new API as a private no-op contract overlay, observe behavioral RED, then implement the existing control-queue transition and GREEN all lifecycle tests. No stub enters production.
+2. Root adds an internal bounded metadata counter keyed by generation/session epoch, with explicit nonzero threshold. Test exact threshold, healthy semantic bytes, zero/negative counts, stale events and overflow saturation. Count actual successful write/read byte lengths; no payload capture or per-chunk lifecycle messages.
+3. Independent reviewer verifies both source/evidence. Format, freeze exact source and run lifecycle plus counter tests under the accepted direct watchdog. Then commit the prerequisite with honest component boundaries.
+4. Parent driver Task3 consumes the counter and idle-retirement seam: count successful whole writes/nonempty reads once before handoff; mark pending monotonically; arm idle read before retirement; preserve accepted result independent of cleanup; block same-generation resubmission. Verify immediate observer reentry, held read/reap, failure and count/idle/byte races using injected collaborators.
+5. The actual two-process allocation gate must cross512,000,000 wire bytes separately from32 requests and idle expiry. Record exact stop/reap/replacement and parent/helper memory evidence. This prerequisite cannot substitute for that run.
+
+Use `scripts/swift.sh test --filter SearchChildLifecycleTests` for lifecycle and the new counter filter once it exists. Run broad suites containing adversarial regex only through `scripts/run-owned-search-tests.py`; never wrap an existing coordinator in a second watchdog. Private evidence belongs under `.local/search-byte-recycling/`. Root and codec worker serialize build ownership and preserve one another's changes.

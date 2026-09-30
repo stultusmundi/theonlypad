@@ -92,6 +92,10 @@ public final class SearchChildLifecycle: @unchecked Sendable {
     _ = try? await control.perform { $0.rejectedChannel(observation, generation: generation) }
   }
 
+  func requestIdleRetirement(generation: UUID) async -> Bool {
+    return (try? await control.perform { $0.requestIdleRetirement(generation) }) ?? false
+  }
+
   func rejectedProtocol(generation: UUID) async {
     _ = try? await control.perform { $0.rejectedProtocol(generation) }
   }
@@ -346,6 +350,15 @@ private final class SearchChildLifecycleControl: @unchecked Sendable {
     // Retire physical ownership even when a previous terminal already won.
     // During recycling the reserved operation can belong to a NEW generation.
     stop(generation)
+  }
+
+  func requestIdleRetirement(_ generation: UUID) -> Bool {
+    guard operation == nil, case .owned(let child) = slot,
+      child.generation == generation, child.handshake,
+      !child.stopping, child.reaped == nil, !child.unconfirmed
+    else { return false }
+    stop(generation)
+    return true
   }
 
   func rejectedProtocol(_ generation: UUID) {
