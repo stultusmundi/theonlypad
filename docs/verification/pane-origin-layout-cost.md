@@ -164,3 +164,20 @@ The large fixture exactly matches the previous controller seed, UTF16LE SHA256 `
 Private evidence: `.local/textkit-comparison-20260930/{plan.md,review.md,final-hashes.json,root-verification.json}` plus four case directories. Final source SHA256 `c352df25739b12da7ea9cd8dc95b98df79ff1b8245b422cf16555b0b350e95cb`; executable SHA256 `0787fd872a351329ba1237d36b240c50cc6339ce6d12438207b251c0cdc4b40a`. Toolchain/platform are the same Swift6.3.3/macOS26.6.2 ARM64 reference as the controller investigation. The first compile and subsequent exact-insertion-check compile are both retained.
 
 This rejects a direct TextKit2 substitution as a demonstrated remedy for this paragraph: it still spends tens of seconds in initial layout and direct insertion. It does not select a new engine or impose an arbitrary long-line policy. These single hidden cases omit production gutters/highlighting/shared models and post-edit repaint; the two engines can defer work differently. They are not p95 typing latency, a100MB benchmark, glyph/IME/accessibility validation or desktop acceptance. Future comparison must include matched paragraph-segmented controls, actual rendered/edit/undo correctness, and the previously recorded Scintilla Unicode gates before adopting any alternative.
+
+
+## Matched paragraph control, 2026-09-30
+
+A separately reviewed TK1 control replaces exactly215 existing ASCII spaces with LF at offsets1216*k−1 (k=1…215). All other scalar positions,262144 total UTF16 units/scalars, typography, wrapping, viewport and native operations remain unchanged. The resulting216 paragraphs have at most1215 content units. Native assertions verify every changed position and exact UTF16LE digest `91ae61b41e6c20a0a390a076857de3c4941098fbb3e8ba9ebb8f4097cd36ca79`. Paragraph boundaries intentionally change bidi/line-breaking context; this is not identical shaping work.
+
+The single optimized hidden run passed content, insertion, undo and live-engine checks with a1059×616 bitmap and no visible window. All14 phase records, exact source/binary, clean compiler output and strict owned-watchdog cleanup/capture receipts were independently verified.
+
+| Interval | Segmented control | Earlier unsegmented TK1 |
+| --- | ---: | ---: |
+| Host/layout/raster | 0.052827s | 29.837105s |
+| Direct insertion | 0.132497s | 29.505706s |
+| Undo | 0.008678s | Incomplete at watchdog timeout |
+
+The segmented pass marker occurred at0.360975s. Do not compare that completed interval with the previous timeout as though both runs completed. This supports paragraph-scoped work as a major contributor for this fixture, without proving a particular AppKit internal cause. The132ms insertion remains a single direct-call observation, not p95 input latency or target acceptance. No production behavior, threshold or engine was changed. Physical typing, glyph/IME/accessibility, actual controller and100MB/1GB acceptance remain outstanding.
+
+Private evidence: `.local/textkit-segmented-control/`, including the full source difference, fixture inventory, pre-run bindings and `root-verification.json`. Source SHA256 `4a4dc31b0ced9c79e0f99eddc538daa6c6cf1cca432671cd75e6b7b1698e9acb`; executable SHA256 `c3203012b47531a4767fbe56a1ed7cf96e2c3c57e6822c31d88732da06ebe9e0`. The original comparison and every timeout remain preserved. Next engine investigations must retain true long-paragraph content; inserting line breaks into user documents is not a remedy.
