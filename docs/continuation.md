@@ -1,100 +1,77 @@
 # Continuation
 
-TheOnlyPad is incomplete. Continue the complete `docs/BUILD_PROMPT.md` autonomously; outstanding requirements remain scope. This checkpoint supersedes the historical active-session notes preserved in git. Local implementation, testing and scoped commits are authorized. Remote pushes, merges, releases, credentials and system-security changes are not.
+## Active resumption, 2026-09-30
 
-## Current branch and package
+The user explicitly requested resumption. The September10 pause is superseded. Continue the full `docs/BUILD_PROMPT.md`; this is an incomplete product, not a release candidate. Routine local implementation, tests, independent agents and scoped commits are authorized. No remote publication, credentials or system-security changes are authorized.
 
-Branch: `build/native-editor`. Recent accepted commits:
+Branch: `build/native-editor`. Current accepted resumption commits:
 
-- `53fa65c`: startup-failure child ownership contract, compiling RED4/5 to GREEN36/0, independent review PASS.
-- `8fedf12`: original and diagnostic Unicode timeout evidence, localized to initial scroll-frame assignment.
-- `7e062e0`: reviewed native search-channel tests, actual9/0 and injected40/0 with complete receipts.
-- `edbfe2a`: preferred native pane focus, projection20/0 and neighboring checks.
-- `5033f93`: verification checkpoint and separate AX diagnostic permission timeout.
-- `3d5b9e6`: independently reviewed document applied-settings and native admission, with24 settings tests and complete neighboring checks.
-- `09456b3`: granted AX retry and actual12-process typography matrix evidence.
-- `d916c55`: frozen native transfer/projection/close runners, strict receipts/input inventories and CI pure controls.
-- `ea9ad38`: equivalent search-harness inventory/receipt correction, independently approved.
-- `534643b`: desktop guide corrected to match actual automation evidence.
-- `2f71077`: corrected typography measurement pair and prior checkpoint.
+- `b3851ff`: checked launcher and actual exit17/bootstrap/echo/exit0 evidence.
+- `20a6bd3`: sequential worker runtime/collector,21 tests and public target build.
+- `d7262a8`: monotonic timer and independent busy-child parent EOF,60 injected tests and one actual child test.
+- `219ede9`: exact per-request Foundation engine adapter,42 combined tests.
+- `c065153`: bootstrap and bounded FD-channel component,60 combined injected tests.
+- `363f5fd`: independently reviewed shared spawn-gate design/plan, implementation not yet accepted.
 
-Current distributed development bundle remains source `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0`, ARM64/ad-hoc signed. It has not been Developer-ID signed, notarized or published:
+Read `docs/verification/search-child-lifecycle.md` and `docs/verification/search-worker-runtime.md` for exact source hashes, failed attempts, proof boundaries and reproduction. The helper executable, production search routing and hard regex containment remain outstanding.
+
+## Current ownership and next actions
+
+Root owns actual child/GUI runs, layout diagnostics, public records and commits. No root GUI or child test is currently active. Serialize builds and reserve exclusive CPU/GUI ownership for performance measurements.
+
+- `worker_engine_adapter` completed the pure `SearchWorkerProgram.swift` and matching tests; independent review pending. Frozen `.local/search-worker-program-task3/green-final` has72/0 (12 new+60 prior), behavioral RED12/35. Red/green dependencies are identical; later concurrent gate changes are deliberately excluded. No actual thread/FD/helper was executed.
+- `search_lifetime_timer` implements shared spawn-gate Task1 under the reviewed September30 spec/plan. It owns new PadCore gate/tests, ExternalCommand consumer and search launcher/injected tests. Build slot belongs to this worker. Require exact-lock contention and poison mutants, matching inventories and independent review before any actual peer test.
+- `worker_runtime_review` reconciles the already reviewed September10 parent-wire-driver plan against current source, then reviews Program. The existing driver plan must be reused; no competing second architecture.
+
+Exact next integration actions: review Program and shared-gate implementation, then add the separately reviewed actual unrelated-child EOF test. Do not expose public lifecycle construction before these gates. Program composition candidate follows accepted bootstrap/channel/lifetime interfaces. The parent synchronous-codec/asynchronous-channel driver needs a separately reviewed bounded rendezvous design before the allocation GateA matrix. No production accumulator or helper executable before that matrix qualifies.
+
+## Accepted runtime evidence
+
+Accepted direct process owner: `scripts/run-owned-search-tests.py`, SHA256 `d5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d`. It owns one new process group, observes leader exit before group cleanup and consuming wait, bounds captures, and verifies its narrow EPERM/exited-leader-only fallback. Never nest another session-owning watchdog around a coordinator that already imports it. Strict command/wait/capture/group receipts and positive XCTest counts are mandatory.
+
+Launcher review required a gate-only behavioral mutant:1 test/seven explicit failures, then14 injected launcher tests and36 lifecycle tests pass. Root reused frozen `run.zfhadph_` for actual exit17 and benign descriptor/64-byte echo/exit0 tests, each1/0; full source/fixture/test-bundle bindings verified. Private `.local/search-child-lifecycle-task-2/launcher/gate-review-repair/` retains review and mutation evidence.
+
+Timer/lifetime freeze `.local/search-child-integration/run.e279qdnw` passes60 injected tests. Root actual `actual-lifetime-absolute` passes1/0 with exact child exit0/reap/channel closure while main is occupied. Initial `actual-lifetime` failed before XCTest because the wrapper changes directory; preserve it. Reusing `--skip-build` requires verified matching sources, fixture and test bundle; supply absolute package/scratch paths with a frozen wrapper.
+
+Runtime Task1 evidence `.local/search-worker-runtime-task1/`: compiling RED12/31, final21/0, actual public-target build and independent approval. Task2 `.local/search-worker-engine-task2/`: compiling default-limit RED21/19, final42/0,62 matching frozen inputs and independent approval. These are no-process protocol/semantic/ownership checks, not memory or helper acceptance.
+
+## Disk and build constraints
+
+The external volume reached32MiB free and a diagnostic invocation refused125 before creating a result directory. Root removed only eight obsolete, reproducible, ignored `.build/search-*` scratch directories; exact receipt `.local/cache-reclamation-20260930.json`. Sources, `.local` evidence and distribution artifacts were retained. Historical commands using those scratches require rebuilding. Freed space was approximately2.3GiB immediately; later APFS accounting showed3.7GiB. Continue reusing scratch and serializing builds. Do not delete verification evidence or unrelated external-volume data.
+
+## Unicode layout diagnosis
+
+The original262144-UTF16 shaping fixture times out with wrap enabled in both debug and optimized current-controller paths; wrap-disabled passed. No production threshold/default/guard was adopted. The separately reviewed presentation-subphase probe now ran: initial15-second attempt timed out with no captured test start; separately labeled60-second diagnostic passed1/0 in38.964s, all22 phases and four positive1059×616 geometries. This weakens zero host geometry as the explanation; it is not target acceptance.
+
+Root's timing-only variant `.local/pane-layout-cost/unicode-controller-phase-timing-20260930/` passed1/0 after the disk cleanup. Watchdog41.718633s; `host.before`0.741323s to `host.after`37.276419s isolates36.535096s inside scroll-view host presentation. Later layout/wrap calls were milliseconds. No native operation order changed. Source manifest `848f9e155b2b2877184a4c144349d19b4c0e9232154941a4d4119d70281d9ab8`; binary `dec53cc896e9713354ef90dc9ff725e5cb77721a985db643f23f81ec70b0d8e9`; strict receipts/four bundle hashes verified. Read-only disk inventory overlapped this diagnostic, so no controlled benchmark claim.
+
+The minimal native comparison is now executed in `.local/textkit-comparison-20260930/`: both65,536-unit cases completed; at262,144 units TK1 timed out during undo after60.077s, while TK2 completed exact content/undo checks in54.544s but spent27.527s in initial layout/raster and26.903s in insertion. One hidden run per case, no post-edit paint or latency acceptance; all receipts/source/binary bindings verified. No engine replacement is justified by these results. A paragraph-segmented control and prior Scintilla Unicode gates remain next investigations. Avoid touching legacy `.layoutManager` on the TextKit2 branch because that can force compatibility fallback. Prior Scintilla/CodeMirror and engine licensing results remain in architecture records/private engine memo; do not treat another probe as a selected replacement. UI, IME, multi-selection, undo, recovery, shared panes and accessibility remain required adoption gates.
+
+## Package and desktop state
+
+Current bundle still source `9231fc352d5ba31c1d90ffeb0710a5c94712d1a0`, ARM64/ad-hoc, with no DeveloperID signing, notarization or publication:
 
 - `dist/TheOnlyPad.app`
 - `dist/TheOnlyPad-0.1.0-dev-arm64.zip`
 - `dist/TheOnlyPad.sbom.json`
 
-Executable SHA256: `8f5fe6c898b4c60ceff367fefc3ccdd2ad67ef3b89e1b0ce9ea414d5057613de`. Launch: `open dist/TheOnlyPad.app`. Clean committed packaging evidence: `.local/shortcut-modifier-integrated-evidence/`,618 tracked hashes, release build32.13s/package37.976426s, bundle/archive/SBOM and strict signature checks before/after promotion. Subsequent subsystem changes are not promoted into this bundle.
+Launch with `open dist/TheOnlyPad.app`. Executable SHA256 `8f5fe6c898b4c60ceff367fefc3ccdd2ad67ef3b89e1b0ce9ea414d5057613de`. Packaging evidence `.local/shortcut-modifier-integrated-evidence/`. Subsequent settings, focus, launcher and runtime changes are **not** in this package.
 
-## Desktop and permission state
+Ordinary XCUITest works. Packaged `.local/desktop-ui/shortcut-production-5aq_v27w/` passed customization/persistence/reset, open/edit/save/quit/relaunch/reopen and Option-held File/New. Private pane candidate passed both desktop orientations but does not establish current production remedy. Actual Locate still has an unresolved intermittent stale-context failure; preserve it rather than retrying to hide it.
 
-Root exclusively owns GUI/input and performance intervals. No root GUI process, test session or measurement interval is active. Ordinary XCUITest works. Current packaged results in `.local/desktop-ui/shortcut-production-5aq_v27w/`: shortcut customization/persistence/reset61.702s, open/edit/save/quit/reopen60.103s and Option-held File/New27.860s passed. Separate AXPress remains unverified.
+Separate AXPress remains incomplete. The original probe received trust and File/New presses succeeded, but its following query failed before the two-tab postcondition. A new diagnostic signature was denied on repeated user-requested attempts. Filtered TCC logs confirmed the saved old cdhash does not match that diagnostic. Last retry `run.NhHkpg` ended77/missingAccess, no target launched; no permission calls occurred during this resumption. Diagnostic path pointer `.local/ax-native-probe/query-diagnostic/relocated-root.txt`. Preserve its signature/location. A bundle-specific `tccutil reset Accessibility org.theonlypad.accessibility-check` is a possible remediation but **has not been authorized or performed**; resumption is not authorization to change privacy settings. Never reset all Accessibility grants.
 
-The user explicitly requested another `AXIsProcessTrustedWithOptions` attempt after granting permission. The retry now reports `postPromptTrusted:true`. Actual File and New Tab AXPress both returned success, but a subsequent accessibility query failed before the two-tab postcondition; this is not a passed end-to-end result. The exact owned target terminated normally and cleanup was confirmed; root driver observed probe termination and rejected the incomplete receipt. Evidence: `.local/ax-native-probe/actual-granted-retry/`, canonical run `run.bBWZ03`. Initial sandbox launch failed before launch; the authorized outside-sandbox invocation ran. No system setting was modified by the agent. A separate diagnostic-only private source review is assigned to identify the AX query/status without weakening acceptance or logging user text. Preserve the original trust-false attempt and all retry evidence.
+## Verification commands and remaining scope
 
-Native probe source/build lives privately under `.local/ax-native-probe/`. Corrected build `build.SYf5nn`, bundleID `org.theonlypad.accessibility-check`, probe SHA `1abd3ba8fb04a99af5d8a5c64b460187c3555a659e6dd1a45c9d53074fc5da91`, driver SHA `299e3f98ad2062ce1abd432c1ee5a9ffc5b22bc1cce21af695e0dd2b85c5c656`. Exact relocated root/run pointers are `relocated-canonical-run-root.txt` and `canonical-active-run.txt`; actual run `run.dvFYOY`, receipts in `actual-canonical-run/`. Driver observed exact probe termination. Preserve original stalled external-volume run and its readConfig/open stack sample; that was before the trust API, not a proved delegate-loss bug. The corrected temporary-path alias handling never admits arbitrary symlinks. No privacy setting, entitlement or credential was changed.
-
-Private pane candidate passed both complete desktop orientations93.629s/95.167s, binary `1c717c742c3c2dbc95aa68eea886db5cd6c1aa9dd1db4c16f9c2c10499c49613`, evidence `.local/desktop-ui/pane-scoped-focus-59pj4cfr/`. Its controller-delta settings behavior is not a production remedy. The adopted spec/plan are `docs/superpowers/{specs,plans}/2026-09-10-pane-restoration-remedy.md`. Actual Locate has an unresolved intermittent stale-context failure despite an unchanged isolated pass. Preserve guards and evidence; do not retry to hide failures.
-
-## Active ownership and exact next actions
-
-All agents share the repository. Preserve each other's edits; no automatic commits of unfinished implementation.
-
-1. **lifecycle_repair — private vertical-origin v5 source handoff.** Task1 applied settings is committed at `3d5b9e6`, Task2 preferred focus at `edbfe2a`; settings24, projection20, transfer12, close106/factory133/shared1 and pure30 passed with reviewed receipts. v5 source-only handoff is `.local/pane-layout-cost/typography-vertical-v5/handoff.md`, review manifest `4359b49583ca9ccef2721a83849161aab7a7e0dd63688dca5f74099608629fbd`. Both v5 variants now compiled; root verified209 inputs, exact variant difference and complete compiler receipts. Execution manifest `08a99d009800564674d10a27afc0eb707bf2918b8736daf0ed5ef46878d4637a`. No runtime. Agent completed independent launcher/startup-failure reviews and now prepares a read-only official-source comparison of engine limits in `.local/editor-engine-unicode-risk.md`. No engine adoption or measurement expansion is authorized by that research.
-2. **lifecycle_review — concrete launcher and minimal fixture.** Startup-failure types/control contract committed at `53fa65c`; RED4/5 (`run.jv7ye2cz`) and GREEN36/0 (`run.tz0d347j`), green manifest `f1b3bf51839d5df51cc339bc7d5cabc3a33770a944a9e0de1f759082a4809e9d`, root and independent review verified all6 typed receipts and unchanged original32 bodies. Next active ownership: new `SearchChildLauncher.swift`, integration `FixtureMain.swift`/`SearchChildLauncherTests.swift`, narrow `run_harness.py`/`test_harness.py` updates. Follow reviewed private next-slice/contract briefs, strict defaultSIGCHLD/no-auto-reap checks, sole exact-PID reaper, bounded retained quarantine and real ancillary cleanup gate. No actual child runtime before root source/compile review. Do not modify accepted lifecycle/channel source or Package.swift without resolving a concrete interface blocker. Channel StageB–D remains accepted at `7e062e0`, actual9/0 and injected40/0. Foundation inheritance remains outstanding.
-3. **semantic_review_fallback — Unicode timeout diagnostic.** Original v4 Unicode first baseline timed out; one attempt, zero records, later seven not dispatched. Private `.local/pane-layout-cost/unicode-timeout-diagnostic/` corrected source adds14 fixed phase markers around existing operations only. Root verified131 compiler inputs and binary, then executed one baseline with all agents command-idle: timeout124 at15.044305s, ten markers through geometry.before after typography.after, no origin entry. Owned cleanup/wait/captures verified; session63983 is closed. Root reviewed geometry-subphase source in separate unicode-timeout-geometry-diagnostic folder and authorized baseline-only compilation. Root verified131inputs/argv/binary/receipt then ran with all agents idle: timeout124 at15.049045s, eleven markers through geometry.frame.before only. Existing scroll.frame did not return; later no-wrap/container-size/origin calls not reached. Session86170 closed with owned cleanup/wait/capture verified. Read-only app analysis found normal display configures wrap before host presentation, unlike the original failing fixture. Agent now prepares SOURCEONLY actual-current-controller setup harness for separately selected true/false wrap cases, same synthetic262144 shaping input and15s deadline. It must exercise normal display without extra forced preconfiguration. Source/design independently approved; current-controller harness compiled with inventory `1f75a0c2eecf1e1371846cfedcc7884116b55d8afd03e708d84881d48ae87721`, executable `87a6699fd40bb50d47dff72f5136d00df7eb847d7e3ed94dc5980ffe1ac6fbb1`. Root verified132original/131generated inputs, strict compiler receipt and all4bundle files. Exact runtime commands/cwd are in private `compile-plan.json`; choose the qualified wrapping-enabled XCTest method first under15s watchdog. Actual DEBUG controller true-case timed out15.037139s aftersettings.configure.after/presentation.before, session79763 closed124; distinctfalsecase passed1/0 (.903s XCTest/.974586s watchdog), session95412 closed0. Both strictreceipts/source/bundle/phase checks verified. No active rootruntime. Semanticagent now compiles SAMEinputs release-only under separatebuild-release scratch; rootruntime onlyafterartifactreview. Lifecycle_repair maps realowner show/projection ordering and prepares SOURCEONLY presentation-subphase markers/scalarhostbounds in a separatefolder. No productionguard/default/threshold adopted. Preserve original and first diagnostic; deadline15 seconds.
-
-Root has no active GUI or measurement process. AX diagnostic session66434 ended77/missingAccess: new ad-hoc signature did not gain trust, and no target launched (`run.GG5sBs`, private `query-diagnostic/actual-runtime/`). Preserve the earlier original-probe granted result separately; do not infer this diagnostic is authorized by that receipt or automatically reprompt. The diagnostic build is5816af13… and exact relocated root recorded privately in `.local/ax-native-probe/query-diagnostic/relocated-root.txt`; root corrected only its missing latest-build pointer before execution. No actual query diagnosis was possible. Next: inspect these handoffs, resolve material findings and continue the full plan. Pause all other project commands and obtain explicit idle reports before any performance run; release the interval afterward. GUI tools remain root-only.
-
-## Accepted runner and search evidence
-
-Task0 native runner correction is independently approved. Final26 pure/0, transfer12/0, projection9/0, close106/factory133/shared1 passed. Fresh close `.local/native-close-model/run.3ucg8jrj` has nine complete receipts, exact source/core inventories and binary hashes checked by root. Failed mid-edit source snapshot `run.8g8apwlk` is preserved, not a pass. Evidence/review: `.local/native-runner-migration/repair/`; public record `docs/verification/native-regression-runners.md`.
-
-Search harness correction: initial16 tests/13 failures; final18 harness+27 watchdog=45/0. Actual unchanged lifecycle32/0 at `.local/search-child-integration/run.iqiqcfbd`, manifest `e296078d20369b0d636185de02bf248c8aa152c3634ef24b1d1a4148350248a1`; all three complete receipts and input membership independently checked. Review: `.local/frozen-input-variant-review/independent-review.md`. A similar provenance-validation gap in the legacy shortcut runner remains recorded and outstanding; do not claim it repaired.
-
-Lifecycle Task1 `eb3f1e1` remains accepted:32 deterministic tests and563 full tests passed. Injected channel state `de6becf` remains accepted:20/0 plus unchanged lifecycle32/0, manifest `6f868e669593809d8733c1245e19e549dbb5eaa1d6df31c4dca9658c623c469a`. The cancellation correction has meaningful2-test/4-failure negative evidence. Concrete Darwin adapters/default construction and coherent fixture are accepted at `cc2b01b`/`7e8e504`. Actual StageA smoke `.local/search-child-integration/run.9qp6ec9y` passed1/0 with three complete receipts, matching frozen inventory and manifest `3469c7eb7a77ddf8f8d9298f7edefb7aec9ce625a25fca034641ddce4bc19c34`. It read the exact synthetic byte, closed the channel, observed lifetime EOF/cancel acknowledgment and confirmed peer close with unchanged default SIGPIPE. This does not establish backpressure, cancellation, EPIPE or descriptor reuse. No real helper, launcher, waitpid integration or production regex routing is complete. See `docs/verification/search-child-lifecycle.md` and existing wire-protocol plans.
-
-Use the accepted `scripts/run-owned-search-tests.py` watchdog directly or through its same-process frozen coordinators. Never nest independent session-owning watchdogs. Preserve exact leader/group cleanup, typed receipts, bounded captures, frozen input membership and positive XCTest counts. A process exit code alone is insufficient. Do not use the historical `.local/run-verified-command.py` as proof of current ownership containment.
-
-## Layout measurement evidence and limits
-
-Original v1 pilot: twelve65,536-unit ASCII processes, one sample each;0.415–6.775ms candidate calls. Effective13pt typography was not verified. Retain these as observations of that fixture, not production typography or p95.
-
-Original v2 first256Ki process refused125/`LayoutCostNominalFont` before any origin timing. Complete cleanup/capture confirmed; no v2 measurement accepted. Separate frozen diagnostic observed Helvetica12 (`wrong-size`) using one existing getter, also before origin. Preserve every original input/result.
-
-Corrected v3 actually ran one baseline/candidate pair, with all agents command-idle. Evidence `.local/pane-layout-cost/typography-fixture-v3/{runtime-baseline,runtime-candidate,actual-pair-summary.json}`.246-entry manifest `3e9d6aea0cf1f74a325da6af881271eea166f81db73fb27c173bf7c4922e58f2`. Both typed receipts/font/geometry/memory/timing guards passed:
-
-- Baseline0.098459ms, clamped(-68,240); full setup103.209334ms, typography0.413042ms, peak63.422MiB.
-- Candidate0.578333ms, exact(0,240); full setup107.220959ms, typography0.449208ms, peak63.391MiB.
-
-Both observed13pt system monospaced. This is262144 dense ASCII, nowrap, low origin, one pane, one sample per variant. No p95, cold-engine state, Unicode/long-line/split result or production ceiling follows. The corrected v4 first ASCII batch subsequently ran12 processes successfully with verified typography, complete receipts and source inventories: `.local/pane-layout-cost/typography-matrix-v4/batch-ascii256-low-p1-20260910-121741/root-verified-summary.json`, manifest `6b1ba9a0932ea999fef3a9683ecc7c4b56944edaf4ccc7ec3659cb5979bf63cb`. Candidate origin calls ranged0.513–24.603ms, peak57.4–69.1MiB across pairs. Long-line nowrap candidate clamped to(0,0); other candidates reached(0,240). Exactly one sample per case/variant. Subsequent deep-request and two-pane batches each passed12 processes; deep x clamping limits interpretation, and two-pane long-wrapped summed calls were49.743750ms in one sample. Unicode first baseline then timed out at15.024074s before any record: one attempted process, zero measured, no remaining dispatch. See the public layout record and private adapter folders for verified receipts. Repeated cases and useful vertical-deep geometry remain outstanding. The100ms/512MiB checks are post-return expansion stops, not in-call cancellation/resource guarantees. Public evidence: `docs/verification/pane-origin-layout-cost.md`.
-
-## Commands and ongoing constraints
-
-Proven commands are maintained in `AGENTS.md`. Relevant current commands:
+See AGENTS for proven commands and their precise scopes. Current pure harness/watchdog suite passed50:
 
 ```sh
 python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'
-python3 -m unittest discover -s Tests/NativeIntegration -p test_native_regressions.py
-scripts/test-search-child-lifecycle.sh
-scripts/test-native-document-transfer.sh
-scripts/test-editor-transfer-projection.sh
-scripts/test-native-close-model.sh
 python3 scripts/check-public.py
 xcrun swift-format lint --strict --recursive Sources Tests Package.swift
 git diff --check
 ```
 
-The zero-argument close runner builds a frozen matching app. Optional supplied debug objects require caller-verified matching sources; hashes alone do not establish equivalence. `scripts/test-document-applied-settings.sh` is accepted with24 focused native tests; preferred focus also has20 accepted projection tests. Neither is in the distributed package. Coordinate all shared scratch paths and source snapshots.
+Native runner pure suite's last accepted count is30; not rerun in this resumption. Native transfer/projection/close runners own their watchdog directly. Historical application-shortcut runner still needs the previously identified late-kill/provenance repair. Never disable hooks or tests. Hosted CI is not claimed executed. No new dependency or asset was adopted; original licensing remains MIT.
 
-Do not disable hooks or checks. A previous `core.hooksPath=/dev/null` commit attempt was automatically rejected; ordinary scoped commits succeeded and nothing remains blocked by that rejection. Hosted CI is not claimed executed. Original code/assets remain MIT, no external runtime dependency was adopted, and no signing credential was used. Keep raw paths, screenshots, fixtures and diagnostics ignored/private.
-
-The complete requirements matrix remains authoritative. Remaining scope includes advanced editing/multicursor/rectangle/overwrite, save faults/autosave, folder replacement preview/backups, language tools, workspace/minimap, automation/extensions polish, accessibility/localization/IME, repeated launch/input/100MB/1GB performance, security and final packaged parity. An internal milestone is never product completion.
-
-## Latest checkpoint — permission and controller follow-up
-
-The explicit diagnostic AX retry ended77/missingAccess after120.073s (`run.jkAnl5`, `.local/ax-native-probe/query-diagnostic/actual-grant-retry/`). Session62628 closed; no target launched. Original grant remains confirmed only for the original signature. Root revealed the exact unchanged diagnostic app in Finder and asked the user to enable that bundle; user reports access enabled but diagnostic API returned false. Do not rebuild/move/re-sign that diagnostic while resolving trust; next retry awaits user confirmation for that exact bundle. No security setting changed.
-
-Optimized testable controller true case ended124 at15.040345s; session89276 closed, strict owned cleanup/captures and source/bundle hashes verified in `unicode-current-controller-setup/actual-release-testable-wrap-true/root-verified-stop.json`. Ten markers stop at presentation.before, same as debug true; hidden fixture is not geometry-equivalent to shown owner routes. Initial non-testable release compile failure retained. `semantic_review_fallback` now compiles reviewed source-only `unicode-controller-presentation-phases` diagnostic, inventory38abe67b04c5151f3a2f89d0ef611d4c762129621c4d605df12985454f95aa81; root must verify full compile handoff before running one qualified true case under15s with agents idle. No production editor changes authorized by these observations.
-
-Concrete launcher final initial handoff has injected13/0, default36/0, pure23/0, manifest219801d81b2b8f61f90e7046e17f255a57067ddde1646954f6e02400d1688cbc. Independent review verified five source hashes/eight receipts but found P2: concrete unconfirmed-close wrapper test does not prove the close waiter remains unconfirmed. `lifecycle_review` owns targeted deterministic test correction; `lifecycle_repair` review complete, idle. No actual child execution yet. After corrected review, exact first command is `scripts/test-search-child-lifecycle.sh --filter SearchChildLauncherTests/testImmediateExit17UsesSoleLifecycleReaper`, then inspect all four receipts before separate benign echo test. No launcher commit or package promotion yet.
+The requirements matrix remains authoritative. Advanced editing/multiple cursors/rectangles/overwrite, save failures/autosave, folder replacement preview/backups, languages, workspace/minimap, automation/extensions, accessibility/localization/IME, repeated launch/input/100MB/1GB performance, security, final packaging and full parity remain applicable outstanding work. Preserve exact checkpoints on interruption; do not claim background work continues after the session ends.

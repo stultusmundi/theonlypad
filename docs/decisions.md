@@ -17,3 +17,9 @@
 - Recovery envelope serialization reuses one canonical snapshot encoding rather than encoding nested content twice. Compatibility tests preserve legacy bytes and checksums. A controlled 100 MB trial reduced commit time but increased peak process memory slightly; no general memory or responsiveness improvement is claimed.
 
 - 2026-09-10: Existing-window moves use one process-owned registry lease and publisher pause, with exact native and monitor receipts. Window recreation rebinds retained views; terminal cleanup preserves newer edits. Closed monitor contexts retain identity only for detachment, while action and attachment admission still reject closed/quitting endpoints. Captured destination and presentation generations prevent stale chooser/quit completions from redirecting the user. New-window creation will reuse this transaction with separate provisional capacity and cleanup ownership; it will not copy/adopt a second document.
+
+## 2026-09-30 — Retain engine decision pending a demonstrated long-paragraph remedy
+
+The actual controller's shaping-paragraph delay was localized to scroll-view host presentation. A separate reviewed hidden native comparison used matched content, typography and geometry for TextKit1 and TextKit2. Both had second-scale65,536-unit work; TextKit2's262,144-unit initial layout and insertion remained roughly27 seconds each. TextKit1 exceeded the60-second diagnostic allowance during undo. See `verification/pane-origin-layout-cost.md` for exact scope, retained failures and source hashes.
+
+A direct TextKit2 switch is therefore not adopted as a proven fix. The current native implementation remains provisional; the performance requirement is still outstanding. No wrap default, input-size contract or target was silently reduced. Further engine/paragraph controls must preserve Unicode editing, shared undo, recovery, selection and accessibility before any architectural change.
