@@ -50,3 +50,13 @@ Build and validate a package with `scripts/package.sh --ad-hoc-sign`. `scripts/t
 ```
 
 Reserve exclusive GUI ownership and check for existing editor instances first. Do not terminate a user-owned editor. The retained exact command includes the private app path and is intentionally not published verbatim.
+
+## Additional file-conflict workflows
+
+A separate actual XCUITest run against the same verified package selected two existing external-file tests. Final xcresult reports1 passed,1 failed,0 skipped; xcodebuild exits65. The clean external-file workflow passes: the changed file produces a notice without replacing the buffer, explicit reload adopts the new bytes, and quit/relaunch preserves that content. The dirty-reload/cancel/disk-copy workflow fails while XCTest types the synthetic path in the native Open dialog, before its conflict assertions; it also exceeds its120-second test allowance. That workflow is not accepted by this run.
+
+The retained hierarchy shows the native Go To sheet and its focused path field. The app's sampled main thread is waiting in the native modal event loop. These observations narrow the failure location but do not establish its cause or justify a product fix. An unchanged isolated retry and comparison are the next diagnostic step; do not hide this failure if a retry passes.
+
+Raw results, activities, system-generated diagnostics and attachments remain private under ignored `.local/desktop-external-20260930/`; they must not be published wholesale. The final result summary, copied executable hash and zero-editor-instance postflight were verified. An early attempt to read the result before xcodebuild finished failed; only the finalized xcresult supplies these counts. No system privacy, signal, input-source or display setting was changed.
+
+An unchanged isolated retry subsequently passed the dirty-buffer workflow (1 test,0 failures/skips,65.310 seconds; xcodebuild0). It reused the same verified copied app and existing test binary via `test-without-building`, with fresh synthetic state. Cancel preserved the unsaved buffer; opening a disk copy retained both the disk bytes and original dirty text. The finalized result, unchanged executable hash and zero-editor-instance postflight were verified. The original timeout remains an unresolved intermittent event-delivery failure, not a fixed defect or an all-green full-suite result. Retry evidence is retained under the same ignored directory's `retry/` child.
