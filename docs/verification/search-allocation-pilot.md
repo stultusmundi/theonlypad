@@ -1,6 +1,6 @@
 # Real search-helper allocation preflight
 
-Date: 2026-09-30. One measurement-only parent/helper pilot passed. The editor still uses its existing in-process search service. No accumulator choice, production budget, repeated performance result or hard-regex containment acceptance follows from this run.
+Date: 2026-09-30. Measurement-only parent/helper pilots and fixed real cancellation/deadline scenarios passed. The editor still uses its existing in-process search service. No accumulator choice, production budget, repeated performance acceptance or integrated editor containment is established.
 
 ## Composition and observed result
 
@@ -10,7 +10,7 @@ The synthetic input is250000 U+1F600 scalars:1000000 UTF8 bytes and500000 UTF16 
 
 The actual run verifies one launch/generation, one accepted terminal, one intentional SIGKILL during shutdown, one exact consuming reap, closed channels, no remaining child slot, a settled parent lane and zero retained parent lanes. Original source and both copied executable hashes are bound to the exact build. Root independently verified93 source inputs, three generated inputs, four complete watchdog receipts, compiler diagnostics, artifact bytes and the result. All checks passed; stderr was empty.
 
-Each process produced five ordered, valid self-memory samples. They bind kernel process-start identity and retain current RSS, RSS high-water and footprint fields separately. This is baseline self-counter evidence only: no paired simultaneous peak, full phase coverage, exact Swift String capacity or memory limit is claimed. The separate paired-counter companion has16 pure tests plus one self test; a subsequent benign owned-child integration passed as described below. Search-helper paired sampling remains outstanding.
+Each process produced five ordered, valid self-memory samples. They bind kernel process-start identity and retain current RSS, RSS high-water and footprint fields separately. This is baseline self-counter evidence only: no paired simultaneous peak, full phase coverage, exact Swift String capacity or memory limit is claimed. The separate paired-counter companion has16 pure tests plus one self test; a subsequent benign owned-child integration passed as described below. A later actual-helper paired-sampling run is recorded below.
 
 ## Prerequisite evidence
 
@@ -34,7 +34,7 @@ The next actual run, `run.oxg6zg50`, returned the correct complete result and ob
 
 The corrected actual run is `.local/search-allocation-preparation/pilot/run.tpwysw5k/`, with `root-verification.json`. Source-inventory SHA256: `45c9f7556e1d521c293dd08f876d6cbe7eee8ab6802ce15c98bde0e505f093af`. Parent executable SHA256: `d546010c6855a9d0f5e85ed966d79c448351fb3915361d031a01a44b4e567dce`. Helper executable SHA256: `83098269166a096c512ff1fca9c568f2f2651d5b31c74f6c462305e0cc1b54f5`.
 
-Next work: verify owned-helper counter sampling, compare five fixed-counterpart A/B/C pairs with equal repeated fixtures, execute the full supported large-input/output and warm-recycle matrix, and verify actual cancellation/deadline isolation. Accumulator selection, production helper assembly, editor routing, packaged search workflows and performance acceptance remain outstanding.
+Next work: compare five fixed-counterpart A/B/C pairs with equal repeated fixtures and execute the full supported large-input/output and warm-recycle matrix. Owned-helper counter sampling and fixed cancellation/deadline scenarios are now recorded below. Accumulator selection, production helper assembly, editor routing, packaged search workflows and performance acceptance remain outstanding.
 
 ## Owned-child counter prerequisite
 
@@ -46,7 +46,7 @@ Root independently verified88 frozen inputs and current origins, identical deter
 
 A subsequent actual A/A parent/helper smoke passed with the same1 MB supplementary fixture, exact input/output digests and full cleanup predicates. Three helper and five parent capacity records passed the strict numeric schema; both roles retained five valid self-memory samples. Root independently checked96 source inputs, four generated inputs, unchanged serializer tests (RED11/2, GREEN11/0), warning-free release compilation, exact built/copied executables and all command receipts. Evidence: `.local/search-allocation-preparation/five-pair/run.knzvtros/root-verification.json`.
 
-The records distinguish requested reservation/malloc quantities, observable range-array capacity and builder ownership states. They do not expose Swift String spare capacity or prove allocator pages were returned. The separate paired sampler passed nine deterministic tests after RED9/27, including active-query settlement, stale admission, cadence/caps and bounded sidecar serialization; concrete timer/helper integration remains outstanding. The instrumented smoke is not one of the three comparison repetitions and selects no accumulator or memory budget.
+The records distinguish requested reservation/malloc quantities, observable range-array capacity and builder ownership states. They do not expose Swift String spare capacity or prove allocator pages were returned. The separate paired sampler passed nine deterministic tests after RED9/27, including active-query settlement, stale admission, cadence/caps and bounded sidecar serialization; concrete timer/helper integration subsequently passed as recorded below. The instrumented smoke is not one of the three comparison repetitions and selects no accumulator or memory budget.
 
 ## Actual healthy helper reuse
 
@@ -68,3 +68,21 @@ Both actual invocations passed their30-second outer watchdog without timeout, tr
 | Deadline | `.local/search-real-cancellation-plan/run.ysxc_d5c/root-verification.json` | `cddcfb1973629907052ea33cc832c0a1ea258cd3f89ee79b015e6a6a751b39b1` |
 
 This establishes these fixed real-process scenarios, not arbitrary-pattern performance, an OS memory cap, production helper packaging or native search integration. The editor remains on its in-process service. Public reproducible adoption of the experimental harness, allocation selection and production routing remain necessary.
+
+## Paired counters in the actual helper pilot
+
+The actual1 MB A/A pilot now also passes with the reviewed retained timer and owned-child counter adapter. Nine component tests passed before the single actual invocation. Root independently verified113 source inputs, four generated inputs, six complete stage receipts, current SDK headers, the retained test bundle and both executed binaries. Exact Unicode output and sole-reaper cleanup still pass. Evidence: `.local/search-memory-probe/pilot-paired/integration/run.bfrsd7gt/root-verification.json`; source inventory `fbb159f596e407c6234c9f6fe930e002ee2cb0b75d502ff42a2df64a79d0f070`.
+
+At a requested20 ms interval, the bounded sampler recorded15 points: ten successful parent/helper pairs and five typed exited-child observations during shutdown. Failed observations contain no invented native metrics. All successful points occurred in the request's coarse awaiting-result phase, so this does not establish coverage of individual engine phases. The maximum observed sum of current resident bytes was28,721,152; the largest interval between successful sample starts was21.186125 ms, and individual native query spans were4,667–19,084 ns. No nominal ticks were reported missed. Both separate self sidecars contain their exact five ordered stages with available counters.
+
+This is sampled current memory, not a continuous peak, allocator capacity, hard memory bound or chosen production budget. The release-configuration products were bound after the component-test build and include SwiftPM's testing-enabled compilation; they are retained sampler-integration evidence, not a production performance baseline. Repeated candidate comparison and full-size, cold/warm, uninstrumented and retirement controls remain outstanding.
+
+## Five-pair comparison stopped on a cleanup assertion
+
+All15 fixed cells (A/A, B/A, C/A, A/B, A/C; three interleaved repetitions) compiled without warnings. Their30 copied executables and45 strict build-stage receipts were independently verified before any measurement. Each uses the same1 MB supplementary fixture and exact streaming digest. Reference host: Apple M4 Pro, Mac16,7,48 GiB RAM, ARM64 macOS26.6.2, Swift6.3.3. Power and thermal conditions were not controlled; this is not product performance acceptance.
+
+Six measurements passed. The seventh, C/A repetition2, returned the exact expected output, valid capacity observations, one accepted terminal, closed channels, no remaining child slot and a settled parent with zero retained lanes. It nevertheless correctly failed the current test predicate: one successful SIGKILL request was recorded, but the exact consuming reap reported normal exit0 instead of signal9. The parent exited1, and the outer watchdog verified complete cleanup without timeout or truncated output. The coordinator stopped, preserving the failed attempt and leaving eight cells unstarted. No complete comparison summary, ranking or candidate selection exists.
+
+The immediate assertion mismatch is established in `PilotCleanupEvidence.accepts` and the batch audit's required reap fields. Source inspection also identifies a dedicated lifetime watcher that exits0 on EOF, but the retained numeric evidence does not establish which shutdown ordering produced this result. Do not relabel the failed attempt as passing, relax predicates or retry the unchanged batch to obtain a green run. A focused ordering regression and reviewed healthy-shutdown contract are the next step; exact generation/PID authority, consuming reap, channel closure and parent settlement must remain mandatory.
+
+Private evidence: `.local/search-allocation-preparation/five-pair/batch.a5ah3b3t/root-measurement-review.json`, `measurement-incomplete.json`, and the C/A repetition2 execution receipt. The all-built manifest SHA256 is `30141543da8a462ba48a60cc553c1356f307931c36b9d372ea93fe9662f6bed1`. Independent source review confirmed the assertion mismatch and left the shutdown ordering unresolved; its proposed deterministic regression is retained beside the failed run. No predicate change, retry or replacement batch ran before the requested sprint stop.

@@ -38,12 +38,14 @@ import PadCore
       Changes after the latest checkpoint can still be lost if the app is force-terminated. Recovery text and session metadata are separate files, so an interrupted checkpoint can restore newer text with older tab metadata. Optional autosave of original files is not implemented.
 
       Finding text
-      Find and Replace supports literal, escaped-text and ICU regular-expression modes. Replacement templates accept numbered capture references such as $1. Search bounds and cancellation can stop expensive queries. The ICU dialect differs from Notepad++ Boost regex.
+      Find and Replace supports literal, escaped-text and ICU regular-expression modes. Replacement templates accept numbered capture references such as $1. Cancellation and time limits currently depend on the regex engine returning control; some expensive patterns can delay cancellation. The ICU dialect differs from Notepad++ Boost regex.
 
       Split views
       View > Split Side by Side or Split Top and Bottom shows two views of the current document. They share text, undo and one save/recovery identity, with independent carets and scrolling. Focus Other Pane switches the active view; Close Other Pane keeps the focused view and shared undo history. Finish text composition before changing panes.
 
-      Adding a split is currently limited to 2 million UTF-16 units. Each tab remembers its arrangement while the app is running; restarting restores one view per tab. Moving documents between pane groups or windows and linked scrolling are not implemented.
+      Adding a split is currently limited to 2 million UTF-16 units. Session checkpoints retain the split orientation, preferred pane, selections and scroll positions. Scroll restoration is best effort when window geometry or settings change. Saved splits above the size limit stay deferred in one pane until you restore or discard the saved arrangement.
+
+      File > Move Document to Window moves the current editable tab and its undo history to an existing or new window without saving the original file. Independent document groups, moving read-only streaming views and linked scrolling are not implemented.
 
       Encodings
       Open with Encoding interprets original bytes. Encoding and Line Endings separates conversion of future saves from reopening bytes. Invalid or lossy conversions report an error.
