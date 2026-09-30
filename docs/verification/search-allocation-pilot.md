@@ -10,7 +10,7 @@ The synthetic input is250000 U+1F600 scalars:1000000 UTF8 bytes and500000 UTF16 
 
 The actual run verifies one launch/generation, one accepted terminal, one intentional SIGKILL during shutdown, one exact consuming reap, closed channels, no remaining child slot, a settled parent lane and zero retained parent lanes. Original source and both copied executable hashes are bound to the exact build. Root independently verified93 source inputs, three generated inputs, four complete watchdog receipts, compiler diagnostics, artifact bytes and the result. All checks passed; stderr was empty.
 
-Each process produced five ordered, valid self-memory samples. They bind kernel process-start identity and retain current RSS, RSS high-water and footprint fields separately. This is baseline self-counter evidence only: no paired simultaneous peak, full phase coverage, exact Swift String capacity or memory limit is claimed. The separate paired-counter companion has16 pure tests plus one self test; actual other-process query acceptance remains outstanding.
+Each process produced five ordered, valid self-memory samples. They bind kernel process-start identity and retain current RSS, RSS high-water and footprint fields separately. This is baseline self-counter evidence only: no paired simultaneous peak, full phase coverage, exact Swift String capacity or memory limit is claimed. The separate paired-counter companion has16 pure tests plus one self test; a subsequent benign owned-child integration passed as described below. Search-helper paired sampling remains outstanding.
 
 ## Prerequisite evidence
 
@@ -35,3 +35,9 @@ The next actual run, `run.oxg6zg50`, returned the correct complete result and ob
 The corrected actual run is `.local/search-allocation-preparation/pilot/run.tpwysw5k/`, with `root-verification.json`. Source-inventory SHA256: `45c9f7556e1d521c293dd08f876d6cbe7eee8ab6802ce15c98bde0e505f093af`. Parent executable SHA256: `d546010c6855a9d0f5e85ed966d79c448351fb3915361d031a01a44b4e567dce`. Helper executable SHA256: `83098269166a096c512ff1fca9c568f2f2651d5b31c74f6c462305e0cc1b54f5`.
 
 Next work: verify owned-helper counter sampling, compare five fixed-counterpart A/B/C pairs with equal repeated fixtures, execute the full supported large-input/output and warm-recycle matrix, and verify actual cancellation/deadline isolation. Accumulator selection, production helper assembly, editor routing, packaged search workflows and performance acceptance remain outstanding.
+
+## Owned-child counter prerequisite
+
+The private adapter's nine deterministic admission tests passed after a retained behavioral RED (nine tests, eleven assertions). One actual benign-child test then passed in0.419 seconds. It uses the real launcher, lifecycle, channels and sole reaper, reads parent/child counters while the echo fixture is held, rejects an intentionally stale start identity without changing output, verifies the exact64-byte response and exit0, and revokes the sampling token before any later query. No extra process-control authority was added.
+
+Root independently verified88 frozen inputs and current origins, identical deterministic/actual source inventories, the exact XCTest binary, five complete watchdog receipts, selected positive test count, warning-free diagnostics and current SDK headers. Evidence: `.local/search-memory-probe/owned-child/run.w2lot_ar/` and `root-actual-review.json`. This establishes the counter prerequisite for that owned process; it is not search-helper phase coverage, sampled combined peak or performance acceptance.

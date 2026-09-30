@@ -107,6 +107,66 @@ final class GUIProbe: XCTestCase {
   }
 
   @MainActor
+  func testRegexReplaceConfirmationUndoAndSave() throws {
+    let (app, state) = try fixture()
+    let original = "alpha 😀\nalpha e\u{301}\nALPHA\n"
+    let changed = "alpha! 😀\nalpha! e\u{301}\nALPHA\n"
+    let input = state.appendingPathComponent("synthetic-search.txt")
+    try Data(original.utf8).write(to: input)
+    open(input, in: app)
+    assertText(original, in: app)
+    app.typeKey("f", modifierFlags: .command)
+    let panel = app.dialogs["Find and Replace"]
+    XCTAssertTrue(panel.waitForExistence(timeout: 10))
+    let query = panel.searchFields["Find text"]
+    XCTAssertTrue(query.waitForExistence(timeout: 5))
+    query.click()
+    query.typeText("(alpha)")
+    let mode = panel.popUpButtons["Search mode"]
+    mode.click()
+    let regexMode = app.menuItems["Regular expression (ICU)"]
+    XCTAssertTrue(regexMode.waitForExistence(timeout: 5))
+    regexMode.click()
+    XCTAssertEqual(mode.value as? String, "Regular expression (ICU)")
+    let matchCase = panel.checkBoxes["Match case"]
+    XCTAssertEqual(String(describing: try XCTUnwrap(matchCase.value)), "0")
+    matchCase.click()
+    XCTAssertEqual(String(describing: try XCTUnwrap(matchCase.value)), "1")
+    let replacement = panel.textFields["Replacement text"]
+    replacement.click()
+    replacement.typeText("$1!")
+    panel.buttons["Find All"].click()
+    XCTAssertTrue(panel.staticTexts["Match 1 of 2 (wrap enabled)"].waitForExistence(timeout: 10))
+    panel.buttons["Next"].click()
+    XCTAssertTrue(panel.staticTexts["Match 2 of 2 (wrap enabled)"].waitForExistence(timeout: 5))
+    panel.buttons["Replace All…"].click()
+    let confirmation = app.dialogs.containing(
+      .staticText, identifier: "Replace 2 matches?"
+    ).firstMatch
+    XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+    confirmation.buttons["Cancel"].click()
+    assertText(original, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), Data(original.utf8))
+    panel.buttons["Replace All…"].click()
+    XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+    confirmation.buttons["Replace All"].click()
+    assertText(changed, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), Data(original.utf8))
+    panel.buttons[XCUIIdentifierCloseWindow].click()
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("z", modifierFlags: .command)
+    assertText(original, in: app)
+    app.typeKey("z", modifierFlags: [.command, .shift])
+    assertText(changed, in: app)
+    app.typeKey("s", modifierFlags: .command)
+    let deadline = Date().addingTimeInterval(10)
+    while Date() < deadline && (try? Data(contentsOf: input)) != Data(changed.utf8) {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    }
+    XCTAssertEqual(try Data(contentsOf: input), Data(changed.utf8))
+  }
+
+  @MainActor
   func testScratchRecoveryAfterCommandQuit() throws {
     let (app, _) = try fixture()
     let editor = app.textViews["Document text"].firstMatch
