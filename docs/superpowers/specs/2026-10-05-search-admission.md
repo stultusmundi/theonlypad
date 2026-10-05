@@ -69,7 +69,7 @@ IDs are distinct opaque UUID-backed types, issued only by the controller; no cal
 
 `SearchAdmissionRetryScheduler` has MainActor `schedule(_ action: @escaping @MainActor () -> Void) -> any SearchAdmissionRetryToken`; token has `cancel()`. This slice supplies injected deterministic scheduler tests, not a production interval/default. At most one scheduled retry and one in-flight settlement query process-wide; callbacks are identity-fenced. Retry owns metadata only. Its purpose is to recheck pending cleanup/idle retirement, not to infer settlement from elapsed time. It does not schedule another capture, reader, launch, driver or cancellation task. Actual integration must supply a nonspinning, low-rate monotonic implementation.
 
-`SearchAdmissionShutdown` contains the existing driver shutdown snapshot plus counts of retained active jobs and leases. It reports pending ownership honestly; it contains no source data. It does not decide durable-document quit.
+`SearchAdmissionShutdown` contains the historical receipt of the single driver shutdown command, a separate current `driverSettlement: SearchParentWireSettlement` observation, and current counts of retained active jobs and leases. Repeated calls join that same command and inspect settlement without manufacturing a fresh reap/channel receipt or resetting shutdown grace. A pending, failed or stale inspection reports pending; settled requires the exact latest handle and closed admission. This observation covers request/adopted resources, not launcher quarantine. The snapshot contains no source data and does not decide durable-document quit.
 
 ## Admission and ownership rules
 
