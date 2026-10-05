@@ -192,3 +192,6 @@ Nonterminal driver settlement (2026-10-05): `scripts/test-search-parent-driver.s
 
 
 Native search replacement safety: `scripts/test-search-replacement.sh` passes12 hidden actual-controller tests, neighboring `scripts/test-editor-transfer-projection.sh` passes20 and native runner contracts pass32. Exact frozen sources and direct-watchdog receipts verified. The replacement stages bookmark/macro bookkeeping until final callback revalidation. See `docs/verification/native-edit-revalidation.md`; other edit routes and visible acceptance remain separate. Do not nest another watchdog around these coordinators.
+
+
+Native callback revalidation checkpoint (2026-10-05): `scripts/test-search-replacement.sh` passes32 hidden actual-controller tests across search, minimal document transforms, line endings, Text Utilities, JSON and replay; `scripts/test-editor-transfer-projection.sh` passes20 matching neighboring checks. The shared native edit boundary preserves original async context/operation/cancellation and stages bookkeeping after precommit callbacks. Pure native runner checks pass37. Frozen integrated app build and839 core/component tests pass under the accepted direct watchdog. No windows/input or packaged desktop acceptance follows; see `docs/verification/native-edit-revalidation.md`.

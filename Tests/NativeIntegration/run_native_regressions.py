@@ -98,6 +98,53 @@ def search_replacement_access(test_source, name):
         raise ValueError('search access markers changed')
     return test_source.split(begin)[1].split(end)[0]
 
+def native_edit_completion(text):
+    start='  private func performDocumentCommand('
+    end='  func navigateManaged('
+    if text.count(start)!=1 or text.count(end)!=1:
+        raise ValueError('native command completion boundaries changed')
+    first=text.index(start);last=text.index(end,first)
+    body=text[first:last]
+    marker='      defer { Self.completeFileOperation(document, id: operationID, controller: self) }'
+    if body.count(marker)!=1: raise ValueError('native command completion marker changed')
+    body=body.replace(marker,marker[:-2]+'; NativeEditTestCompletion.finish?() }')
+    return text[:first]+body+text[last:]
+
+def native_line_ending_completion(text):
+    start='  private func convertLineEndings('
+    end='  private func convertEncoding('
+    if text.count(start)!=1 or text.count(end)!=1:
+        raise ValueError('native line ending completion boundaries changed')
+    first=text.index(start);last=text.index(end,first)
+    body=text[first:last]
+    marker='      defer { Self.completeFileOperation(document, id: operationID, controller: self) }'
+    if body.count(marker)!=1: raise ValueError('native line ending completion marker changed')
+    body=body.replace(marker,marker[:-2]+'; NativeEditTestCompletion.finish?() }')
+    return text[:first]+body+text[last:]
+
+def native_replay_completion(text):
+    start='  func replay(_ macro: EditorMacro, repeatCount: Int) {'
+    end='  func textViewDidChangeSelection('
+    if text.count(start)!=1 or text.count(end)!=1:
+        raise ValueError('native replay completion boundaries changed')
+    first=text.index(start);last=text.index(end,first)
+    body=text[first:last]
+    marker='        Self.completeFileOperation(document, id: operationID, controller: self)\n      }\n      do {'
+    if body.count(marker)!=1: raise ValueError('native replay completion marker changed')
+    body=body.replace(marker,marker.replace('\n      }','\n        NativeEditTestCompletion.finish?()\n      }'))
+    return text[:first]+body+text[last:]
+
+def native_text_utility_controller(text):
+    start='  private func showTextUtilities() {'
+    end='  private func showSearch() {'
+    if text.count(start)!=1 or text.count(end)!=1:
+        raise ValueError('native utility construction boundaries changed')
+    first=text.index(start);last=text.index(end,first)
+    body=text[first:last];marker='    panel.showWindow(nil)'
+    if body.count(marker)!=1: raise ValueError('native utility presentation marker changed')
+    body=body.replace(marker,'    // Hidden harness: construct the actual utility panel without showing it.')
+    return text[:first]+body+text[last:]
+
 def search_replacement_controller(text,access):
     start='  private func showSearch() {'
     end='  private func apply(_ transform: LineTransform) {'
@@ -138,7 +185,13 @@ def freeze(root,run,suite,prebuilt=False):
                 if suite=='search-replacement':
                     test_source=(run/'Original/Tests/NativeIntegration/SearchReplacementTests.swift').read_text()
                     if path.name=='EditorWindowController.swift':
-                        data=search_replacement_controller(data.decode(),search_replacement_access(test_source,'CONTROLLER')).encode()
+                        text=search_replacement_controller(data.decode(),search_replacement_access(test_source,'CONTROLLER'))
+                        for transform in (native_edit_completion,native_line_ending_completion,
+                                          native_text_utility_controller,native_replay_completion):
+                            text=transform(text)
+                        data=text.encode()
+                    if path.name=='TextUtilitiesController.swift':
+                        data+=('\n'+search_replacement_access(test_source,'UTILITY')).encode()
                     if path.name=='SearchPanelController.swift':
                         data+=('\n'+search_replacement_access(test_source,'PANEL')).encode()
                 if suite=='settings':
@@ -160,7 +213,7 @@ def freeze(root,run,suite,prebuilt=False):
             text=test_data.decode();start=text.index('// NATIVE-ACCESS-BEGIN');end=text.index('// NATIVE-ACCESS-END')+len('// NATIVE-ACCESS-END');test_data=(text[:start]+text[end:]).encode()
         if suite=='search-replacement':
             text=test_data.decode()
-            for label in ('CONTROLLER','PANEL'):
+            for label in ('CONTROLLER','PANEL','UTILITY'):
                 search_replacement_access(text,label)
                 start=text.index('// SEARCH-'+label+'-ACCESS-BEGIN')
                 end=text.index('// SEARCH-'+label+'-ACCESS-END')+len('// SEARCH-'+label+'-ACCESS-END')
@@ -180,7 +233,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest

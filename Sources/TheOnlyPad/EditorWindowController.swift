@@ -41,9 +41,9 @@ private enum EditorSaveFailure: Error {
   case uncertain(PendingDocumentPublication)
 }
 
-/// One synchronous search admission owns this proposal. The actual delegate claims
+/// One synchronous native edit admission owns this proposal. The actual delegate claims
 /// it before calling application code; nested native edits keep their normal bookkeeping.
-@MainActor private final class SearchReplacementPreparation {
+@MainActor private final class NativeEditPreparation {
   let editor: NSTextView
   let range: NSRange
   let replacement: String
@@ -840,7 +840,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let recovery = RecoveryCoordinator.shared
   private var recoveryFailureShown = false
   private var searchPanel: SearchPanelController?
-  private var searchReplacementPreparation: SearchReplacementPreparation?
+  private var nativeEditPreparation: NativeEditPreparation?
   private var encodingPanel: EncodingPanelController?
   private var textUtilities: TextUtilitiesController?
   private var folderSearch: FolderSearchController?
@@ -2176,6 +2176,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       document.composingPaneID == nil, source.isAttached,
       documents.contains(where: { $0 === document })
     else { return }
+    let sourceContext = context(for: source)
     let snapshot = document.storage.string
     let operationID = document.beginFileOperation()
     document.saving = true
@@ -2189,7 +2190,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       refreshInteractivity(document)
       replaceDocumentText(
         document, source: source, expected: snapshot, replacement: replacement,
-        action: "Convert Line Endings")
+        action: "Convert Line Endings", context: sourceContext, requireFocus: false,
+        operationID: operationID)
     }
   }
 
@@ -2253,13 +2255,102 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     scheduleRecovery()
   }
 
+  /// Primitive checks only: callers run owner admission before this final fence.
+  private func nativeEditContextStillValid(
+    _ document: EditorDocument, source: EditorPane, context: PaneCommandContext?,
+    requireFocus: Bool, operationID: UUID?, cancellation: MacroCancellation? = nil
+  ) -> Bool {
+    guard !document.saving, !preparingToQuit, !windowClosed,
+      source.isAttached, source.document === document,
+      document.panePresentation.installing == nil, document.composingPaneID == nil,
+      documents.contains(where: { $0 === document }),
+      document.panePool.contains(where: { $0 === source }),
+      source.editor.textStorage === document.storage,
+      !document.storage.editedMask.contains(.editedCharacters)
+    else { return false }
+    if let operationID, document.operationID != operationID { return false }
+    if cancellation?.isCancelled == true { return false }
+    if let context {
+      guard context.documentID == document.id, context.paneID == source.id,
+        context.editRevision == document.editRevision
+      else { return false }
+      if requireFocus {
+        guard current === document, focusedPane === source,
+          source.editor.selectedRange() == context.selection
+        else { return false }
+      }
+    }
+    return true
+  }
+
+  @discardableResult private func applyNativeTextEdit(
+    _ document: EditorDocument, source: EditorPane, expected: String, edit: TextEdit,
+    action: String, context: PaneCommandContext? = nil, requireFocus: Bool = true,
+    operationID: UUID? = nil, cancellation: MacroCancellation? = nil
+  ) -> Bool {
+    guard nativeEditPreparation == nil,
+      documents.contains(where: { $0 === document }),
+      !document.saving, !preparingToQuit, !windowClosed, source.isAttached,
+      document.composingPaneID == nil,
+      document.storage.string.utf16.elementsEqual(expected.utf16)
+    else { return false }
+    let range = edit.range
+    let replacement = edit.replacement
+    let native = expected as NSString
+    guard range.location >= 0, range.length >= 0, range.location <= native.length,
+      range.length <= native.length - range.location
+    else { return false }
+    func scalarBoundary(_ offset: Int) -> Bool {
+      offset == 0 || offset == native.length
+        || !(0xDC00...0xDFFF).contains(native.character(at: offset))
+    }
+    guard scalarBoundary(range.location), scalarBoundary(NSMaxRange(range)) else { return false }
+    let editor = source.editor
+    let revision = document.editRevision
+    let ownership = document.ownershipGeneration
+    let mutation = document.closeMutationGeneration
+    @MainActor func snapshotStillValid() -> Bool {
+      self.nativeEditContextStillValid(
+        document, source: source, context: context, requireFocus: requireFocus,
+        operationID: operationID, cancellation: cancellation)
+        && document.editRevision == revision && document.ownershipGeneration == ownership
+        && document.closeMutationGeneration == mutation
+        && document.storage.string.utf16.elementsEqual(expected.utf16)
+    }
+    @MainActor func stillAdmitted() -> Bool {
+      (context == nil || self.applicationAllows(.select, document: document))
+        && self.applicationAllows(.edit, document: document) && snapshotStillValid()
+    }
+    guard stillAdmitted() else { return false }
+    editor.breakUndoCoalescing()
+    guard stillAdmitted() else { return false }
+    let preparation = NativeEditPreparation(
+      editor: editor, range: range, replacement: replacement, validate: snapshotStillValid)
+    self.nativeEditPreparation = preparation
+    defer { self.nativeEditPreparation = nil }
+    guard editor.shouldChangeText(in: range, replacementString: replacement), stillAdmitted()
+    else { return false }
+    editor.documentUndo.beginUndoGrouping()
+    // Undo-group notifications may run application code too. Publish no edit
+    // bookkeeping until the target and proposal are valid after that boundary.
+    guard stillAdmitted(), preparation.commit?() ?? !preparation.delegateClaimed else {
+      editor.documentUndo.endUndoGrouping()
+      return false
+    }
+    editor.textStorage?.replaceCharacters(in: range, with: replacement)
+    editor.didChangeText()
+    editor.documentUndo.endUndoGrouping()
+    editor.documentUndo.setActionName(action)
+    return true
+  }
+
   @discardableResult private func replaceDocumentText(
     _ document: EditorDocument, source: EditorPane, expected: String, replacement: String,
     action: String,
-    edit: TextEdit? = nil
+    edit: TextEdit? = nil, context: PaneCommandContext? = nil, requireFocus: Bool = true,
+    operationID: UUID? = nil
   ) -> Bool {
     guard !preparingToQuit, !windowClosed, !document.saving, source.isAttached,
-      applicationAllows(.edit, document: document),
       source.document === document, document.composingPaneID == nil,
       documents.contains(where: { $0 === document }),
       document.storage.string.utf16.elementsEqual(expected.utf16),
@@ -2274,16 +2365,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       present(error)
       return false
     }
-    guard source.editor.shouldChangeText(in: change.range, replacementString: change.replacement)
-    else {
-      return false
-    }
-    source.editor.breakUndoCoalescing()
-    document.undoManager.beginUndoGrouping()
-    source.editor.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
-    source.editor.didChangeText()
-    document.undoManager.endUndoGrouping()
-    document.undoManager.setActionName(action)
+    guard
+      applyNativeTextEdit(
+        document, source: source, expected: expected, edit: change, action: action,
+        context: context, requireFocus: requireFocus, operationID: operationID)
+    else { return false }
     refresh()
     return true
   }
@@ -2431,10 +2517,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
                 "The target document or selection changed. Run the editing command again."
             ])
         }
-        if result.text.utf16.elementsEqual(snapshot.utf16)
+        let unchanged = result.text.utf16.elementsEqual(snapshot.utf16)
+        if unchanged {
+          guard
+            self.nativeEditContextStillValid(
+              document, source: source, context: sourceContext, requireFocus: true,
+              operationID: operationID)
+          else { return }
+        }
+        if unchanged
           || self.replaceDocumentText(
             document, source: source, expected: snapshot, replacement: result.text, action: action,
-            edit: edit)
+            edit: edit, context: sourceContext, operationID: operationID)
         {
           source.editor.setSelectedRange(result.selection)
           source.editor.scrollRangeToVisible(result.selection)
@@ -2604,14 +2698,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
             ]))
         return
       }
+      guard
+        self.applyNativeTextEdit(
+          document, source: source, expected: snapshot,
+          edit: TextEdit(range: range, replacement: replacement), action: "Text Conversion",
+          context: sourceContext)
+      else { return }
       let editor = source.editor
-      guard editor.shouldChangeText(in: range, replacementString: replacement) else { return }
-      editor.breakUndoCoalescing()
-      editor.documentUndo.beginUndoGrouping()
-      editor.textStorage?.replaceCharacters(in: range, with: replacement)
-      editor.didChangeText()
-      editor.documentUndo.endUndoGrouping()
-      editor.documentUndo.setActionName("Text Conversion")
       editor.setSelectedRange(NSRange(location: range.location, length: replacement.utf16.count))
       self.refresh()
     }
@@ -2643,52 +2736,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
       },
       replace: { [weak self, weak document] expected, replacement in
-        guard let self, let document, self.searchReplacementPreparation == nil,
-          self.documents.contains(where: { $0 === document }),
-          !document.saving, !self.preparingToQuit, !self.windowClosed, source.isAttached,
-          document.composingPaneID == nil,
-          document.storage.string.utf16.elementsEqual(expected.utf16)
+        guard let self, let document,
+          self.applyNativeTextEdit(
+            document, source: source, expected: expected,
+            edit: TextEdit(
+              range: NSRange(location: 0, length: expected.utf16.count),
+              replacement: replacement), action: "Replace All")
         else { return false }
-        let editor = source.editor
-        let revision = document.editRevision
-        let ownership = document.ownershipGeneration
-        let mutation = document.closeMutationGeneration
-        @MainActor func snapshotStillValid() -> Bool {
-          !document.saving && !self.preparingToQuit && !self.windowClosed
-            && source.isAttached && source.document === document
-            && document.panePresentation.installing == nil && document.composingPaneID == nil
-            && self.documents.contains(where: { $0 === document })
-            && document.panePool.contains(where: { $0 === source })
-            && editor.textStorage === document.storage
-            && document.editRevision == revision && document.ownershipGeneration == ownership
-            && document.closeMutationGeneration == mutation
-            && !document.storage.editedMask.contains(.editedCharacters)
-            && document.storage.string.utf16.elementsEqual(expected.utf16)
-        }
-        @MainActor func stillAdmitted() -> Bool {
-          self.applicationAllows(.edit, document: document) && snapshotStillValid()
-        }
-        let range = NSRange(location: 0, length: expected.utf16.count)
-        guard stillAdmitted() else { return false }
-        editor.breakUndoCoalescing()
-        guard stillAdmitted() else { return false }
-        let preparation = SearchReplacementPreparation(
-          editor: editor, range: range, replacement: replacement, validate: snapshotStillValid)
-        self.searchReplacementPreparation = preparation
-        defer { self.searchReplacementPreparation = nil }
-        guard editor.shouldChangeText(in: range, replacementString: replacement), stillAdmitted()
-        else { return false }
-        editor.documentUndo.beginUndoGrouping()
-        // Undo-group notifications may run application code too. Publish no search
-        // bookkeeping until the target and proposal are valid after that boundary.
-        guard stillAdmitted(), preparation.commit?() ?? !preparation.delegateClaimed else {
-          editor.documentUndo.endUndoGrouping()
-          return false
-        }
-        editor.textStorage?.replaceCharacters(in: range, with: replacement)
-        editor.didChangeText()
-        editor.documentUndo.endUndoGrouping()
-        editor.documentUndo.setActionName("Replace All")
         document.preferredPaneID = source.id
         self.display(document)
         return true
@@ -2790,14 +2844,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
         guard !formatted.utf16.elementsEqual(captured.utf16) else { return }
         let range = NSRange(location: 0, length: (captured as NSString).length)
-        let editor = source.editor
-        guard editor.shouldChangeText(in: range, replacementString: formatted) else { return }
-        editor.breakUndoCoalescing()
-        editor.documentUndo.beginUndoGrouping()
-        editor.textStorage?.replaceCharacters(in: range, with: formatted)
-        editor.didChangeText()
-        editor.documentUndo.endUndoGrouping()
-        editor.documentUndo.setActionName("Format JSON")
+        guard
+          self.applyNativeTextEdit(
+            document, source: source, expected: captured,
+            edit: TextEdit(range: range, replacement: formatted), action: "Format JSON",
+            context: sourceContext, requireFocus: false)
+        else { return }
         self.refresh()
       } catch { self?.present(error) }
     }
@@ -3389,7 +3441,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
     replacementString: String?
   ) -> Bool {
-    if let preparation = searchReplacementPreparation,
+    if let preparation = nativeEditPreparation,
       !preparation.delegateClaimed, preparation.editor === textView
     {
       // Claim before any owner/delegate callback. Identical nested edits cannot
@@ -3398,7 +3450,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       guard affectedCharRange == preparation.range,
         replacementString == preparation.replacement
       else { return false }
-      return prepareSearchReplacement(preparation)
+      return prepareNativeEdit(preparation)
     }
     guard let source = pane(for: textView), mayMutate(source) else { return false }
     let document = source.document
@@ -3488,7 +3540,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     return true
   }
 
-  private func prepareSearchReplacement(_ preparation: SearchReplacementPreparation) -> Bool {
+  private func prepareNativeEdit(_ preparation: NativeEditPreparation) -> Bool {
     guard let source = pane(for: preparation.editor), mayMutate(source), preparation.validate()
     else { return false }
     let document = source.document
@@ -3517,7 +3569,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         return false
       }
     }
-    let noOp = document.storage.string.utf16.elementsEqual(preparation.replacement.utf16)
+    let native = document.storage.mutableString
+    let replacementUnits = preparation.replacement.utf16
+    let noOp =
+      preparation.range.length == replacementUnits.count
+      && zip(preparation.range.location..<NSMaxRange(preparation.range), replacementUnits)
+        .allSatisfy { native.character(at: $0.0) == $0.1 }
     let recordingID = recordingDocumentID
     let commands = recordedCommands
     let units = recordedUnits
@@ -3662,14 +3719,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           return
         }
         let range = NSRange(location: 0, length: snapshot.utf16.count)
-        if source.editor.shouldChangeText(in: range, replacementString: replacement) {
-          source.editor.breakUndoCoalescing()
-          document.undoManager.beginUndoGrouping()
-          source.editor.textStorage?.replaceCharacters(in: range, with: replacement)
-          source.editor.didChangeText()
-          document.undoManager.endUndoGrouping()
-          document.undoManager.setActionName(macro.name)
-        }
+        self.applyNativeTextEdit(
+          document, source: source, expected: snapshot,
+          edit: TextEdit(range: range, replacement: replacement), action: macro.name,
+          context: sourceContext, requireFocus: false, operationID: operationID,
+          cancellation: cancellation)
         self.refresh()
       } catch {
         guard document.operationID == operationID, self?.replayCancellation === cancellation else {

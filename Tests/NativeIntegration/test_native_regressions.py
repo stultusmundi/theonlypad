@@ -63,6 +63,87 @@ class NativeRunnerTests(unittest.TestCase):
             with self.subTest(text=text),self.assertRaises(ValueError):
                 RUNNER.parse_success('search-replacement',text)
 
+    def test_replay_completion_transform_preserves_owned_cleanup_and_is_exact(self):
+        source="""prefix
+  func replay(_ macro: EditorMacro, repeatCount: Int) {
+    Task {
+      defer {
+        originalCancellationCleanup()
+        Self.completeFileOperation(document, id: operationID, controller: self)
+      }
+      do {
+        actualReplay()
+      }
+    }
+  }
+  func textViewDidChangeSelection(_ notification: Notification) {
+suffix
+"""
+        marker='        Self.completeFileOperation(document, id: operationID, controller: self)\n      }\n      do {'
+        expected=source.replace(marker,marker.replace('\n      }','\n        NativeEditTestCompletion.finish?()\n      }'))
+        self.assertEqual(RUNNER.native_replay_completion(source),expected)
+        for broken in [source.replace(marker,''),source.replace(marker,marker+'\n'+marker),
+                       source+source,source.replace('  func textViewDidChangeSelection(', 'changed(')]:
+            with self.assertRaises(ValueError): RUNNER.native_replay_completion(broken)
+
+    def test_text_utility_transform_suppresses_only_the_exact_presentation(self):
+        source="""prefix
+  private func showTextUtilities() {
+    let panel = actualPanel(actualReplacement)
+    panel.showWindow(nil)
+  }
+
+  private func showSearch() {
+    panel.showWindow(nil)
+  }
+suffix
+"""
+        expected=source.replace('    panel.showWindow(nil)',
+          '    // Hidden harness: construct the actual utility panel without showing it.',1)
+        self.assertEqual(RUNNER.native_text_utility_controller(source),expected)
+        for broken in [source.replace('  private func showSearch()', 'changed()'),
+                       source.replace('    let panel', '    panel.showWindow(nil)\n    let panel'),
+                       source+source]:
+            with self.assertRaises(ValueError): RUNNER.native_text_utility_controller(broken)
+
+    def test_line_ending_completion_transform_is_exact_and_preserves_cleanup(self):
+        source="""prefix
+  private func convertLineEndings(
+    Task {
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
+      actualConversion()
+    }
+  }
+
+  private func convertEncoding(
+suffix
+"""
+        marker='      defer { Self.completeFileOperation(document, id: operationID, controller: self) }'
+        expected=source.replace(marker,marker[:-2]+'; NativeEditTestCompletion.finish?() }')
+        self.assertEqual(RUNNER.native_line_ending_completion(source),expected)
+        for broken in [source.replace(marker,''),source.replace(marker,marker+'\n'+marker),
+                       source+source,source.replace('  private func convertEncoding(', 'changed(')]:
+            with self.assertRaises(ValueError): RUNNER.native_line_ending_completion(broken)
+
+    def test_document_command_completion_transform_is_exact_and_preserves_cleanup(self):
+        source="""prefix
+  private func performDocumentCommand(
+    Task { [weak self, weak document] in
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
+      actualCommand()
+    }
+  }
+
+  func navigateManaged(
+suffix
+"""
+        marker='      defer { Self.completeFileOperation(document, id: operationID, controller: self) }'
+        expected=source.replace(marker,marker[:-2]+'; NativeEditTestCompletion.finish?() }')
+        self.assertEqual(RUNNER.native_edit_completion(source),expected)
+        for broken in [source.replace(marker,''),source.replace(marker,marker+'\n'+marker),
+                       source+source,source.replace('  func navigateManaged(', 'changed(')]:
+            with self.assertRaises(ValueError): RUNNER.native_edit_completion(broken)
+
     def test_search_replacement_transform_changes_only_presentation_and_appends_access(self):
         source="""  private func showSearch() {
     let panel = actualSearchPanel(replace: actualReplacement)
@@ -113,6 +194,41 @@ class NativeRunnerTests(unittest.TestCase):
             path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(data)
         run=Path(self.temp.name)/'run';run.mkdir()
         return root,run
+
+    def test_search_replacement_manifest_declares_all_frozen_transforms(self):
+        root,run=self.fixture()
+        source="""  private func convertLineEndings(
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
+  private func convertEncoding(
+  private func performDocumentCommand(
+      defer { Self.completeFileOperation(document, id: operationID, controller: self) }
+  func navigateManaged(
+  private func showTextUtilities() {
+    panel.showWindow(nil)
+  private func showSearch() {
+    panel.showWindow(nil)
+  private func apply(_ transform: LineTransform) {
+  func replay(_ macro: EditorMacro, repeatCount: Int) {
+        Self.completeFileOperation(document, id: operationID, controller: self)
+      }
+      do {
+  func textViewDidChangeSelection(
+"""
+        files={'Sources/TheOnlyPad/EditorWindowController.swift':source,
+          'Sources/TheOnlyPad/SearchPanelController.swift':'// actual search panel\n',
+          'Sources/TheOnlyPad/TextUtilitiesController.swift':'// actual utility panel\n',
+          'scripts/test-search-replacement.sh':'# actual suite entry\n',
+          'Tests/NativeIntegration/SearchReplacementTests.swift':''.join(
+            '// SEARCH-'+label+'-ACCESS-BEGIN\n// '+label+' access\n// SEARCH-'+label+'-ACCESS-END\n'
+            for label in ('CONTROLLER','PANEL','UTILITY'))}
+        for name,value in files.items(): (root/name).write_text(value)
+        manifest=RUNNER.freeze(root,run,'search-replacement')
+        self.assertEqual(manifest['transformation'],
+          'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; '
+          'exact search and text utility showWindow calls suppressed; document command, line-ending conversion and '
+          'macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.')
+        self.assertEqual((run/'Original/Sources/TheOnlyPad/EditorWindowController.swift').read_text(),source)
+        self.assertNotEqual((run/'Package/Sources/NativeRouting/EditorWindowController.swift').read_text(),source)
 
     def test_transfer_snapshot_retains_exact_original_and_counter_transform(self):
         root,run=self.fixture()
