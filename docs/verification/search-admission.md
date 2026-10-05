@@ -1,6 +1,6 @@
 # Search admission verification
 
-Driver settlement, the numeric ledger and the policy-injected admission controller are implemented and independently reviewed. The controller remains unrouted; native/modal integration and measured policy selection remain planned. No production budget, helper accumulator or native route is selected.
+Driver settlement, the numeric ledger and the policy-injected admission controller are implemented and independently reviewed. The controller remains unrouted; hidden nested AppKit-mode borrow tests now pass, while shown-modal integration and measured policy selection remain planned. No production budget, helper accumulator or native route is selected.
 
 ## Descriptor and ledger — 2026-10-05
 
@@ -48,3 +48,14 @@ Root executed one hidden native control with actual AppKit target/action dispatc
 The control passes1/0 without compiler warnings. Root verified77 current/frozen inputs, the exact test binary and complete owned-watchdog receipt. Inventory SHA256: `e9051429e1a0249eef9063aa06ac9cccd4de775189dad5848613ff0071ff61fe`; evidence is ignored under `.local/search-admission-native-borrow-20261005/boundary2-run/`. An earlier compile-only attempt passed a CFString where this SDK requires an explicit CFRunLoopMode wrapper; it executed no test and remains preserved.
 
 No window, shown modal session or physical input was exercised. Broader nested budget-refusal, unregister/release and joined-shutdown cases are being implemented separately. Production native routing and the default memory policy remain outstanding.
+
+
+## Dedicated native borrow runner
+
+`scripts/test-search-admission-native-borrow.sh` now runs three mandatory hidden AppKit tests through its own direct watchdog. Twenty-four pure runner checks validate frozen membership and exact named execution; the runner rejects omitted, skipped or conditional cases. It remains separate from the ordinary headless core suite. Do not nest another process-group watchdog around it.
+
+The tests cover refused and admitted replacement under two injected budgets while an old borrow stays live; nested unregister/release with deferred credit/context destruction; and two shutdown callers sharing one driver command while the retained result remains charged. Actual target/action and nested `modalPanel` run-loop dispatch occur without shown windows, posted input or a helper. Driver and policy remain injected. Removing the production borrow-depth destruction fence in a private mutation produces three failed assertions in the nested case.
+
+Independent review found fixture cleanup could create a new held shutdown if the native callback never began. A bounded regression reproduced one failed assertion and unconditionally rescued the task, without watchdog timeout. Cleanup now disables future holds before draining existing ones. The final three tests pass, including that previously failing path. Earlier compilation failures and all mutation/RED receipts remain preserved.
+
+Root executed the adopted, formatted runner and verified all80 source/generated bindings, both strict execution receipts and the exact test binary. Inventory SHA256: `d424c5905d937a7d44c54f7ef2067a2f621e56f8d5dd4fae4c3dc8966c27a6a7`; evidence: `.local/search-admission-native-integration/run.g7dvwknz/`. The pre-adoption final and mutation snapshots remain under `.local/search-admission-native-borrow-20261005/`. No production source changed in this checkpoint. This establishes hidden native reentry behavior, not a shown modal session, physical keyboard input, application shutdown routing, memory performance or desktop acceptance.
