@@ -186,3 +186,6 @@ Packaged search workflow: `GUIProbe/testRegexReplaceConfirmationUndoAndSave` pas
 
 
 Shutdown preservation controls (2026-10-05): `scripts/test-search-child-lifecycle.sh --filter 'SearchChildLifecycleTests/testSuccessfulSignal'` passes2 tests; matching default lifecycle passes53. Successful signal followed by exact exit0 or signal9 retains ownership until channel acknowledgment. A frozen premature-release mutant fails6 assertions. Root verified78 input hashes and strict direct-watchdog receipts; independent review approved the test scope. Production and the private allocation predicate are unchanged; this does not explain historical OS scheduling or establish app routing. See `docs/verification/search-child-lifecycle.md`.
+
+
+Nonterminal driver settlement (2026-10-05): `scripts/test-search-parent-driver.sh` passes54 tests; default `scripts/test-search-child-lifecycle.sh` passes57; parent runner pure contracts pass23. Matching source inventories, direct-watchdog receipts and stale-handle mutation failure were verified. Inspection preserves healthy reuse and waits for exact request/adopted cleanup; it does not certify launcher quarantine. See `docs/verification/search-parent-driver.md`. No admission policy, production helper routing or packaged acceptance follows.

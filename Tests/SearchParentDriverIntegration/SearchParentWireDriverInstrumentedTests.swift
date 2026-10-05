@@ -64,6 +64,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     await observerInstalled.wait()
     h.connection.offer(try DriverTestWire.success(identity: identity))
     await entered.wait()
+    let heldSettlement = try await driver.settlement(after: first)
+    XCTAssertEqual(heldSettlement, .pending)
     XCTAssertFalse(
       events.withValue { $0.contains(.resultDelivered(first.nonce)) },
       "Publication is forbidden inside the held source-bearing helper")
@@ -148,6 +150,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
       let result = try await driver.wait(for: failed)
       XCTAssertEqual(result, .failed(identity: nil, failure: .invalidPolicy))
     } catch { XCTFail("Refused attempt erased the unobserved failure: \(error)") }
+    let heldSettlement = try await driver.settlement(after: failed)
+    XCTAssertEqual(heldSettlement, .pending)
     sessionRelease.open()
     h.prepareCleanup()
     _ = await driver.shutdown()
@@ -191,6 +195,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     let held = await driver.testLaneOwnership()
     XCTAssertTrue(held.reserved, "A no-ticket refusal cannot release another owner's lane credit")
     XCTAssertTrue(held.executing, "The actual retained thread is positively held")
+    let heldSettlement = try await driver.settlement(after: refused)
+    XCTAssertEqual(heldSettlement, .pending)
     hold.open()
     await released.wait()
     let ended = await driver.testLaneOwnership()
@@ -401,6 +407,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     XCTAssertEqual(connection.readEntered.value, 0)
     let held = await driver.testLaneOwnership()
     XCTAssertTrue(held.reserved)
+    let heldSettlement = try await driver.settlement(after: second)
+    XCTAssertEqual(heldSettlement, .pending)
     oldOwnerRelease.open()
     await connection.waitForWriteCalls(2)
     connection.offer(try DriverTestWire.childHello(generation: generation))
@@ -570,6 +578,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     let (handle, identity) = try await start(h, driver: driver)
     h.connection.offer(try DriverTestWire.success(identity: identity))
     await entered.wait()
+    let heldSettlement = try await driver.settlement(after: handle)
+    XCTAssertEqual(heldSettlement, .pending)
     XCTAssertFalse(callbacks.withValue { $0.contains("begin") })
     XCTAssertEqual(h.connection.readEntered.value, 2)
     release.open()
@@ -605,6 +615,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     let (handle, identity) = try await start(h, driver: driver)
     h.connection.offerFailure(.channelFailure(5))
     await entered.wait()
+    let heldSettlement = try await driver.settlement(after: handle)
+    XCTAssertEqual(heldSettlement, .pending)
     XCTAssertEqual(h.system.signalCount.value, 0)
     XCTAssertEqual(h.connection.readEntered.value, 2)
     release.open()
@@ -649,6 +661,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
         identity: identity, source: "x",
         output: .init(matches: [NSRange(location: 0, length: 1)], replacement: nil)))
     XCTAssertEqual(retirement.withValue { $0 }, false)
+    let heldSettlement = try await driver.settlement(after: handle)
+    XCTAssertEqual(heldSettlement, .pending)
     do {
       _ = try await driver.submit(job())
       XCTFail("Refused retirement cannot restore old admission")
@@ -796,6 +810,8 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     executeRelease.open()
     await expectEntered.wait()
     await decisionObserved.wait()
+    let heldSettlement = try await driver.settlement(after: handle)
+    XCTAssertEqual(heldSettlement, .pending)
     let enabled = try XCTUnwrap(firstDecision.withValue { $0 })
     XCTAssertFalse(enabled, "Held response must remain ineligible before expect")
     if enabled { await prematureConsume.wait() }
@@ -810,16 +826,165 @@ final class SearchParentWireDriverInstrumentedTests: XCTestCase {
     _ = await driver.shutdown()
   }
 
-  private func start(_ h: DriverHarness, driver: SearchParentWireDriver) async throws
-    -> (SearchParentWireHandle, SearchWireIdentity)
-  {
+  func testSettlementCancellationCleanupPermitsFreshAdmissionWithoutShutdown() async throws {
+    try await assertNonterminalCancellationCleanup(holdClose: false)
+  }
+
+  func testSettlementCloseAcknowledgmentPermitsFreshAdmissionWithoutShutdown() async throws {
+    try await assertNonterminalCancellationCleanup(holdClose: true)
+  }
+
+  private func assertNonterminalCancellationCleanup(holdClose: Bool) async throws {
+    let h = try DriverHarness()
+    let connection = holdClose ? DriverTestConnection(holdClose: true) : h.connection
+    h.system.reapOnSignal = holdClose
+    let adoptedReleased = DriverTestGate()
+    let releases = DriverTestLocked<[UUID]>([])
+    SearchChildLifecycleTestHooks.afterAdoptedRelease = { generation in
+      releases.withValue { $0.append(generation) }
+      adoptedReleased.open()
+    }
+    defer {
+      SearchChildLifecycleTestHooks.afterAdoptedRelease = nil
+      h.releaseAllGates()
+    }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let (first, identity) = try await start(h, driver: driver, connection: connection)
+    let pollsBeforeCancel = h.system.polledPIDs.count
+    try await driver.cancel(first)
+    let cancelled = try await driver.wait(for: first)
+    XCTAssertEqual(cancelled, .failed(identity: identity, failure: .cancelled))
+    await connection.closeEntered.wait(for: 1)
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.scheduled.value)
+    let pending = try await driver.settlement(after: first)
+    XCTAssertEqual(pending, .pending)
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.scheduled.value, before.2)
+    if holdClose {
+      connection.closeRelease.open()
+    } else {
+      h.system.prepareReap()
+      h.timers.fireDue(at: h.clock.advance(by: 100_000_000))
+    }
+    await adoptedReleased.wait()
+    XCTAssertEqual(
+      Array(h.system.polledPIDs.dropFirst(pollsBeforeCancel)), holdClose ? [7120] : [7120, 7120])
+    XCTAssertEqual(connection.closeEntered.value, 1)
+    XCTAssertEqual(releases.withValue { $0 }, [identity.generation])
+    let available = try await driver.settlement(after: first)
+    XCTAssertEqual(available, .settled(admissionClosed: false))
+    let second = try await driver.submit(job())
+    await h.system.launchCount.wait(for: 2)
+    let generation = try XCTUnwrap(h.system.generations.last)
+    XCTAssertNotEqual(generation, identity.generation)
+    h.system.defaultPoll = .running
+    let nextConnection = DriverTestConnection()
+    h.system.deliver(generation: generation, pid: 7184, connection: nextConnection)
+    await nextConnection.waitForWriteCalls(2)
+    nextConnection.offer(try DriverTestWire.childHello(generation: generation))
+    await nextConnection.waitForWriteCalls(7)
+    let next = try SearchWireIdentity(
+      generation: generation, requestID: second.requestID, ordinal: 1)
+    nextConnection.offer(try DriverTestWire.success(identity: next))
+    let completed = try await driver.wait(for: second)
+    XCTAssertEqual(
+      completed,
+      .completed(
+        identity: next, source: "x",
+        output: .init(matches: [NSRange(location: 0, length: 1)], replacement: nil)))
+    let reused = try await driver.settlement(after: second)
+    XCTAssertEqual(reused, .settled(admissionClosed: false))
+    XCTAssertEqual(h.system.signals.count, 1)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+  }
+
+  func testSettlementRejectsHandleChangedDuringInspection() async throws {
+    let h = try DriverHarness()
+    h.system.reapOnSignal = true
+    let entered = DriverTestGate()
+    let release = DriverTestGate()
+    SearchParentDriverTestHooks.afterSettlementInspection = {
+      entered.open()
+      await release.wait()
+    }
+    defer {
+      release.open()
+      SearchParentDriverTestHooks.afterSettlementInspection = nil
+      h.releaseAllGates()
+    }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let (first, identity) = try await start(h, driver: driver)
+    h.connection.offer(try DriverTestWire.success(identity: identity))
+    _ = try await driver.wait(for: first)
+    let observation = Task { try await driver.settlement(after: first) }
+    await entered.wait()
+    let second = try await driver.submit(job())
+    await h.connection.waitForWriteCalls(12)
+    release.open()
+    do {
+      _ = try await observation.value
+      XCTFail("Old observation must not certify the newer handle")
+    } catch { XCTAssertEqual(error as? SearchParentWireDriverError, .staleHandle) }
+    let next = try SearchWireIdentity(
+      generation: identity.generation, requestID: second.requestID, ordinal: 2)
+    h.connection.offer(try DriverTestWire.success(identity: next))
+    _ = try await driver.wait(for: second)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+  }
+
+  func testSettlementRejectsSessionRetiredDuringInspection() async throws {
+    let h = try DriverHarness()
+    h.system.reapOnSignal = true
+    let entered = DriverTestGate()
+    let release = DriverTestGate()
+    let sessionExited = DriverTestGate()
+    SearchParentDriverTestHooks.afterSettlementInspection = {
+      entered.open()
+      await release.wait()
+    }
+    defer {
+      release.open()
+      SearchParentDriverTestHooks.afterSettlementInspection = nil
+      h.releaseAllGates()
+    }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000,
+      observe: { if case .sessionReleased = $0 { sessionExited.open() } })
+    let (handle, identity) = try await start(h, driver: driver)
+    h.connection.offer(try DriverTestWire.success(identity: identity))
+    _ = try await driver.wait(for: handle)
+    let observation = Task { try await driver.settlement(after: handle) }
+    await entered.wait()
+    h.connection.offer(Data([0]))
+    await sessionExited.wait()
+    release.open()
+    let changed = try await observation.value
+    XCTAssertEqual(changed, .pending)
+    XCTAssertEqual(h.system.launchCount.value, 1)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+  }
+
+  private func start(
+    _ h: DriverHarness, driver: SearchParentWireDriver,
+    connection supplied: DriverTestConnection? = nil
+  ) async throws -> (SearchParentWireHandle, SearchWireIdentity) {
+    let connection = supplied ?? h.connection
     let handle = try await driver.submit(job())
     await h.system.launchCount.wait(for: 1)
     let generation = try XCTUnwrap(h.system.generations.first)
-    h.system.deliver(generation: generation, pid: 7120, connection: h.connection)
-    await h.connection.waitForWriteCalls(2)
-    h.connection.offer(try DriverTestWire.childHello(generation: generation))
-    await h.connection.waitForWriteCalls(7)
+    h.system.deliver(generation: generation, pid: 7120, connection: connection)
+    await connection.waitForWriteCalls(2)
+    connection.offer(try DriverTestWire.childHello(generation: generation))
+    await connection.waitForWriteCalls(7)
     return (
       handle,
       try SearchWireIdentity(generation: generation, requestID: handle.requestID, ordinal: 1)

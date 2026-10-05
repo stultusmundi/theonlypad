@@ -39,6 +39,11 @@ package final class SearchParentWireDriver: SearchParentWireDriving {
     let state = state
     Task { await state.abandon() }
   }
+  package func settlement(after handle: SearchParentWireHandle?) async throws
+    -> SearchParentWireSettlement
+  {
+    try await state.settlement(after: handle)
+  }
   package func submit(_ job: SearchParentWireJob) async throws -> SearchParentWireHandle {
     try await state.submit(job)
   }
@@ -211,6 +216,7 @@ private actor SearchParentDriverState {
   let observe: (@Sendable (SearchParentDriverEvent) -> Void)?
   let lane = SearchParentCodecLane()
   private var operation: Operation?
+  private var lastAdmittedHandle: SearchParentWireHandle?
   private var receipt: (SearchParentWireHandle, SearchParentWireOutcome)?
   private var waiter: Waiter?
   private var session: Session?
@@ -242,6 +248,7 @@ private actor SearchParentDriverState {
     receipt = nil
     let op = Operation(job, observe: observe)
     operation = op
+    lastAdmittedHandle = op.handle
     session?.enabled = false
     observe?(.admitted(op.handle.nonce))
     let nonce = op.handle.nonce
@@ -251,6 +258,42 @@ private actor SearchParentDriverState {
     }
     return op.handle
   }
+  /// Bounded advisory observation for the sole admission owner. It neither reserves
+  /// a future submit nor certifies launcher pre-adoption quarantine was released.
+  func settlement(after handle: SearchParentWireHandle?) async throws -> SearchParentWireSettlement
+  {
+    guard handle == lastAdmittedHandle else { throw SearchParentWireDriverError.staleHandle }
+    guard requestScopesSettled else { return .pending }
+    let inspectedEpoch = session?.epoch
+    let child = await lifecycle.admissionInspection()
+    // An admission or session transition can occur while the control lane is queried.
+    guard handle == lastAdmittedHandle else { throw SearchParentWireDriverError.staleHandle }
+    guard requestScopesSettled, inspectedEpoch == session?.epoch else { return .pending }
+    switch child {
+    case .unsettled:
+      return .pending
+    case .absent(let closed):
+      guard session == nil else { return .pending }
+      return .settled(admissionClosed: shuttingDown || closed)
+    case .healthy(let generation):
+      guard !shuttingDown, let current = session,
+        current.generation == generation, current.handshake, current.enabled,
+        !current.retiring, current.progress == nil
+      else { return .pending }
+      switch current.readState {
+      case .available, .reading:
+        // The healthy idle reader owns bounded resident transport, not request data.
+        return .settled(admissionClosed: false)
+      default:
+        return .pending
+      }
+    }
+  }
+
+  private var requestScopesSettled: Bool {
+    operation == nil && waiter == nil && receipt == nil && bridge == nil && !laneBusy
+  }
+
   func wait(_ handle: SearchParentWireHandle, registration: SearchParentDriverRegistration)
     async throws -> SearchParentWireOutcome
   {

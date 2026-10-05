@@ -7,6 +7,9 @@ def _require_unique(text: str, needle: str) -> None:
 
 def transform_driver(source: str) -> str:
   text=source
+  needle='    let child = await lifecycle.admissionInspection()'
+  _require_unique(text,needle)
+  text=text.replace(needle,needle+'\n    await SearchParentDriverTestHooks.afterSettlementInspection?()')
   needle='    withExtendedLifetime(source) {}';_require_unique(text,needle)
   text=text.replace(needle,'    await SearchParentDriverTestHooks.scopeExit?(nonce)\n'+needle)
   needle='        await discardSession(epoch)\n        readOwnerExited(epoch)'
@@ -57,6 +60,14 @@ def transform_driver(source: str) -> str:
   needle='      guard current.enabled else { return nil }'
   _require_unique(text,needle)
   text=text.replace(needle,'      SearchParentDriverTestHooks.heldReadDecision?(current.enabled)\n'+needle)
-  text+='\n// Frozen test-only scope hold; absent from candidate production source.\nenum SearchParentDriverTestHooks {\n  static var scopeExit: (@Sendable (UUID) async -> Void)?\n  static var sessionExit: (@Sendable (UInt64) async -> Void)?\n  static var beforeConsume: (@Sendable () -> Void)?\n  static var beforeBegin: (@Sendable () async -> Void)?\n  static var beforeClaim: (@Sendable () -> Void)?\n  static var beforeObserverInstall: (@Sendable () async -> Void)?\n  static var beforeRequestUpload: (@Sendable () async -> Void)?\n  static var beforeChannelObservation: (@Sendable () async -> Void)?\n  static var beforeCancelCommand: (@Sendable () async -> Void)?\n  static var beforeShutdownCommand: (@Sendable () async -> Void)?\n  static var beforeAuthorityWait: (@Sendable () -> Void)?\n  static var readScope: (@Sendable (UInt64) async -> Void)?\n  static var exhaustReadOnTerminal = false\n  static var exhaustReadOnNeedMore = false\n  static var beforeExpect: (@Sendable () async -> Void)?\n  static var heldReadDecision: (@Sendable (Bool) -> Void)?\n}\n'
+  text+='\n// Frozen test-only scope hold; absent from candidate production source.\nenum SearchParentDriverTestHooks {\n  static var afterSettlementInspection: (@Sendable () async -> Void)?\n  static var scopeExit: (@Sendable (UUID) async -> Void)?\n  static var sessionExit: (@Sendable (UInt64) async -> Void)?\n  static var beforeConsume: (@Sendable () -> Void)?\n  static var beforeBegin: (@Sendable () async -> Void)?\n  static var beforeClaim: (@Sendable () -> Void)?\n  static var beforeObserverInstall: (@Sendable () async -> Void)?\n  static var beforeRequestUpload: (@Sendable () async -> Void)?\n  static var beforeChannelObservation: (@Sendable () async -> Void)?\n  static var beforeCancelCommand: (@Sendable () async -> Void)?\n  static var beforeShutdownCommand: (@Sendable () async -> Void)?\n  static var beforeAuthorityWait: (@Sendable () -> Void)?\n  static var readScope: (@Sendable (UInt64) async -> Void)?\n  static var exhaustReadOnTerminal = false\n  static var exhaustReadOnNeedMore = false\n  static var beforeExpect: (@Sendable () async -> Void)?\n  static var heldReadDecision: (@Sendable (Bool) -> Void)?\n}\n'
   text+='\nextension SearchParentWireDriver {\n  func testLaneOwnership() async -> (reserved: Bool, executing: Bool) { await state.testLaneOwnership() }\n}\nextension SearchParentDriverState {\n  func testLaneOwnership() -> (reserved: Bool, executing: Bool) { (laneBusy, lane.snapshot.busy) }\n}\n'
   return text
+
+
+def transform_lifecycle(source: str) -> str:
+  needle = '    slot = .absent\n    ownership = nil\n    if let current = operation'
+  _require_unique(source, needle)
+  replacement = '    slot = .absent\n    ownership = nil\n    SearchChildLifecycleTestHooks.afterAdoptedRelease?(generation)\n    if let current = operation'
+  text = source.replace(needle, replacement)
+  return text + '\n// Frozen-only nonblocking observation after exact reap and close acknowledgment.\nenum SearchChildLifecycleTestHooks {\n  static var afterAdoptedRelease: (@Sendable (UUID) -> Void)?\n}\n'

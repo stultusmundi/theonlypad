@@ -55,6 +55,10 @@ public final class SearchChildLifecycle: @unchecked Sendable {
     try await control.perform { try $0.cleanup(ticket) }
   }
 
+  func admissionInspection() async -> SearchChildAdmissionInspection {
+    (try? await control.perform { $0.admissionInspection() }) ?? .unsettled
+  }
+
   public func shutdown() async -> SearchChildShutdown {
     let owner = control
     return await withCheckedContinuation { continuation in
@@ -364,6 +368,22 @@ private final class SearchChildLifecycleControl: @unchecked Sendable {
   func rejectedProtocol(_ generation: UUID) {
     if operation?.ticket.identity.generation == generation { finish(.failed(.protocolFailure)) }
     stop(generation)
+  }
+
+  /// Observe existing ownership only: never poll, signal, close or restart a timer.
+  func admissionInspection() -> SearchChildAdmissionInspection {
+    guard operation == nil else { return .unsettled }
+    switch slot {
+    case .absent:
+      return .absent(admissionClosed: shutDown)
+    case .launching:
+      return .unsettled
+    case .owned(let child):
+      guard !shutDown, child.handshake, !child.stopping,
+        child.reaped == nil, !child.unconfirmed
+      else { return .unsettled }
+      return .healthy(generation: child.generation)
+    }
   }
 
   func cleanup(_ ticket: SearchChildTicket) throws -> SearchChildCleanup {

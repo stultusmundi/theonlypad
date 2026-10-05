@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import PadCore
 import XCTest
@@ -738,6 +739,177 @@ final class SearchParentWireDriverTests: XCTestCase {
         output: .init(matches: [NSRange(location: 0, length: 1)], replacement: nil)))
     XCTAssertEqual(h.system.launchCount.value, 1)
     h.prepareCleanup()
+    _ = await driver.shutdown()
+  }
+
+  func testSettlementBeforeAdmissionIsReadOnlyAndShutdownIsTerminal() async throws {
+    let h = try DriverHarness()
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let fresh = try await driver.settlement(after: nil)
+    XCTAssertEqual(fresh, .settled(admissionClosed: false))
+    XCTAssertEqual(h.system.launchCount.value, 0)
+    XCTAssertEqual(h.system.pollCount.value, 0)
+    XCTAssertEqual(h.system.signalCount.value, 0)
+    XCTAssertEqual(h.timers.scheduled.value, 0)
+    _ = await driver.shutdown()
+    let closed = try await driver.settlement(after: nil)
+    XCTAssertEqual(closed, .settled(admissionClosed: true))
+    XCTAssertEqual(h.system.launchCount.value, 0)
+  }
+
+  func testSettlementRequiresReceiptConsumptionAndAllowsHealthyReuse() async throws {
+    let h = try DriverHarness()
+    let staged = DriverTestCount()
+    defer { h.releaseAllGates() }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000,
+      observe: { if case .coordinatorScopeExited = $0 { staged.increment() } })
+    let (first, identity) = try await start(h, driver: driver)
+    let active = try await driver.settlement(after: first)
+    XCTAssertEqual(active, .pending)
+    h.connection.offer(try DriverTestWire.success(identity: identity))
+    await staged.wait(for: 1)
+    let unconsumed = try await driver.settlement(after: first)
+    XCTAssertEqual(unconsumed, .pending)
+    _ = try await driver.wait(for: first)
+    await h.connection.waitForReadCalls(3)
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.scheduled.value)
+    let settled = try await driver.settlement(after: first)
+    XCTAssertEqual(settled, .settled(admissionClosed: false))
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.scheduled.value, before.2)
+    XCTAssertFalse(h.connection.snapshot.closed)
+    XCTAssertEqual(h.connection.snapshot.activeReads, 1)
+    let second = try await driver.submit(job())
+    await h.connection.waitForWriteCalls(12)
+    for old in [Optional(first), nil] {
+      do {
+        _ = try await driver.settlement(after: old)
+        XCTFail("An older or initial handle cannot inspect the new admission")
+      } catch { XCTAssertEqual(error as? SearchParentWireDriverError, .staleHandle) }
+    }
+    let secondIdentity = try SearchWireIdentity(
+      generation: identity.generation, requestID: second.requestID, ordinal: 2)
+    h.connection.offer(try DriverTestWire.success(identity: secondIdentity))
+    _ = try await driver.wait(for: second)
+    let again = try await driver.settlement(after: second)
+    XCTAssertEqual(again, .settled(admissionClosed: false))
+    XCTAssertEqual(h.system.launchCount.value, 1)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+  }
+
+  func testSettlementRejectsForeignHandleAndRetainsSemanticReceipt() async throws {
+    let h = try DriverHarness()
+    let other = try DriverHarness()
+    let staged = DriverTestGate()
+    defer { h.releaseAllGates() }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000,
+      observe: { if case .coordinatorScopeExited = $0 { staged.open() } })
+    let foreign = try SearchParentWireDriver(
+      lifecycle: other.lifecycle, accumulatorFactory: other.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let (handle, identity) = try await start(h, driver: driver)
+    do {
+      _ = try await foreign.settlement(after: handle)
+      XCTFail("Foreign handle")
+    } catch { XCTAssertEqual(error as? SearchParentWireDriverError, .staleHandle) }
+    h.connection.offer(
+      try DriverTestWire.semanticFailure(identity: identity, error: .invalidPattern))
+    await staged.wait()
+    let unconsumed = try await driver.settlement(after: handle)
+    XCTAssertEqual(unconsumed, .pending)
+    try await driver.discard(handle)
+    let consumed = try await driver.settlement(after: handle)
+    XCTAssertEqual(consumed, .settled(admissionClosed: false))
+    XCTAssertEqual(other.system.launchCount.value, 0)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+    _ = await foreign.shutdown()
+  }
+
+  func testSettlementCancellationOutcomeDoesNotCertifyReap() async throws {
+    let h = try DriverHarness()
+    defer { h.releaseAllGates() }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let (handle, identity) = try await start(h, driver: driver)
+    try await driver.cancel(handle)
+    let outcome = try await driver.wait(for: handle)
+    XCTAssertEqual(outcome, .failed(identity: identity, failure: .cancelled))
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.scheduled.value)
+    let pending = try await driver.settlement(after: handle)
+    XCTAssertEqual(pending, .pending)
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.scheduled.value, before.2)
+    h.prepareCleanup()
+    _ = await driver.shutdown()
+    let settled = try await driver.settlement(after: handle)
+    XCTAssertEqual(settled, .settled(admissionClosed: true))
+  }
+
+  func testSettlementReapDoesNotCertifyHeldChannelClose() async throws {
+    let h = try DriverHarness()
+    let connection = DriverTestConnection(holdClose: true)
+    h.system.reapOnSignal = true
+    defer {
+      h.releaseAllGates()
+      connection.releaseAllGates()
+    }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let handle = try await driver.submit(job())
+    await h.system.launchCount.wait(for: 1)
+    let generation = try XCTUnwrap(h.system.generations.first)
+    h.system.deliver(generation: generation, pid: 7181, connection: connection)
+    await connection.waitForWriteCalls(2)
+    connection.offer(try DriverTestWire.childHello(generation: generation))
+    await connection.waitForWriteCalls(7)
+    try await driver.cancel(handle)
+    _ = try await driver.wait(for: handle)
+    await connection.closeEntered.wait(for: 1)
+    let pending = try await driver.settlement(after: handle)
+    XCTAssertEqual(pending, .pending)
+    let nextTimer = h.timers.scheduled.value + 1
+    let stopping = Task { await driver.shutdown() }
+    await h.timers.scheduled.wait(for: nextTimer)
+    let bounded = await driver.shutdown()
+    XCTAssertFalse(bounded.child.stopped)
+    let stillPending = try await driver.settlement(after: handle)
+    XCTAssertEqual(stillPending, .pending)
+    connection.closeRelease.open()
+    _ = await stopping.value
+    let settled = try await driver.settlement(after: handle)
+    XCTAssertEqual(settled, .settled(admissionClosed: true))
+    XCTAssertEqual(h.system.signals, [.init(pid: 7181, signal: SIGKILL)])
+  }
+
+  func testSettlementHeldLaunchThenNoPIDFailure() async throws {
+    let h = try DriverHarness()
+    defer { h.releaseAllGates() }
+    let driver = try SearchParentWireDriver(
+      lifecycle: h.lifecycle, accumulatorFactory: h.accumulatorFactory,
+      maximumWireBytesPerChild: 1_000_000)
+    let handle = try await driver.submit(job())
+    await h.system.launchCount.wait(for: 1)
+    let pending = try await driver.settlement(after: handle)
+    XCTAssertEqual(pending, .pending)
+    h.system.failPending()
+    let result = try await driver.wait(for: handle)
+    guard case .failed(_, .launchFailed) = result else { return XCTFail("Expected launch refusal") }
+    let settled = try await driver.settlement(after: handle)
+    XCTAssertEqual(settled, .settled(admissionClosed: false))
+    XCTAssertEqual(h.system.signalCount.value, 0)
+    XCTAssertEqual(h.system.pollCount.value, 0)
     _ = await driver.shutdown()
   }
 

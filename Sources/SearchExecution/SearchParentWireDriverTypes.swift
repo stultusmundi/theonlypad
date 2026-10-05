@@ -85,7 +85,15 @@ package struct SearchParentWireShutdown: Sendable, Equatable {
   package let parentLaneSettled: Bool
   package let retainedParentLanes: Int
 }
+/// Settles request/adopted ownership only, not a guarantee that a future launch succeeds.
+package enum SearchParentWireSettlement: Sendable, Equatable {
+  case pending
+  case settled(admissionClosed: Bool)
+}
+
 package protocol SearchParentWireDriving: AnyObject, Sendable {
+  /// nil is valid only before the first submission; otherwise only the latest handle.
+  func settlement(after handle: SearchParentWireHandle?) async throws -> SearchParentWireSettlement
   func submit(_ job: SearchParentWireJob) async throws -> SearchParentWireHandle
   func wait(for handle: SearchParentWireHandle) async throws -> SearchParentWireOutcome
   func cancel(_ handle: SearchParentWireHandle) async throws

@@ -17,9 +17,26 @@ class RunnerTests(unittest.TestCase):
     def test_transform_adds_all_declared_hooks(self):
         result = r.instrument(self.source().encode()).decode()
         self.assertNotEqual(result, self.source())
-        for hook in ('scopeExit', 'sessionExit', 'beforeConsume', 'beforeExpect', 'readScope', 'beforeChannelObservation'):
+        for hook in ('afterSettlementInspection', 'scopeExit', 'sessionExit', 'beforeConsume', 'beforeExpect', 'readScope', 'beforeChannelObservation'):
             self.assertIn('SearchParentDriverTestHooks.' + hook + '?', result)
         self.assertIn('enum SearchParentDriverTestHooks', result)
+
+    def lifecycle_source(self):
+        return (Path(__file__).absolute().parents[2] / 'Sources/SearchExecution/SearchChildLifecycle.swift').read_text()
+
+    def test_lifecycle_transform_observes_adopted_release_only_in_copy(self):
+        original = self.lifecycle_source()
+        changed = r.instrument_lifecycle(original.encode()).decode()
+        self.assertEqual(changed.count('SearchChildLifecycleTestHooks.afterAdoptedRelease?(generation)'), 1)
+        self.assertNotIn('SearchChildLifecycleTestHooks', original)
+        self.assertIn('ownership = nil\n    SearchChildLifecycleTestHooks.afterAdoptedRelease?(generation)', changed)
+
+    def test_lifecycle_transform_rejects_missing_or_duplicate_anchor(self):
+        source = self.lifecycle_source()
+        anchor = '    slot = .absent\n    ownership = nil\n    if let current = operation'
+        for changed in (source.replace(anchor, ''), source + '\n' + anchor):
+            with self.subTest(changed=len(changed)), self.assertRaises(ValueError):
+                r.instrument_lifecycle(changed.encode())
 
     def test_missing_anchor_refused(self):
         with self.assertRaises(ValueError):
@@ -87,6 +104,7 @@ class FixtureBase(unittest.TestCase):
             self.write(name, '// synthetic input\n')
         self.write('Sources/PadCore/Example.swift', '// core\n')
         self.write('Sources/SearchExecution/SearchParentWireDriver.swift', RunnerTests().source())
+        self.write('Sources/SearchExecution/SearchChildLifecycle.swift', RunnerTests().lifecycle_source())
         self.write('Tests/SearchExecutionTests/SearchParentWireDriverTests.swift',
                    'final class SearchParentWireDriverTests { func testNormal() {} }')
         self.write('Tests/SearchParentDriverIntegration/SearchParentWireDriverInstrumentedTests.swift',
@@ -123,6 +141,25 @@ class FreezeTests(FixtureBase):
         target = self.run / 'Original/SearchParentWireDriver.swift'
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('// replaced origin')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_changed_lifecycle_original_refused(self):
+        manifest = r.freeze(self.root, self.run, self.common)
+        target = self.run / 'Original/SearchChildLifecycle.swift'
+        target.write_text('// replaced lifecycle origin')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_lifecycle_transform_relationship_checked_even_with_updated_digest(self):
+        manifest = r.freeze(self.root, self.run, self.common)
+        name = 'Package/Sources/SearchExecution/SearchChildLifecycle.swift'
+        target = self.run / name
+        changed = target.read_bytes().replace(b'afterAdoptedRelease?(generation)', b'afterAdoptedRelease?(UUID())')
+        target.write_bytes(changed)
+        for item in manifest['sources']:
+            if item['frozen'] == name:
+                item['sha256'] = self.common.digest(changed)
         with self.assertRaises(ValueError):
             r.verify(self.run, manifest, self.common)
 

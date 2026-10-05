@@ -5,6 +5,83 @@ import XCTest
 @testable import SearchExecution
 
 final class SearchChildLifecycleTests: XCTestCase {
+  func testAdmissionInspectionAbsentAndClosedDoesNotScheduleOrPoll() async throws {
+    let h = try Harness()
+    let before = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(before, .absent(admissionClosed: false))
+    XCTAssertTrue(h.system.launches.isEmpty)
+    XCTAssertTrue(h.system.signals.isEmpty)
+    XCTAssertTrue(h.system.polledPIDs.isEmpty)
+    XCTAssertEqual(h.timers.count, 0)
+    _ = await h.lifecycle.shutdown()
+    let after = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(after, .absent(admissionClosed: true))
+    XCTAssertEqual(h.timers.count, 0)
+  }
+
+  func testAdmissionInspectionDistinguishesActiveFromHealthyIdleWithoutMutation() async throws {
+    let h = try Harness()
+    let ticket = try await h.ready()
+    let active = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(active, .unsettled)
+    try await h.lifecycle.acceptedTerminal(.success, ticket: ticket)
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.activeDeadlines, h.timers.count)
+    let idle = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(idle, .healthy(generation: ticket.identity.generation))
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.activeDeadlines, before.2)
+    XCTAssertEqual(h.timers.count, before.3)
+    let next = try await h.lifecycle.begin(requestID: UUID())
+    XCTAssertEqual(next.identity.generation, ticket.identity.generation)
+    let activeAgain = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(activeAgain, .unsettled)
+    await h.dispose()
+  }
+
+  func testAdmissionInspectionRetainsReapedChildUntilCloseAcknowledgment() async throws {
+    let h = try Harness()
+    let ticket = try await h.ready()
+    h.system.poll = .reaped(.exited(0))
+    try await h.lifecycle.cancel(ticket)
+    await h.connection.started.wait()
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.count)
+    let held = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(held, .unsettled)
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.count, before.2)
+    let stopping = Task { await h.lifecycle.shutdown() }
+    await h.timers.waitForDeadline(100_000_000)
+    let closedButHeld = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(closedButHeld, .unsettled)
+    h.connection.release.open()
+    _ = await stopping.value
+    let settled = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(settled, .absent(admissionClosed: true))
+    let receipt = try await h.lifecycle.cleanup(for: ticket)
+    XCTAssertEqual(receipt, .reaped(generation: ticket.identity.generation, exit: .exited(0)))
+  }
+
+  func testAdmissionInspectionHeldLaunchAndUnconfirmedStopRemainUnsettled() async throws {
+    let h = try Harness()
+    let ticket = try await h.lifecycle.begin(requestID: UUID())
+    let launch = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(launch, .unsettled)
+    h.system.deliver(ticket, pid: 49, connection: h.connection)
+    _ = try await h.lifecycle.connection(for: ticket)
+    h.system.poll = .failed(ECHILD)
+    try await h.lifecycle.cancel(ticket)
+    await h.connection.started.wait()
+    let before = (h.system.polledPIDs, h.system.signals, h.timers.count)
+    let unconfirmed = await h.lifecycle.admissionInspection()
+    XCTAssertEqual(unconfirmed, .unsettled)
+    XCTAssertEqual(h.system.polledPIDs, before.0)
+    XCTAssertEqual(h.system.signals, before.1)
+    XCTAssertEqual(h.timers.count, before.2)
+    await h.dispose()
+  }
+
   func testStartupFailureStopsOwnedChildWithoutPublishingConnection() async throws {
     let h = try Harness()
     let ticket = try await h.lifecycle.begin(requestID: UUID())

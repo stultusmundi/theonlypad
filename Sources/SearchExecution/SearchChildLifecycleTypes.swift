@@ -160,3 +160,10 @@ enum SearchChildChannelObservation: Sendable, Equatable {
   case endOfFile
   case failure(Int32)
 }
+
+/// Read-only control-lane observation, not a launcher quarantine certificate.
+enum SearchChildAdmissionInspection: Sendable, Equatable {
+  case unsettled
+  case absent(admissionClosed: Bool)
+  case healthy(generation: UUID)
+}

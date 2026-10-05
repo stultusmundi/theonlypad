@@ -6,6 +6,11 @@ def instrument(data):
     return transformer.transform_driver(data.decode('utf-8')).encode('utf-8')
 
 
+def instrument_lifecycle(data):
+    transformer = load(Path(__file__).with_name('driver_transform.py'), 'frozen_lifecycle_transform')
+    return transformer.transform_lifecycle(data.decode('utf-8')).encode('utf-8')
+
+
 def validate_tests(text, expected):
     def normalized(value):
         match = re.fullmatch(r'-\[SearchExecutionTests\.(\w+) (test\w+)\]', value)
@@ -41,6 +46,10 @@ FIXED = (
     'scripts/test-search-parent-driver.sh', 'Package.swift',
 )
 REQUIRED_INSTRUMENTED = (
+    'testSettlementCancellationCleanupPermitsFreshAdmissionWithoutShutdown',
+    'testSettlementCloseAcknowledgmentPermitsFreshAdmissionWithoutShutdown',
+    'testSettlementRejectsHandleChangedDuringInspection',
+    'testSettlementRejectsSessionRetiredDuringInspection',
     'testTerminalPublicationWaitsForSourceScopeThenImmediateResubmit',
     'testRefusedAdmissionPreservesUnobservedCompactFailure',
     'testNoTicketRefusalCannotClearHeldIdleConsumeCredit',
@@ -108,10 +117,12 @@ def freeze(root, run, common):
         target = run / prefix / relative
         if source.name == 'SearchParentWireDriverInstrumentedTests.swift':
             target = run / 'Package/Tests/SearchExecutionTests' / source.name
-        if relative == 'Sources/SearchExecution/SearchParentWireDriver.swift':
-            data = instrument(original)
-            origin = run / 'Original/SearchParentWireDriver.swift'
-            origin.parent.mkdir(parents=True, mode=0o700)
+        if relative in ('Sources/SearchExecution/SearchParentWireDriver.swift',
+                        'Sources/SearchExecution/SearchChildLifecycle.swift'):
+            transform = instrument if source.name == 'SearchParentWireDriver.swift' else instrument_lifecycle
+            data = transform(original)
+            origin = run / 'Original' / source.name
+            origin.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             origin.write_bytes(original)
             items.append(dict(source=relative, frozen=origin.relative_to(run).as_posix(),
                               sha256=common.digest(original), originSHA256=common.digest(original)))
@@ -148,10 +159,12 @@ def freeze(root, run, common):
 def verify(run, manifest, common):
     common.verify_frozen(run, manifest)
     # Verify the transformation relationship as well as both pinned byte streams.
-    source = common.read_source(common.real_path(run, run / 'Original/SearchParentWireDriver.swift'))
-    compiled = common.read_source(common.real_path(run, run / 'Package/Sources/SearchExecution/SearchParentWireDriver.swift'))
-    if instrument(source) != compiled:
-        raise ValueError('instrumented source relationship changed')
+    for name, transform in (('SearchParentWireDriver.swift', instrument),
+                            ('SearchChildLifecycle.swift', instrument_lifecycle)):
+        source = common.read_source(common.real_path(run, run / 'Original' / name))
+        compiled = common.read_source(common.real_path(run, run / 'Package/Sources/SearchExecution' / name))
+        if transform(source) != compiled:
+            raise ValueError('instrumented source relationship changed')
 
 
 def execute(run, scratch, common, watchdog_main):
