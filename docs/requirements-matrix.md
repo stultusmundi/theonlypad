@@ -10,6 +10,10 @@ Status has four separate fields: **Plan**, **Implementation**, **Validation**, *
 
 The76 A–I aggregate requirements remain64 partial and12 outstanding; no aggregate is signed off across all its clauses. This count is not a percentage of completed work. The current frozen integrated source passes765 automated tests at the parent-driver checkpoint `2405d80`; see [driver evidence](verification/search-parent-driver.md). Five actual packaged desktop workflows pass on `f4d9207`; see [desktop evidence](verification/packaged-desktop-2026-09-30.md). New internal search infrastructure is covered separately by [channel/lifecycle evidence](verification/search-child-lifecycle.md), [real child inheritance evidence](verification/shared-spawn-gate.md), and [parent bridge evidence](verification/search-parent-wire-bridge.md). Production search isolation remains outstanding. Counts and old source checkpoints in individual rows below retain their historical scope.
 
+## Resumption evidence (2026-10-05)
+
+Full-scope implementation has resumed. Nonterminal search settlement is committed at `fff331f` (driver54/0, lifecycle57/0); checked descriptors/ledger at `293582e` (14/0); native Replace All callback preservation at `4428b0e` (12 hidden native tests plus20 projection regressions). See [admission](verification/search-admission.md), [driver](verification/search-parent-driver.md) and [native edit](verification/native-edit-revalidation.md) records. Queue/cancellation ownership, four neighboring edit routes and production helper routing remain in progress. The tiny shutdown diagnostic passed signaled9 and does not explain the preserved historical exited0 measurement. These bounded checks do not change aggregate completion status or replace the older packaged desktop evidence.
+
 ## Public repository
 
 | ID | Requirement | Observable acceptance criteria | Planned implementation location | Required tests/evidence | Plan | Implementation | Validation | Blocker |
