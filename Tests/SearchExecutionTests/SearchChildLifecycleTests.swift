@@ -610,6 +610,59 @@ final class SearchChildLifecycleTests: XCTestCase {
     await failure(.shutDown) { _ = try await h.lifecycle.begin(requestID: UUID()) }
   }
 
+  func testSuccessfulSignalThenExitZeroRetainsOwnershipUntilCloseAcknowledgment() async throws {
+    try await assertSuccessfulSignalShutdown(exit: .exited(0))
+  }
+
+  func testSuccessfulSignalThenSignalNineRetainsOwnershipUntilCloseAcknowledgment() async throws {
+    try await assertSuccessfulSignalShutdown(exit: .signaled(SIGKILL))
+  }
+
+  private func assertSuccessfulSignalShutdown(exit: SearchChildExit) async throws {
+    let system = ScriptedSystem()
+    let clock = ScriptedClock()
+    let timers = ScriptedTimers()
+    let signalsAtClose = Locked<[ScriptedSystem.Signal]?>(nil)
+    let connection = HeldCloseConnection {
+      signalsAtClose.withValue { $0 = system.signals }
+    }
+    let lifecycle = try makeLifecycle(system, clock, timers)
+    let ticket = try await lifecycle.begin(requestID: UUID())
+    system.deliver(ticket, pid: 41, connection: connection)
+    _ = try await lifecycle.connection(for: ticket)
+    try await lifecycle.acceptedHandshake(generation: ticket.identity.generation)
+    let pollsBeforeShutdown = system.polledPIDs.count
+    system.poll = .reaped(exit)
+
+    let task = Task { await lifecycle.shutdown() }
+    await connection.started.wait()
+    let held = await lifecycle.shutdown()
+    let expectedSignal = [ScriptedSystem.Signal(pid: 41, signal: SIGKILL)]
+    XCTAssertEqual(signalsAtClose.withValue { $0 }, expectedSignal)
+    XCTAssertEqual(system.signals, expectedSignal)
+    XCTAssertEqual(Array(system.polledPIDs.dropFirst(pollsBeforeShutdown)), [41])
+    XCTAssertEqual(connection.closeCalls, 1)
+    XCTAssertFalse(held.stopped)
+    XCTAssertFalse(held.channelsClosed)
+    XCTAssertEqual(held.cleanup, .reaped(generation: ticket.identity.generation, exit: exit))
+
+    // Repeated inspection cannot retire an owned child with its close acknowledgment held.
+    let heldAgain = await lifecycle.shutdown()
+    XCTAssertEqual(heldAgain, held)
+    connection.release.open()
+    let settled = await task.value
+    XCTAssertTrue(settled.stopped)
+    XCTAssertTrue(settled.channelsClosed)
+    XCTAssertEqual(settled.cleanup, .noChild)
+    let repeated = await lifecycle.shutdown()
+    XCTAssertEqual(repeated, settled)
+    XCTAssertEqual(system.signals, expectedSignal)
+    XCTAssertEqual(Array(system.polledPIDs.dropFirst(pollsBeforeShutdown)), [41])
+    XCTAssertEqual(connection.closeCalls, 1)
+    let receipt = try await lifecycle.cleanup(for: ticket)
+    XCTAssertEqual(receipt, .reaped(generation: ticket.identity.generation, exit: exit))
+  }
+
   func testShutdownGraceIsNotRestartedForHeldLaunch() async throws {
     let h = try Harness()
     let ticket = try await h.lifecycle.begin(requestID: UUID())
@@ -1068,11 +1121,14 @@ private final class HeldCloseConnection: SearchChildConnection, Sendable {
   let started = Gate()
   let release = Gate()
   private let calls = Locked(0)
+  private let onClose: @Sendable () -> Void
+  init(onClose: @escaping @Sendable () -> Void = {}) { self.onClose = onClose }
   var closeCalls: Int { calls.withValue { $0 } }
   func write(_ bytes: Data) async throws {}
   func read(maxBytes: Int) async throws -> Data { Data() }
   func close() async {
     calls.withValue { $0 += 1 }
+    onClose()
     started.open()
     await release.wait()
   }

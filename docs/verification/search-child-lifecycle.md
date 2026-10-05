@@ -232,3 +232,20 @@ The parent driver plan's internal `rejectedChannel` event is implemented. Matchi
 Nine new deterministic tests first produced15 explicit failed assertions using a private no-op contract overlay, then all45 lifecycle tests passed with the implementation. Both65-file frozen inventories and complete watchdog receipts were independently verified. Tests include both semantic and successful accepted terminals, invalid errno, explicit reap with held close, a same-generation subsequent request, and a genuinely reserved/replaced generation. No stub was adopted into production. Private evidence: `.local/search-channel-observation/`.
 
 This is lifecycle behavior evidence only. The parent driver, real channel-to-event adapter and production search routing remain outstanding. Formatted combined-source validation in `run.ueklpf9q` passed80/0, including all45 lifecycle cases,34 other deterministic cases and the actual unrelated-peer test. See `verification/shared-spawn-gate.md` for the initial narrower filter and corrected command evidence.
+
+## Signal receipt and exact reap preservation — 2026-10-05
+
+Two new deterministic lifecycle controls cover successful SIGKILL submission followed by either `exited(0)` or `signaled(9)`. The injected channel holds its close acknowledgment. Both controls verify the exact owned PID/generation, signal recorded before channel close entry, one stop-time poll/reap and one close call, retained ownership while close is held, final `noChild` only after acknowledgment, and preservation of the exact exit in the ticket receipt. They do not reproduce kernel scheduling or explain the historical allocation experiment's normal exit.
+
+Commands actually run:
+
+```sh
+scripts/test-search-child-lifecycle.sh --filter 'SearchChildLifecycleTests/testSuccessfulSignal'
+scripts/test-search-child-lifecycle.sh
+```
+
+Focused result:2 tests/0 failures. Default result:53 tests/0 failures. Both frozen runs bind78 inputs under source manifest `6d1b6b9d04abf96a8c13dc8fc0ef992919df2ef969abf5d8f331ab352368f6ec`. Root reverified frozen/live hashes, direct-watchdog receipts and fixture binary bindings. The runner builds its fixtures, but these injected selections never launch them. Strict changed-file formatting and diff checks pass.
+
+A private frozen mutation removing only the `child.closed` release requirement fails both controls with six explicit assertions, exit1 and no watchdog timeout. This is preservation/discrimination evidence against intentionally broken source, not a behavioral RED for a production defect. Production lifecycle and the private allocation acceptance predicate remain unchanged. Historical failed experiment evidence remains immutable; actual-helper shutdown diagnosis and acceptance-contract review are still outstanding.
+
+Raw run/receipt and mutation evidence remains ignored under `.local/search-shutdown-resumption/` and the referenced search-child integration run directories. This checkpoint establishes no new memory, helper-routing or desktop acceptance.

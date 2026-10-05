@@ -1,5 +1,11 @@
 # Continuation
 
+## Active resumption — 2026-10-05
+
+The user explicitly resumed the full build scope until implementation is complete or a new stop message arrives. This supersedes the historical sprint stop below. Root retains exclusive actual-child/GUI execution and commit ownership. Work continues on the clean existing `build/native-editor` branch to preserve private experiment paths; bounded workers have disjoint file ownership. No remote publication is authorized.
+
+Current work: the deterministic shutdown-order preservation regression is independently reviewed and verified (focused2/0, default53/0, frozen premature-release mutant2 tests/6 failures;78 bound inputs). A separately bounded private real-helper diagnostic is being prepared and reviewed; no diagnostic helper has run yet. The old failed batch is immutable. The benchmark predicate and production lifecycle have not been changed. In parallel, a source-only review is mapping the shortest safe production search integration path against the accepted specifications. Planned, implemented and verified states remain separate; no new feature completion is claimed.
+
 ## Paused after sprint, 2026-09-30
 
 Stopped as requested after the bounded sprint. No agent, helper, build, measurement or GUI run remains active; no background work is continuing. All15 comparison cells built, six measurements passed, the seventh failed a strict reap-status assertion and eight were left unstarted. The failure is preserved, independently reviewed and not fixed or retried. The final app build with reviewed Help corrections passed without warnings. The full `docs/BUILD_PROMPT.md` remains the eventual scope; this is an incomplete product, not a release candidate. Resume only on a new user request. No remote publication, credentials or system-security changes occurred.
