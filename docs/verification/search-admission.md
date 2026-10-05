@@ -39,3 +39,12 @@ Three additional tests compose the real admission controller, parent driver, lif
 The final baseline passes3/0. A frozen-only early-release mutation fails one test with12 assertions across four held-cleanup checkpoints, without a timeout. Root and an independent reviewer verify78 input/manifest/wrapper bindings and strict baseline/mutant receipts. Inventory SHA256: `2e8da2deeace799af18aaa1389db4db260c48e99f916fbbf09accbf2fe31736b`. The earlier candidate3 passed with73 production/test source hashes; its generated manifest/wrapper coverage was incomplete, so it was preserved and superseded by the complete freeze.
 
 A matching fresh full snapshot passes842 tests with no warnings and builds the actual app. Its239-input inventory is `e00a4037d44829141284470f6715a45fff693e5be369b2ad7de2808ebf6d29ef`. Private evidence: `.local/search-admission-driver-integration/` and `.local/resumption-integration-20261005/root-verification2.json`. Focused reproduction: `scripts/swift.sh test --filter SearchAdmissionDriverIntegrationTests`, under the accepted direct watchdog. No helper, concrete kernel reap, real descriptor, GUI or performance acceptance is established. Native/modal live-borrow composition remains separate.
+
+
+## Hidden nested AppKit boundary control
+
+Root executed one hidden native control with actual AppKit target/action dispatch inside a nested `modalPanel` run-loop mode. A new capture and its failure completion both executed while an invalidated old result remained synchronously borrowed. The old result retained its charge and context until the outer borrow returned; the independent second result remained valid. This establishes asynchronous admission overlap in this host, rather than merely queueing a request until after return.
+
+The control passes1/0 without compiler warnings. Root verified77 current/frozen inputs, the exact test binary and complete owned-watchdog receipt. Inventory SHA256: `e9051429e1a0249eef9063aa06ac9cccd4de775189dad5848613ff0071ff61fe`; evidence is ignored under `.local/search-admission-native-borrow-20261005/boundary2-run/`. An earlier compile-only attempt passed a CFString where this SDK requires an explicit CFRunLoopMode wrapper; it executed no test and remains preserved.
+
+No window, shown modal session or physical input was exercised. Broader nested budget-refusal, unregister/release and joined-shutdown cases are being implemented separately. Production native routing and the default memory policy remain outstanding.
