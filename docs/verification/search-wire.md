@@ -119,3 +119,9 @@ Final independently reviewed snapshot `.local/search-wire-header-fix/final` bind
 A separate runtime regression proves why the phase check matters. The old decoder produced1 test/3 failures: the reader accepted the malformed stream, the engine ran once and response bytes escaped. With only the decoder changed, all73 worker-runtime tests passed; this regression now asserts zero engine calls/output and discarded accumulator ownership. Both frozen input inventories and strict receipts were verified under `.local/search-worker-header-regression/`.
 
 Reproduce the focused wire suite with `scripts/swift.sh test --filter SearchWire` and worker runtime with `scripts/swift.sh test --filter PadSearchWorkerRuntimeTests`. These are in-process protocol/runtime tests; the shipped app has not yet adopted isolated search.
+
+## Emitted byte accounting controls — 2026-10-05
+
+Six new preservation tests count actual writer emissions without retaining a wire stream. They verify both generation hellos total112 bytes; empty find/replacement bodies; UTF-16 charging for supplementary/combining text; input/output65536-byte frame boundaries including a split surrogate pair; the4096/4097 range-frame boundary; and a failure terminal without a success body. These are codec controls for later recycling/measurement arithmetic, not new protocol behavior or a memory benchmark.
+
+The frozen minimal actual-source suite passed6/0 without warnings under the accepted direct watchdog. Root verified all68 source/test hashes, current-source equality and strict process receipts; independent source/arithmetic review approved. Inventory SHA256: `f8fea7ff92b302f65364038e2d6bcb1ce58d446af21176f44e581fa7979f7e6e`. Evidence remains in `.local/search-wire-accounting-20261005/`. Test filter: `SearchWireByteAccountingTests`. No actual child or100M-unit writer run occurred. The measured fixtures/recycling campaign remain separate.
