@@ -83,8 +83,8 @@ struct SearchAdmissionLedger {
 
 Ledger stores bounded reservations/leases issued through the owner; abandon/release are idempotent for missing IDs. `retain` rejects an absent/consumed reservation, duplicate lease or arithmetic violation without partial mutation. Sum committed leases plus future retained reservations when checking retainedLimit. Resident remains in active ledger throughout this component's lifetime. Add internal read-only numeric snapshot solely for diagnostics/tests; no source-bearing state.
 
-- [ ] Red-test exact-limit admission, limit+1 refusal, UInt64 overflow, resident>limit, retained future reservation pressure, simultaneous old lease/new reservation, and refusal leaving every numeric value unchanged. Use tiny explicit policies; never allocate a maximum document to test arithmetic.
-- [ ] Red-test reserve→retain transfers exactly once, release twice, abandonment twice, wrong/foreign token, duplicate lease, and independent consumer ordering. Preserve previous lease charge until its actual release. Example observable contract:
+- [x] Red-test exact-limit admission, limit+1 refusal, UInt64 overflow, resident>limit, retained future reservation pressure, simultaneous old lease/new reservation, and refusal leaving every numeric value unchanged. Use tiny explicit policies; never allocate a maximum document to test arithmetic.
+- [x] Red-test reserve→retain transfers exactly once, release twice, abandonment twice, wrong/foreign token, duplicate lease, and independent consumer ordering. Preserve previous lease charge until its actual release. Example observable contract:
 
 ```swift
 let old = try ledger.reserve(.init(active: 8, retained: 6))
@@ -95,8 +95,8 @@ XCTAssertEqual(ledger.snapshot, before) // retainedLimit is 10
 ```
 
   The test helper issues oldLease through an internal fixture accessor available only to tests; production callers cannot forge IDs.
-- [ ] Implement checked integer transitions and descriptor validation. Bound query/template to wire limits, reject negative/oversized estimate and unsafe scope arithmetic before invoking capture. Keep existing typed semantic errors where appropriate; replace arbitrary capture Error with compact captureRefused.
-- [ ] Run ledger focused tests and review invariants. This task does not prove String capacities, selected budget eligibility or any engine execution.
+- [x] Implement checked integer transitions and descriptor validation. Bound query/template to wire limits, reject negative/oversized estimate and unsafe scope arithmetic before invoking capture. Keep existing typed semantic errors where appropriate; replace arbitrary capture Error with compact captureRefused.
+- [x] Run ledger focused tests and review invariants. This task does not prove String capacities, selected budget eligibility or any engine execution.
 
 ## Task 3 — Metadata queue, lazy capture and cancellation-owned execution
 
