@@ -93,6 +93,7 @@ package protocol SearchAdmissionAccounting {
   func charge(for descriptor: SearchAdmissionDescriptor) throws -> SearchAdmissionCharge
 }
 
+/// The callback must run after schedule returns. A controller rejects inline invocation fail-closed.
 @MainActor package protocol SearchAdmissionRetryScheduler {
   func schedule(_ action: @escaping @MainActor () -> Void) -> any SearchAdmissionRetryToken
 }
@@ -102,7 +103,10 @@ package protocol SearchAdmissionAccounting {
 }
 
 package struct SearchAdmissionShutdown: Sendable, Equatable {
+  /// Historical receipt of the single bounded terminal command; it is never fabricated as fresh.
   package let driver: SearchParentWireShutdown
+  /// Current request/adopted-resource observation, excluding launcher quarantine.
+  package let driverSettlement: SearchParentWireSettlement
   package let retainedActiveJobs: Int
   package let retainedLeases: Int
 }
