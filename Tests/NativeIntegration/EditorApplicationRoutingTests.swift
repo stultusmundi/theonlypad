@@ -322,11 +322,15 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     var opened = 0
     var recent = 0
     var failed = 0
+    var typed = 0
     f.controller.onOpenedURL = { _ in recent += 1 }
-    f.controller.open(url, onFailure: { _ in failed += 1 }, onOpened: { opened += 1 })
+    f.controller.open(
+      url, onFailure: { _ in failed += 1 }, onOpened: { opened += 1 },
+      onOpenedDocument: { _ in typed += 1 })
     let entered = await f.wait { gate.entered }
     XCTAssertTrue(entered)
     XCTAssertEqual(opened, 0)
+    XCTAssertEqual(typed, 0)
     XCTAssertEqual(recent, 0)
     XCTAssertTrue(f.controller.sessionMetadata.tabs.isEmpty)
     gate.release()
@@ -335,6 +339,7 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
     XCTAssertTrue(done)
     XCTAssertEqual(failed, 0)
     XCTAssertEqual(recent, 1)
+    XCTAssertEqual(typed, 1)
     if let id = f.controller.sessionMetadata.selectedTabID,
       let model = f.registry.handle(id: id) as? EditorDocument
     {

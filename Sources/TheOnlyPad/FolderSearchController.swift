@@ -1,6 +1,29 @@
 import AppKit
 import PadCore
 
+/// Navigation authority expires with its originating result generation.
+@MainActor final class FolderSearchNavigationRequest {
+  let url: URL
+  let range: NSRange
+  let snapshot: String
+  private weak var owner: FolderSearchController?
+  private let generation: UUID
+  fileprivate init(
+    url: URL, range: NSRange, snapshot: String, owner: FolderSearchController, generation: UUID
+  ) {
+    self.url = url
+    self.range = range
+    self.snapshot = snapshot
+    self.owner = owner
+    self.generation = generation
+  }
+  var isCurrent: Bool { owner?.acceptsNavigation(generation) == true }
+  func belongs(to panel: FolderSearchController?) -> Bool {
+    guard let owner, let panel else { return false }
+    return owner === panel
+  }
+}
+
 private final class FolderSearchCancellation: @unchecked Sendable {
   private let lock = NSLock()
   private var value = false
@@ -34,11 +57,12 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     ) throws -> FolderSearchReport
 
   var onClose: (() -> Void)?
-  private let onOpen: (URL, NSRange, String) -> Void
+  private let onOpen: (FolderSearchNavigationRequest) -> Void
   private let search: SearchOperation?
   private var root: URL?
   private var token: FolderSearchCancellation?
   private var generation = UUID()
+  private var closed = false
   private var hits: [FolderSearchHit] = []
   private var resultRoot: URL?
   private let folder = NSTextField(labelWithString: "Choose a folder")
@@ -55,7 +79,7 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   private let status = NSTextField(wrappingLabelWithString: "Ready")
 
   init(
-    root: URL? = nil, onOpen: @escaping (URL, NSRange, String) -> Void,
+    root: URL? = nil, onOpen: @escaping (FolderSearchNavigationRequest) -> Void,
     search: SearchOperation? = nil
   ) {
     self.root = root
@@ -153,6 +177,7 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   required init?(coder: NSCoder) { nil }
   deinit { token?.cancel() }
   func windowWillClose(_ notification: Notification) {
+    closed = true
     stop()
     onClose?()
   }
@@ -163,17 +188,21 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     return NSTextField(labelWithString: "\(hit.relativePath) — \(hit.range.location)")
   }
   @objc private func pickFolder() {
-    guard let window else { return }
+    guard !closed, let window else { return }
+    let requestedGeneration = generation
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
     panel.allowsMultipleSelection = false
     panel.beginSheetModal(for: window) { [weak self] result in
-      guard result == .OK, let self, let url = panel.url else { return }
+      guard result == .OK, let self, !self.closed,
+        self.generation == requestedGeneration, let url = panel.url
+      else { return }
       self.setRoot(url)
     }
   }
   func setRoot(_ url: URL) {
+    guard !closed else { return }
     stop()
     root = url
     folder.stringValue = url.path
@@ -195,7 +224,7 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     table.reloadData()
   }
   @objc private func start() {
-    guard token == nil else { return }
+    guard !closed, token == nil else { return }
     guard let root else {
       status.stringValue = "Choose a folder first."
       return
@@ -272,7 +301,7 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     }
   }
   @objc private func openResult() {
-    guard hits.indices.contains(table.selectedRow), let resultRoot else { return }
+    guard !closed, hits.indices.contains(table.selectedRow), let resultRoot else { return }
     let hit = hits[table.selectedRow]
     let id = generation
     Task { [weak self] in
@@ -281,11 +310,15 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
           try WorkspaceIndex.validatedFile(hit.url, within: resultRoot)
         }.value
         guard let self, self.generation == id else { return }
-        self.onOpen(validated, hit.range, hit.originalText)
+        self.onOpen(
+          FolderSearchNavigationRequest(
+            url: validated, range: hit.range, snapshot: hit.originalText,
+            owner: self, generation: id))
       } catch {
         guard let self, self.generation == id else { return }
         self.status.stringValue = "Cannot open changed or unsafe result: \(error)"
       }
     }
   }
+  fileprivate func acceptsNavigation(_ id: UUID) -> Bool { !closed && generation == id }
 }

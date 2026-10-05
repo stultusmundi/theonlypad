@@ -11,6 +11,13 @@ SPEC=importlib.util.spec_from_file_location('native_regressions',Path(__file__).
 RUNNER=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(RUNNER)
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_folder_navigation_requires_its_named_positive_suite(self):
+        text="Test Suite 'FolderNavigationTests' passed\nExecuted 2 tests, with 0 failures\n"
+        self.assertEqual(RUNNER.parse_success('folder-navigation',text),{'tests':2,'failures':0})
+        for text in ["Test Suite 'FolderNavigationTests' passed\nExecuted 0 tests, with 0 failures",
+                     "Test Suite 'SearchReplacementTests' passed\nExecuted 2 tests, with 0 failures"]:
+            with self.assertRaises(ValueError): RUNNER.parse_success('folder-navigation',text)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.output=Path(self.temp.name)/'output';self.output.mkdir()

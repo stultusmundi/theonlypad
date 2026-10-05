@@ -1,6 +1,14 @@
 # Continuation
 
-## Active resumption — 2026-10-05
+## Paused at user request — 2026-10-05
+
+The user requested stopping after the current chunk. The folder-result navigation and encoding-reload fixes are complete, independently reviewed and locally tested: navigation10, native runner38, managed documents71, neighboring native edit/search32, both error-panel harnesses and a fresh warning-free app build pass. See [navigation verification](verification/folder-result-navigation.md). The earlier dedicated native-borrow runner is committed at `1cf00da`; typed serializer/release-schema records at `72b8f5e`. No push, merge, release or new desktop package was made.
+
+All agents and runtime work are stopped. Resume only on a new user request. The full build prompt remains incomplete; the latest packaged desktop evidence still belongs to `f4d9207`. This pause supersedes all active-owner/next-action instructions below.
+
+Private measurement work is checkpointed, with distinct evidence states: counter component32/0 and unchanged baseline2/0 are reviewed for injected scope; the stronger33-test control and two mutants are prepared but unexecuted. Journal19/0 includes the reproduced/fixed pending-launch overlap, with independent final review still pending. Source-submit helper RED17/8 preserves11 passing terminal controls; its minimal implementation is saved but uncompiled/untested and requires the newer journal checkpoint before GREEN. Exact resumes: `.local/search-engine-counters-20261005/handoff.md`, `.local/search-campaign-journal-20261005/checkpoint.md`, and `.local/search-campaign-source-binding-20261005/parked-checkpoint.md`. No native counter query, allocation campaign, selected budget or production search route is established by these private components.
+
+## Prior active resumption — 2026-10-05
 
 The user explicitly resumed the full build scope until implementation is complete or a new stop message arrives. This supersedes the historical sprint stop below. Root retains exclusive actual-child/GUI execution and commit ownership. Work continues on the clean existing `build/native-editor` branch to preserve private experiment paths; bounded workers have disjoint file ownership. No remote publication is authorized.
 

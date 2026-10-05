@@ -30,7 +30,9 @@ import PadCore
     try Data([0xEF, 0xBB, 0xBF] + Array("first needle second".utf8)).write(
       to: root.appendingPathComponent("a.txt"))
     var opened: [(URL, NSRange, String)] = []
-    let controller = FolderSearchController(root: root) { opened.append(($0, $1, $2)) }
+    let controller = FolderSearchController(root: root) {
+      opened.append(($0.url, $0.range, $0.snapshot))
+    }
     guard let content = controller.window?.contentView else {
       throw Failure.failed("Missing window")
     }
@@ -97,7 +99,7 @@ import PadCore
     var failureOpened = 0
     let scriptedSearch = ScriptedFolderSearch()
     let failureController = FolderSearchController(
-      root: failureRoot, onOpen: { _, _, _ in failureOpened += 1 },
+      root: failureRoot, onOpen: { _ in failureOpened += 1 },
       search: { root, query, includes, excludes in
         try scriptedSearch.run(root, query, includes, excludes)
       })

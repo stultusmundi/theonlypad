@@ -11,7 +11,8 @@ import re
 import sys
 import tempfile
 
-SUITES={'search-replacement':('SearchReplacementTests','search-replacement-tests'),
+SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
+        'search-replacement':('SearchReplacementTests','search-replacement-tests'),
         'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
         'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
@@ -59,6 +60,7 @@ def parse_args(argv):
 
 def discover(root,suite,prebuilt):
     paths={root/name for name in FIXED}
+    if suite=='folder-navigation': paths.add(root/'scripts/test-folder-navigation.sh')
     if suite=='settings': paths.add(root/'scripts/test-document-applied-settings.sh')
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:
@@ -179,6 +181,24 @@ def freeze(root,run,suite,prebuilt=False):
                 generate('Package/'+name,(run/item['frozen']).read_bytes(),name)
             elif name.startswith('Sources/TheOnlyPad/') and path.name!='TheOnlyPadApplication.swift':
                 data=(run/item['frozen']).read_bytes()
+                if suite=='folder-navigation':
+                    test_source=(run/'Original/Tests/NativeIntegration/FolderNavigationTests.swift').read_text()
+                    label={'EditorWindowController.swift':'CONTROLLER',
+                           'FolderSearchController.swift':'PANEL'}.get(path.name)
+                    if label:
+                        begin='// FOLDER-'+label+'-ACCESS-BEGIN\n'
+                        end='// FOLDER-'+label+'-ACCESS-END'
+                        if test_source.count(begin)!=1 or test_source.count(end)!=1:
+                            raise ValueError('folder access markers changed')
+                        text=data.decode()
+                        if label=='CONTROLLER':
+                            first=text.index('    case "edit.findFolder":')
+                            last=text.index('    case "view.splitVertical":',first)
+                            body=text[first:last]
+                            marker='      panel.showWindow(nil)'
+                            if body.count(marker)!=1: raise ValueError('folder presentation marker changed')
+                            text=text[:first]+body.replace(marker,'      // Hidden test: keep the actual folder panel unshown.')+text[last:]
+                        data=(text+'\n'+test_source.split(begin)[1].split(end)[0]).encode()
                 if suite=='projection' and path.name=='EditorWindowController.swift':
                     access=(run/'Original/Tests/NativeIntegration/EditorTransferProjectionTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
                     data=projection_probe(data.decode(),access).encode()
@@ -209,6 +229,13 @@ def freeze(root,run,suite,prebuilt=False):
                 generate('Package/Sources/NativeRouting/'+path.name,data,name)
         name=SUITES[suite][0]+'.swift'
         test_data=(run/'Original/Tests/NativeIntegration'/name).read_bytes()
+        if suite=='folder-navigation':
+            text=test_data.decode()
+            for label in ('CONTROLLER','PANEL'):
+                start=text.index('// FOLDER-'+label+'-ACCESS-BEGIN')
+                end=text.index('// FOLDER-'+label+'-ACCESS-END')+len('// FOLDER-'+label+'-ACCESS-END')
+                text=text[:start]+text[end:]
+            test_data=text.encode()
         if suite in ('settings','projection'):
             text=test_data.decode();start=text.index('// NATIVE-ACCESS-BEGIN');end=text.index('// NATIVE-ACCESS-END')+len('// NATIVE-ACCESS-END');test_data=(text[:start]+text[end:]).encode()
         if suite=='search-replacement':
@@ -233,7 +260,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -337,7 +364,7 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
-    if kind in ('transfer','projection','settings','search-replacement'):
+    if kind in SUITES and kind!='close':
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or any(n<=0 or failures!=0 for n,failures in counts): raise ValueError('missing positive XCTest result')
         if "Test Suite '"+SUITES[kind][0]+"' passed" not in text: raise ValueError('expected suite did not pass')

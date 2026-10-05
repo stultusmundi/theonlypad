@@ -13,6 +13,17 @@ struct PaneCommandContext: Equatable {
   let editRevision: UInt64
   let selection: NSRange
 }
+/// Captured before completion callbacks can move, edit, or replace the opened target.
+@MainActor struct EditorOpenedDocument {
+  fileprivate let document: EditorDocument
+  fileprivate let pane: EditorPane
+  fileprivate let context: PaneCommandContext
+  fileprivate let ownership: UUID
+  fileprivate let closeMutation: UUID
+  fileprivate let operationID: UUID?
+  fileprivate let endpointID: UUID?
+}
+
 enum PaneRoutingError: LocalizedError {
   case stale, composition
   var errorDescription: String? {
@@ -300,20 +311,69 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     refreshInteractivity(document)
   }
 
-  private func activateSource(_ pane: EditorPane, snapshot: String, range: NSRange) throws {
-    guard !windowClosed, !preparingToQuit,
-      documents.contains(where: { $0 === pane.document }), pane.isAttached,
-      !pane.document.saving, pane.document.composingPaneID == nil,
-      current?.composingPaneID == nil,
-      pane.document.storage.string.utf16.elementsEqual(snapshot.utf16),
-      range.location >= 0, range.length >= 0, range.location <= (snapshot as NSString).length,
-      range.length <= (snapshot as NSString).length - range.location,
-      Range(range, in: snapshot) != nil
+  private func openedTarget(_ document: EditorDocument, pane source: EditorPane? = nil)
+    -> EditorOpenedDocument
+  {
+    let pane = source ?? preferredPane(in: document)
+    return EditorOpenedDocument(
+      document: document, pane: pane, context: context(for: pane),
+      ownership: document.ownershipGeneration, closeMutation: document.closeMutationGeneration,
+      operationID: document.operationID, endpointID: applicationRouting?.endpointID)
+  }
+
+  /// Reads only native identity/state; owner callbacks run before this final fence.
+  private func openedTargetStillValid(_ target: EditorOpenedDocument) -> Bool {
+    let document = target.document
+    return nativeEditContextStillValid(
+      document, source: target.pane, context: target.context, requireFocus: false,
+      operationID: target.operationID)
+      && document.operationID == target.operationID
+      && document.ownershipGeneration == target.ownership
+      && document.closeMutationGeneration == target.closeMutation
+      && applicationRouting?.endpointID == target.endpointID
+      && !target.pane.editor.hasMarkedText()
+      && current?.composingPaneID == nil
+  }
+
+  private func activateSource(
+    _ pane: EditorPane, snapshot: String, range: NSRange,
+    opened: EditorOpenedDocument? = nil, request: FolderSearchNavigationRequest? = nil
+  ) throws {
+    let target = opened ?? openedTarget(pane.document, pane: pane)
+    let document = pane.document
+    let native = snapshot as NSString
+    guard range.location >= 0, range.length >= 0, range.location <= native.length,
+      range.length <= native.length - range.location
     else { throw PaneRoutingError.stale }
-    pane.document.preferredPaneID = pane.id
-    display(pane.document)
+    func scalarBoundary(_ offset: Int) -> Bool {
+      offset == 0 || offset == native.length
+        || !(0xDC00...0xDFFF).contains(native.character(at: offset))
+    }
+    guard scalarBoundary(range.location), scalarBoundary(NSMaxRange(range)) else {
+      throw PaneRoutingError.stale
+    }
+    func valid() -> Bool {
+      target.document === document && (opened == nil || target.pane === pane)
+        && openedTargetStillValid(target)
+        && pane.isAttached && document.panePool.contains(where: { $0 === pane })
+        && pane.editor.textStorage === document.storage && !pane.editor.hasMarkedText()
+        && document.storage.string.utf16.elementsEqual(snapshot.utf16)
+        && (request == nil || (request!.isCurrent && request!.belongs(to: folderSearch)))
+    }
+    func admitted() -> Bool { applicationAllows(.select, document: document) && valid() }
+    guard admitted() else { throw PaneRoutingError.stale }
+    document.preferredPaneID = pane.id
+    display(document)
+    guard admitted(), current === document else { throw PaneRoutingError.stale }
     try focusPane(id: pane.id)
+    guard admitted(), current === document, focusedPane === pane else {
+      throw PaneRoutingError.stale
+    }
     pane.editor.setSelectedRange(range)
+    // Selection notifications can reenter too; never scroll a now-invalid target.
+    guard admitted(), current === document, focusedPane === pane else {
+      throw PaneRoutingError.stale
+    }
     pane.editor.scrollRangeToVisible(range)
   }
   private var settings = EditorSettings.defaults
@@ -1448,9 +1508,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func open(
     _ url: URL, encoding: DocumentEncoding? = nil, shouldAccept: (() -> Bool)? = nil,
-    onFailure: ((Error) -> Void)? = nil, onOpened: (() -> Void)? = nil
+    onFailure: ((Error) -> Void)? = nil, onOpened: (() -> Void)? = nil,
+    onOpenedDocument: ((EditorOpenedDocument) -> Void)? = nil
   ) {
     // Completion owns exactly one outcome, even when a window disappears during its read.
+    var openedDocument: EditorDocument?
     var completed = false
     let finish: (Error?, Bool) -> Void = { [weak self] error, showDefaultError in
       guard !completed else { return }
@@ -1462,9 +1524,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           self?.present(error)
         }
       } else {
+        let target = openedDocument.flatMap { self?.openedTarget($0) }
         self?.onOpenedURL?(url)
         onOpened?()
+        if let target { onOpenedDocument?(target) }
       }
+    }
+    let succeed: (EditorDocument) -> Void = { document in
+      openedDocument = document
+      finish(nil, false)
     }
     guard !preparingToQuit, !windowClosed, shouldAccept?() != false else {
       finish(CancellationError(), false)
@@ -1480,21 +1548,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       if let encoding {
         reload(
-          encoding: encoding, shouldAccept: shouldAccept,
+          document: existing, encoding: encoding, shouldAccept: shouldAccept,
           onFailure: { finish($0, true) },
           onReload: {
             self.display(existing)
-            finish(nil, false)
+            succeed(existing)
           })
       } else {
-        finish(nil, false)
+        succeed(existing)
       }
       return
     }
     if applicationRouting != nil {
       openApplicationDocument(
         url, encoding: encoding, shouldAccept: shouldAccept, allowLargeViewer: onFailure == nil,
-        hasPositionCompletion: onOpened != nil, finish: finish)
+        hasPositionCompletion: onOpened != nil || onOpenedDocument != nil,
+        finish: finish, succeed: succeed)
       return
     }
     loadingCount += 1
@@ -1532,7 +1601,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           }
           if let viewer = self.onOpenLargeFile {
             viewer(url)
-            if onOpened != nil {
+            if onOpened != nil || onOpenedDocument != nil {
               finish(
                 NSError(
                   domain: "TheOnlyPad", code: 13,
@@ -1555,14 +1624,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           self.display(existing)
           if let encoding {
             self.reload(
-              encoding: encoding, shouldAccept: shouldAccept,
+              document: existing, encoding: encoding, shouldAccept: shouldAccept,
               onFailure: { finish($0, true) },
               onReload: {
                 self.display(existing)
-                finish(nil, false)
+                succeed(existing)
               })
           } else {
-            finish(nil, false)
+            succeed(existing)
           }
           return
         }
@@ -1587,7 +1656,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         self.documents.append(document)
         self.adoptFileState(document)
         self.display(document)
-        finish(nil, false)
+        succeed(document)
       }
     }
   }
@@ -1827,10 +1896,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       controller.showWindow(nil)
     case "edit.findFolder":
       folderSearch?.close()
-      let panel = FolderSearchController(root: workspace.rootURL) {
-        [weak self] url, range, snapshot in
-        self?.open(
-          url, onOpened: { [weak self] in self?.selectSearchResult(range, snapshot: snapshot) })
+      let panel = FolderSearchController(root: workspace.rootURL) { [weak self] request in
+        guard let self, request.isCurrent, request.belongs(to: self.folderSearch) else { return }
+        self.open(
+          request.url,
+          shouldAccept: { [weak self] in
+            request.isCurrent && request.belongs(to: self?.folderSearch)
+          },
+          onOpenedDocument: { [weak self] target in
+            guard let self, request.isCurrent, request.belongs(to: self.folderSearch) else {
+              return
+            }
+            do {
+              try self.activateSource(
+                target.pane, snapshot: request.snapshot, range: request.range,
+                opened: target, request: request)
+            } catch { self.present(error) }
+          })
       }
       folderSearch = panel
       panel.showWindow(nil)
@@ -2029,9 +2111,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   private func reload(
-    encoding: DocumentEncoding? = nil, shouldAccept: (() -> Bool)? = nil,
+    document requestedDocument: EditorDocument? = nil, encoding: DocumentEncoding? = nil,
+    shouldAccept: (() -> Bool)? = nil,
     onFailure: ((Error) -> Void)? = nil, onReload: (() -> Void)? = nil
   ) {
+    let target = requestedDocument ?? current
     let fail: (Error) -> Void = { [weak self] error in
       if let onFailure {
         onFailure(error)
@@ -2053,7 +2137,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           ]))
       return
     }
-    guard let document = current, let url = document.url, !document.saving,
+    guard let document = target, let url = document.url, !document.saving,
       applicationAllows(.fileOperation, document: document),
       document.composingPaneID == nil
     else {
@@ -4274,7 +4358,7 @@ extension EditorWindowController {
   private func openApplicationDocument(
     _ url: URL, encoding: DocumentEncoding?, shouldAccept: (() -> Bool)?,
     allowLargeViewer: Bool, hasPositionCompletion: Bool,
-    finish: @escaping (Error?, Bool) -> Void
+    finish: @escaping (Error?, Bool) -> Void, succeed: @escaping (EditorDocument) -> Void
   ) {
     let request: UUID
     do { request = try beginApplicationPreparation() } catch {
@@ -4322,10 +4406,10 @@ extension EditorWindowController {
           }
           if let encoding {
             self.reload(
-              encoding: encoding, shouldAccept: shouldAccept,
-              onFailure: { finish($0, true) }, onReload: { finish(nil, false) })
+              document: existing, encoding: encoding, shouldAccept: shouldAccept,
+              onFailure: { finish($0, true) }, onReload: { succeed(existing) })
           } else {
-            finish(nil, false)
+            succeed(existing)
           }
           return
         }
@@ -4335,7 +4419,10 @@ extension EditorWindowController {
         try self.requireApplicationPreparation(request)
         guard shouldAccept?() != false else { throw CancellationError() }
         try self.validateApplicationResult(outcome)
-        finish(nil, false)
+        guard case .imported(let documentID) = outcome,
+          let document = self.applicationRouting?.registry.handle(id: documentID) as? EditorDocument
+        else { throw EditorApplicationRoutingError.invalidProjection }
+        succeed(document)
       } catch { finish(error, !self.windowClosed && !self.preparingToQuit) }
     }
   }
