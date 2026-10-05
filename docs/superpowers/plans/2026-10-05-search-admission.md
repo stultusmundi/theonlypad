@@ -116,7 +116,7 @@ XCTAssertEqual(ledger.snapshot, before) // retainedLimit is 10
 
 ## Task 4 — Result leases, reentrant borrows and terminal shutdown
 
-Implementation is complete and the injected component is reviewed/tested (56 focused,839 integrated,54 actual-driver regression tests). The two unchecked composition items below remain narrower integration gates: actual nested modal borrowing/admission and controller composition with separately held physical cleanup. Existing synchronous borrow and driver cleanup tests are not relabeled as that evidence. See the verification record.
+Implementation is complete and the injected component is reviewed/tested (56 focused,842 integrated,54 driver regressions and3 actual controller/driver composition tests). The two unchecked broad items below retain the native/modal live-borrow gap. Actual controller/driver composition now covers held reap/close through terminal shutdown and held write-scope settlement; it does not claim nonterminal FIFO restart after those holds. Existing synchronous borrow tests are not relabeled as actual nested modal execution. See the verification record.
 
 **Consumes:** controller execution state and ledger.
 
