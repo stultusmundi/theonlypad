@@ -55,6 +55,35 @@ class NativeRunnerTests(unittest.TestCase):
                      "Test Suite 'EditorDocumentTransferTests' passed\nExecuted 5 tests, with 0 failures"]:
             with self.subTest(text=text),self.assertRaises(ValueError): RUNNER.parse_success('settings',text)
 
+    def test_search_replacement_requires_its_named_positive_suite(self):
+        text="Test Suite 'SearchReplacementTests' passed\nExecuted 1 test, with 0 failures\n"
+        self.assertEqual(RUNNER.parse_success('search-replacement',text),{'tests':1,'failures':0})
+        for text in ["Test Suite 'SearchReplacementTests' passed\nExecuted 0 tests, with 0 failures",
+                     "Test Suite 'EditorTransferProjectionTests' passed\nExecuted 1 test, with 0 failures"]:
+            with self.subTest(text=text),self.assertRaises(ValueError):
+                RUNNER.parse_success('search-replacement',text)
+
+    def test_search_replacement_transform_changes_only_presentation_and_appends_access(self):
+        source="""  private func showSearch() {
+    let panel = actualSearchPanel(replace: actualReplacement)
+    panel.showWindow(nil)
+  }
+  private func apply(_ transform: LineTransform) {
+    untouched()
+  }
+"""
+        expected=source.replace('    panel.showWindow(nil)',
+            '    // Hidden harness: construct the actual panel without showing it.')+'\n// access'
+        self.assertEqual(RUNNER.search_replacement_controller(source,'// access'),expected)
+        for broken in [source.replace('panel.showWindow(nil)','changed()'),source+source]:
+            with self.subTest(broken=broken),self.assertRaises(ValueError):
+                RUNNER.search_replacement_controller(broken,'')
+        access='// SEARCH-PANEL-ACCESS-BEGIN\nactual access\n// SEARCH-PANEL-ACCESS-END'
+        self.assertEqual(RUNNER.search_replacement_access(access,'PANEL'),'actual access\n')
+        for broken in ['',access+access]:
+            with self.subTest(broken=broken),self.assertRaises(ValueError):
+                RUNNER.search_replacement_access(broken,'PANEL')
+
     def test_native_summary_and_shared_smoke_are_distinct(self):
         self.assertEqual(RUNNER.parse_success('NativeCloseModelHarness','Native close model checks: 106, failures: 0'),{'checks':106,'failures':0})
         self.assertEqual(RUNNER.parse_success('DocumentFactoryHarness','Factory checks: 133, failures: 0'),{'checks':133,'failures':0})

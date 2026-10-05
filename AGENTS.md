@@ -189,3 +189,6 @@ Shutdown preservation controls (2026-10-05): `scripts/test-search-child-lifecycl
 
 
 Nonterminal driver settlement (2026-10-05): `scripts/test-search-parent-driver.sh` passes54 tests; default `scripts/test-search-child-lifecycle.sh` passes57; parent runner pure contracts pass23. Matching source inventories, direct-watchdog receipts and stale-handle mutation failure were verified. Inspection preserves healthy reuse and waits for exact request/adopted cleanup; it does not certify launcher quarantine. See `docs/verification/search-parent-driver.md`. No admission policy, production helper routing or packaged acceptance follows.
+
+
+Native search replacement safety: `scripts/test-search-replacement.sh` passes12 hidden actual-controller tests, neighboring `scripts/test-editor-transfer-projection.sh` passes20 and native runner contracts pass32. Exact frozen sources and direct-watchdog receipts verified. The replacement stages bookmark/macro bookkeeping until final callback revalidation. See `docs/verification/native-edit-revalidation.md`; other edit routes and visible acceptance remain separate. Do not nest another watchdog around these coordinators.

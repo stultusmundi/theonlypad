@@ -27,6 +27,8 @@ jobs:
         run: xcrun swift-format lint --strict --recursive Sources Tests Package.swift
       - name: Native integration
         run: scripts/test-native-integration.sh
+      - name: Search replacement callback safety
+        run: scripts/test-search-replacement.sh
       - name: Managed document lifecycle integration
         run: scripts/test-managed-documents.sh
       - name: Document transfer foundations

@@ -11,7 +11,8 @@ import re
 import sys
 import tempfile
 
-SUITES={'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
+SUITES={'search-replacement':('SearchReplacementTests','search-replacement-tests'),
+        'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
         'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
         'close':(None,'native-close-model')}
@@ -59,6 +60,7 @@ def parse_args(argv):
 def discover(root,suite,prebuilt):
     paths={root/name for name in FIXED}
     if suite=='settings': paths.add(root/'scripts/test-document-applied-settings.sh')
+    if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
         if suite=='close':
@@ -89,6 +91,24 @@ def projection_probe(text,access):
     body=body[:index]+'      ProjectionFocusProbe.afterOrigin?(self)\n'+body[index:]
     return text[:start]+body+text[end:]+'\n'+access
 
+def search_replacement_access(test_source, name):
+    begin='// SEARCH-'+name+'-ACCESS-BEGIN\n'
+    end='// SEARCH-'+name+'-ACCESS-END'
+    if test_source.count(begin)!=1 or test_source.count(end)!=1:
+        raise ValueError('search access markers changed')
+    return test_source.split(begin)[1].split(end)[0]
+
+def search_replacement_controller(text,access):
+    start='  private func showSearch() {'
+    end='  private func apply(_ transform: LineTransform) {'
+    if text.count(start)!=1 or text.count(end)!=1:
+        raise ValueError('search construction boundaries changed')
+    first=text.index(start);last=text.index(end,first)
+    body=text[first:last];marker='    panel.showWindow(nil)'
+    if body.count(marker)!=1: raise ValueError('search presentation marker changed')
+    body=body.replace(marker,'    // Hidden harness: construct the actual panel without showing it.')
+    return text[:first]+body+text[last:]+'\n'+access
+
 def freeze(root,run,suite,prebuilt=False):
     root,run=Path(root),Path(run)
     paths=discover(root,suite,prebuilt);items=[];generated=[]
@@ -115,6 +135,12 @@ def freeze(root,run,suite,prebuilt=False):
                 if suite=='projection' and path.name=='EditorWindowController.swift':
                     access=(run/'Original/Tests/NativeIntegration/EditorTransferProjectionTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
                     data=projection_probe(data.decode(),access).encode()
+                if suite=='search-replacement':
+                    test_source=(run/'Original/Tests/NativeIntegration/SearchReplacementTests.swift').read_text()
+                    if path.name=='EditorWindowController.swift':
+                        data=search_replacement_controller(data.decode(),search_replacement_access(test_source,'CONTROLLER')).encode()
+                    if path.name=='SearchPanelController.swift':
+                        data+=('\n'+search_replacement_access(test_source,'PANEL')).encode()
                 if suite=='settings':
                     access=(run/'Original/Tests/NativeIntegration/DocumentAppliedSettingsTests.swift').read_text().split('// NATIVE-ACCESS-BEGIN\n')[1].split('// NATIVE-ACCESS-END')[0]
                     if path.name=='EditorWindowController.swift': data+=('\n'+access).encode()
@@ -132,6 +158,14 @@ def freeze(root,run,suite,prebuilt=False):
         test_data=(run/'Original/Tests/NativeIntegration'/name).read_bytes()
         if suite in ('settings','projection'):
             text=test_data.decode();start=text.index('// NATIVE-ACCESS-BEGIN');end=text.index('// NATIVE-ACCESS-END')+len('// NATIVE-ACCESS-END');test_data=(text[:start]+text[end:]).encode()
+        if suite=='search-replacement':
+            text=test_data.decode()
+            for label in ('CONTROLLER','PANEL'):
+                search_replacement_access(text,label)
+                start=text.index('// SEARCH-'+label+'-ACCESS-BEGIN')
+                end=text.index('// SEARCH-'+label+'-ACCESS-END')+len('// SEARCH-'+label+'-ACCESS-END')
+                text=text[:start]+text[end:]
+            test_data=text.encode()
         generate('Package/Tests/NativeRoutingTests/'+name,test_data,
                  'Tests/NativeIntegration/'+name)
         generate('Package/Package.swift',PACKAGE.encode())
@@ -250,7 +284,7 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
-    if kind in ('transfer','projection','settings'):
+    if kind in ('transfer','projection','settings','search-replacement'):
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or any(n<=0 or failures!=0 for n,failures in counts): raise ValueError('missing positive XCTest result')
         if "Test Suite '"+SUITES[kind][0]+"' passed" not in text: raise ValueError('expected suite did not pass')

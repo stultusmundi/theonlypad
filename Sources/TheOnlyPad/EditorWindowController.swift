@@ -41,6 +41,27 @@ private enum EditorSaveFailure: Error {
   case uncertain(PendingDocumentPublication)
 }
 
+/// One synchronous search admission owns this proposal. The actual delegate claims
+/// it before calling application code; nested native edits keep their normal bookkeeping.
+@MainActor private final class SearchReplacementPreparation {
+  let editor: NSTextView
+  let range: NSRange
+  let replacement: String
+  let validate: @MainActor () -> Bool
+  var delegateClaimed = false
+  var commit: (@MainActor () -> Bool)?
+
+  init(
+    editor: NSTextView, range: NSRange, replacement: String,
+    validate: @escaping @MainActor () -> Bool
+  ) {
+    self.editor = editor
+    self.range = range
+    self.replacement = replacement
+    self.validate = validate
+  }
+}
+
 /// Refuse known-denied editor focus before AppKit resigns the current responder.
 @MainActor private final class EditorAdmissionWindow: NSWindow {
   private var checkingFocusAdmission = false
@@ -819,6 +840,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let recovery = RecoveryCoordinator.shared
   private var recoveryFailureShown = false
   private var searchPanel: SearchPanelController?
+  private var searchReplacementPreparation: SearchReplacementPreparation?
   private var encodingPanel: EncodingPanelController?
   private var textUtilities: TextUtilitiesController?
   private var folderSearch: FolderSearchController?
@@ -2621,18 +2643,48 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         }
       },
       replace: { [weak self, weak document] expected, replacement in
-        guard let self, let document, self.documents.contains(where: { $0 === document }),
+        guard let self, let document, self.searchReplacementPreparation == nil,
+          self.documents.contains(where: { $0 === document }),
           !document.saving, !self.preparingToQuit, !self.windowClosed, source.isAttached,
           document.composingPaneID == nil,
           document.storage.string.utf16.elementsEqual(expected.utf16)
         else { return false }
         let editor = source.editor
+        let revision = document.editRevision
+        let ownership = document.ownershipGeneration
+        let mutation = document.closeMutationGeneration
+        @MainActor func snapshotStillValid() -> Bool {
+          !document.saving && !self.preparingToQuit && !self.windowClosed
+            && source.isAttached && source.document === document
+            && document.panePresentation.installing == nil && document.composingPaneID == nil
+            && self.documents.contains(where: { $0 === document })
+            && document.panePool.contains(where: { $0 === source })
+            && editor.textStorage === document.storage
+            && document.editRevision == revision && document.ownershipGeneration == ownership
+            && document.closeMutationGeneration == mutation
+            && !document.storage.editedMask.contains(.editedCharacters)
+            && document.storage.string.utf16.elementsEqual(expected.utf16)
+        }
+        @MainActor func stillAdmitted() -> Bool {
+          self.applicationAllows(.edit, document: document) && snapshotStillValid()
+        }
         let range = NSRange(location: 0, length: expected.utf16.count)
-        guard editor.shouldChangeText(in: range, replacementString: replacement) else {
+        guard stillAdmitted() else { return false }
+        editor.breakUndoCoalescing()
+        guard stillAdmitted() else { return false }
+        let preparation = SearchReplacementPreparation(
+          editor: editor, range: range, replacement: replacement, validate: snapshotStillValid)
+        self.searchReplacementPreparation = preparation
+        defer { self.searchReplacementPreparation = nil }
+        guard editor.shouldChangeText(in: range, replacementString: replacement), stillAdmitted()
+        else { return false }
+        editor.documentUndo.beginUndoGrouping()
+        // Undo-group notifications may run application code too. Publish no search
+        // bookkeeping until the target and proposal are valid after that boundary.
+        guard stillAdmitted(), preparation.commit?() ?? !preparation.delegateClaimed else {
+          editor.documentUndo.endUndoGrouping()
           return false
         }
-        editor.breakUndoCoalescing()
-        editor.documentUndo.beginUndoGrouping()
         editor.textStorage?.replaceCharacters(in: range, with: replacement)
         editor.didChangeText()
         editor.documentUndo.endUndoGrouping()
@@ -3337,6 +3389,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     _ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
     replacementString: String?
   ) -> Bool {
+    if let preparation = searchReplacementPreparation,
+      !preparation.delegateClaimed, preparation.editor === textView
+    {
+      // Claim before any owner/delegate callback. Identical nested edits cannot
+      // consume this proposal or publish the outer command on its behalf.
+      preparation.delegateClaimed = true
+      guard affectedCharRange == preparation.range,
+        replacementString == preparation.replacement
+      else { return false }
+      return prepareSearchReplacement(preparation)
+    }
     guard let source = pane(for: textView), mayMutate(source) else { return false }
     let document = source.document
     do {
@@ -3422,6 +3485,61 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         location: affectedCharRange.location, length: affectedCharRange.length,
         text: replacementString))
     recordedUnits += count
+    return true
+  }
+
+  private func prepareSearchReplacement(_ preparation: SearchReplacementPreparation) -> Bool {
+    guard let source = pane(for: preparation.editor), mayMutate(source), preparation.validate()
+    else { return false }
+    let document = source.document
+    let count = preparation.replacement.utf16.count
+    if recordingDocumentID == document.id,
+      recordedCommands.count >= 10_000 || count > 10_000_000 - recordedUnits
+    {
+      recordingDocumentID = nil
+      let alert = NSAlert()
+      alert.messageText = "Macro recording limit reached"
+      alert.informativeText =
+        "Editing will continue. Use Stop Recording to save the commands captured so far."
+      alert.runModal()
+      guard preparation.validate() else { return false }
+    }
+    var bookmarks: DocumentBookmarks?
+    if !document.bookmarks.offsets.isEmpty {
+      do {
+        var updated = document.bookmarks
+        try updated.remap(
+          through: TextEdit(range: preparation.range, replacement: preparation.replacement),
+          inUTF16: document.storage.mutableString)
+        bookmarks = updated
+      } catch {
+        present(error)
+        return false
+      }
+    }
+    let noOp = document.storage.string.utf16.elementsEqual(preparation.replacement.utf16)
+    let recordingID = recordingDocumentID
+    let commands = recordedCommands
+    let units = recordedUnits
+    let command: MacroCommand? =
+      recordingID == document.id
+      ? .replace(
+        location: preparation.range.location, length: preparation.range.length,
+        text: preparation.replacement) : nil
+    preparation.commit = { [weak self, weak document] in
+      guard let self, let document,
+        self.recordingDocumentID == recordingID, self.recordedCommands == commands,
+        self.recordedUnits == units
+      else { return false }
+      document.pendingBookmarks = bookmarks
+      document.pendingBookmarksHaveUndo = bookmarks != nil && noOp
+      document.typingBookmarkNextLocation = nil
+      if let command {
+        self.recordedCommands.append(command)
+        self.recordedUnits += count
+      }
+      return true
+    }
     return true
   }
 
