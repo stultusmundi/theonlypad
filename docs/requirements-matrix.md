@@ -14,9 +14,9 @@ The76 A–I aggregate requirements remain64 partial and12 outstanding; no aggreg
 
 Full-scope implementation has resumed. Nonterminal settlement is committed at `fff331f`; checked ledger at `293582e`; the reviewed admission controller at `c1e3373` (56 focused tests and two discriminating mutation controls). Shared native edit callback preservation is committed at `6f411e3` (32 hidden actual-controller tests,20 projection regressions,37 pure runner contracts). A matching frozen app build and842 core/component tests pass without warnings; actual-driver regressions pass54. See [admission](verification/search-admission.md), [driver](verification/search-parent-driver.md) and [native edit](verification/native-edit-revalidation.md). Actual controller/driver cleanup composition is committed at `db51d7a` with3 tests and an early-release mutant producing12 failed assertions. Native/modal integration and production helper routing remain in progress. The separate healthy-cleanup smoke does not explain or relabel the preserved historical exited0 failure. All52 fixture goldens and tiny engine compatibility are prerequisites, not full memory/performance acceptance. These bounded checks do not change aggregate completion status or replace the older packaged desktop evidence.
 
-## Active continuation evidence (2026-10-06)
+## Active continuation evidence (2026-10-07)
 
-Current continuation (2026-10-06): work remains active. The separately reviewed
+Current continuation (2026-10-07): work remains active. The separately reviewed
 private search-campaign prerequisites now include counter33/0 plus three mutants,
 actual tiny own-process counter1/0, source submission18/0 plus two mutants, and
 physical projection51/0 plus two mutants, and journal decoder18/0 plus three
@@ -34,8 +34,12 @@ controls and uncertain-close handling initially passed52/0 after RED52/20.
 Complete private Task2 filesystem review now accepts109/0, including actual
 maximum-depth/FD accounting, streaming, race and fault controls. A separate
 iterator cleanup-acknowledgment regression produced RED86/16 before GREEN86/0;
-uncertain cleanup retains its conservative charge. Task3 decoder variants and
-three finite mutants remain pending before actual campaign assembly. These component checks leave the76
+uncertain cleanup retains its conservative charge. Task3 now passes its120/0
+baseline, with three decoder bridge and eight safe guard methods; three focused
+mutant methods produce2/1/5 expected assertions and zero errors/skips/timeouts.
+Independent final review accepts the scoped private filesystem component. The
+Swift publisher and real-role/helper assembly remain outstanding. These component
+checks leave the76
 aggregate requirement states unchanged and do not establish production search
 isolation, memory acceptance or a new packaged desktop checkpoint.
 

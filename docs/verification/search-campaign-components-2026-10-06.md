@@ -454,11 +454,62 @@ Final manifest SHA256:
 `c93f55396d3b1b443a36ded0f923ccfc59e77e5ab90e3ffe97534f540cf94932`.
 Earlier snapshots and failures remain preserved.
 
-Planned next: unchanged-decoder valid/invalid/pending variants and three finite
-mutants. Literal whole-read interception has an approved design direction but
-needs actual guard/ownership controls and independent review before mutation.
+At this Task2 checkpoint, planned next were unchanged-decoder valid/invalid/pending
+variants and three finite mutants. The later Task3 evidence is recorded below.
+Literal whole-read interception then had an approved design direction but still
+needed actual guard/ownership controls and independent review before mutation.
 No additional testing access is needed for the current synthetic-file tests.
 Task2 completion is private filesystem scope only: Task3, real roles/helper,
 whole-cell assembly, native sampling, memory eligibility and public adoption
 remain outstanding. Evidence stays ignored under
 `.local/search-campaign-tiny-boundary-20261006/`; the tested package stays`f4d9207`.
+
+## Private tiny decoder bridge and mutation controls — 2026-10-07
+
+Implemented: unchanged-decoder integration now preserves literal empty,
+incomplete, invalid and pending records for both fixed indices, including their
+absent optional fields and immutable parsed metadata. Format acceptance conveys
+no health or measurement eligibility. Malformed UTF-8, BOM, duplicate keys,
+floating-point and overflowing integers, excessive depth and null optional
+fields are refused; publication refuses these before creating output files.
+
+Tested: the frozen baseline passes120/0 (109 earlier methods plus three bridge
+and eight read-guard controls). Direct controls exercise actual borrowed FileIO,
+bounded reads and cursor observations, pre-forward whole-read refusal, wrapper
+cleanup, descriptor reuse and module-local hook restoration. The literal vectors
+are pinned to previously authored decoder tests; expected values are not derived
+from the candidate schema. No helper, native query or engine is launched.
+
+Three separately frozen candidate-only mutants retain all120 test methods and
+unchanged decoder/layout dependencies. Root executed one fixed method per mutant
+once: journal-only omitted-size read produced two explicit pre-forward policy
+assertions; removal of the final journal pathname fence produced one expected
+refusal assertion; removal of marker value association produced five expected
+refusal assertions. These are three methods/eight assertions, not eight tests or
+an additional120-method run. There were zero unexpected errors, skips or
+timeouts. The whole-read mutant was run only through its authenticated guard;
+zero real delegate reads and definite cleanup were verified before rethrowing.
+The pathname fixture changes both inode and172-to173-byte content after final
+role validation. Later postconditions following its failing refusal assertion
+are not claimed to execute on the mutant. Marker typing/canonical validation
+remain intact; the five discriminators are canonical wrong values.
+
+Root audited each138-member mutation packet:123 unchanged baseline copies,
+one candidate with a distinct origin and13 additions. Unique forward/inverse
+source replay, exact prefix/suffix/diffs, all120 preserved names, fixed selection,
+interpreter/working-directory/command/capture provenance and frozen imports were
+checked. False source-preflight records remain separate from explicit guarded
+runtime authorization. The original125-member baseline remains unchanged.
+Baseline manifest SHA256:
+`7116a2f6f298c09d1a13873d4f82b7b839fefa031fd52ab38ef7ca7d50f76a37`.
+Boundary source remains
+`a3e12d314d07edabee551a8abb5c66c9265c920940c488e24796497dbae65fea`.
+
+Independent final review mapped every Task3 requirement and approved specification
+compliance and quality; root accepted the scoped private component.
+Task1/Task2/Task3 evidence concerns the private filesystem component only.
+Swift descriptor adapters, actual role builds/sidecar integration, whole-cell
+execution, allocation comparison and production editor routing remain separate
+work. Sources and raw evidence remain ignored under
+`.local/search-campaign-tiny-boundary-20261006/`; no public campaign command or
+new tested package is introduced. The tested package remains`f4d9207`.
