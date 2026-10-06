@@ -1,5 +1,11 @@
 # Continuation
 
+## Active resumption — 2026-10-06
+
+The user resumed work until a new stop message arrives. This supersedes the pause below. Root continues on the clean `build/native-editor` feature branch at `7592fb0`, preserving the existing ignored frozen evidence paths. Root owns serial runtime/GUI execution, public records and local commits; remote publication remains unauthorized.
+
+The journal correction is reviewed and verified21/0, with its RED21/4 preserved. Counter33 control, all three discriminating fault controls, and one actual tiny native self-query smoke are verified; see [component checkpoint](verification/search-campaign-components-2026-10-06.md). Source-submit helper verification now owns the serial Swift slot against the corrected journal; its original RED remains preserved. Next comes the independently observed cold physical-facts bridge and finalization before whole-stack assembly. Full scope, measurement-role assembly, allocation comparison, policy selection and production search routing remain outstanding. The prior navigation fixes and their evidence remain committed. Work continues after internal checkpoints.
+
 ## Paused at user request — 2026-10-05
 
 The user requested stopping after the current chunk. The folder-result navigation and encoding-reload fixes are complete, independently reviewed and locally tested: navigation10, native runner38, managed documents71, neighboring native edit/search32, both error-panel harnesses and a fresh warning-free app build pass. See [navigation verification](verification/folder-result-navigation.md). The earlier dedicated native-borrow runner is committed at `1cf00da`; typed serializer/release-schema records at `72b8f5e`. No push, merge, release or new desktop package was made.
