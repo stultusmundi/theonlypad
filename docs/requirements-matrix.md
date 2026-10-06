@@ -24,7 +24,9 @@ mutants and actual writer compatibility1/0/four decoded files. See
 [component evidence](verification/search-campaign-components-2026-10-06.md).
 Joined shutdown has independently reviewed private78/0 and six finite mutants;
 public harness78/0, pure runner31/0 and full app/core847/0 pass.
-Finalization remains in progress before actual
+The private epoch identity/drain adapter passes uninstrumented73/0,
+counted77/0 and nine finite discriminating mutants with independent acceptance.
+Cold finalizer preparation remains in progress before actual
 campaign assembly. These component checks leave the76
 aggregate requirement states unchanged and do not establish production search
 isolation, memory acceptance or a new packaged desktop checkpoint.

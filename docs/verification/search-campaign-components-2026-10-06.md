@@ -8,9 +8,10 @@ production helper. Implementation continues under the user's resumed request.
 | --- | --- | --- | --- |
 | Combined engine trace | Inline logical/native observations under one lock; one active and one completed trace; at most16 events | Frozen injected33/0 and three discriminating mutations; independent review | Helper composition, release roles and allocation comparison |
 | Native self adapter | Unchanged C probe, raw clocks, pinned identity/timebase and explicit native failures | Tiny actual Foundation engine1/0 with eight own-process observations; smoke source review | Paired peak, overhead and memory acceptance |
-| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Finalization, external decoder and actual campaign |
+| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Finalization and actual campaign |
 | Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Finalization and whole-stack composition |
 | Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and finalization |
+| Cold epoch adapter | Opaque pre-outcome journal binding; independent parent guard; stable association result; one retained annotation/drain owner and compact validated receipt | Uninstrumented73/0, counted77/0 and nine discriminating mutants; independent final acceptance | Cold finalizer, actual helper/native sampling and campaign eligibility |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -125,8 +126,9 @@ Private evidence is ignored under `.local/search-campaign-cold-facts-20261006/`.
 
 These are injected event-model checks, with no actual helper/process operation
 or native sampling. Historical immutable physical facts cannot establish live
-admission, result release or campaign eligibility. A stronger joined driver
-shutdown, mandatory epoch drain and finalization still require implementation.
+admission, result release or campaign eligibility. The joined shutdown and epoch
+adapter checkpoints below add their own bounded evidence; cold finalization
+remains unimplemented at this checkpoint.
 
 ## External journal decoder
 
@@ -178,3 +180,61 @@ SDK pins and complete owned-process receipts. See [joined evidence](search-paren
 Public adoption passes pure31/0, frozen driver78/0 and full app/core847/0
 with a warning-free build and independent diff review. The finalizer and
 actual campaign assembly remain separate gates; no memory acceptance follows.
+
+## Cold epoch identity and drain adapter
+
+The private adapter projects one pre-outcome journal snapshot into an immutable
+binding with an inaccessible constructor. It pins the exact journal object and
+observed generation, probe nonce, helper PID/start identity and request metadata.
+Its startup parent identity is independently supplied inside SearchExecution;
+nonpositive PID or zero start ticks refuse sampling before begin while retaining
+actual coordinator close duty. First association attempts retain their exact key
+and disposition, including refusal, across equivalent retries and close.
+
+One retained detached annotation forwards the fixed shutdownReturned phase.
+Accepted means forwarded, not proof that a stopping sampler recorded a phase.
+Close latches before suspension, awaits admitted annotation work, invokes the
+actual coordinator close once and takes one snapshot. Its sole retained task
+returns only a fully validated compact receipt. Cancelled/concurrent callers join
+that same result. Startup, phase, close, returned summary and snapshot failures
+remain separate. Missing or multiple cold summaries cannot be selected away.
+
+Initial behavioral RED17/52 explicit assertions preceded GREEN17/0. Independent
+review exposed unstable unavailable retries and invalid parent acceptance in
+empty epochs; unchanged-source regression RED2/51 preceded corrected GREEN19/0.
+Final uninstrumented73/0 contains26 adapter controls plus47 unchanged epoch,
+sampler and journal controls. Its103-input manifest is
+`725ae4e9be30a74469e14708a303f54d3a3c12f5bd2392e3b983176164b3aee1`.
+
+The counted77/0 packet adds four tests using exactly four coordinator entry
+counters and two additive adapter hooks. Original sources are retained with
+exact replay relations; the generated snapshot needs an explicit return after
+its counter. Holds positively observe annotation admission, close latching,
+actual injected query entry, timer acknowledgment and synchronous sink work.
+They release rescue gates before awaiting results. Counts are captured before
+independent fixture cleanup, so they describe adapter invocations. Its109-input
+manifest is
+`4215af9a9d2b79b46e4537838343e4aa53f76a29e1de6151fedc2d93d5ab8407`.
+
+Nine focused one-test mutants fail3,12,1,1,2,2,48,1,1 explicit assertions for
+annotation ordering, winner identity, zero-success acceptance, summary issue
+retention, journal identity, retry stability, startup parent admission, duplicate
+close and duplicate snapshot, respectively. Each has112 inputs and unchanged
+tests/dependencies/wrappers. Every executed behavior stage has zero unexpected
+failures. Root verified exact membership, original/derived source bytes, four
+inherited SDK header pins, named cases, complete owned-watchdog receipts and
+post-run test executable hashes. Independent review accepted this bounded slice.
+
+Unexecuted preparation failures, the counted snapshot compiler failure and
+read-only audit parser corrections remain separately recorded. The compiler
+attempt ran no tests; singular XCTest test/failure parser corrections reused
+completed outputs without rerunning tests. Raw evidence remains ignored under
+`.local/search-campaign-epoch-bridge-20261006/`.
+
+Winner association checks all six independent generation/probe/helper/parent
+identity fields. It proves only the retained winning observation's association.
+Valid empty and noAdmission-only drains remain measurement unavailable; no
+every-sample identity, cadence, allocation, native-query or memory acceptance is
+inferred. This is a private component with injected numeric collaborators, not
+editor routing or a public campaign runner. A fresh cold finalizer implementation
+is next; actual helper assembly and publication remain separately planned.
