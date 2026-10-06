@@ -13,6 +13,7 @@ production helper. Implementation continues under the user's resumed request.
 | Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and whole-cell composition |
 | Cold epoch adapter | Opaque pre-outcome journal binding; independent parent guard; stable association result; one retained annotation/drain owner and compact validated receipt | Uninstrumented73/0, counted77/0 and nine discriminating mutants; independent final acceptance | Actual helper/native sampling and campaign eligibility |
 | Cold finalizer | One actual wait; raw helper scope before bookkeeping; original joined shutdown preserved; one current/physical read and compact validated epoch result | Uninstrumented109/0, counted121/0 and five discriminating mutants; independent spec/quality acceptance | Readiness/export/filesystem assembly, actual helper/native sampling and campaign eligibility |
+| Tiny input schema | Literal index0/1; closed canonical configuration and both receipts; bounded root validation; synthetic-only role anchors | Initial25/0; corrective RED28/1 then GREEN28/0; independent spec/quality acceptance | Filesystem publication/ingestion, FD accounting, decoder bridge and real role assembly |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -305,3 +306,45 @@ winnerAssociated establishes only retained-winner identity. No memory comparison
 accumulator/budget selection, editor routing or newer packaged runtime follows.
 Raw evidence remains ignored under `.local/search-campaign-finalizer-20261006/`;
 the last tested desktop package remains `f4d9207`.
+
+
+## Tiny journal-boundary input schema
+
+Implemented: literal string index0/1 before anchor access; independently pinned
+canonical configuration and both input receipts; exact scalar types, fixed two-row
+A/A schedule and synthetic-only artifact anchors. Configuration and each receipt
+are capped at16384 bytes before parsing, with depth3 and eight-digit integer
+token limits. The root character guard precedes scanning/encoding/splitting;
+actual UTF-8 bytes remain capped at3072, components at24 and each component at255
+bytes. Both rows remain measurementEligible=false. No filesystem APIs are called.
+
+Tested: the initial honest stub produced25 methods/121 explicit assertion
+failures; implementation passed25/0. Independent review found root encoding
+occurred before its byte check, allowing an unrestricted intermediate allocation.
+A finite3073-character profiling test caught that encode call before execution;
+corrective RED28/1 preserved the original25 passing controls. The minimal scalar
+guard then passed28/0, including independently calculated3072/3073 UTF-8 byte
+controls with shorter character counts. Scoped independent review closed the
+sole blocker and approved spec compliance and quality. No errors, skips or
+timeouts occurred in these Python runs.
+
+Root verified exact commands, interpreter/capture hashes, named test membership,
+all40 final packet members/current origins, unchanged decoder and the minimal
+guard replay. Only Candidate changed between corrective RED/GREEN;38 copied
+files and all28 tests stayed identical. Final candidate SHA256:
+`f99873df1041e130137ce1672eedd24d5909d8a0da2c256029ffaff6fd8f4801`.
+Final manifest SHA256:
+`40d2fc2fc0a11a2e5063e1e721a4bfaaf069f716b0a7e2bcf6c7de08f06e049d`.
+Historical source-preparation records retain their original unexecuted status;
+later root audits establish actual runtime results. The initial read-only audit
+parser correction reused completed logs without rerunning tests.
+
+Planned: exclusive journal/marker publication, bounded concrete reads, actual
+32-FD ownership/maximum-depth checks and unchanged decoder ingestion. Task2 is
+preparing reachable synthetic filesystem tests. There is no platform/approval
+blocker. Constructor authority is a trusted Python component convention, not an
+unforgeable capability; the synthetic roles are not compiled release evidence.
+No helper, native query, whole-cell execution, memory eligibility or public
+campaign command follows. Raw evidence remains ignored under
+`.local/search-campaign-tiny-boundary-20261006/`; the tested package stays
+`f4d9207`.
