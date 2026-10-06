@@ -100,3 +100,27 @@ package protocol SearchParentWireDriving: AnyObject, Sendable {
   func discard(_ handle: SearchParentWireHandle) async throws
   func shutdown() async -> SearchParentWireShutdown
 }
+
+// Logical terminal-join facts; neither payload release nor cold eligibility.
+package enum SearchParentJoinedShutdownResult: Sendable, Equatable {
+  case completed(SearchParentJoinedShutdownCompletion)
+  case callerRefused(SearchParentJoinedCallerRefusal)
+}
+package enum SearchParentJoinedCallerRefusal: Sendable, Equatable {
+  case legacyModeSelected, differentJoinOwner
+}
+package struct SearchParentJoinedShutdownCompletion: Sendable, Equatable {
+  package let shutdown: SearchParentWireShutdown
+  package let ownership: SearchParentJoinedOwnership
+  package let laneStop: SearchParentJoinedLaneStop
+}
+package enum SearchParentJoinedOwnership: Sendable, Equatable {
+  case admitted
+  case refused(SearchParentJoinedOwnershipRefusal)
+}
+package enum SearchParentJoinedOwnershipRefusal: Sendable, Equatable {
+  case staleHandle, requestActive, observerPresent, receiptUnconsumed, abandoned
+}
+package enum SearchParentJoinedLaneStop: Sendable, Equatable {
+  case acknowledged, failed
+}

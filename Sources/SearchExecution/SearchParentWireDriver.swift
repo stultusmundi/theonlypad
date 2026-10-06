@@ -63,6 +63,13 @@ package final class SearchParentWireDriver: SearchParentWireDriving {
   package func discard(_ handle: SearchParentWireHandle) async throws {
     try await state.discard(handle)
   }
+  /// One terminal owner joins logical parent scopes and the existing lane stop.
+  /// Ownership admission does not certify external result or allocator release.
+  package func shutdownJoined(after handle: SearchParentWireHandle?) async
+    -> SearchParentJoinedShutdownResult
+  {
+    await state.shutdownJoined(after: handle)
+  }
   package func shutdown() async -> SearchParentWireShutdown { await state.shutdown() }
 }
 
@@ -228,6 +235,29 @@ private actor SearchParentDriverState {
   private var readWake: CheckedContinuation<ReadAction, Never>?
   private var shuttingDown = false
   private var abandoned = false
+  private final class JoinedOwner {
+    let id = UUID()
+    let key: SearchParentWireHandle?
+    let admittedHandle: SearchParentWireHandle?
+    let ownership: SearchParentJoinedOwnership
+    var task: Task<Void, Never>?
+    var completion: SearchParentJoinedShutdownCompletion?
+    init(
+      key: SearchParentWireHandle?, admittedHandle: SearchParentWireHandle?,
+      ownership: SearchParentJoinedOwnership
+    ) {
+      self.key = key
+      self.admittedHandle = admittedHandle
+      self.ownership = ownership
+    }
+  }
+  private enum TerminalMode {
+    case unused, legacyStarted
+    case joinedStarted(JoinedOwner)
+  }
+  private var terminalMode = TerminalMode.unused
+  /// Sole retained owner registers here; payload/coordinator waits remain separate.
+  private var joinedWake: CheckedContinuation<Void, Never>?
 
   init(
     lifecycle: SearchChildLifecycle, factory: @escaping SearchParentWireResponseAccumulatorFactory,
@@ -297,6 +327,9 @@ private actor SearchParentDriverState {
   func wait(_ handle: SearchParentWireHandle, registration: SearchParentDriverRegistration)
     async throws -> SearchParentWireOutcome
   {
+    if abandoned, case .joinedStarted = terminalMode {
+      throw SearchParentWireDriverError.shutDown
+    }
     guard operation?.handle == handle || receipt?.0 == handle else {
       throw SearchParentWireDriverError.staleHandle
     }
@@ -391,6 +424,7 @@ private actor SearchParentDriverState {
   private func finishLane(_ owner: UUID) {
     guard laneOwner == owner else { return }
     laneOwner = nil
+    wakeJoinedIfReady()
   }
   /// The receipt has no source-bearing body. Only its matching admission credit is released.
   private func completeLane<T>(_ work: SearchParentCodecWork<T>, token: SearchParentCodecToken)
@@ -541,8 +575,15 @@ private actor SearchParentDriverState {
     receipt = (op.handle, result)
     operation = nil
     observe?(.coordinatorScopeExited(nonce))
-    if abandoned { receipt = nil } else { publish() }
+    if abandoned {
+      // An observer installed before joined abandonment keeps its one claim.
+      if case .joinedStarted = terminalMode { publish() }
+      receipt = nil
+    } else {
+      publish()
+    }
     stopLaneIfReady()
+    wakeJoinedIfReady()
   }
   private func decided(_ nonce: UUID, _ result: SearchChildOutcome) {
     guard let op = operation, op.handle.nonce == nonce, op.decision == nil else { return }
@@ -636,6 +677,7 @@ private actor SearchParentDriverState {
     await consumer.value
     bridge = nil
     pulse()
+    wakeJoinedIfReady()
     guard upload.snapshot.settled else { throw SearchChildFailure.protocolFailure }
     if let error = upload.snapshot.firstError { throw error }
     if let producerError { throw producerError }
@@ -836,8 +878,13 @@ private actor SearchParentDriverState {
     observe?(.sessionReleased(current.generation))
     pulse()
     stopLaneIfReady()
+    wakeJoinedIfReady()
   }
   func shutdown() async -> SearchParentWireShutdown {
+    if case .joinedStarted(let owner) = terminalMode {
+      return await join(owner).shutdown
+    }
+    if case .unused = terminalMode { terminalMode = .legacyStarted }
     shuttingDown = true
     bridge?.close(.child(.shutDown))
     session?.retiring = true
@@ -851,8 +898,108 @@ private actor SearchParentDriverState {
   }
   func abandon() async {
     abandoned = true
-    receipt = nil
-    _ = await shutdown()
+    if case .joinedStarted(let owner) = terminalMode {
+      publish()
+      receipt = nil
+      _ = await join(owner)
+    } else {
+      receipt = nil
+      if case .unused = terminalMode { terminalMode = .legacyStarted }
+      _ = await shutdown()
+    }
+  }
+
+  func shutdownJoined(after handle: SearchParentWireHandle?) async
+    -> SearchParentJoinedShutdownResult
+  {
+    switch terminalMode {
+    case .legacyStarted:
+      return .callerRefused(.legacyModeSelected)
+    case .joinedStarted(let owner):
+      guard handle == owner.key else { return .callerRefused(.differentJoinOwner) }
+      return .completed(await join(owner))
+    case .unused:
+      let owner = JoinedOwner(
+        key: handle, admittedHandle: lastAdmittedHandle, ownership: joinedOwnership(handle))
+      terminalMode = .joinedStarted(owner)
+      // Close actual admission synchronously, before task creation or any await.
+      shuttingDown = true
+      bridge?.close(.child(.shutDown))
+      session?.retiring = true
+      pulse()
+      wakeJoinedIfReady()
+      let ownerID = owner.id
+      owner.task = Task.detached { [self] in await runJoined(ownerID) }
+      return .completed(await join(owner))
+    }
+  }
+
+  private func joinedOwnership(_ handle: SearchParentWireHandle?) -> SearchParentJoinedOwnership {
+    if abandoned { return .refused(.abandoned) }
+    if handle != lastAdmittedHandle { return .refused(.staleHandle) }
+    if waiter != nil { return .refused(.observerPresent) }
+    if operation != nil { return .refused(.requestActive) }
+    if receipt != nil { return .refused(.receiptUnconsumed) }
+    return .admitted
+  }
+
+  private var joinedMechanicalReady: Bool {
+    operation == nil && session == nil && laneOwner == nil && bridge == nil
+  }
+  private func wakeJoinedIfReady() {
+    guard joinedMechanicalReady else { return }
+    let old = joinedWake
+    joinedWake = nil
+    old?.resume()
+  }
+  private func waitForJoinedMechanical() async {
+    while !joinedMechanicalReady {
+      await withCheckedContinuation { continuation in
+        // Predicate and registration share this actor turn: no lost transition.
+        if joinedMechanicalReady {
+          continuation.resume()
+        } else {
+          precondition(joinedWake == nil, "Only the retained terminal owner may wait")
+          joinedWake = continuation
+        }
+      }
+    }
+  }
+  private func join(_ owner: JoinedOwner) async -> SearchParentJoinedShutdownCompletion {
+    if let completed = owner.completion { return completed }
+    guard let task = owner.task else { preconditionFailure("Terminal owner not installed") }
+    // Caller cancellation never forwards to the retained detached owner.
+    await task.value
+    guard let completed = owner.completion else {
+      preconditionFailure("Terminal owner returned without its committed completion")
+    }
+    return completed
+  }
+  private func runJoined(_ ownerID: UUID) async {
+    guard case .joinedStarted(let owner) = terminalMode, owner.id == ownerID else {
+      preconditionFailure("Terminal owner changed")
+    }
+    let originalChild = await lifecycle.shutdown()
+    wakeJoinedIfReady()
+    await waitForJoinedMechanical()
+    lane.requestStop()
+    let laneStop: SearchParentJoinedLaneStop
+    do {
+      try await lane.waitForStop()
+      laneStop = .acknowledged
+    } catch {
+      laneStop = .failed
+    }
+    guard case .joinedStarted(let current) = terminalMode, current === owner,
+      owner.admittedHandle == lastAdmittedHandle
+    else { preconditionFailure("Terminal owner changed while joining") }
+    let settled = joinedMechanicalReady && laneStop == .acknowledged
+    // Commit the first combined receipt; original pending child is never upgraded.
+    owner.completion = SearchParentJoinedShutdownCompletion(
+      shutdown: SearchParentWireShutdown(
+        child: originalChild, parentLaneSettled: settled,
+        retainedParentLanes: settled ? 0 : 1),
+      ownership: owner.ownership, laneStop: laneStop)
   }
   private func stopLaneIfReady() {
     if shuttingDown && operation == nil && session == nil && !laneBusy { lane.requestStop() }

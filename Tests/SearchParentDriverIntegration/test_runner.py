@@ -24,6 +24,19 @@ class RunnerTests(unittest.TestCase):
     def lifecycle_source(self):
         return (Path(__file__).absolute().parents[2] / 'Sources/SearchExecution/SearchChildLifecycle.swift').read_text()
 
+    def lane_source(self):
+        return (Path(__file__).absolute().parents[2] / 'Sources/SearchExecution/SearchParentWireBridge.swift').read_text()
+
+    def test_joined_and_lane_transforms_reject_missing_or_duplicate_anchors(self):
+        for source, transform, anchor in (
+            (self.source(), r.instrument, '      owner.task = Task.detached { [self] in await runJoined(ownerID) }'),
+            (self.lane_source(), r.instrument_lane, '        if job == nil && stopping {\n          exited = true'),
+            (self.lifecycle_source(), r.instrument_lifecycle, '      owner.enqueue { owner.shutdown(continuation) }'),
+        ):
+            for changed in (source.replace(anchor, ''), source + '\n' + anchor):
+                with self.subTest(anchor=anchor, changed=len(changed)), self.assertRaises(ValueError):
+                    transform(changed.encode())
+
     def test_lifecycle_transform_observes_adopted_release_only_in_copy(self):
         original = self.lifecycle_source()
         changed = r.instrument_lifecycle(original.encode()).decode()
@@ -96,20 +109,34 @@ class FixtureBase(unittest.TestCase):
         self.root.mkdir()
         self.run = Path(self.temp.name) / 'run'
         self.run.mkdir()
+        self.sdk = Path(self.temp.name) / 'SDK'
+        self.sdk.mkdir()
+        for name in r.SDK_INPUTS:
+            target = self.sdk / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('synthetic SDK input: ' + name + '\n')
         repo = Path(__file__).resolve().parents[2]
         if not (repo / 'Tests/SearchChildIntegration/run_harness.py').exists():
             repo = Path.cwd()
         self.common = r.load(repo / 'Tests/SearchChildIntegration/run_harness.py', 'runner_common_test')
         for name in r.FIXED:
             self.write(name, '// synthetic input\n')
+        self.write('scripts/swift.sh', '#!/bin/bash\ncd "$(dirname "$0")/.."\n')
         self.write('Sources/PadCore/Example.swift', '// core\n')
         self.write('Sources/SearchExecution/SearchParentWireDriver.swift', RunnerTests().source())
         self.write('Sources/SearchExecution/SearchChildLifecycle.swift', RunnerTests().lifecycle_source())
+        self.write('Sources/SearchExecution/SearchParentWireBridge.swift', RunnerTests().lane_source())
         self.write('Tests/SearchExecutionTests/SearchParentWireDriverTests.swift',
                    'final class SearchParentWireDriverTests { func testNormal() {} }')
         self.write('Tests/SearchParentDriverIntegration/SearchParentWireDriverInstrumentedTests.swift',
                    'final class SearchParentWireDriverInstrumentedTests {\n' +
                    '\n'.join('func ' + name + '() {}' for name in r.REQUIRED_INSTRUMENTED) + '\n}')
+        self.write('Tests/SearchExecutionTests/SearchParentJoinedShutdownTests.swift',
+                   'final class SearchParentJoinedShutdownTests {\n' +
+                   '\n'.join('func ' + name + '() {}' for name in r.REQUIRED_JOINED_ORDINARY) + '\n}')
+        self.write('Tests/SearchParentDriverIntegration/SearchParentJoinedShutdownInstrumentedTests.swift',
+                   'extension SearchParentJoinedShutdownTests {\n' +
+                   '\n'.join('func ' + name + '() {}' for name in r.REQUIRED_JOINED_INSTRUMENTED) + '\n}')
 
     def write(self, name, text):
         path = self.root / name
@@ -118,18 +145,84 @@ class FixtureBase(unittest.TestCase):
 
 
 class FreezeTests(FixtureBase):
+    def change_frozen_with_updated_digest(self, manifest, name, before, after):
+        target = self.run / name
+        changed = target.read_bytes().replace(before, after)
+        self.assertNotEqual(changed, target.read_bytes())
+        target.write_bytes(changed)
+        for item in manifest['sources'] + manifest['generated']:
+            if item['frozen'] == name:
+                item['sha256'] = self.common.digest(changed)
+
+    def test_lane_relationship_checked_even_with_updated_digest(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        self.change_frozen_with_updated_digest(manifest,
+            'Package/Sources/SearchExecution/SearchParentWireBridge.swift',
+            b'SearchParentJoinedTestHooks.loopStop?()', b'SearchParentJoinedTestHooks.laneWait?()')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_joined_relationship_checked_even_with_updated_digest(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        self.change_frozen_with_updated_digest(manifest,
+            'Package/Sources/SearchExecution/SearchParentWireDriver.swift',
+            b'SearchParentJoinedTestHooks.ownerStart?()', b'SearchParentJoinedTestHooks.legacyEntry?()')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_wrapper_derivation_checked_even_with_updated_digest(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        self.change_frozen_with_updated_digest(manifest, 'Runner/scripts/swift-driver.sh',
+            b'cd "$(dirname "$0")/../.."', b'cd "$(dirname "$0")/.."')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_changed_selected_sdk_input_refused(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        (self.sdk / r.SDK_INPUTS[0]).write_text('changed synthetic SDK')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_unlisted_runner_input_refused(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        (self.run / 'Runner/unlisted.py').write_text('unlisted input')
+        with self.assertRaises(ValueError):
+            r.verify(self.run, manifest, self.common)
+
+    def test_removed_joined_transform_inventory_row_refused(self):
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+        name = 'Runner/Tests/SearchParentDriverIntegration/joined_transform.py'
+        self.assertTrue((self.run / name).is_file())
+        removed = [item for item in manifest['sources'] if item['frozen'] == name]
+        self.assertEqual(len(removed), 1)
+        manifest['sources'].remove(removed[0])
+        with self.assertRaisesRegex(ValueError, 'complete frozen input membership changed'):
+            r.verify(self.run, manifest, self.common)
+
+    def test_missing_joined_cases_refused(self):
+        for path in ('Tests/SearchExecutionTests/SearchParentJoinedShutdownTests.swift',
+                     'Tests/SearchParentDriverIntegration/SearchParentJoinedShutdownInstrumentedTests.swift'):
+            with self.subTest(path=path):
+                original = (self.root / path).read_bytes()
+                self.write(path, 'class SearchParentJoinedShutdownTests { func testUnrelated() {} }')
+                try:
+                    with self.assertRaises(ValueError):
+                        r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
+                finally:
+                    (self.root / path).write_bytes(original)
+
     def test_freeze_preserves_original_and_instruments_only_copy(self):
         original = (self.root / 'Sources/SearchExecution/SearchParentWireDriver.swift').read_bytes()
-        manifest = r.freeze(self.root, self.run, self.common)
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         self.assertTrue(manifest.get('sources'))
         self.assertEqual((self.root / 'Sources/SearchExecution/SearchParentWireDriver.swift').read_bytes(), original)
         self.assertEqual((self.run / 'Original/SearchParentWireDriver.swift').read_bytes(), original)
         self.assertNotEqual((self.run / 'Package/Sources/SearchExecution/SearchParentWireDriver.swift').read_bytes(), original)
-        self.assertEqual(len(manifest['expectedTests']), 1 + len(r.REQUIRED_INSTRUMENTED))
+        self.assertEqual(len(manifest['expectedTests']), 1 + len(r.REQUIRED_INSTRUMENTED) + len(r.REQUIRED_JOINED_ORDINARY) + len(r.REQUIRED_JOINED_INSTRUMENTED))
         r.verify(self.run, manifest, self.common)
 
     def test_added_compiler_input_refused(self):
-        manifest = r.freeze(self.root, self.run, self.common)
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         target = self.run / 'Package/Package@swift-6.swift'
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('// unlisted manifest')
@@ -137,7 +230,7 @@ class FreezeTests(FixtureBase):
             r.verify(self.run, manifest, self.common)
 
     def test_changed_original_refused(self):
-        manifest = r.freeze(self.root, self.run, self.common)
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         target = self.run / 'Original/SearchParentWireDriver.swift'
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('// replaced origin')
@@ -145,14 +238,14 @@ class FreezeTests(FixtureBase):
             r.verify(self.run, manifest, self.common)
 
     def test_changed_lifecycle_original_refused(self):
-        manifest = r.freeze(self.root, self.run, self.common)
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         target = self.run / 'Original/SearchChildLifecycle.swift'
         target.write_text('// replaced lifecycle origin')
         with self.assertRaises(ValueError):
             r.verify(self.run, manifest, self.common)
 
     def test_lifecycle_transform_relationship_checked_even_with_updated_digest(self):
-        manifest = r.freeze(self.root, self.run, self.common)
+        manifest = r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         name = 'Package/Sources/SearchExecution/SearchChildLifecycle.swift'
         target = self.run / name
         changed = target.read_bytes().replace(b'afterAdoptedRelease?(generation)', b'afterAdoptedRelease?(UUID())')
@@ -167,14 +260,14 @@ class FreezeTests(FixtureBase):
         self.write('Tests/SearchParentDriverIntegration/SearchParentWireDriverInstrumentedTests.swift',
                    'final class SearchParentWireDriverInstrumentedTests { func testUnrelated() {} }')
         with self.assertRaises(ValueError):
-            r.freeze(self.root, self.run, self.common)
+            r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
 
     def test_symlink_source_refused(self):
         file = self.root / 'Sources/PadCore/Example.swift'
         file.unlink()
         file.symlink_to(self.root / 'Package.swift')
         with self.assertRaises(ValueError):
-            r.freeze(self.root, self.run, self.common)
+            r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
 
 class ExecuteTests(FixtureBase):
     # Frozen synthetic receipts exercise the coordinator; no subprocess or Swift build.
@@ -203,7 +296,7 @@ class ExecuteTests(FixtureBase):
         return 0
 
     def setup_execution(self):
-        r.freeze(self.root, self.run, self.common)
+        r.freeze(self.root, self.run, self.common, sdk_root=self.sdk)
         self.calls = []
 
     def test_full_stage_receipts_and_counts_recorded(self):
@@ -211,7 +304,7 @@ class ExecuteTests(FixtureBase):
         self.assertEqual(r.execute(self.run, self.run / 'scratch', self.common, self.watchdog), 0)
         self.assertEqual(self.calls, ['toolchain', 'test'])
         status = json.loads((self.run / 'status.json').read_text())
-        self.assertEqual(status['testsExecuted'], 1 + len(r.REQUIRED_INSTRUMENTED))
+        self.assertEqual(status['testsExecuted'], 1 + len(r.REQUIRED_INSTRUMENTED) + len(r.REQUIRED_JOINED_ORDINARY) + len(r.REQUIRED_JOINED_INSTRUMENTED))
         self.assertEqual(status['exit'], 0)
 
     def test_exit_zero_without_cleanup_receipt_refused(self):

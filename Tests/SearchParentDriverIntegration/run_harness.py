@@ -3,12 +3,19 @@ import re
 
 def instrument(data):
     transformer = load(Path(__file__).with_name('driver_transform.py'), 'frozen_driver_transform')
-    return transformer.transform_driver(data.decode('utf-8')).encode('utf-8')
+    joined = load(Path(__file__).with_name('joined_transform.py'), 'frozen_joined_transform')
+    return joined.driver(transformer.transform_driver(data.decode('utf-8'))).encode('utf-8')
 
 
 def instrument_lifecycle(data):
     transformer = load(Path(__file__).with_name('driver_transform.py'), 'frozen_lifecycle_transform')
-    return transformer.transform_lifecycle(data.decode('utf-8')).encode('utf-8')
+    joined = load(Path(__file__).with_name('joined_transform.py'), 'frozen_joined_lifecycle_transform')
+    return joined.lifecycle(transformer.transform_lifecycle(data.decode('utf-8'))).encode('utf-8')
+
+
+def instrument_lane(data):
+    joined = load(Path(__file__).with_name('joined_transform.py'), 'frozen_joined_lane_transform')
+    return joined.lane(data.decode('utf-8')).encode('utf-8')
 
 
 def validate_tests(text, expected):
@@ -33,13 +40,23 @@ import json
 import os
 import sys
 import tempfile
+import subprocess
+
+SDK_INPUTS = (
+    'SDKSettings.json', 'usr/include/sys/wait.h', 'usr/include/sys/errno.h',
+    'usr/include/sys/signal.h', 'usr/include/sys/stat.h', 'usr/include/sys/types.h',
+    'usr/include/unistd.h', 'usr/include/fcntl.h', 'usr/include/spawn.h',
+)
 
 FIXED = (
     'Tests/SearchExecutionTests/SearchParentWireDriverTests.swift',
     'Tests/SearchExecutionTests/SearchParentWireDriverTestHarness.swift',
+    'Tests/SearchExecutionTests/SearchParentJoinedShutdownTests.swift',
     'Tests/SearchParentDriverIntegration/SearchParentWireDriverInstrumentedTests.swift',
+    'Tests/SearchParentDriverIntegration/SearchParentJoinedShutdownInstrumentedTests.swift',
     'Tests/SearchParentDriverIntegration/run_harness.py',
     'Tests/SearchParentDriverIntegration/driver_transform.py',
+    'Tests/SearchParentDriverIntegration/joined_transform.py',
     'Tests/SearchParentDriverIntegration/test_runner.py',
     'Tests/SearchChildIntegration/run_harness.py',
     'scripts/swift.sh', 'scripts/run-owned-search-tests.py',
@@ -67,6 +84,35 @@ REQUIRED_INSTRUMENTED = (
     'testTerminalSequenceExhaustionKeepsAcceptedResult',
     'testPartialResponseSequenceExhaustionReservesCleanup',
     'testExpectGatePreventsPrematureConsumeAfterUploadReceipt',
+)
+
+REQUIRED_JOINED_ORDINARY = (
+    'testNeverAdmittedNilJoinsAndClosesAdmission',
+    'testNilAfterConsumedAdmissionLatchesStaleOwnership',
+    'testConsumedLatestHandleIsAdmittedAndCompletionIsStable',
+    'testWrongLaterKeyCannotBorrowNeverAdmittedCompletion',
+    'testLegacyFirstPermanentlyRefusesJoinedMode',
+)
+REQUIRED_JOINED_INSTRUMENTED = (
+    'testPreOwnerStartClosesActualSubmitAdmission',
+    'testJoinedFirstLegacySecondAliasesOneOriginalCommand',
+    'testLegacyGraceHeldRepeatedSnapshotReturnsAndJoinedStaysRefused',
+    'testCancelledMatchingCallerAndWrongLateKeyPreserveOwner',
+    'testActiveAdmissionRefusalStillJoinsFailedBeginWithoutConsumingReceipt',
+    'testUnconsumedReceiptRefusalRemainsAfterActualConsumption',
+    'testObserverPresentRefusalPreservesActualOutcome',
+    'testJoinedAbandonDeliversExistingObserverBeforeDiscard',
+    'testJoinedAbandonPreservesCancellationBeforePublication',
+    'testJoinedAbandonPreservesCancellationAtDeliveryClaim',
+    'testHeldReadOwnerRequiresFinalWakeAndRescuesMutationFinitely',
+    'testMechanicalReadinessBeforeRegistrationDoesNotLoseWake',
+    'testOriginalPendingChildRemainsPendingAfterRealCleanup',
+    'testHeldLaneLoopAcknowledgementPreventsCommittedCompletion',
+    'testConflictingLaneObserverNormalizesFiniteFailure',
+    'testHeldCodecBodyCannotBeReportedAsJoined',
+    'testHeldCodecCompletionScopeRequiresExistingLaneStop',
+    'testHeldRealCloseAcknowledgementPreventsJoinedCompletion',
+    'testHeldConsumingReapPreventsJoinedCompletion',
 )
 
 PACKAGE = '''// swift-tools-version: 6.0
@@ -106,7 +152,7 @@ def discover(root, common):
     return paths
 
 
-def freeze(root, run, common):
+def freeze(root, run, common, sdk_root=None):
     paths = discover(root, common)
     items, expected = [], []
     for source in paths:
@@ -115,18 +161,23 @@ def freeze(root, run, common):
         data = original
         prefix = 'Package' if relative.startswith(('Sources/', 'Tests/SearchExecutionTests/')) else 'Runner'
         target = run / prefix / relative
-        if source.name == 'SearchParentWireDriverInstrumentedTests.swift':
+        if source.name in ('SearchParentWireDriverInstrumentedTests.swift',
+                           'SearchParentJoinedShutdownInstrumentedTests.swift'):
             target = run / 'Package/Tests/SearchExecutionTests' / source.name
         if relative in ('Sources/SearchExecution/SearchParentWireDriver.swift',
-                        'Sources/SearchExecution/SearchChildLifecycle.swift'):
-            transform = instrument if source.name == 'SearchParentWireDriver.swift' else instrument_lifecycle
+                        'Sources/SearchExecution/SearchChildLifecycle.swift',
+                        'Sources/SearchExecution/SearchParentWireBridge.swift'):
+            transform = {'SearchParentWireDriver.swift': instrument,
+                         'SearchChildLifecycle.swift': instrument_lifecycle,
+                         'SearchParentWireBridge.swift': instrument_lane}[source.name]
             data = transform(original)
             origin = run / 'Original' / source.name
             origin.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             origin.write_bytes(original)
             items.append(dict(source=relative, frozen=origin.relative_to(run).as_posix(),
                               sha256=common.digest(original), originSHA256=common.digest(original)))
-        if source.name in ('SearchParentWireDriverTests.swift', 'SearchParentWireDriverInstrumentedTests.swift'):
+        if source.name in ('SearchParentWireDriverTests.swift', 'SearchParentWireDriverInstrumentedTests.swift',
+                           'SearchParentJoinedShutdownTests.swift', 'SearchParentJoinedShutdownInstrumentedTests.swift'):
             text = original.decode()
             if '#if' in text or 'XCTSkip' in text:
                 raise ValueError('conditional or skipped driver test refused')
@@ -135,7 +186,12 @@ def freeze(root, run, common):
                 raise ValueError('missing or duplicate named tests')
             if source.stem == 'SearchParentWireDriverInstrumentedTests' and not set(REQUIRED_INSTRUMENTED).issubset(names):
                 raise ValueError('required ownership case missing')
-            expected.extend(source.stem + '.' + name for name in names)
+            if source.stem == 'SearchParentJoinedShutdownTests' and not set(REQUIRED_JOINED_ORDINARY).issubset(names):
+                raise ValueError('required ordinary joined case missing')
+            if source.stem == 'SearchParentJoinedShutdownInstrumentedTests' and not set(REQUIRED_JOINED_INSTRUMENTED).issubset(names):
+                raise ValueError('required frozen joined case missing')
+            owner = 'SearchParentJoinedShutdownTests' if source.stem.startswith('SearchParentJoinedShutdown') else source.stem
+            expected.extend(owner + '.' + name for name in names)
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         target.write_bytes(data)
         if source.suffix == '.sh':
@@ -149,8 +205,30 @@ def freeze(root, run, common):
             raise ValueError('origin changed during capture')
     package = run / 'Package/Package.swift'
     package.write_text(PACKAGE)
+    generated = [dict(frozen='Package/Package.swift', sha256=common.digest(package.read_bytes()))]
+    original_wrapper = (run / 'Runner/scripts/swift.sh').read_bytes()
+    anchor = b'cd "$(dirname "$0")/.."'
+    if original_wrapper.count(anchor) != 1:
+        raise ValueError('swift wrapper cd anchor not unique')
+    wrapper = run / 'Runner/scripts/swift-driver.sh'
+    wrapper.write_bytes(original_wrapper.replace(anchor, b'cd "$(dirname "$0")/../.."'))
+    wrapper.chmod(0o700)
+    generated.append(dict(frozen=wrapper.relative_to(run).as_posix(), sha256=common.digest(wrapper.read_bytes())))
+    sdk = Path(sdk_root) if sdk_root is not None else Path(
+        subprocess.check_output(['/usr/bin/xcrun', '--show-sdk-path'], text=True).strip()).resolve()
+    if not sdk.is_absolute() or not sdk.is_dir() or sdk.is_symlink():
+        raise ValueError('selected SDK must be an absolute real directory')
+    headers = []
+    for name in SDK_INPUTS:
+        source = sdk / name
+        data = common.read_source(common.real_path(sdk, source))
+        target = run / 'SDK' / name
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.write_bytes(data)
+        generated.append(dict(frozen=target.relative_to(run).as_posix(), sha256=common.digest(data)))
+        headers.append(dict(source=str(source), sha256=common.digest(data)))
     manifest = dict(version=1, sources=items, expectedTests=expected,
-                    generated=[dict(frozen='Package/Package.swift', sha256=common.digest(package.read_bytes()))])
+                    generated=generated, SDK=str(sdk), headers=headers)
     (run / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n')
     verify(run, manifest, common)
     return manifest
@@ -158,9 +236,37 @@ def freeze(root, run, common):
 
 def verify(run, manifest, common):
     common.verify_frozen(run, manifest)
+    expected = set()
+    for item in manifest['sources'] + manifest['generated']:
+        name = Path(item['frozen'])
+        expected.add(('file', name.as_posix()))
+        for parent in name.parents:
+            if len(parent.parts) < 2:
+                break
+            expected.add(('directory', parent.as_posix()))
+    actual = set()
+    for top in ('Package', 'Runner', 'Original', 'SDK'):
+        for folder, directories, files in os.walk(run / top, followlinks=False):
+            for kind, names in [('directory', directories), ('file', files)]:
+                for name in names:
+                    path = Path(folder) / name
+                    if path.is_symlink():
+                        raise ValueError('symlink frozen input refused')
+                    actual.add((kind, path.relative_to(run).as_posix()))
+    if actual != expected:
+        raise ValueError('complete frozen input membership changed')
+    for header in manifest['headers']:
+        if common.digest(common.read_source(common.real_path(Path(manifest['SDK']), Path(header['source'])))) != header['sha256']:
+            raise ValueError('selected SDK input changed')
+    original_wrapper = (run / 'Runner/scripts/swift.sh').read_bytes()
+    anchor = b'cd "$(dirname "$0")/.."'
+    if original_wrapper.count(anchor) != 1 or original_wrapper.replace(
+            anchor, b'cd "$(dirname "$0")/../.."') != (run / 'Runner/scripts/swift-driver.sh').read_bytes():
+        raise ValueError('swift wrapper derivation changed')
     # Verify the transformation relationship as well as both pinned byte streams.
     for name, transform in (('SearchParentWireDriver.swift', instrument),
-                            ('SearchChildLifecycle.swift', instrument_lifecycle)):
+                            ('SearchChildLifecycle.swift', instrument_lifecycle),
+                            ('SearchParentWireBridge.swift', instrument_lane)):
         source = common.read_source(common.real_path(run, run / 'Original' / name))
         compiled = common.read_source(common.real_path(run, run / 'Package/Sources/SearchExecution' / name))
         if transform(source) != compiled:
@@ -173,12 +279,12 @@ def execute(run, scratch, common, watchdog_main):
         manifest_bytes = (run / 'sources.json').read_bytes()
         manifest = json.loads(manifest_bytes)
         result['sourceManifestSHA256'] = common.digest(manifest_bytes)
-        swift = str(run / 'Runner/scripts/swift.sh')
+        swift = str(run / 'Runner/scripts/swift-driver.sh')
         stages = [
             ('toolchain', 30, ['/usr/bin/xcrun', 'swift', '--version']),
-            ('test', 180, [swift, 'test', '--package-path', str(run / 'Package'),
+            ('test', 180, ['/usr/bin/env', 'SDKROOT=' + manifest['SDK'], swift, 'test', '--package-path', str(run / 'Package'),
                            '--scratch-path', str(scratch), '--filter',
-                           'SearchParentWireDriverTests|SearchParentWireDriverInstrumentedTests']),
+                           'SearchParentWireDriverTests|SearchParentWireDriverInstrumentedTests|SearchParentJoinedShutdownTests']),
         ]
         def checked_inputs():
             if (run / 'sources.json').read_bytes() != manifest_bytes:
@@ -215,7 +321,7 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
     if argv:
-        raise SystemExit('This runner takes no arguments; it executes both complete driver classes.')
+        raise SystemExit('This runner takes no arguments; it executes the complete driver and joined-shutdown suites.')
     root = Path(__file__).absolute().parents[2]
     common = load(root / 'Tests/SearchChildIntegration/run_harness.py', 'parent_driver_common')
     parent = common.real_path(root, root / '.local/search-parent-driver-integration')
