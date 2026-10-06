@@ -14,6 +14,19 @@ The76 A–I aggregate requirements remain64 partial and12 outstanding; no aggreg
 
 Full-scope implementation has resumed. Nonterminal settlement is committed at `fff331f`; checked ledger at `293582e`; the reviewed admission controller at `c1e3373` (56 focused tests and two discriminating mutation controls). Shared native edit callback preservation is committed at `6f411e3` (32 hidden actual-controller tests,20 projection regressions,37 pure runner contracts). A matching frozen app build and842 core/component tests pass without warnings; actual-driver regressions pass54. See [admission](verification/search-admission.md), [driver](verification/search-parent-driver.md) and [native edit](verification/native-edit-revalidation.md). Actual controller/driver cleanup composition is committed at `db51d7a` with3 tests and an early-release mutant producing12 failed assertions. Native/modal integration and production helper routing remain in progress. The separate healthy-cleanup smoke does not explain or relabel the preserved historical exited0 failure. All52 fixture goldens and tiny engine compatibility are prerequisites, not full memory/performance acceptance. These bounded checks do not change aggregate completion status or replace the older packaged desktop evidence.
 
+## Active continuation evidence (2026-10-06)
+
+Current continuation (2026-10-06): work remains active. The separately reviewed
+private search-campaign prerequisites now include counter33/0 plus three mutants,
+actual tiny own-process counter1/0, source submission18/0 plus two mutants, and
+physical projection51/0 plus two mutants, and journal decoder18/0 plus three
+mutants and actual writer compatibility1/0/four decoded files. See
+[component evidence](verification/search-campaign-components-2026-10-06.md).
+Deterministic joined shutdown/finalization remains in progress before actual
+campaign assembly. These component checks leave the76
+aggregate requirement states unchanged and do not establish production search
+isolation, memory acceptance or a new packaged desktop checkpoint.
+
 ## Public repository
 
 | ID | Requirement | Observable acceptance criteria | Planned implementation location | Required tests/evidence | Plan | Implementation | Validation | Blocker |

@@ -127,3 +127,37 @@ These are injected event-model checks, with no actual helper/process operation
 or native sampling. Historical immutable physical facts cannot establish live
 admission, result release or campaign eligibility. A stronger joined driver
 shutdown, mandatory epoch drain and finalization still require implementation.
+
+## External journal decoder
+
+The private Python bytes decoder implements the closed journal-v1 format with a
+262144-byte input cap, strict UTF-8, bounded container depth and integer tokens.
+It rejects duplicate decoded keys, unknown/missing fields, explicit null,
+Boolean/integer coercion and noninteger numbers. Omitted Swift optionals remain
+omitted. Signed diagnostic integers and counters retain their declared domains;
+invalid or incomplete diagnostic snapshots are not promoted into health evidence.
+Callers remain responsible for bounded file reads and retention.
+
+Eighteen independently specified test methods pass. The preserved unimplemented
+scaffold has18 methods/12 errors; it is not assertion-only behavioral RED. Three
+focused mutants each fail one assertion for duplicate keys, Boolean coercion and
+explicit null. Independent source review approved the scope. Root additionally
+verified exact Python commands, working directories, complete frozen membership,
+hashes, unchanged expectations and mutation replay. These Python runs use bounded
+ordinary subprocesses, separate from the Swift process watchdog.
+
+One actual Swift writer test passes using85 frozen inputs, including82 unchanged
+accepted journal inputs. Root decoded its four output files through the frozen
+GREEN decoder and checked fields and omissions: empty, planned, over-attempt and
+an explicitly constructed diagnostic-width snapshot. The last preserves
+UInt64.max, Int32.min, a negative PID and false retirement acknowledgement; it is
+format compatibility, not observed process evidence. Exact SDK/input bindings,
+named test, complete owned-watchdog receipt and post-run executable/output hashes
+were verified. Decoder GREEN manifest:
+`a2230cf1814744d290393c75858e170fa0f655fcdf9705ce345646cd80f3fc6b`.
+Writer manifest:
+`934032964613b4dd68b9701962eea0847b25ae43de47168a4d829de184aa344e`.
+Private evidence stays under `.local/search-campaign-journal-decoder-20261006/`.
+
+No production parser, cleanup ownership, finalization or campaign eligibility is
+established by these format checks. There is still no public campaign runner.
