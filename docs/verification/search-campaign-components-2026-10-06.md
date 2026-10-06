@@ -161,3 +161,18 @@ Private evidence stays under `.local/search-campaign-journal-decoder-20261006/`.
 
 No production parser, cleanup ownership, finalization or campaign eligibility is
 established by these format checks. There is still no public campaign runner.
+
+## Joined shutdown plan
+
+The separately reviewed revision3 design selects one terminal mode before
+suspension. Legacy-first use permanently excludes joined mode; joined-first use
+owns one retained operation, with later legacy calls explicitly joining its
+original completion. Legacy-only calls retain their existing snapshot behavior.
+Terminal intent closes admission before scheduling the owner. Joined abandonment
+preserves delivery to an installed observer before disposing of unclaimed data.
+
+These rules resolve source-backed design findings; implementation and runtime
+acceptance remain outstanding. Planned checks preserve the original child result,
+join reader/codec scopes and one lane-stop acknowledgement, keep payload ownership
+separate, and retain the existing54 driver regressions. The live pure runner
+baseline passes23 tests. There is no joined cleanup or finalizer acceptance yet.
