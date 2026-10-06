@@ -9,7 +9,7 @@ production helper. Implementation continues under the user's resumed request.
 | Combined engine trace | Inline logical/native observations under one lock; one active and one completed trace; at most16 events | Frozen injected33/0 and three discriminating mutations; independent review | Helper composition, release roles and allocation comparison |
 | Native self adapter | Unchanged C probe, raw clocks, pinned identity/timebase and explicit native failures | Tiny actual Foundation engine1/0 with eight own-process observations; smoke source review | Paired peak, overhead and memory acceptance |
 | Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Physical facts, finalization, external decoder and actual campaign |
-| Source submission | Candidate reviewed against actual driver and corrected journal | Historical RED preserved; fresh integration verification pending | GREEN, mutations and final review |
+| Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Physical facts/finalization and whole-stack composition |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -62,3 +62,36 @@ Private journal evidence is ignored under
 `.local/search-campaign-journal-20261005/`. An uninvalidated snapshot is not a
 health verdict or proof of live admission. Close return and lifecycle close
 acknowledgement remain separate.
+
+## Source-submit helper
+
+The helper plans a fixed cold request before constructing source and calls the
+actual builder, job constructor and driver submit at one reviewed call site each.
+Only fixed metadata, the real opaque handle and the bounded journal leave that
+scope. Post-submit association refusal preserves the handle for existing driver
+cleanup. Later binding requires that exact journal and independently observed
+ticket/adoption/connection metadata; an outcome supplies no expected identity.
+
+The fresh97-input package passes18 tests: seven actual-driver injected integration
+cases plus eleven unchanged terminal controls. The reviewed corrected journal is
+its dependency. Both98-input mutants retain unchanged expectations: removing the
+same-journal guard fails one explicit assertion; substituting same-length source
+text fails with the actual verifier's `sourceMismatch`. XCTest classifies that
+thrown error as one unexpected failure. This exact classification is preserved;
+it is not a compiler/setup failure or a claim of assertion-only RED.
+
+Root verified exact mutation replay, dependency/input/SDK bindings, named cases,
+complete owned-watchdog receipts and test binary hashes. Independent final review
+approved the narrow cold-only component. Historical RED17/8 remains preserved
+against its original journal dependency; the additional same-journal test is
+independently discriminated by its mutant. Fresh clones copy manifest inputs,
+excluding generated caches. GREEN manifest:
+`d9c3304fef9c508d44efa6b276679f777333191cbd6ef7844cccd46d2c014d61`.
+Private evidence is ignored under
+`.local/search-campaign-source-binding-20261005/`.
+
+Source fidelity on successful output is dynamically checked. A semantic failure
+contains no source; its association relies on reviewed builder-to-job dataflow and
+metadata bindings. Builder count is source-callgraph evidence, with no measured
+allocation count, physical move, zero-copy or storage-release claim. No actual
+helper, native process identity or complete cold cleanup is established here.
