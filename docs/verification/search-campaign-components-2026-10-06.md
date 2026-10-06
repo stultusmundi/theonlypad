@@ -8,10 +8,11 @@ production helper. Implementation continues under the user's resumed request.
 | --- | --- | --- | --- |
 | Combined engine trace | Inline logical/native observations under one lock; one active and one completed trace; at most16 events | Frozen injected33/0 and three discriminating mutations; independent review | Helper composition, release roles and allocation comparison |
 | Native self adapter | Unchanged C probe, raw clocks, pinned identity/timebase and explicit native failures | Tiny actual Foundation engine1/0 with eight own-process observations; smoke source review | Paired peak, overhead and memory acceptance |
-| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Finalization and actual campaign |
-| Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Finalization and whole-stack composition |
-| Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and finalization |
-| Cold epoch adapter | Opaque pre-outcome journal binding; independent parent guard; stable association result; one retained annotation/drain owner and compact validated receipt | Uninstrumented73/0, counted77/0 and nine discriminating mutants; independent final acceptance | Cold finalizer, actual helper/native sampling and campaign eligibility |
+| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Whole-cell composition and actual campaign |
+| Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Whole-cell composition |
+| Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and whole-cell composition |
+| Cold epoch adapter | Opaque pre-outcome journal binding; independent parent guard; stable association result; one retained annotation/drain owner and compact validated receipt | Uninstrumented73/0, counted77/0 and nine discriminating mutants; independent final acceptance | Actual helper/native sampling and campaign eligibility |
+| Cold finalizer | One actual wait; raw helper scope before bookkeeping; original joined shutdown preserved; one current/physical read and compact validated epoch result | Uninstrumented109/0, counted121/0 and five discriminating mutants; independent spec/quality acceptance | Readiness/export/filesystem assembly, actual helper/native sampling and campaign eligibility |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -236,5 +237,71 @@ identity fields. It proves only the retained winning observation's association.
 Valid empty and noAdmission-only drains remain measurement unavailable; no
 every-sample identity, cadence, allocation, native-query or memory acceptance is
 inferred. This is a private component with injected numeric collaborators, not
-editor routing or a public campaign runner. A fresh cold finalizer implementation
-is next; actual helper assembly and publication remain separately planned.
+editor routing or a public campaign runner. The cold finalizer checkpoint below
+adds its bounded owner evidence; actual helper assembly and publication remain
+separately planned.
+
+
+## Compact cold finalizer owner
+
+Implemented privately: one retained task owns the actual driver wait. The original
+source helper binds once before any outcome; only a valid bind admits the separate
+pre-outcome epoch identity projection. A nonisolated helper contains the raw
+outcome and verifier scope, returning compact terminal metadata and actual
+consumption before journal receipt/external bookkeeping begins. Journal refusals
+remain typed; an unknown journal error has its own fixed internalContract
+classification rather than a fabricated known cause.
+
+The owner invokes shutdownJoined once, preserving the original refusal or pending
+child receipt. It reads current settlement and the post-shutdown physical journal
+projection once, then uses the unchanged mapper/cleanup verifier with the original
+shutdown. Completed joined results receive the fixed annotation; epoch close is
+awaited even after earlier finite failures. Structural validation precedes the
+sole retained result publication. Concurrent, cancelled and later joining callers
+obtain that compact result without another observer or cleanup owner. Trusted
+assembly must reserve one start/consumer for the exact submitted driver.
+
+Tested: compiling RED6/18 explicit assertions preceded GREEN6/0. The original
+source remains unchanged afterward. Final uninstrumented109/0 contains those six
+owner cases plus103 unchanged inherited controls; its138-input manifest is
+`0147755a59eefb561bd427c28f075eb00fba03fac4942125ec514c7eb6a5e42e`.
+The counted121/0 packet adds12 cases with seven exact frozen-only source
+transformations and two compact test-support files. Its155-input manifest is
+`1c3a490fac4f9a095ed80d9d043b784ad7e1f39db3e5442ec6c2ddfa988e19af`.
+Original sources and exact transformation relations are retained. Entry counts
+are asserted before independent fixture cleanup.
+
+The added cases hold actual outcome, sink and injected-query scopes; observe
+actual observer installation; cancel joining callers; and preserve an original
+pending completion after the synthetic lifecycle really becomes absent. They
+also cover premature readiness, foreign journals/drivers, journal refusal,
+legacy-mode refusal, nonthrowing summary errors and retained-winner association.
+Numeric samples and OS/channel collaborators are injected; no native sampling or
+helper process is exercised here. A foreign supplied driver does not clean the
+original driver's resources; independent fixture cleanup retains that duty.
+
+Five focused mutants each finish one test with6,2,1,1,1 explicit failed assertions
+and zero unexpected failures: early bookkeeping, replacement of the original
+verifier shutdown argument, ignored summary/snapshot issue, an unvalidated
+success on a later join, and a duplicate actual settlement call. Four packets
+have161 inputs; pending replacement has164. Its unexecuted first draft is retained;
+the executed version substitutes both noChild and channelsClosed:true while
+leaving result.joined original. The later-join mutant tests result stability,
+not temporal publication before drain; held sink/query tests cover that separate
+boundary. No mutant was adopted into the candidate.
+
+Root verified complete input/member/origin inventories, exact dependency/test
+bytes, four inherited SDK header pins, transformation/mutation replay, named
+cases, strict direct-watchdog receipts and post-run executable hashes. Independent
+review accepted this private component for spec compliance and quality. Finite
+holds have explicit rescue; broken underlying progress still relies on the outer
+watchdog, so no unconditional in-process termination promise follows.
+
+Planned: the pure journal publication boundary, real bootstrap readiness/export
+barriers, fixed epoch sink, whole-cell output binding and actual release roles.
+No platform permission or user approval blocks this component; these integration
+steps remain unimplemented. Empty sampling stays measurement unavailable, while
+winnerAssociated establishes only retained-winner identity. No memory comparison,
+accumulator/budget selection, editor routing or newer packaged runtime follows.
+Raw evidence remains ignored under `.local/search-campaign-finalizer-20261006/`;
+the last tested desktop package remains `f4d9207`.
