@@ -13,7 +13,8 @@ production helper. Implementation continues under the user's resumed request.
 | Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and whole-cell composition |
 | Cold epoch adapter | Opaque pre-outcome journal binding; independent parent guard; stable association result; one retained annotation/drain owner and compact validated receipt | Uninstrumented73/0, counted77/0 and nine discriminating mutants; independent final acceptance | Actual helper/native sampling and campaign eligibility |
 | Cold finalizer | One actual wait; raw helper scope before bookkeeping; original joined shutdown preserved; one current/physical read and compact validated epoch result | Uninstrumented109/0, counted121/0 and five discriminating mutants; independent spec/quality acceptance | Readiness/export/filesystem assembly, actual helper/native sampling and campaign eligibility |
-| Tiny input schema | Literal index0/1; closed canonical configuration and both receipts; bounded root validation; synthetic-only role anchors | Initial25/0; corrective RED28/1 then GREEN28/0; independent spec/quality acceptance | Filesystem publication/ingestion, FD accounting, decoder bridge and real role assembly |
+| Tiny input schema | Literal index0/1; closed canonical configuration and both receipts; bounded root validation; synthetic-only role anchors | Initial25/0; corrective RED28/1 then GREEN28/0; independent spec/quality acceptance | Full filesystem publication/ingestion acceptance, FD accounting, decoder variants and real role assembly |
+| Initial tiny filesystem boundary | Fixed paths and pinned ancestors; exclusive journal then marker; capped reads; single-use owners; uncertain close is never retried | Initial49/0; corrective RED52/20 then GREEN52/0 with actual descriptors and injected close errors; independent scoped approval | Full FD32/depth/stream/race/fault matrix, Task3 mutants and whole-cell integration |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -348,3 +349,57 @@ No helper, native query, whole-cell execution, memory eligibility or public
 campaign command follows. Raw evidence remains ignored under
 `.local/search-campaign-tiny-boundary-20261006/`; the tested package stays
 `f4d9207`.
+
+
+## Initial tiny filesystem boundary and close ownership
+
+Implemented privately: distinct PRE publication and POST read owners, fixed root
+entries0/1 and selected subtree, pinned ancestors and original-path re-resolution.
+Publication writes journal exclusively, fsyncs/closes/rechecks it, then writes its
+canonical bound commit marker last. Reads cap requests before allocation and
+preserve format-only immutable metadata through the unchanged decoder. Inputs
+are hashed at admission and before success; one owner admits one attempt.
+Partial files stay preserved. Directory-entry crash durability is not claimed.
+
+Tested:21 new actual synthetic-file cases plus28 preserved schema controls passed
+49/0 after an honest initial RED49/26. Cases cover membership, immutable drift,
+sibling scope, missing/partial/wrong markers, exclusive refusal, upfront oversize
+with zero journal reads, exact-cap EOF probing, aliases and partial writes.
+Root independently verified the actual frozen decoder/module paths and hashes.
+
+Independent review found failed close numbers remained eligible for retry. Three
+new controls actually close a designated descriptor, reuse that exact number for
+a synthetic sentinel and inject EIO, or inject an error before close with fixture
+rescue. Corrective RED52/20 retained all49 earlier passing tests. The minimal fix
+passed52/0 and scoped spec/quality rereview closed the blocker. Cleanup now retires
+actionable authority before one close attempt, keeps the in-flight charge until
+acknowledgment, and records sticky uncertainty on error. It drains other definite
+handles, refuses success, and never retries or looks up the uncertain number.
+Repeated cleanup preserves fixed failure; it does not claim closed or zero
+resources. Fixture rescue is separately owned and is not production retry authority.
+
+The generic zero-owned failure-unwind requirement is therefore qualified for
+unknown close acknowledgment. This conservative refusal can retain a charge even
+when the original descriptor actually closed; it avoids closing unrelated reused
+state. Role work is also clarified: two64MiB files hashed in two fixed passes mean
+128MiB per pass and256MiB accepted bytes per operation, plus at most four
+conservative growth-probe bytes. Other traffic and kernel overhead are separate;
+this is not a heap, RSS or latency bound. Original design history stays preserved.
+
+Final candidate SHA256:
+`2cd78fa11d3e3a4bfe9a0dfe1918e372f2aa746da1628d54c512e3529cc5a6a1`.
+Final manifest SHA256:
+`bcaf7dc1e4ea5641b2aec0a077a0f58256327ba2d9576739a50bb7395c22557e`.
+Root audited all65 final members/current origins,60 unchanged prior copies,
+three declared added preparation/audit inputs, exact commands/interpreter/captures
+and52 named methods. All original tests, fixtures, Task1 and decoder stayed
+unchanged. These pure Python runs had no errors, skips or timeouts and used an
+ordinary bounded subprocess. No helper/process-group-watchdog claim follows.
+
+Planned: the complete actual24-component/FD32/iterator, role-stream/two-pass,
+input/marker/cap/growth/identity/race/type/fault/privacy matrix and Task3 decoder
+variants/three mutants. Expanded tests are being prepared against the immutable
+52-test baseline. Source ledger arithmetic is not actual maximum-depth evidence.
+No platform/approval blocker exists. No compiled roles, whole-cell execution,
+native sampling, campaign eligibility, public adoption or new package follows.
+Raw evidence remains ignored under `.local/search-campaign-tiny-boundary-20261006/`.
