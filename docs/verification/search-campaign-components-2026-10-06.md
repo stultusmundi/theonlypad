@@ -8,8 +8,9 @@ production helper. Implementation continues under the user's resumed request.
 | --- | --- | --- | --- |
 | Combined engine trace | Inline logical/native observations under one lock; one active and one completed trace; at most16 events | Frozen injected33/0 and three discriminating mutations; independent review | Helper composition, release roles and allocation comparison |
 | Native self adapter | Unchanged C probe, raw clocks, pinned identity/timebase and explicit native failures | Tiny actual Foundation engine1/0 with eight own-process observations; smoke source review | Paired peak, overhead and memory acceptance |
-| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Physical facts, finalization, external decoder and actual campaign |
-| Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Physical facts/finalization and whole-stack composition |
+| Journal first slice | Bounded metadata and ownership forwarding; pending revokes earlier open settlement | RED21/4 assertions, GREEN21/0; independent re-review | Finalization, external decoder and actual campaign |
+| Source submission | Same-scope fixed builder/job/actual submit; real handle preserved on association failure | GREEN18/0, two discriminating mutants and independent final review | Finalization and whole-stack composition |
+| Cold physical projection | One journal snapshot; immutable package bridge and exact field mapper; first missing prerequisite/invalidity stays explicit | GREEN51/0 (12 new plus39 retained), two mutants1/1 each; independent final review | Native process evidence and finalization |
 
 The injected33-case suite retains the original22 logical controls. Its actual
 fixed-engine case requires probe calls1/7/8 at begin, before execute returns and
@@ -95,3 +96,34 @@ contains no source; its association relies on reviewed builder-to-job dataflow a
 metadata bindings. Builder count is source-callgraph evidence, with no measured
 allocation count, physical move, zero-copy or storage-release claim. No actual
 helper, native process identity or complete cold cleanup is established here.
+
+## Cold physical projection
+
+The bridge captures one existing lock-held journal snapshot and returns immutable
+physical metadata with an inaccessible constructor. It accepts no expected
+identity, terminal outcome or caller-supplied snapshot. Invalidity preempts other
+fields; incomplete means the first missing prerequisite, not every missing group.
+Adoption counts derive from recorded observations, with launch attempts retained
+separately. The mapper preserves exact fields and exit tags. Connection close
+return remains distinct from lifecycle acknowledgement and actual shutdown.
+
+The99-input GREEN passes51 tests:12 new controls,18 unchanged helper/terminal
+controls and21 unchanged journal controls. Identity and missing-close mutants
+each fail one explicit assertion with100 inputs and unchanged expectations. The
+latter deliberately substitutes a consuming-reap position for absent close
+evidence only in its mutant; baseline projection never supplies that default.
+The existing journal, adapters and cleanup verifier remain byte-identical.
+
+The initial test compile failure due to an inherited property-name collision is
+preserved separately. Behavioral RED49/23 and expanded RED51/25 are genuine
+assertion failures; all39 inherited cases pass. Root verified exact inventories,
+SDK headers, full mutation replay, dependency bytes, complete watchdog receipts,
+named cases and post-run test executable hashes. Independent final review approved
+the narrow projection/mapper slice. GREEN manifest:
+`b96479339e6bc9df29befeb92120d8b4c14e88f2db0cc88e3fe93b8179507591`.
+Private evidence is ignored under `.local/search-campaign-cold-facts-20261006/`.
+
+These are injected event-model checks, with no actual helper/process operation
+or native sampling. Historical immutable physical facts cannot establish live
+admission, result release or campaign eligibility. A stronger joined driver
+shutdown, mandatory epoch drain and finalization still require implementation.
