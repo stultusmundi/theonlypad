@@ -30,9 +30,12 @@ The private cold finalizer passes uninstrumented109/0 and counted121/0,
 with five finite discriminating mutants and independent acceptance.
 The private tiny index/anchor schema passes28/0 after the independently reviewed
 pre-encode root-bound correction (RED28/1). Initial filesystem publication/read
-controls and uncertain-close handling pass52/0 after RED52/20; full maximum-depth,
-FD accounting, streaming, race and fault acceptance remains in preparation
-before actual campaign assembly. These component checks leave the76
+controls and uncertain-close handling initially passed52/0 after RED52/20.
+Complete private Task2 filesystem review now accepts109/0, including actual
+maximum-depth/FD accounting, streaming, race and fault controls. A separate
+iterator cleanup-acknowledgment regression produced RED86/16 before GREEN86/0;
+uncertain cleanup retains its conservative charge. Task3 decoder variants and
+three finite mutants remain pending before actual campaign assembly. These component checks leave the76
 aggregate requirement states unchanged and do not establish production search
 isolation, memory acceptance or a new packaged desktop checkpoint.
 

@@ -403,3 +403,62 @@ variants/three mutants. Expanded tests are being prepared against the immutable
 No platform/approval blocker exists. No compiled roles, whole-cell execution,
 native sampling, campaign eligibility, public adoption or new package follows.
 Raw evidence remains ignored under `.local/search-campaign-tiny-boundary-20261006/`.
+
+
+## Complete private tiny filesystem Task2
+
+Implemented and independently reviewed: the finite publication/read scope now
+includes actual native enumeration at24 root components, shared32 descriptor
+accounting, bounded role/input/journal/marker streams, pinned identity and
+membership races, special nodes, publication faults and preserved partial files.
+One owner still permits one attempt; receipts expose immutable format metadata.
+
+Tested: expanded groups passed63/0,83/0 and109/0. The final selection contains
+28 unchanged schema controls and81 boundary controls. Actual maximum-depth
+controls observed native peak30 and conservative ledger31, with noninheritability
+checks and acknowledged cleanup. Role evidence includes a real65537-byte rollover
+and two fixed passes in both modes, plus sparse64MiB ceiling refusal. It does not
+claim a successful64MiB role measurement or memory/performance acceptance.
+Journal retention controls observe bytearray length through the262144-byte cap
+and reject growth before extending; they do not measure all allocations or RSS.
+
+A source review of the earlier close pattern found iterator cleanup could lose
+its reservation after a failed acknowledgment and falsely report clean zero.
+Three new controls use a strongly retained real native iterator interrupted
+before exhaustion: acknowledged close, injected failure before actual close, and
+actual close followed by injected acknowledgment failure. Corrective RED86/16
+preserved the83 earlier passing cases and the positive control. The minimal
+iterator-only fix passed86/0. Both reserved slots remain charged through the sole
+cleanup call; failure transfers them into compact sticky uncertainty and poisons
+the owner. Other definite handles drain once. There is no numeric retry or clean
+closed/zero claim. Native CPython closedir failure propagation and arbitrary
+partial-acquisition adapters are not established by these injected controls.
+
+The final109/0 selection includes real FIFO/socket/directory/symlink and hardlink
+refusal, file and rooted-path drift, late journal/marker replacement, partial
+writes and tail failures. Late replacement changes the inode and appends one
+space after the final temporary selected-cell close; it is not a same-byte race
+or an executed removal mutant. Mode changes establish observed drift, not a
+universal kernel permission-denial result. Fixed outward error strings exclude
+the selected private payload markers; tests do not inspect every logging sink.
+
+Root verified105 final members/current origins,95 unchanged prior copies and nine
+declared additions, exact109 names, commands, interpreter/captures and frozen
+module bindings. All tests, schema and decoder remained unchanged through the
+iterator fix and final expansion. There were no errors, skips or timeouts.
+Independent review mapped every Task2 requirement to source and controls and
+approved specification compliance and quality under the retained role-pass and
+uncertain-close rulings. Final candidate SHA256:
+`a3e12d314d07edabee551a8abb5c66c9265c920940c488e24796497dbae65fea`.
+Final manifest SHA256:
+`c93f55396d3b1b443a36ded0f923ccfc59e77e5ab90e3ffe97534f540cf94932`.
+Earlier snapshots and failures remain preserved.
+
+Planned next: unchanged-decoder valid/invalid/pending variants and three finite
+mutants. Literal whole-read interception has an approved design direction but
+needs actual guard/ownership controls and independent review before mutation.
+No additional testing access is needed for the current synthetic-file tests.
+Task2 completion is private filesystem scope only: Task3, real roles/helper,
+whole-cell assembly, native sampling, memory eligibility and public adoption
+remain outstanding. Evidence stays ignored under
+`.local/search-campaign-tiny-boundary-20261006/`; the tested package stays`f4d9207`.
