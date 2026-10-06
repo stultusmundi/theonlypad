@@ -100,6 +100,80 @@ Accepted manifest SHA256:
 `root-task2-first-group-acceptance.json` binds the independent runtime review and
 each source/build/test audit in the same ignored evidence directory.
 
+## Input anchor and file limits
+
+A separate package preserves all 194 ownership-group inputs and 39 methods. Two
+new test sources add ten methods. Independent source review and a fresh build
+preceded four separate selections on one matched 36-unit, 37-object build:
+
+| Stage | Methods | Failures / unexpected / skips |
+| --- | ---: | --- |
+| Selective input observer controls | 2 | 0 / 0 / 0 |
+| Trusted-anchor negatives | 5 | 0 / 0 / 0 |
+| Actual oversized input files | 3 | 0 / 0 / 0 |
+| Preserved regressions | 39 | 0 / 0 / 0 |
+
+The five anchor methods cover 56 finite vectors: malformed roots/UIDs, input-image
+sizes, digest format/binding, and role scalar/path/contracts. Each requires the
+fixed anchor error, no returned owner/output and no guarded filesystem work.
+The two 3073-byte roots have valid individual components and depth, isolating the
+total path limit. Six invalid-size input images carry independently matching hashes.
+
+Three file methods exercise four actual 16385-byte configuration/selected-receipt
+files. Each requires a successful target path-stat observation of that size, the
+fixed limit error, zero target open/read attempts, and acknowledged cleanup.
+These checks do not certify valid canonical input at the exact 16384-byte cap.
+
+The transparent observer distinguishes attempts, native forwards and accepted
+bytes. Its direct controls establish actual read/EOF/close and fresh acquisition
+state, plus oversized-request and retired-descriptor refusal before forwarding.
+All controls require no observation overflow. Overflow is sticky and invalidates
+claims while storage stays bounded and delegation continues; it does not globally
+freeze every observation field. No overflow runtime coverage is claimed here.
+
+The original packet permissions were writable despite exact frozen hashes. Root
+preserved that metadata preflight failure, checked all files/origins and made the
+packet read-only without changing bytes. No compiler or behavioral failure occurred.
+Thirty-four protected original input anchors were retained across these stages;
+they are input provenance, not new Python selections or output interoperability.
+
+Manifest SHA256:
+`980684474037cc39f198a17c2048d572afa96e96be70845e8a604be26cbdb4fb`.
+`root-task2-input-cap-acceptance.json` binds the four runs and independent final
+runtime review for this finite group.
+
+## Direct writer prerequisite
+
+A separately frozen two-record writer layer composes the accepted guarded
+syscalls. Scoped opaque tokens retain acquisition identity; successful acquisition
+is installed before validation, and actionability retires before the sole close.
+It adds no destructor cleanup or arbitrary path writer.
+
+The matched package passed a fresh 36-unit, 37-object build and three separate
+stages: one native write/sync/close positive, two fresh-token/refusal controls,
+and all 39 preserved regressions. All 42 named outcomes passed without failures,
+unexpected errors or skips. Independent review accepted the positive before the
+two controls, then reviewed the complete prerequisite.
+
+Assertions require actual five-byte first-writer progress and acknowledged
+retirement, a distinct new token with zero counters before arming, actual three-byte
+second-writer progress, and one pre-forward EIO against that token. The old retired
+snapshot remains unchanged. A separate control checks five intentional layer
+refusals, with no underlying guarded violation or second injected fault. Independent
+reads check exact FIRST/SEC bytes; cleanup leaves no live or uncertain owner.
+
+The first evidence audit incorrectly expected plural wording for XCTest's single
+method summary. The original audit/preflight and successful capture were preserved;
+the corrected auditor accepted exact singular wording without rerunning the test
+or changing Swift assertions. This was an auditor setup failure, not behavioral RED.
+
+Manifest SHA256:
+`f04c42666ab0a5190b604e2e4fac076118ba6732801b9b8b7bb0698118467a69`.
+`root-task3-writer-prerequisite-acceptance.json` binds the three runs, 26 original
+input anchors and independent reviews. Future publication-fault routing must reuse
+this same state layer or supply equivalent reviewed matching-source evidence.
+No controlled numeric descriptor reuse or publisher fault is certified here.
+
 ## Limits and next gates
 
 Parent-only native observations matched before and after each stage: physical
@@ -116,11 +190,10 @@ process/libc descriptors, allocation/RSS, arbitrary short-I/O/EINTR behavior or
 concurrent atomic ledger observations. The initial recorder omitted the default
 reset operation; new reset-aware tests do not retroactively change that evidence.
 
-Planned next are finite invalid-anchor and oversized-input cases, followed by
-separately reviewed writer/fault controls. Marker prefix faults require actual
-proof that a new writer token starts with fresh counters after acknowledged
-retirement of a writer with nonzero progress. Role-read totals do not provide that
-proof; controlled numeric descriptor reuse remains a separate gate.
+Planned next are finite role admission negatives and a reviewed adapter for ordinary
+publication faults. Direct writer bookkeeping now has its own accepted prerequisite;
+integrated marker-fault reachability and controlled numeric descriptor reuse remain
+separate gates.
 
 Full depth/reservation and byte-cap coverage, fault/race cases, guard mutants,
 actual Swift-output ingestion by the unchanged Python filesystem reader, real
