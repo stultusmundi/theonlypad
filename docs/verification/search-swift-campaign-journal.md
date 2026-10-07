@@ -873,16 +873,89 @@ Independent execution review accepts this finite evidence. Root finite acceptanc
 SHA256:
 `6f84d9004d3019e45626c3207c8842a1d731e2d812fde0b4c5d3a380fddd61bd`.
 
-**Planned and untested.** A separate same-Directory admission-sampling branch has
-reviewed design/schema and authorized source preparation for three future methods
-plus77 prior methods. Its protected-anchor naming mismatch was corrected in a
-fresh immutable schema packet. Its prospective80-method branch is separate from
-the census82-method branch; no new admission-sampling compile or native result is
-claimed. Missing-source, lifetime, errno, factory identity and source-fit review
-remain gates for its concrete source.
+At this census checkpoint, the separate same-Directory admission-sampling branch
+was planned but untested. Its subsequent finite evidence is recorded below; the
+80-method admission branch and82-method census branch remain separate.
 
 **Still outstanding.** This finite census does not complete Swift Task2/Task3/Task4,
 external output-reader interoperability, real helper/editor routing or public
 publisher source adoption. Memory/performance and same-publisher admission ledger
 acceptance remain separate. Packaged desktop, physical input and Accessibility
 acceptance are unchanged. No public command for these private packets is added.
+
+## Same-Directory admission sampling — 2026-10-07
+
+**Implemented and tested, private scope.** Three new methods preserve the77
+prior methods. A weak observer reads the actual Directory ledger before and
+after admission through the existing factory. The corrected immutable source
+build verifies588 current origins,52 compiled units and53 linked objects, with
+zero source compiler warnings. The separate census branch is not merged.
+
+All23 serial selections pass80 distinct methods with zero failures, unexpected
+errors or skips. They retain90 protected exports,24 opened-parent observations
+and47 complete test/parent owned-process receipts. The build receipt is separate.
+Fourteen original trees and14 workspaces remain under their existing named-fact
+contracts. Eight originals have full current POST snapshots; the six inherited
+uncertainty originals retain their approved facts without invented timestamps.
+
+| New publisher case | Actual ledger reads | Recorded errno restorations | Observed boundary total-charge peak |
+| --- | ---: | ---: | --- |
+| Sampling disabled | 0 | 2489 | Unavailable |
+| Selected cell0 | 2439 | 2489 | 31 |
+| Selected cell1 | 2439 | 2489 | 31 |
+
+Both sampled cases report the total peak at ordinal466, on entry to the protected
+duplicate operation. The record combines2439 source-qualified observations with
+eight retained phase checkpoints and six retained peaks; it does not retain or
+reconstruct every individual reading. Earliest-tie selection is supported by the
+reviewed sampling algorithm and reached assertions. These are callable-entry,
+return and phase boundaries, not every instruction or a global native descriptor,
+allocation or RSS peak. Internal ownership bookkeeping intervals remain excluded.
+
+Each new tree preserves nine original files and adds only the two expected
+publication outputs in its selected cell. The selected1 case independently binds
+its original anchor and cell1 outputs. Original and protected-export bytes match;
+their native identities remain distinct. The sampling-disabled case runs the same
+publisher workflow with unavailable ledger fields. Getter accesses do not sample
+the ledger; native errno and cached collaborator errors retain separate meanings.
+
+The missing-source connection first produced a genuine native RED: one selected
+method,82 explicit failed assertions and zero unexpected errors. The correction
+adds the bounded factory attachment before actual admission. That failed evidence
+remains retained separately from the80 passing methods.
+
+Five actual valid-record controls accept and22 altered-copy controls reject under
+the reviewed metadata validators. They cover closed/type/numeric records,
+source/phase/peak association, selected-index routing and mandatory handoff keys.
+The RED completion-label control is expressly a semantic, already-multiinvalid
+record check. The wrong-index control invokes both actual current/output functions
+and observes zero path construction. These are copied metadata controls, not
+native mutants or additional native tests. The tool rechecks its three named seed
+trees; it does not claim another full14-tree audit.
+
+The first control-runner invocation stopped before any control because it decoded
+XCTest's valid Unicode trailer as ASCII. An independently reviewed derivative
+uses strict UTF-8 for complete stdout while preserving ASCII trace validation,
+the32768-byte JSON cap and131072-byte stream acceptance cap. The failed invocation
+is preserved. Four captured-output roundtrips and four malformed UTF-8 refusals
+verify the decoding correction; the subsequent actual5/22 run is separately
+reviewed. No truncation, replacement decoding or raised cap earns acceptance.
+
+Corrected GREEN producer manifest SHA256:
+`1d511c15656845c4b6c2ace24f4645a7ec6c221971b54f4116cc093c5ab9adfa`.
+Root finite acceptance SHA256:
+`ffaeaf3a07013e6a92d87f581afe9059d085b892acfaee5e45b8eb456f17118a`.
+
+**Planned and untested.** Four next controls target actual successful directory
+transfer, refused transfer with raw cleanup, negative flags after transfer with
+iterator cleanup, and negative flags after initial raw acquisition. Their reviewed
+design uses the existing actual Directory controller and guard. Concrete source,
+closed telemetry bounds, matching build and native results remain separate gates.
+
+**Still outstanding.** This accepts the finite immutable admission-sampling slice.
+Fresh reproduction of its historical preparation/finalization chain is excluded
+because the recorded qualification-append history is inconsistent; the exact
+source/build/native evidence is accepted independently. Full Swift Task2/Task3/
+Task4, new output-consumer proof, helper/editor routing, memory/performance and
+public publisher-source adoption remain unaccepted. Packaged desktop, physical
+input and Accessibility evidence are unchanged. No public runner is added.
