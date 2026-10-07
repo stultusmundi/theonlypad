@@ -1104,8 +1104,10 @@ Its private gate is
 The next adapter uses a new closed44-key role interface while preserving the
 inherited42-key interface. Twelve reviewed metadata regression methods produced
 one expected new44-positive failure and eleven passes against the actual inherited
-validator. The minimal schema extension is being prepared separately; full adapter
-and large-case execution remain gated. The finite retention plan is accepted as
+validator. The reviewed minimal schema then passed the same twelve methods with
+zero failures/errors/skips, using the actual inherited validator and unchanged
+vectors. This accepts only the closed44 schema and exact42-field projection;
+full adapter and large-case execution remain gated. The finite retention plan is accepted as
 planning only; no large fixture, role stage or retention pass has run.
 
 Full Swift Task2/Task3/Task4, valid maximum-record streams, merged descriptor/fault
