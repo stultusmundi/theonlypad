@@ -481,6 +481,103 @@ separate input selections and independent runtime review. Full Task2, resource
 peak/census, allocation/RSS, helper execution and application adoption remain
 outstanding.
 
+## Simultaneous owner ledger boundary
+
+A new private package preserves all 330 depth-V2 input records. The original
+Package and Directory source are archived through two declared path relocations;
+the other 328 paths retain their original fields, bytes and provenance. The
+active Directory copy retains its exact operational prefix and appends a fixed,
+conditional test-only controller. Two new test sources and a private package
+define expose scalar snapshots and fixed operations without a descriptor getter,
+charge setter or new production API. The package contains 375 input records.
+
+Independent source review preceded a fresh matched build of 45 frozen compilation
+units (44 Swift and one C) and 46 linked objects including the derived runner.
+All current origins, source/object/bundle and tool bindings passed the strict
+build audit. Source compiler warnings were zero; the separate verbose manifest
+compiler-command warning prefix remains retained. Root then ran ten separately
+gated selections on that same build:
+
+| Stage | Methods | Protected original anchors | Failures / unexpected / skips |
+| --- | ---: | ---: | --- |
+| One-charge capacity control | 1 | 1 | 0 / 0 / 0 |
+| Two-charge scan control | 1 | 1 | 0 / 0 / 0 |
+| Failed-acquisition control | 1 | 1 | 0 / 0 / 0 |
+| In-flight close control | 1 | 1 | 0 / 0 / 0 |
+| Preserved actual role streams | 1 | 6 | 0 / 0 / 0 |
+| Preserved pre-forward refusals | 1 | 1 | 0 / 0 / 0 |
+| Preserved owner publications | 3 | 12 | 0 / 0 / 0 |
+| Preserved regressions | 55 | 48 | 0 / 0 / 0 |
+| Preserved depth-24 publications | 2 | 2 | 0 / 0 / 0 |
+| Preserved depth-25 refusals | 1 | 2 | 0 / 0 / 0 |
+
+These total 67 unique methods and 75 original anchors: four new controls and
+63 preserved methods. Each audited selection gates the next. Eleven fresh
+parent-only native observations span the ten stages and retain physical-parent
+identity, nonunion APFS, protected descriptor flags and acknowledged sole probe
+close. Complete owned-process receipts and exact named outcomes are retained.
+The watchdog's fixed 1 MiB stream retention and the separate 128 KiB post-run
+acceptance cap remain distinct.
+
+The four new controls select index 0 in separate fixtures, admit an actual
+depth-24 owner at charge 26 and retain additional real directory acquisitions.
+Six padding acquisitions reach charge 32; the next
+one-charge request refuses with the limit error before any guarded call. At
+charge 30, an actual scan reserves two charges, transfers the duplicate to DIR,
+and retains two in-flight charges until acknowledged close returns. The same
+scan at charge 31 refuses before duplicate or transfer, while allowing exactly
+its original preliminary status call. A pre-forward injected open EIO at charge
+31 releases the reservation with no acquired handle; a distinct fresh native
+acquisition then reaches 32. A separate raw-close control observes retired
+ownership plus one in-flight charge, preserving total 32 until acknowledgment,
+then charge 31. Final drain reaches acknowledged zero and repeated drain adds
+no guarded work.
+
+Four closed typed traces contain respectively 12/16/14/14 events and 4/6/5/5
+checkpoints. Their actual encoded JSON sizes are 7869/10637/9226/9168 bytes,
+below the independent 65536-byte ledger cap. Audits recompute the original
+owner's scalar equations, complete ordered events and every scoped checkpoint
+counter delta. Attempted calls, delegation to the guard and native actions
+remain distinct; refusal labels are not trusted Boolean verdicts. The controls
+require no observation overflow, missing sample, forbidden call, live owner or
+uncertain ownership at final cleanup. Independent original input/directory facts
+and both-cell journal/marker absence are checked before teardown. These four
+controls publish no output.
+
+Four separately owned unchanged Python selector children accepted both indices
+from the four new protected original anchors, totaling eight selections. This
+validates input images only; it does not read publication outputs or attest
+live executable roles. Sixteen separate metadata controls accepted the four
+actual traces and rejected twelve malformed in-memory variants. They do not
+constitute native guard mutants, repeated Swift tests or behavioral RED. These
+additive controls exercise existing capacity behavior; no new RED is claimed.
+
+Two metadata setup corrections remain preserved. A source-acceptance derivative
+corrected only the strict-tree schema to the build auditor's established shape.
+The adapter's first byte verifier passed, but its separate permission check
+found writable frozen files/directories; root tightened only mirror modes to
+0444/0555 without changing source bytes or origins. Neither correction weakened
+compiler warnings, changed assertions or required a native/Swift rerun. They
+are not compiler failures or behavioral RED.
+
+Source manifest SHA256:
+`8b85de3ac4f7d8999aa6f4a42551504b5334e98c825b8617cddcdfac5e93b0c4`.
+The private build audit, ten stage audits, original-input selection audit and
+metadata-control record retain these actual observations. Independent runtime
+review accepted this finite scope. Root's finite acceptance record excludes
+full component completion and production adoption. Acceptance SHA256:
+`a15ccc1c8ae3a4ec4b6a90468ab47e1ef4065164aaf70b9d1d3f12e8b25bdfc5`.
+
+These are clean serial collaborator-visible charge-32/33 controls in a private
+package. The conditional controller is not adopted into production. The
+ordinary depth trace's cumulative 183 acquisitions/208 reservation tokens remain
+separate from simultaneous charge. Internal transfer instructions between
+collaborator samples, concurrent observations, a process-wide FD census and an
+ordinary-publication measured peak are not certified. Uncertain cleanup/reuse,
+arbitrary short-I/O/EINTR, allocation/RSS, full Task2/Task3/Task4, additional output
+interoperability, helper/editor routing and application adoption remain separate
+gates. No packaged desktop acceptance is updated.
+
 ## Limits and next gates
 
 For the earlier temporary-fixture stages, parent-only native observations matched
