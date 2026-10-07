@@ -946,7 +946,7 @@ Corrected GREEN producer manifest SHA256:
 Root finite acceptance SHA256:
 `ffaeaf3a07013e6a92d87f581afe9059d085b892acfaee5e45b8eb456f17118a`.
 
-**Planned and untested.** Four next controls target actual successful directory
+**Then planned and untested.** Four next controls target actual successful directory
 transfer, refused transfer with raw cleanup, negative flags after transfer with
 iterator cleanup, and negative flags after initial raw acquisition. Their reviewed
 design uses the existing actual Directory controller and guard. Concrete source,
@@ -959,3 +959,73 @@ source/build/native evidence is accepted independently. Full Swift Task2/Task3/
 Task4, new output-consumer proof, helper/editor routing, memory/performance and
 public publisher-source adoption remain unaccepted. Packaged desktop, physical
 input and Accessibility evidence are unchanged. No public runner is added.
+
+## Finite directory-transfer and flag-refusal checkpoint, 2026-10-07
+
+**Accepted finite scope.** The matching private source now preserves all80
+admission-branch methods and adds four actual Directory-controller checks. Its
+634-input frozen packet builds54 active units/55 linked objects without source
+compiler warnings. Root ran27 serial selections:84 distinct methods passed with
+zero failures, unexpected errors or skips. Independent evidence review checked
+the actual complete captures and method membership,94 protected original
+exports,28 parent observations and55 test/parent watchdog receipts. The build
+receipt is separate. This branch does not merge the descriptor-census experiment.
+
+| New case | Observed cleanup behavior | Trace events |
+| --- | --- | ---: |
+| Successful prepared-root transfer | One transferred iterator is closed once; its transferred raw descriptor is not closed separately. | 24 |
+| Refused prepared-root transfer | The protected raw duplicate is closed once; no iterator is acquired. | 8 |
+| Negative flags after transfer | The iterator is closed once, with no raw fallback, reset or iteration. | 12 |
+| Negative initial-root flags | The initial raw descriptor is closed once, before duplication or transfer. | 6 |
+
+The three failures are controlled collaborator refusals, not observed kernel
+failures. Each reaches its fixed error and acknowledged zero final ownership;
+repeated drain leaves counters unchanged. Target generation and prepared-root
+identity are checked independently of emitted target metadata. Callback traces
+do not expose every instruction or the internal transfer interval, and establish
+neither a global descriptor maximum nor allocation/RSS bounds.
+
+Eighteen original trees and14 known workspaces remain retained. Twelve originals
+have full recorded POST facts; six inherited uncertainty trees retain their
+narrower identity/content contracts without invented timestamps. Named original
+and output bytes, directory membership and protected exports were independently
+checked. The four new trees each contain nine originals and no publication
+outputs. Parent probes certify only their observed parent, not future fixtures.
+
+The first audit-adapter source was rejected before full invocation for three
+fixed-input interface errors. A separately reviewed isolated metadata exercise
+reproduced six interface failures. The corrected V2 passes six authentic input
+checks and ten malformed-copy refusals in that narrow exercise. Neither run is
+product behavioral RED or a native test. Uninvoked driver drafts and original
+failed preparation/control histories remain preserved.
+
+Separately approved actual result-reader controls accept four genuine captured
+records and reject20 malformed copies. They cover ordinary numeric spelling,
+duplicate/unknown fields, the32768-byte preparse cap, file/target association and
+cleanup-event/counter consistency. The wrong-context check calls both actual
+entry points and observes zero path construction. The relabeled case is
+multi-invalid; the reset check does not prove independent next/read coverage;
+two accounting checks have overlapping exact-vector/conservation predicates.
+Complete stdout uses strict UTF-8; extracted traces remain bounded ASCII. These
+controls recheck exactly their four named trees and exports, and add no native
+tests or mutants to the84-method count. Independent source and actual evidence
+reviews accept this separate4/20 scope.
+
+Selected producer manifest SHA256:
+`b6b2e0ae4488665742aa249fe38be506d3f922ed9da7d335918dc2a485816e85`.
+Root finite acceptance SHA256:
+`a267172044e966ef8f009f735e5e8cd55336b49ea8d5330d581a2dded767c857`.
+
+**Next planned work.** Seven small-record methods will cover a separate known-file
+mutation helper, ordinary publication, input/output limits, actual growth and
+short EOF. Source preparation uses this accepted84-method parent. The unchanged
+guard's at-cap growth refusal is expected to report I/O failure; hidden native
+excess bytes and the Candidate's own excess-cap append branch remain unproved.
+Concrete source, helper safety, trace bounds, matching build and runtime gates
+remain outstanding.
+
+**Still outstanding.** Full Swift Task2/Task3/Task4, historical preparation-chain
+reproduction, new output-consumer interoperability, helper/editor routing,
+memory/performance and public publisher-source adoption remain unaccepted.
+The tested package and desktop/accessibility evidence are unchanged. No new
+public source or runnable harness is adopted by this documentation checkpoint.
