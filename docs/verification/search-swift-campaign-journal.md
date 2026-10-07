@@ -268,6 +268,64 @@ Manifest SHA256:
 `root-task3-ordinary-fault-native-acceptance.json` binds the matching build, eight
 separate runs and independent review. Full Task3 remains incomplete.
 
+## Role chunk boundary
+
+A separate private package preserves all 240 role-admission inputs and 55 existing
+methods. Three new test sources add five methods without changing the publisher,
+encoder or Python consumer. Independent review preceded a fresh 41-unit,
+42-object build and four separate selections:
+
+| Stage | Methods | Failures / unexpected / skips |
+| --- | ---: | --- |
+| Actual chunk streams | 1 | 0 / 0 / 0 |
+| Pre-forward request refusals | 1 | 0 / 0 / 0 |
+| Actual owner publications | 3 | 0 / 0 / 0 |
+| Preserved regressions | 55 | 0 / 0 / 0 |
+
+These are 60 unique methods across four runs. The positive gate passed before
+the safety selection, and safety passed before owner entry. All use the same
+matched build with complete owned-process receipts. Source compiler warnings
+were zero; the verbose manifest-command warning prefix remains separate.
+
+Six direct fixtures exercise literal q files at lengths 65535, 65536 and 65537,
+at both role positions. Each has two fresh acquisitions, actual byte comparisons,
+a distinct native EOF and acknowledged cleanup. Fixed request/return sequences
+for each stream are:
+
+| Length | Requests | Actual returns |
+| ---: | --- | --- |
+| 65535 | 65536, 1 | 65535, 0 |
+| 65536 | 65536, 1 | 65536, 0 |
+| 65537 | 65536, 2, 1 | 65536, 1, 0 |
+
+The safety fixture allocates an actual 65536-byte buffer and uses a 65537-byte
+role. Its initial request 65537 fits remaining-plus-one 65538, independently
+isolating maximum-request refusal before native reading. After actual 65536-byte
+progress, request 3 separately isolates remaining-plus-one refusal. Requests 2
+and 1 then receive one byte and EOF. A final request after acknowledged retirement
+refuses without an intervening acquisition. Attempted and native counts are
+separate, and the three deliberate refusals add no native read or accepted bytes.
+
+Twelve owner cases cover each length, both role positions and both indices.
+Independently reviewed digest literals bind the q files; bounded supplier writes
+and actual hashes verify them. The other role remains abc/3. Admission and
+publication produce exactly two streams per role, totaling 2L+6 received and
+accepted bytes. Finish adds no third hash or stream. Actual independent empty
+journal/marker bytes, one encoding and acknowledged final cleanup with zero
+definite/uncertain charge are required. No control reports observation overflow.
+
+Sixty-seven original input anchors were retained across the four runs. The
+unchanged Python selector separately accepted both cells from the 19 new anchors,
+totaling 38 selections. This checks protected original input compatibility; it
+does not read the actual q files or Swift publication outputs.
+
+Manifest SHA256:
+`7f43beb184bf866316c86ca5777dba37c24809756e48c4f87961626fad6d71fc`.
+`root-task2-role-chunk-acceptance.json` binds the four native runs, separate input
+selection and independent review. Source-level buffer/storage bounds and these
+ordinary full-progress traces do not establish allocation/RSS, arbitrary
+short-I/O/EINTR, maximum-role streaming, forced descriptor reuse or full Task2.
+
 ## Limits and next gates
 
 Parent-only native observations matched before and after each stage: physical
@@ -284,11 +342,11 @@ process/libc descriptors, allocation/RSS, arbitrary short-I/O/EINTR behavior or
 concurrent atomic ledger observations. The initial recorder omitted the default
 reset operation; new reset-aware tests do not retroactively change that evidence.
 
-Planned next are role streams around the 65536-byte chunk boundary and an explicitly
-partial proof retaining actual Swift outputs for the unchanged Python reader. The
-ordinary fault adapter now has matching source, native prerequisite and reached
-marker-fault evidence. Controlled numerical descriptor reuse, other fault positions
-and full component acceptance remain separate gates.
+An explicitly partial proof retaining actual Swift outputs for the unchanged
+Python reader is in preparation. The ordinary fault adapter has matching source,
+native prerequisite and reached marker-fault evidence. Controlled numerical
+descriptor reuse, other fault positions and full component acceptance remain
+separate gates.
 
 Full depth/reservation and byte-cap coverage, fault/race cases, guard mutants,
 actual Swift-output ingestion by the unchanged Python filesystem reader, real
