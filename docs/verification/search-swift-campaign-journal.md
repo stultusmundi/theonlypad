@@ -794,3 +794,95 @@ global descriptor peak, RSS, full Swift Task2/Task3/Task4, helper/editor routing
 or production adoption. The next qualified census direction and a separate
 same-Directory admission-sampling design are planned, with no new measured peak.
 Packaged desktop and Accessibility acceptance remain unchanged.
+
+
+## Finite descriptor census — 2026-10-07
+
+**Implemented and tested, private scope.** A separately reviewed fixed-window
+observer and five new methods preserve all 77 prior methods. The matching build
+verifies 590 current input origins, compiles 52 frozen units and links 53 objects,
+with zero source compiler warnings; its verbose manifest-command prefix remains
+separate. Twenty-five serial selections pass 82 distinct methods with zero
+failures, unexpected errors or skips. They retain 92 protected original exports,
+26 native parent observations and 51 complete test/parent owned-process receipts.
+The build receipt is separate from those 51 receipts.
+
+| New main trace | Completed windows | Slot queries | Sampled native ownership peak | Sampled ledger or owner charge peak |
+| --- | ---: | ---: | ---: | --- |
+| Known FD and live DIR positive | 17 | 4352 | 2 | Unavailable by scope |
+| Outside-window refusal | 4 | 1024 | 1 before disable | Unavailable by scope |
+| Depth24 Directory admission | 221 | 56576 | 30 | 31, actual Directory ledger |
+| Instrumented selected-cell publisher | 608 | 155648 | 30 | 31, publisher post-admission charge |
+| Uninstrumented selected-cell publisher | 608 | 155648 | 30 | 31, publisher post-admission charge |
+
+These are actual serial callback samples, not forced expected peaks. Each window
+queries the fixed descriptor range 0 through 255. The Directory test observes
+that actual Directory's ledger. Neither publisher exposes its admission ledger;
+its charge becomes available only after factory return. Transfer-return and
+later descriptor-return hooks bracket an internal bookkeeping interval that is
+not sampled. These records do not establish every-instruction, concurrent,
+process-global or libc descriptor peaks, allocation or RSS.
+
+The outside-window control performs a non-clobbering duplicate with minimum256,
+retains sole caller cleanup authority and refuses further sampling before any
+query of the returned high descriptor. The refusal latches at1024 queries;
+after-disable queries and borrowed queries both remain zero. The observer records
+two acquisitions/two cleanup acknowledgments, while the unchanged guard records
+only its one ordinary acquisition/close. No fresh final native-zero sample is
+inferred after disable.
+
+The native positive also executes a separate resource-free missing-publisher
+source diagnostic. Its corrected GREEN path has one baseline window/256 queries
+and invalidates the missing required source before another query. Its main trace
+remains17 windows/4352 queries; the whole method totals4608 queries. The earlier
+genuine RED produced eight explicit assertion failures and remains separate from
+the82 passing methods. The direct scan now bounds the copied directory-entry
+length, terminator and UTF-8 decoding, requires four unique fixed names and a
+fifth EOF observation. The errno statistic counts delegate-return restorations;
+additional baseline/phase/cleanup-entry restorations are not included in it.
+
+Seven actual metadata controls accept and22 altered copies reject under the
+reviewed validators. These cover typed/closed records, source completeness,
+disabled queries, scope/ledger/phase/peak association, selected-index output
+binding and prepared keys. They are metadata perturbations, not native mutants
+or new behavioral RED. The earlier18 source-only controls remain historical
+source evidence.
+
+All five new original trees remain retained with nine original files each. The
+first three have no publication outputs; the two publishers each add exactly the
+two expected outputs in their independently selected cell. Both journals are the
+independent172-byte empty journal, with markers bound separately to the original
+index0 or index1 receipt. Across inherited selections,16 original trees and14
+workspaces remain. Ten newer trees retain full current POST time facts; six
+inherited uncertainty trees retain their approved identity, mode, ownership,
+link, size, hash and membership facts without invented timestamps. Reached
+Swift assertions support PRE preservation and the selected-directory two-entry
+transition; current snapshots do not reconstruct PRE times. No unknown-resource
+query, retry or cleanup authority is added.
+
+The largest actual complete stage stdout is29856 bytes, below the unchanged
+131072-byte per-stream acceptance cap. Census JSON is capped at32768 before
+emission. The fixed1 MiB watchdog retention is separate; no truncation or cap
+increase earns acceptance. Parent observations certify their opened parent only,
+under the retained no-mount-replacement assumption, not every removed or retained
+fixture root retrospectively.
+
+Corrected GREEN producer manifest SHA256:
+`afe6ac67d6cd1054eb980d42905891792bf79ec7c87a87eb23eaeb00761f2113`.
+Independent execution review accepts this finite evidence. Root finite acceptance
+SHA256:
+`6f84d9004d3019e45626c3207c8842a1d731e2d812fde0b4c5d3a380fddd61bd`.
+
+**Planned and untested.** A separate same-Directory admission-sampling branch has
+reviewed design/schema and authorized source preparation for three future methods
+plus77 prior methods. Its protected-anchor naming mismatch was corrected in a
+fresh immutable schema packet. Its prospective80-method branch is separate from
+the census82-method branch; no new admission-sampling compile or native result is
+claimed. Missing-source, lifetime, errno, factory identity and source-fit review
+remain gates for its concrete source.
+
+**Still outstanding.** This finite census does not complete Swift Task2/Task3/Task4,
+external output-reader interoperability, real helper/editor routing or public
+publisher source adoption. Memory/performance and same-publisher admission ledger
+acceptance remain separate. Packaged desktop, physical input and Accessibility
+acceptance are unchanged. No public command for these private packets is added.
