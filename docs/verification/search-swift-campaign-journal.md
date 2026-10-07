@@ -720,3 +720,77 @@ allocation/RSS, actual helper/editor routing and application adoption remain
 outstanding. The test-only controller and new guard are not adopted into
 production; packaged desktop, physical input and Accessibility acceptance are
 unchanged.
+
+
+## Public operation refusal after uncertain cleanup — 2026-10-07
+
+The reviewed private Swift test package preserves all 74 prior methods and adds
+three public-operation methods with five synthetic scenarios. A matching build
+compiles 50 frozen source units and links 51 objects, with zero source compiler
+warnings. The verbose manifest-command prefix remains a separate category.
+Twenty ordered selections pass 77 distinct methods with zero failures,
+unexpected failures or skips, preserving 87 original exports. Twenty-one native
+parent observations and all 41 direct owned-process receipts pass; no successful
+native group was repeated for bookkeeping.
+
+| New public-operation method | Scenarios | Original exports | Failures / skips |
+| --- | ---: | ---: | --- |
+| Successful publication, finish and cached teardown | 1 | 1 | 0 / 0 |
+| FD cleanup uncertainty before native close or after its ACK | 2 | 2 | 0 / 0 |
+| DIR finish uncertainty before native closedir or after its ACK | 2 | 2 | 0 / 0 |
+
+The clean path obtains the final acknowledged publication receipt. Repeated
+finish and close return their cached historical facts without new work; publish
+after closure refuses. Injected failed FD cleanup preserves one uncertain charge,
+and failed DIR cleanup preserves two. Subsequent finish, close and publish all
+return I/O failure without a receipt, including after fixture-owned known rescue.
+That rescue cannot clear original ownership uncertainty or promote a failed
+operation to successful publication. Native successful cleanup acknowledgments
+remain distinct from the injected failure reports.
+
+Five closed typed traces retain 0, 52, 52, 4 and 4 ordered events, respectively,
+and eight checkpoints each. Their primitive event ledgers are explicitly null;
+these public-owner facts are not the separate controller's ledger. Audits compare
+complete scalar/result arrays with independently prepared literal expectations.
+Receipt associations use protected original input bytes. Fourteen altered trace
+copies are rejected, including false success, cleared sticky charge, repeated
+I/O, changed event order, type aliases and invalid receipt/anchor facts. These
+are metadata discriminator checks, not new native mutants or behavioral RED.
+
+All five new originals and workspaces remain retained, including the clean
+scenario. Combined with inherited uncertainty controls, eleven original trees
+and fourteen named workspaces remain. Public trees preserve all nine input files
+and contain the two exact selected outputs. The journal is the independent
+172-byte canonical empty journal; marker bytes bind the protected original
+receipt. Named current checks compare full POST identity, mode, ownership, link,
+time, size and hash facts. First POST snapshots do not invent independently
+observed PRE timestamps. No unknown FD/DIR lookup, retry or cleanup is performed.
+
+Actual complete stage stdout peaks at 29856 bytes, below the unchanged 131072-byte
+per-stream acceptance cap. Public JSON remains bounded by 65536 bytes before
+emission. The watchdog's fixed 1 MiB retention is a separate limit; no trace
+trimming or cap increase is used.
+
+The original metadata harness had two source blockers: it assumed every producer
+stage row contained a name, and its preparation omitted two audit-required trace
+fields. Both were caught before invocation. A separately frozen V2 corrects
+only the membership and preparation bodies plus its reference filename,
+preserving all 37 other bodies. Source-only checks accept two valid models and
+reject 21 malformed models; whole independent reviews approve the exact corrected
+source. An initial aggregate bookkeeping lookup also mistook inherited nested
+subcases for flat traces; it was corrected without fixture reruns or result edits.
+These failures remain preserved and are not executed product failures.
+
+Producer manifest SHA256:
+`659b08f4269c71edab369be29d916f6754269300ff254d35c0a3ce5a55f8e43b`.
+Independent runtime review accepts the finite staged evidence. Root finite
+acceptance SHA256:
+`9e6d50fa36a76bef56f7ec0c63c58afe9be27ce4356a38616b15005ef592bd4e`.
+
+This accepts public receipt refusal in serial synthetic before-cleanup or
+after-success injection. It does not accept actual kernel cleanup failure,
+new original-input selector or external output-reader compatibility, a native
+global descriptor peak, RSS, full Swift Task2/Task3/Task4, helper/editor routing
+or production adoption. The next qualified census direction and a separate
+same-Directory admission-sampling design are planned, with no new measured peak.
+Packaged desktop and Accessibility acceptance remain unchanged.
