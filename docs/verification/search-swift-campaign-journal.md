@@ -215,6 +215,59 @@ Manifest SHA256:
 selection audit and independent final runtime review. These accepted finite checks
 do not establish complete role streaming or the full ownership/cap matrix.
 
+## Ordinary publication faults
+
+A private frozen package preserves 218 parent source identities, with 217 unchanged
+inputs and one explicitly reviewed writer-token interface change. The original
+layer remains archived. Two new test files add eight methods; a fresh build
+verified 38 compiled units and 39 linked objects.
+
+Eight separate selections passed on that same build:
+
+| Stage | Method invocations | Failures / unexpected / skips |
+| --- | ---: | --- |
+| Existing native ownership guards | 6 | 0 / 0 / 0 |
+| Renewed writer positive | 1 | 0 / 0 / 0 |
+| Renewed writer controls | 2 | 0 / 0 / 0 |
+| Bridge positive | 1 | 0 / 0 / 0 |
+| Bridge controls | 2 | 0 / 0 / 0 |
+| Publication positive | 1 | 0 / 0 / 0 |
+| Publication faults | 4 | 0 / 0 / 0 |
+| Preserved regressions | 39 | 0 / 0 / 0 |
+
+These total 56 invocations covering 50 unique methods. The six native guards
+intentionally repeat in the final regression selection. Positive results were
+audited before later controls. Independent source and runtime reviews accepted
+this finite subset. Source compiler warnings were zero; a separate verbose
+manifest-command warning prefix remains in the retained build transcript.
+
+The four faults use actual synthetic files and one reached injected EIO each.
+Journal write failure preserves the first three bytes, with no marker. Marker
+write failure follows a complete 172-byte journal, real sync and acknowledged
+readback, then preserves the marker's first three bytes. Journal sync failure
+preserves the complete journal and suppresses readback. Journal readback failure
+follows real successful sync and rejects the verified reader's first request
+before native reading. The latter two suppress marker creation.
+
+Every fault requires one encoding, no publication receipt, acknowledged cleanup,
+zero definite/uncertain charge and no overflow. Repeated publication is consumed;
+finish retains the failure without more work. Explicit close provides teardown
+facts, and later finish refuses closed. Retained partial bytes cannot become a
+successful receipt. The shared writer state and fresh marker initialization are
+verified through the adapter; its immutable issued descriptor is diagnostic data,
+not current ownership authority.
+
+Forty protected original input anchors were retained across the eight runs,
+including eight from the new cases. These anchors are input provenance, not
+consumer-validated publisher outputs. Injected EIO does not establish actual OS
+read/sync failure, crash durability, uncertain cleanup or controlled numerical
+descriptor reuse. No new behavioral RED is claimed for these additive controls.
+
+Manifest SHA256:
+`de81424b8f7a505bb32698c26b8a93cd91c26ca0a8ad852ce92923606ba82169`.
+`root-task3-ordinary-fault-native-acceptance.json` binds the matching build, eight
+separate runs and independent review. Full Task3 remains incomplete.
+
 ## Limits and next gates
 
 Parent-only native observations matched before and after each stage: physical
@@ -231,11 +284,11 @@ process/libc descriptors, allocation/RSS, arbitrary short-I/O/EINTR behavior or
 concurrent atomic ledger observations. The initial recorder omitted the default
 reset operation; new reset-aware tests do not retroactively change that evidence.
 
-Planned next are role streams around the 65536-byte chunk boundary and a reviewed
-adapter for ordinary publication faults. Direct writer bookkeeping has its own
-accepted prerequisite; its protocol bridge needs a separately reviewed acquisition
-interface and renewed matching-source controls. Integrated marker-fault reachability
-and controlled numeric descriptor reuse remain separate gates.
+Planned next are role streams around the 65536-byte chunk boundary and an explicitly
+partial proof retaining actual Swift outputs for the unchanged Python reader. The
+ordinary fault adapter now has matching source, native prerequisite and reached
+marker-fault evidence. Controlled numerical descriptor reuse, other fault positions
+and full component acceptance remain separate gates.
 
 Full depth/reservation and byte-cap coverage, fault/race cases, guard mutants,
 actual Swift-output ingestion by the unchanged Python filesystem reader, real
