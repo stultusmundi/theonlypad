@@ -408,6 +408,79 @@ correction, positive-reader, transform, refusal-reader and final filesystem gate
 This is finite output interoperability, not full Task2/Task3/Task4 acceptance,
 helper execution, allocation/RSS or production editor routing.
 
+## Physical path-depth boundary
+
+A separate private package preserves the 277 role-chunk inputs and 60 methods.
+Two new Swift test sources add three methods. The first build completed but
+failed the strict warning gate: two catches were unreachable because their
+throwing calls appeared inside XCTest assertion autoclosures. No tests ran in
+that package. A new immutable derivative moves exactly those two groups of
+throwing calls into local bindings before assertions, preserving the catches,
+expectations, fixture, publisher, guards and consumer. The rejected build and
+its diagnostics remain retained; this is not behavioral RED.
+
+Independent source review preceded the corrected build of 43 frozen source
+units and 44 linked objects. The accepted manifest contains 330 input records;
+all current origins, frozen bytes, compilation objects, test bundle and tools
+were checked. Source compiler warnings were zero. The derived test runner's
+actual compiler invocation leaves its language mode unspecified; it is not
+attributed the frozen sources' explicit Swift 5 mode.
+
+Root then executed six separate selections on that matched build:
+
+| Stage | Methods | Protected original anchors | Failures / unexpected / skips |
+| --- | ---: | ---: | --- |
+| Preserved actual role streams | 1 | 6 | 0 / 0 / 0 |
+| Preserved pre-forward refusals | 1 | 1 | 0 / 0 / 0 |
+| Preserved owner publications | 3 | 12 | 0 / 0 / 0 |
+| Preserved regressions | 55 | 48 | 0 / 0 / 0 |
+| Actual depth-24 publications | 2 | 2 | 0 / 0 / 0 |
+| Actual depth-25 admission refusals | 1 | 2 | 0 / 0 / 0 |
+
+These are 63 unique methods and 71 protected anchors. Each stage's accepted
+audit gates the following stage. Complete owned-process receipts verify exact
+commands, exit, wait and capture settlement. The watchdog retains at most
+1 MiB per stream; a separate audit accepts stage captures only up to 128 KiB.
+The latter is a post-run predicate, not the watchdog's runtime capture setting.
+
+The fixtures prepare the physical temporary parent through native realpath and
+add independently counted directory components. Both publication modes reach
+actual root depth 24. Assertions compare independently constructed configuration,
+receipt, journal and marker bytes, one encoder call, cached receipts without
+new role I/O, and acknowledged teardown with zero definite or uncertain charge.
+Each positive trace records four completed role streams, 12 received/accepted
+bytes, four EOFs, 183 acquisitions and 208 cumulative reservation tokens. These
+cumulative counts are not a simultaneous ownership peak or proof of the
+32/33 ledger-capacity boundary.
+
+At physical root depth 25, both indices refuse with the anchor error before
+any guarded owner acquisition. Every guarded counter remains zero, no owner
+is returned, and independent inputs remain unchanged with outputs absent.
+Fixture preparation and hashing still perform native work; the zero counters
+refer specifically to guarded owner activity. Refused-depth anchors retain
+input provenance and are excluded from positive input selection.
+
+Seven actual parent-only native observations match across the six stages.
+They check the physical temporary-parent identity, nonunion APFS, protected
+descriptor flags and acknowledged sole probe close. Four bounded typed traces
+bind the successful and refused depths to the exact protected anchors. Audits
+confirm the temporary roots and their UUID containers are absent after
+teardown. They do not retrospectively certify removed-root inodes or filesystems.
+The retained anchor exports and temporary fixtures reside on different volumes.
+
+Two separately owned unchanged Python selector children accepted both indices
+from the two positive original anchors, totaling four selections. Exact typed,
+closed receipts and unchanged protected anchor identities were checked. These
+validate the original input images; they do not consume publication outputs or
+attest live executable roles.
+
+Manifest SHA256:
+`2f20714a7bee4c9fadd29e37d31a9530a368a7afaeaf84f37afd0dbdf8af3386`.
+The private depth acceptance record binds the matching build, six stage audits,
+separate input selections and independent runtime review. Full Task2, resource
+peak/census, allocation/RSS, helper execution and application adoption remain
+outstanding.
+
 ## Limits and next gates
 
 For the earlier temporary-fixture stages, parent-only native observations matched
