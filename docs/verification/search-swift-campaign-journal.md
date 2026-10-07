@@ -1115,14 +1115,35 @@ methods with zero failures/errors/skips, following a genuine baseline RED agains
 the inherited schema. Independent source and actual-evidence reviews accept
 closed fields, ordinary types, bounded arrays and the four literal profiles.
 The authentic inherited parser and schema remain in use for their existing
-domain. This accepts structural validation only: exact outcome equations,
-trace framing, original/current-file binding and large native cases remain
-gated. The inherited raw parser has no predecode depth guard.
+domain. This accepts structural validation only and does not establish exact
+outcome equations, trace framing or original/current-file binding. The inherited
+raw parser has no predecode depth guard.
 
 Structural finite acceptance SHA256:
 `5c2d9d9635f2d9b7eac4c4c9528eeb4e706d4fdb771add60c0ca37753bb9e8fc`.
 Its private gate is
 `.local/search-campaign-swift-journal-20261007/root-role-trace-shape-finite-acceptance-v1.json`.
+
+The complete pure outcome and framing component now passes44 unchanged metadata
+methods with zero failures/errors/skips. Its absent-feature baseline produced264
+assertion failures across37 methods, with seven fully passing and no errors/skips;
+the new implementation then passed the same definitions and literal vectors.
+Independent specification, source-quality and actual-evidence reviews accept
+the finite counter equations, ordered generations/events/checkpoints, digest
+associations and separately bound original PRE versus mutation POST facts.
+Framing checks cover complete single-trace LF records, strict UTF-8 ancillary
+text, ASCII JSON, foreign/duplicate/embedded trace refusal and the independent
+131072-byte capture/32768-byte JSON boundaries. The excess-capture control also
+verifies that the parser is never called. The authentic parser's interior JSON
+whitespace domain is preserved; no specific interior-TAB witness is claimed.
+These are synthetic metadata controls, not native file or helper observations.
+Original/current binding, retained-reader integration and all four new native
+producer cases remain gated; no allocation/RSS or editor-routing claim follows.
+
+Outcome/framing finite acceptance SHA256:
+`f0414afb4f162930aa721f50eae8473894c503b36a1d0cada5d319a815379dcd`.
+Its private gate is
+`.local/search-campaign-swift-journal-20261007/root-role-outcome-finite-green-acceptance-v1.json`.
 
 Full Swift Task2/Task3/Task4, valid maximum-record streams, merged descriptor/fault
 coverage, unchanged output-consumer interoperability, memory/performance,
