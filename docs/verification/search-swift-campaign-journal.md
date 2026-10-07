@@ -174,6 +174,47 @@ input anchors and independent reviews. Future publication-fault routing must reu
 this same state layer or supply equivalent reviewed matching-source evidence.
 No controlled numeric descriptor reuse or publisher fault is certified here.
 
+## Role admission negatives
+
+A separate package preserves the 214 input-cap inputs and all 49 methods. Two
+new test sources add six methods. Independent source review preceded a fresh
+38-unit, 39-object build and three separate selections on that same build:
+
+| Stage | Methods | Failures / unexpected / skips |
+| --- | ---: | --- |
+| Direct role observation controls | 2 | 0 / 0 / 0 |
+| Role admission negatives | 4 | 0 / 0 / 0 |
+| Preserved regressions | 49 | 0 / 0 / 0 |
+
+The four negative methods exercise 12 synthetic cases across both role positions
+and cell indices. Actual sparse 67108865-byte files refuse with the limit error
+after target size observation and before target open/read. Actual four-byte files
+against unchanged three-byte anchors refuse drift at the same boundary. Wrong
+well-formed SHA anchors against actual three-byte files require a real three-byte
+read and zero-byte EOF before drift. No negative case returns an owner or output;
+all require acknowledged cleanup and no forbidden calls, overflow, live owners
+or uncertain owners.
+
+The direct controls verify actual bytes/EOF, fresh acquisition counters and
+oversized-request or retired-descriptor refusal before forwarding. The 65537-byte
+request uses an allocated 65536-byte buffer and also exceeds remaining-plus-one;
+it does not independently discriminate removal of the maximum-request check.
+Native received bytes and accepted bytes are counted separately. Sparse creation
+uses a known descriptor with one acknowledged close, without allocating a role
+image of that size.
+
+Forty-eight protected original input anchors were retained across the three runs.
+The unchanged frozen Python selector separately accepted both cells from the 14
+new original anchors, totaling 28 selections. Those images were exported before
+role mutation or trusted-SHA substitution: this validates original input
+compatibility, not changed role files, substituted hashes or published outputs.
+
+Manifest SHA256:
+`2f08301480b3e41009dcedea8b49beeff78970bb100894b8d9f9b4f269ce8154`.
+`root-task2-role-negative-acceptance.json` binds the three runs, original-input
+selection audit and independent final runtime review. These accepted finite checks
+do not establish complete role streaming or the full ownership/cap matrix.
+
 ## Limits and next gates
 
 Parent-only native observations matched before and after each stage: physical
@@ -190,10 +231,11 @@ process/libc descriptors, allocation/RSS, arbitrary short-I/O/EINTR behavior or
 concurrent atomic ledger observations. The initial recorder omitted the default
 reset operation; new reset-aware tests do not retroactively change that evidence.
 
-Planned next are finite role admission negatives and a reviewed adapter for ordinary
-publication faults. Direct writer bookkeeping now has its own accepted prerequisite;
-integrated marker-fault reachability and controlled numeric descriptor reuse remain
-separate gates.
+Planned next are role streams around the 65536-byte chunk boundary and a reviewed
+adapter for ordinary publication faults. Direct writer bookkeeping has its own
+accepted prerequisite; its protocol bridge needs a separately reviewed acquisition
+interface and renewed matching-source controls. Integrated marker-fault reachability
+and controlled numeric descriptor reuse remain separate gates.
 
 Full depth/reservation and byte-cap coverage, fault/race cases, guard mutants,
 actual Swift-output ingestion by the unchanged Python filesystem reader, real
