@@ -326,10 +326,93 @@ selection and independent review. Source-level buffer/storage bounds and these
 ordinary full-progress traces do not establish allocation/RSS, arbitrary
 short-I/O/EINTR, maximum-role streaming, forced descriptor reuse or full Task2.
 
+## Retained Swift-output interoperability
+
+A separate private package preserves all 282 ordinary-fault inputs and 50
+methods. Two new Swift test sources add five methods. Independent source review
+preceded a fresh 40-unit, 41-object build; all five newly selected methods passed
+with zero failures, unexpected errors or skips. The existing 50 methods remain
+source-preserved; this checkpoint does not claim a new selection of those methods.
+
+Root prepared eleven original synthetic trees with protected configuration,
+receipt and schedule images. The unchanged Python input selector accepted both
+indices from each original anchor, totaling 22 input selections, before Swift
+publication. These inputs are separate from output-reader evidence.
+
+The five Swift methods published eleven journals and commit markers into those
+same retained trees. Assertions require exact independent bytes, one encoding,
+final acknowledged cleanup, zero definite/uncertain charge and no guard overflow.
+Empty publications additionally refuse a fresh owner after actual publication,
+with unchanged disk facts and refusal before observer rescue. The initial output
+inventory bound 121 directory records, 88 unchanged input files and 22 original
+outputs by full metadata, hashes and actual Swift-observed output inodes.
+
+Eleven separately owned unchanged external Python readers then produced:
+
+| Actual reader cases | Count | Outcome |
+| --- | ---: | --- |
+| Empty, planned, failed and pending; both indices | 8 | accepted |
+| Missing actual marker | 1 | missingPublication |
+| Actual marker truncated to three bytes | 1 | partialPublication |
+| Actual marker index digit changed from 0 to 1 | 1 | publicationBinding |
+
+Accepted reads compare the actual returned immutable decoded structure, including
+closed keys and exact scalar types, with independent literal journals. They also
+check index, mode, input-receipt digest, journal digest and byte count. All eight
+returned owners close with acknowledged, zero-definite/zero-uncertain state.
+
+The three negative cases begin with actual successful empty Swift publications.
+A separately reviewed one-shot transform relocates the original missing marker
+without changing its inode, or retains a full original reference outside cells
+before truncating or changing the actual primary marker in place. References are
+readback evidence; they never replace the consumer input. No restore, retry,
+chmod or output reconstruction occurs. Partial/wrong references are exclusive
+0400 files; actual cell files remain 0600 and directories 0700. Each content
+mutation retains original primary inode, mode, UID and single-link identity.
+Both admitted writers close once with acknowledgment. Relocation acquires no
+writer descriptor and reports no fictitious writer close.
+
+The missing-marker reader returns no owner and exposes no cleanup acknowledgment;
+owner absence is not a global descriptor certificate. The partial/wrong readers
+return owners and require their actual sole close and zero definite/uncertain
+state. The derived inventory and post-reader audits preserve all eight positive
+trees, 88 input files, 21 cell outputs and three outside references. The Swift, inventory, transform and reader child
+commands have complete owned-process receipts and separately checked source bindings.
+
+The first origin audit failed because it treated directory link count as stable
+when two outputs were added. Actual APFS selected-directory counts changed from
+5 to 7. The failure, original inline source and earlier transform packet remain
+preserved. A new synthetic sibling diagnostic established exact addition and
+relocation deltas and rejected the old predicate plus wrong membership, link and
+inode controls. The corrected audit and new transform derivative preserve
+directory device/inode/mode/UID with exact membership/link deltas; all file
+single-link checks and unaffected directory facts remain strict. Successful
+publication and inventory commands were not repeated for this audit correction.
+A separate auditor review corrected numeric/Boolean equivalence and duplicate-key
+acceptance before use, with discriminating metadata controls.
+
+Native observations of the actual physical retained envelope passed before
+preparation, after preparation, before publication, after publication and after
+all readers. They verify stable literal-prefix identity, nonunion APFS, protected
+descriptor flags and acknowledged sole probe close. They do not certify fixture
+contents or total process/libc descriptors. The separate diagnostic-parent probe
+retains its relative-versus-absolute executable-spelling qualification with the
+same pinned artifact resolution; it is not claimed as an exact spelling match.
+
+Manifest SHA256:
+`053226151577bd75b8f1c758006eb5d9625fcc653bf03fe62d5ae546fc0933a0`.
+Transform derivative SHA256:
+`24ec899dd80746f7980da3e106b7c48bf6e0fb4206ad1204a82c3e0fbf907698`.
+The private acceptance record binds the separate preparation, publication,
+correction, positive-reader, transform, refusal-reader and final filesystem gates.
+This is finite output interoperability, not full Task2/Task3/Task4 acceptance,
+helper execution, allocation/RSS or production editor routing.
+
 ## Limits and next gates
 
-Parent-only native observations matched before and after each stage: physical
-temporary-parent spelling, directory identity, protected descriptor flags,
+For the earlier temporary-fixture stages, parent-only native observations matched
+before and after each stage: physical temporary-parent spelling, directory
+identity, protected descriptor flags,
 nonunion APFS and acknowledged probe close. Preserved 0400, single-link input
 anchors bind immediate UUID-container/cells paths; temporary roots were absent
 after teardown. This assumes no mount injection or replacement and does not
@@ -342,14 +425,14 @@ process/libc descriptors, allocation/RSS, arbitrary short-I/O/EINTR behavior or
 concurrent atomic ledger observations. The initial recorder omitted the default
 reset operation; new reset-aware tests do not retroactively change that evidence.
 
-An explicitly partial proof retaining actual Swift outputs for the unchanged
-Python reader is in preparation. The ordinary fault adapter has matching source,
+The finite retained-output proof above consumes actual Swift files through the
+unchanged Python reader. The ordinary fault adapter has matching source,
 native prerequisite and reached marker-fault evidence. Controlled numerical
 descriptor reuse, other fault positions and full component acceptance remain
 separate gates.
 
 Full depth/reservation and byte-cap coverage, fault/race cases, guard mutants,
-actual Swift-output ingestion by the unchanged Python filesystem reader, real
-helper roles, the memory campaign and production editor routing remain incomplete.
+broader output-interoperability coverage, real helper roles, the memory campaign
+and production editor routing remain incomplete.
 No new packaged desktop, physical input, accessibility or performance acceptance
 is established by these checkpoints.
