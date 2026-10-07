@@ -1110,6 +1110,20 @@ vectors. This accepts only the closed44 schema and exact42-field projection;
 full adapter and large-case execution remain gated. The finite retention plan is accepted as
 planning only; no large fixture, role stage or retention pass has run.
 
+The separate structural role-trace validator now passes28 unchanged metadata
+methods with zero failures/errors/skips, following a genuine baseline RED against
+the inherited schema. Independent source and actual-evidence reviews accept
+closed fields, ordinary types, bounded arrays and the four literal profiles.
+The authentic inherited parser and schema remain in use for their existing
+domain. This accepts structural validation only: exact outcome equations,
+trace framing, original/current-file binding and large native cases remain
+gated. The inherited raw parser has no predecode depth guard.
+
+Structural finite acceptance SHA256:
+`5c2d9d9635f2d9b7eac4c4c9528eeb4e706d4fdb771add60c0ca37753bb9e8fc`.
+Its private gate is
+`.local/search-campaign-swift-journal-20261007/root-role-trace-shape-finite-acceptance-v1.json`.
+
 Full Swift Task2/Task3/Task4, valid maximum-record streams, merged descriptor/fault
 coverage, unchanged output-consumer interoperability, memory/performance,
 helper/editor routing and public publisher-source adoption remain outstanding.
