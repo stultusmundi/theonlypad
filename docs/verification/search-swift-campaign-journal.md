@@ -1072,12 +1072,41 @@ Root finite acceptance SHA256:
 The private finite gate is
 `.local/search-campaign-swift-journal-20261007/root-task2-small-record-boundary-finite-acceptance.json`.
 
-Next source preparation uses this accepted91-method common parent for four
-separate role-streaming methods: bounded direct forwarding, a known helper-byte
-mutation, two actual64 MiB roles with four complete hash streams, and a final
-helper-content change before its last stream. Independently reproduced bounded
-digest vectors are accepted; source review, matching build and native execution
-remain future gates. No64 MiB streaming or final-role drift result is claimed.
+The four role-streaming method sources now have independent source review and
+a matching build:61 active units/62 linked objects, preserving the91-method
+common parent and adding four method definitions. No new producer method ran.
+The prepared cases cover bounded forwarding, a known helper-byte mutation,
+two64 MiB roles with four hash streams, and final helper-content drift.
+Independent bounded digest vectors are accepted; large-role execution remains gated.
+
+The separate tiny reader prerequisite is now finitely accepted. Review caught an
+incorrect unchanged-directory-link-count condition during fixture creation.
+Eight injected actual-action controls produced five expected membership failures
+and one positive-case error on the original source. A versioned create-only fix
+checks exactly one bounded filename addition, stable directory identity, and an
+explicit link-count delta0/+1 envelope; noncreate and regular-file checks remain.
+The unchanged eight controls then passed with zero failures/errors/skips.
+
+One actual synthetic original-parent read returned/accepted3 bytes, requested5,
+used two read API invocations, observed EOF and acknowledged one close. All41
+supporting file actions acknowledged their own closes; exact original images,
+both original receipt associations,14 directories and distinct inside/outside
+protected-anchor identities were checked. Root and independent evidence reviews
+accept this finite prerequisite. These are component observations, not global
+FD counts, hidden native-attempt bounds, allocation/RSS or continuous retention.
+The current temporary fixture's filesystem type is not inferred from the separate
+historical filesystem evidence. No64 MiB stream or final-role drift is accepted.
+
+Tiny finite acceptance SHA256:
+`4e89006660f7c89c5cd634cf6b27a5346c911f0f0b405098c871f0c9912a727c`.
+Its private gate is
+`.local/search-campaign-swift-journal-20261007/root-actual-tiny-reader-finite-acceptance-v1.json`.
+The next adapter uses a new closed44-key role interface while preserving the
+inherited42-key interface. Twelve reviewed metadata regression methods produced
+one expected new44-positive failure and eleven passes against the actual inherited
+validator. The minimal schema extension is being prepared separately; full adapter
+and large-case execution remain gated. The finite retention plan is accepted as
+planning only; no large fixture, role stage or retention pass has run.
 
 Full Swift Task2/Task3/Task4, valid maximum-record streams, merged descriptor/fault
 coverage, unchanged output-consumer interoperability, memory/performance,
