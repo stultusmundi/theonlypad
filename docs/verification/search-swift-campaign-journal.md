@@ -606,3 +606,117 @@ broader output-interoperability coverage, real helper roles, the memory campaign
 and production editor routing remain incomplete.
 No new packaged desktop, physical input, accessibility or performance acceptance
 is established by these checkpoints.
+
+## Uncertain cleanup and retirement boundary
+
+A separate private package preserves all 375 ledger input records and all 45
+active parent compilation units unchanged. The original Package is archived
+through one declared path relocation; the other 374 paths retain their original
+fields, bytes and origins. Three new test sources and three Package entries add
+seven controls without changing the Directory, controller, publisher, encoder,
+old guard or consumer. The package contains 442 input records.
+
+Independent source review preceded a fresh matched build of 48 frozen units
+(47 Swift and one C) and 49 linked objects. Source compiler warnings were zero;
+the retained verbose manifest-command warning prefix remains a separate category.
+Root then ran 17 separately gated selections on that build:
+
+| Stage | Methods | Protected original anchors | Failures / unexpected / skips |
+| --- | ---: | ---: | --- |
+| Acknowledged raw and interrupted DIR cleanup | 1 | 1 | 0 / 0 / 0 |
+| Direct FD retirement and known-rescue guards | 1 | 1 | 0 / 0 / 0 |
+| FD report before native cleanup | 1 | 1 | 0 / 0 / 0 |
+| FD report after native acknowledgment | 1 | 1 | 0 / 0 / 0 |
+| Direct DIR retirement and known-rescue guards | 1 | 1 | 0 / 0 / 0 |
+| DIR report before native cleanup | 1 | 1 | 0 / 0 / 0 |
+| DIR report after native acknowledgment | 1 | 1 | 0 / 0 / 0 |
+| Preserved ten separately gated selections | 67 | 75 | 0 / 0 / 0 |
+
+These total 74 distinct methods and 82 original anchors. Each new control uses
+index 0 at physical depth 24; each direct guard method has two fresh subcases
+within one original fixture. Positive and guard results were audited before
+owner negatives. Eighteen separately owned native parent observations retain
+physical-parent identity, nonunion APFS, protected descriptor flags and sole
+acknowledged probe close. Exact named outcomes, source/tool/bundle bindings and
+complete owned-process receipts are retained. The watchdog's fixed 1 MiB stream
+retention remains distinct from the 128 KiB post-run stage acceptance cap.
+
+The positive control performs acknowledged raw cleanup and an actual nonnil
+directory read, followed by one injected body EIO before EOF and acknowledged
+DIR cleanup. It drains to zero definite/uncertain charge. Direct qualifications
+refuse retired cleanup arguments before native forwarding. Before-cleanup faults
+transfer a known live resource into a pre-reserved fixture capsule and report
+EIO without native target cleanup. After-cleanup faults first require exactly
+one successful native close or closedir acknowledgment, then report EIO.
+
+The FD-after control installs a fixture-owned sentinel through a nonclobbering
+duplicate, requires exact numerical-slot equality and checks its identity and
+survival through repeated owner cleanup. Only the capsule later closes that
+known resource. DIR-before rescue retains the exact known live typed stream;
+DIR-after retains no actionable freed pointer. No raw close behind a live DIR,
+unknown-handle lookup, guessed resource, clobbering replacement or native retry
+is authorized.
+
+Owner FD reports preserve one uncertain charge; DIR reports preserve two.
+Callback snapshots retain the original charge in flight until the reported
+result returns. The guard's one uncertain token is distinct from the DIR's
+two-charge ledger state. Poisoned acquisition refuses before guarded work;
+other definite owners drain once, and repeated drain returns the same I/O
+failure without new operations. Known capsule rescue never clears the original
+owner or guard uncertainty or creates a clean-zero acknowledgment. These seven
+new controls publish no journals or markers and do not call public finish.
+
+Seven closed typed traces contain 30 ordered events and 50 checkpoints. Audits
+compare complete literal arrays and distinguish guard attempts, policy calls,
+actual native attempts/ACKs, injected reports and known rescue. Disarmed admission
+and drain activity remains counted; early-body requirements use explicit phase
+deltas. The source checks complete encoded JSON against 65536 bytes before
+emission, without trimming. The reviewed conservative 25600-byte envelope is
+metadata arithmetic, not an allocation/RSS measurement. Twenty metadata controls
+accept seven actual traces and reject thirteen malformed in-memory variants;
+they are not native candidate mutants, repeated tests or behavioral RED.
+
+All nine capsule workspaces and six uncertain original containers remain
+retained. Named current checks verify physical identities, exact membership,
+full mode/ownership/link facts, fixed-size synthetic sentinel contents and
+unchanged original input images/files with both-cell outputs absent. P's original
+container is removed only after fully observed acknowledged-zero cleanup;
+its protected original export and workspace remain. Earlier removed fixtures
+are not retrospectively certified, and no broad temporary-parent census or
+unknown resource cleanup is performed by these metadata checks.
+
+Two pre-freeze metadata helper corrections allocate protection before owned
+open/scandir and keep receipt bytes distinct from the protected anchor bytes.
+A model-read allegation was withdrawn after exact-path reproduction; its model
+bytes stayed unchanged. These source/metadata corrections are preserved history,
+not executed product failures or behavioral RED, and no successful native stage
+was repeated for them.
+
+Source manifest SHA256:
+`90416bc8a5d2c90300739437563f1f1485fd333b9c17812d80ddfdf740a3e281`.
+Independent runtime review accepts this finite native slice. The private native
+review acceptance SHA256 is:
+`b596c870386bfff742b80698245cf6959e27618c335fab6bcaeef52b1a239886`.
+A separate barrier summary is root-verified; the independent review covers the
+retained native evidence rather than independently reviewing that summary record.
+
+**Completed input-only reader gate.** Seven separately owned unchanged Python
+selector children selected both indices from the seven new protected ORIGINAL
+exports, completing fourteen calls. Each exited zero with a complete owned-process
+receipt, one 321-byte stdout line and empty stderr. Independent reader evidence
+review accepts this finite compatibility slice. The complete finite group acceptance
+SHA256 is:
+`d81d31ac92bd3fcdd10814a2fd2954ba3c0c2d502b47b9c03fc627299c41bc2b`.
+This certifies original-image compatibility; output validation and sticky-uncertainty
+discharge remain unaccepted.
+
+This is serial synthetic injected EIO before native cleanup or after observed
+native success, not actual operating-system close/closedir failure acceptance.
+Sampled primitive retirement/rescue does not prove public publisher finish or
+final-receipt refusal, arbitrary error/reuse mutants, hostile concurrency, every
+internal instruction, total process/libc descriptors or an ordinary measured
+ownership peak. Full Task2/Task3/Task4, broader output interoperability,
+allocation/RSS, actual helper/editor routing and application adoption remain
+outstanding. The test-only controller and new guard are not adopted into
+production; packaged desktop, physical input and Accessibility acceptance are
+unchanged.
