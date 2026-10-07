@@ -1029,3 +1029,57 @@ reproduction, new output-consumer interoperability, helper/editor routing,
 memory/performance and public publisher-source adoption remain unaccepted.
 The tested package and desktop/accessibility evidence are unchanged. No new
 public source or runnable harness is adopted by this documentation checkpoint.
+
+## Finite small-record limits and mutation checkpoint (2026-10-07)
+
+The subsequent small-record slice is now independently accepted. One matching
+frozen packet preserves the accepted84-method parent and adds seven methods in
+three new test units. Its720 source origins build57 active units/58 linked
+objects with zero source compiler warnings. All34 separately admitted native
+selections pass91 distinct named methods with zero failures, unexpected errors
+or skips. The inherited84 methods ran again on this matching binary; their old
+results were not transferred. Actual evidence contains104 distinct protected
+exports,35 opened-parent observations and69 complete test/parent receipts. The
+build receipt is separate. Complete stdout peaks at29856 bytes below131072
+post-run acceptance, separate from fixed1 MiB watchdog retention.
+
+The new standalone helper control verifies bounded, fixture-owned mutations and
+acknowledged cleanup before dependent tests. The owner control verifies ordinary
+publication and small-stream readback. Five further methods cover actual16384-byte
+input streams followed by trusted-image refusal, oversized journal/marker
+readback refusal, real journal growth after initial status, real short EOF and
+the at-cap input growth probe. The exact-cap inputs are whitespace fixtures,
+not valid maximum-size JSON images. The growth probe reaches a protected-guard
+I/O refusal; hidden native excess bytes and the Candidate reader's own excess
+append branch remain unproved. Positive returned-byte accounting is distinct
+from bytes appended by the Candidate. Helper call totals cover the declared
+instrumented subset, not every native call.
+
+Independent reviews accept the new seven methods, matching-binary inherited
+selection and combined evidence closure. Separate host controls accept three
+authentic cases and reject twelve malformed metadata variants at their specified
+gates. Those controls add zero native tests or native watchdog receipts. Their
+stopped driver-prefix check refuses a rehashed mismatched selection before
+approval, native-command writes or dispatch. Existing narrow retained identity/content
+proofs keep their original scope; no missing timestamps are invented. Source
+preparation errors and historical prospective flags remain preserved separately
+from actual runtime evidence.
+
+Selected producer manifest SHA256:
+`df092269c6430d92274728fa303b059f69d29c80caee18aab8b2e98838349edb`.
+Root finite acceptance SHA256:
+`1684f13576ae3c1fe504977ef9d06221ae32a7d0b8392e1d919d42b4abac2d75`.
+The private finite gate is
+`.local/search-campaign-swift-journal-20261007/root-task2-small-record-boundary-finite-acceptance.json`.
+
+Next source preparation uses this accepted91-method common parent for four
+separate role-streaming methods: bounded direct forwarding, a known helper-byte
+mutation, two actual64 MiB roles with four complete hash streams, and a final
+helper-content change before its last stream. Independently reproduced bounded
+digest vectors are accepted; source review, matching build and native execution
+remain future gates. No64 MiB streaming or final-role drift result is claimed.
+
+Full Swift Task2/Task3/Task4, valid maximum-record streams, merged descriptor/fault
+coverage, unchanged output-consumer interoperability, memory/performance,
+helper/editor routing and public publisher-source adoption remain outstanding.
+This checkpoint adds documentation only; package and desktop evidence are unchanged.
