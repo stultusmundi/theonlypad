@@ -1,6 +1,6 @@
 # Production parent response accumulator design
 
-Status: planned architectural component; independent specification/quality design review approves it. Base: verified helper checkpoint `7e63d4d`. No collector implementation or tests have run. Root owns future RED/GREEN and runtime. Fixed parent policy, admission accounting/retry and native routing remain separate tasks.
+Status: implemented component, independently reviewed and tested on2026-10-09. Base: verified helper checkpoint `7e63d4d`. Focused32/0, neighboring173/0, full app/core927/0 and five actual nested-helper methods pass with the production factory. Initial absent-API and behavioral RED evidence is preserved. See [verification](../../verification/search-parent-response-accumulator.md). Fixed parent policy, admission accounting/retry and native routing remain separate tasks; independent final checkpoint evidence review approves the scope for a local commit.
 
 ## Placement and scope
 
@@ -99,8 +99,8 @@ After component and real-codec GREEN plus independent review, Root may separatel
 ## Review checklist and limits
 
 - [x] Different design reviewer validates thread/discard API and state/error precedence against complete current sink/codec contracts.
-- [ ] Different test author derives literal expectations, including Unicode fixture counts, and retains original regression assertions.
-- [ ] Root obtains compiler and behavioral RED, focused GREEN, unchanged codec/wire/core checks and source review.
-- [ ] Root separately verifies real helper with the production factory before default composition/native owner tasks.
+- [x] Different test author derives literal expectations, including Unicode fixture counts, and retains original regression assertions.
+- [x] Root obtains compiler and behavioral RED, focused GREEN, unchanged codec/wire/core checks and source review.
+- [x] Root separately verifies real helper with the production factory before default composition/native owner tasks.
 
 This design scopes only the collector. It neither grants runtime authority nor changes accepted packaging/worker sources. Nonthrowing owner-only discard and bounded content rather than measured memory are explicit acceptance limits, not hidden assumptions.

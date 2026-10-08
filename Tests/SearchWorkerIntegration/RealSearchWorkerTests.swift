@@ -266,81 +266,6 @@ private final class FragmentedHelperConnection: SearchChildConnection, @unchecke
   func close() async { await base.close() }
 }
 
-/// Small trusted test-only collection; the real response codec confines callbacks.
-private final class HelperResponseAccumulator: SearchParentWireResponseAccumulator,
-  @unchecked Sendable
-{
-  let expected: SearchWireIdentity
-  let owner = Thread.current
-  var response: SearchWireResponse?
-  var ranges: [NSRange] = []
-  var bytes = Data()
-  var terminal: SearchWireTerminal?
-  init(request: SearchWireRequest) { expected = request.identity }
-  private func check() throws {
-    guard Thread.current === owner, !Thread.isMainThread else {
-      throw HelperTestFailure("Wrong codec lane")
-    }
-  }
-  func helloAccepted(generation: UUID) throws { try check() }
-  func begin(_ response: SearchWireResponse) throws {
-    try check()
-    guard self.response == nil, response.identity == expected else {
-      throw HelperTestFailure("Wrong response")
-    }
-    self.response = response
-  }
-  func appendRanges(_ values: [NSRange]) throws {
-    try check()
-    guard values.count <= 16 - ranges.count else {
-      throw HelperTestFailure("Synthetic range bound")
-    }
-    ranges.append(contentsOf: values)
-  }
-  func appendReplacementUTF8(_ values: Data) throws {
-    try check()
-    guard values.count <= 1024 - bytes.count else {
-      throw HelperTestFailure("Synthetic output bound")
-    }
-    bytes.append(values)
-  }
-  func complete(_ identity: SearchWireIdentity, terminal: SearchWireTerminal) throws {
-    try check()
-    guard identity == expected, self.terminal == nil else {
-      throw HelperTestFailure("Wrong terminal identity")
-    }
-    self.terminal = terminal
-  }
-  func takeTerminal(for identity: SearchWireIdentity) throws -> (
-    terminal: SearchWireTerminal, output: SearchExecutionOutput?
-  ) {
-    try check()
-    guard identity == expected, let terminal else { throw HelperTestFailure("Missing terminal") }
-    let output: SearchExecutionOutput?
-    switch terminal {
-    case .failure: output = nil
-    case .success:
-      guard let response else { throw HelperTestFailure("Missing response") }
-      let invalid = transcode(
-        bytes.makeIterator(), from: UTF8.self, to: UTF16.self,
-        stoppingOnError: true, into: { _ in })
-      guard !invalid else { throw HelperTestFailure("Invalid output UTF8") }
-      output = SearchExecutionOutput(
-        matches: ranges,
-        replacement: response.replacementUTF16 == nil ? nil : String(decoding: bytes, as: UTF8.self)
-      )
-    }
-    discard()
-    return (terminal, output)
-  }
-  func discard() {
-    response = nil
-    ranges.removeAll()
-    bytes.removeAll()
-    terminal = nil
-  }
-}
-
 private final class RealHelperHarness {
   let artifact: HelperArtifact
   let observations: HelperObservations
@@ -362,7 +287,7 @@ private final class RealHelperHarness {
       now: { DispatchTime.now().uptimeNanoseconds },
       schedule: { SearchChildDispatchTimer(deadline: $0, queue: timers, action: $1) })
     driver = try SearchParentWireDriver(
-      lifecycle: lifecycle, accumulatorFactory: { HelperResponseAccumulator(request: $0) },
+      lifecycle: lifecycle, accumulatorFactory: { SearchParentResponseAccumulator(request: $0) },
       maximumWireBytesPerChild: 1_000_000,
       observe: {
         if case .sessionReleased(let generation) = $0 {

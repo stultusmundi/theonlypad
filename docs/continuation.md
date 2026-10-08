@@ -1,5 +1,24 @@
 # Continuation
 
+## Production parent response collection — 2026-10-09
+
+The isolated `feat/search-parent-response-accumulator` branch adds the bounded,
+owner-thread production collector and replaces the real-helper test factory's
+private collector. Direct/codec32/0, neighboring173/0, full app/core927/0 and
+five actual final nested-helper methods pass. Current local package/archive/SBOM
+and explicit helper/application signatures pass. All five controlled helper
+shutdowns record exact owned SIGKILL, sole consuming reap and settled parent lane;
+these are cleanup evidence, not adversarial-regex containment. Independent source
+and factory reviews approve the changes; independent final checkpoint evidence
+review also approves the scope. See [verification](verification/search-parent-response-accumulator.md).
+
+Next: fixed production parent driver/policy composition, admission accounting and
+retry ownership, then native document/folder search routing. The editor still
+uses in-process search. Current desktop UI Automation authentication remains
+user-owned and pending; continue independent implementation. No memory/physical
+input/VoiceOver/macOS14/Intel acceptance or whole-product completion follows.
+No remote merge/push/release is authorized.
+
 ## Fixed production search helper — 2026-10-08
 
 The isolated `feat/search-helper-production` branch implements the fixed public

@@ -5,6 +5,8 @@
 
 **Goal:** Supply the production response collector behind the existing codec sink.
 
+**Checkpoint2026-10-09:** Tasks1/2 implemented and tested; full app/core927/0 and current nested-helper5/0 pass. Local package/archive/SBOM and explicit helper/app signatures pass. Independent final evidence review approves this local checkpoint; default policy/admission/native routing remain separate.
+
 **Architecture:** One owner-thread SearchExecution class retains compact request
 metadata, bounded ranges and strictly validated UTF8 replacement bytes. The
 existing reader authenticates source scalar boundaries; the collector validates
@@ -36,9 +38,9 @@ Tests/SearchExecutionTests/SearchParentResponseCodecTests.swift.
 Consumes validated SearchWireRequest/Response and SearchWireResponseSink;
 produces the spec's exact package class/error API and protocol conformance.
 
-- [ ] Independent design review approves the owner/state/error/bounds contract;
+- [x] Independent design review approves the owner/state/error/bounds contract;
   qualify empty signals before outcome credit, with owned shutdown signals kept.
-- [ ] A separate test author writes independent direct and genuine codec tests
+- [x] A separate test author writes independent direct and genuine codec tests
   before implementation. Codec tests use the actual lane/session/bridge and
   response writer/reader with the proposed factory. Direct tests cover every spec case.
   A small representative oracle is:
@@ -59,20 +61,20 @@ XCTAssertEqual(result.output?.matches, [NSRange(location: 1, length: 2)])
   Test helpers construct request inputUTF16=4, pattern="😀", find, expected
   response count1/nil replacement. Exact error/Unicode/range/phase cases follow
   the adopted spec; no production counters or hooks are added.
-- [ ] Root freezes actual sources/tests and first records absent-API compiler
+- [x] Root freezes actual sources/tests and first records absent-API compiler
   failure. In a separate ignored minimal package, add only a conforming naive
   collector shell: accept all callbacks, store ranges/Data, return one nominal
   output with String(decoding:as:), and discard storage. Root records actual
   behavioral assertions failing for absent validation/state handling. Never
   check in this shell or count compiler failure as behavioral RED.
-- [ ] Source implementer writes the specified class after RED. Sequence methods:
+- [x] Source implementer writes the specified class after RED. Sequence methods:
   owner guard; failed/phase guard; identity/shape check; subtractive bounds and
   strict transcode; append only fully validated batch. Errors clear payload and
   enter failed; no wrong-lane mutation. Failure terminal bypasses completeness
   and clears partial output. Successful take validates whole bytes, constructs
   output, detaches storage and enters taken. Keep whole-data validation separate
   from the per-chunk cap.
-- [ ] Root runs focused GREEN against exact frozen sources, then independent
+- [x] Root runs focused GREEN against exact frozen sources, then independent
   source reviewer verifies complete class/test conformance and resolves findings.
 
 Proposed focused invocation, executed directly by the existing watchdog:
@@ -90,7 +92,7 @@ The codec test file is authored before implementation in Task1. Modify
 only the factory binding in Tests/SearchWorkerIntegration/RealSearchWorkerTests.swift
 and remove the superseded test-only collector after direct/codec GREEN.
 
-- [ ] Independently review the already authored tests using actual
+- [x] Independently review the already authored tests using actual
   SearchParentCodecLane/session, bridge,
   request writer/boundary index and response reader/writer with the new factory.
   Capture no source outside the established job/upload scope. Assert exact
@@ -98,7 +100,7 @@ and remove the superseded test-only collector after direct/codec GREEN.
   replacement, semantic failure before begin/after partial body, invalid source
   scalar endpoints, trailing terminal junk and a fresh next-ordinal collector.
   Retain original instrumented codec tests unchanged.
-- [ ] Root verifies the genuine codec cases against the frozen RED shell from
+- [x] Root verifies the genuine codec cases against the frozen RED shell from
   Task1, then the actual production class. Record any already-passing baseline
   controls honestly; never alter an oracle to manufacture RED. GREEN selection:
 
@@ -106,9 +108,9 @@ and remove the superseded test-only collector after direct/codec GREEN.
 python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/parent-response-codec -- scripts/swift.sh test --scratch-path .build/parent-response --filter 'SearchParentResponse|SearchParentWireCodecSessionTests|SearchWire'
 ```
 
-- [ ] Reviewer checks codec/helper test source delta and original literal result,
+- [x] Reviewer checks codec/helper test source delta and original literal result,
   identity, reuse, pre-outcome signal/reap and strict joined cleanup assertions.
-- [ ] Root runs scripts/test-search-worker.sh with the production factory. The
+- [x] Root runs scripts/test-search-worker.sh with the production factory. The
   coordinator owns its watchdog; do not wrap it. Record current helper/test
   artifact hashes, actual five methods and all stage/cleanup receipts. This is
   production response collection acceptance, not UI routing or memory proof.
@@ -117,16 +119,18 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/parent-r
 
 Update dated verification, AGENTS, continuation and spec/plan states.
 
-- [ ] Root runs full current app/core through the direct600s watchdog, strict
+- [x] Root runs full current app/core through the direct600s watchdog, strict
   format, public-source and scoped diff checks. Actual full command:
 
 ```sh
-python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/parent-response-integrated -- scripts/swift.sh test --scratch-path .build/parent-response-integrated
+python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/parent-response-integrated-owned -- scripts/swift.sh test --scratch-path .build/parent-response-integrated
 xcrun swift-format lint --strict --recursive Sources Tests Package.swift
 python3 scripts/check-public.py
 ```
 
-- [ ] Independent final review matches actual receipts/pins and all planned,
+- [x] Independent final review matches actual receipts/pins and all planned,
   implemented/tested/blocked states. Make a scoped local commit after checks;
   no remote merge/push/release. Continue fixed parent policy/composition,
   production admission accounting/retry and native owner routing.
+
+Root additionally rebuilt the local package before the nested-helper selection, preserving prior dist artifacts under ignored synthetic evidence. This binds the actual five cases to this checkpoint's final helper; no desktop or memory acceptance is inferred. See docs/verification/search-parent-response-accumulator.md.
