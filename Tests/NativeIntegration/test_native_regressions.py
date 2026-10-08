@@ -11,6 +11,39 @@ SPEC=importlib.util.spec_from_file_location('native_regressions',Path(__file__).
 RUNNER=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(RUNNER)
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_help_requires_its_named_positive_suite(self):
+        text="Test Suite 'HelpReferenceTests' passed\nExecuted 5 tests, with 0 failures\n"
+        try:
+            result=RUNNER.parse_success('help',text)
+        except (KeyError,ValueError):
+            self.fail('A positive HelpReferenceTests result must be admitted by its own suite')
+        self.assertEqual(result,{'tests':5,'failures':0})
+        for text in ["Test Suite 'HelpReferenceTests' passed\nExecuted 0 tests, with 0 failures",
+                     "Test Suite 'EditorDocumentTransferTests' passed\nExecuted 5 tests, with 0 failures",
+                     "Test Suite 'HelpReferenceTests' passed\nExecuted 5 tests, with 1 failures",
+                     "Executed 5 tests, with 0 failures"]:
+            with self.subTest(text=text),self.assertRaises(ValueError):
+                RUNNER.parse_success('help',text)
+
+    def test_help_freezes_actual_controller_and_separate_test_without_presentation_transform(self):
+        root,run=self.fixture()
+        controller='// complete original Help controller\n'
+        test='// real hidden Help assertions\n'
+        (root/'Sources/TheOnlyPad/HelpController.swift').write_text(controller)
+        (root/'Tests/NativeIntegration/HelpReferenceTests.swift').write_text(test)
+        (root/'scripts/test-help-reference.sh').write_text('# fixed Help entry\n')
+        try:
+            args=RUNNER.parse_args(['help'])
+        except SystemExit:
+            self.fail('The Help entry must select an isolated Help regression run')
+        manifest=RUNNER.freeze(root,run,args.suite)
+        self.assertEqual((run/'Package/Sources/NativeRouting/HelpController.swift').read_text(),controller)
+        self.assertEqual((run/'Package/Tests/NativeRoutingTests/HelpReferenceTests.swift').read_text(),test)
+        self.assertFalse((run/'Package/Sources/NativeRouting/TheOnlyPadApplication.swift').exists())
+        RUNNER.verify(run,manifest)
+        (run/'Package/Sources/NativeRouting/HelpController.swift').write_text('changed after freeze')
+        with self.assertRaises(ValueError): RUNNER.verify(run,manifest)
+
     def test_folder_navigation_requires_its_named_positive_suite(self):
         text="Test Suite 'FolderNavigationTests' passed\nExecuted 2 tests, with 0 failures\n"
         self.assertEqual(RUNNER.parse_success('folder-navigation',text),{'tests':2,'failures':0})

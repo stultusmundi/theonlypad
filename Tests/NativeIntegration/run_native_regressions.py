@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
+        'help':('HelpReferenceTests','help-reference-tests'),
         'search-replacement':('SearchReplacementTests','search-replacement-tests'),
         'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
         'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
@@ -61,6 +62,7 @@ def parse_args(argv):
 def discover(root,suite,prebuilt):
     paths={root/name for name in FIXED}
     if suite=='folder-navigation': paths.add(root/'scripts/test-folder-navigation.sh')
+    if suite=='help': paths.add(root/'scripts/test-help-reference.sh')
     if suite=='settings': paths.add(root/'scripts/test-document-applied-settings.sh')
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:

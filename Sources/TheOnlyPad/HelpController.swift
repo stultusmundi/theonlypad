@@ -1,7 +1,15 @@
 import AppKit
 import PadCore
 
-@MainActor final class HelpController: NSWindowController {
+@MainActor final class HelpController: NSWindowController, NSSearchFieldDelegate {
+  private let search = NSSearchField()
+  private let previous = NSButton()
+  private let next = NSButton()
+  private let status = NSTextField(labelWithString: "")
+  private let text = NSTextView()
+  private var matches: [NSRange] = []
+  private var matchIndex = 0
+
   init(commands: [CommandDescriptor]) {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
@@ -9,10 +17,10 @@ import PadCore
     super.init(window: window)
     window.title = AppIdentity.name + " Help"
     window.isReleasedWhenClosed = false
-    let scroll = NSScrollView(frame: window.contentView!.bounds)
+    let content = NSView(frame: window.contentView!.bounds)
+    let scroll = NSScrollView(frame: content.bounds)
     scroll.hasVerticalScroller = true
-    scroll.autoresizingMask = [.width, .height]
-    let text = NSTextView(frame: scroll.bounds)
+    text.frame = scroll.bounds
     text.isEditable = false
     text.isSelectable = true
     text.font = .systemFont(ofSize: 14)
@@ -21,9 +29,12 @@ import PadCore
     text.autoresizingMask = [.width]
     text.textContainer?.widthTracksTextView = true
     text.setAccessibilityLabel("Help and keyboard shortcuts")
-    let shortcuts = commands.compactMap { command -> String? in
-      guard let shortcut = command.shortcut else { return nil }
-      return command.title + " — " + shortcut
+    text.setAccessibilityIdentifier("help.text")
+    let shortcuts = commands.map { command in
+      command.title + " — "
+        + (command.shortcut
+          ?? NSLocalizedString(
+            "No shortcut", comment: "Help reference command without a keyboard assignment"))
     }.joined(separator: "\n")
     text.string = """
       \(AppIdentity.name) \(AppIdentity.version)
@@ -64,17 +75,117 @@ import PadCore
 
       If stored shortcuts cannot be applied, the shortcut editor explains why and retains them. Recover Stored Settings offers explicit reload or a checked retry of an unconfirmed save. The app waits for you to resolve an unconfirmed settings save before quitting.
 
-      cmd = Command; alt = Option; shift = Shift.
+      cmd = Command; alt = Option; shift = Shift; ctrl = Control.
 
       \(shortcuts)
 
       Menus and Command Palette list every registered command. Native editing shortcuts act on the focused text control.
       """
     scroll.documentView = text
-    window.contentView = scroll
+    search.placeholderString = NSLocalizedString(
+      "Search help and commands", comment: "Help search placeholder")
+    search.setAccessibilityLabel(search.placeholderString)
+    search.setAccessibilityIdentifier("help.search")
+    search.delegate = self
+    // Text changes select the first match; only Return/search-button actions advance it.
+    search.sendsWholeSearchString = true
+    search.target = self
+    search.action = #selector(findNext)
+    previous.title = NSLocalizedString("Previous", comment: "Previous help search match")
+    previous.target = self
+    previous.action = #selector(findPrevious)
+    previous.setAccessibilityIdentifier("help.previous")
+    next.title = NSLocalizedString("Next", comment: "Next help search match")
+    next.target = self
+    next.action = #selector(findNext)
+    next.setAccessibilityIdentifier("help.next")
+    status.setAccessibilityLabel(
+      NSLocalizedString("Help search matches", comment: "Help match status"))
+    status.setAccessibilityIdentifier("help.matchStatus")
+    status.textColor = .secondaryLabelColor
+    for view in [search, previous, next, status, scroll] {
+      view.translatesAutoresizingMaskIntoConstraints = false
+      content.addSubview(view)
+    }
+    NSLayoutConstraint.activate([
+      search.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+      search.topAnchor.constraint(equalTo: content.topAnchor, constant: 12),
+      previous.leadingAnchor.constraint(equalTo: search.trailingAnchor, constant: 8),
+      previous.centerYAnchor.constraint(equalTo: search.centerYAnchor),
+      next.leadingAnchor.constraint(equalTo: previous.trailingAnchor, constant: 8),
+      next.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+      next.centerYAnchor.constraint(equalTo: search.centerYAnchor),
+      status.leadingAnchor.constraint(equalTo: search.leadingAnchor),
+      status.trailingAnchor.constraint(equalTo: next.trailingAnchor),
+      status.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 8),
+      scroll.topAnchor.constraint(equalTo: status.bottomAnchor, constant: 8),
+      scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+      scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+      scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+    ])
+    window.contentView = content
+    window.initialFirstResponder = search
+    updateSearch()
     window.minSize = NSSize(width: 400, height: 320)
     window.setContentSize(NSSize(width: 700, height: 600))
     window.center()
   }
   required init?(coder: NSCoder) { nil }
+
+  func controlTextDidChange(_ notification: Notification) {
+    guard notification.object as? NSSearchField === search else { return }
+    updateSearch()
+  }
+
+  private func updateSearch() {
+    matches = []
+    matchIndex = 0
+    let query = search.stringValue
+    let source = text.string as NSString
+    if !query.isEmpty {
+      var offset = 0
+      while offset < source.length {
+        let range = source.range(
+          of: query, options: [.caseInsensitive],
+          range: NSRange(location: offset, length: source.length - offset))
+        guard range.location != NSNotFound, range.length > 0 else { break }
+        matches.append(range)
+        offset = NSMaxRange(range)
+      }
+    }
+    previous.isEnabled = !matches.isEmpty
+    next.isEnabled = !matches.isEmpty
+    if matches.isEmpty {
+      status.stringValue =
+        query.isEmpty
+        ? ""
+        : NSLocalizedString(
+          "No matches", comment: "Help search has no matching text")
+      text.setSelectedRange(NSRange(location: text.selectedRange().location, length: 0))
+    } else {
+      showMatch()
+    }
+  }
+
+  @objc private func findNext() {
+    guard !matches.isEmpty else { return }
+    matchIndex = (matchIndex + 1) % matches.count
+    showMatch()
+  }
+
+  @objc private func findPrevious() {
+    guard !matches.isEmpty else { return }
+    matchIndex = (matchIndex + matches.count - 1) % matches.count
+    showMatch()
+  }
+
+  private func showMatch() {
+    let range = matches[matchIndex]
+    text.setSelectedRange(range)
+    text.scrollRangeToVisible(range)
+    status.stringValue = String(
+      format: NSLocalizedString(
+        "%ld of %ld matches", comment: "Current and total help search matches"),
+      matchIndex + 1, matches.count)
+  }
 }

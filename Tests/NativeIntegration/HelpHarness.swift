@@ -14,7 +14,15 @@ import PadCore
       RunLoop.main.run(until: Date().addingTimeInterval(0.1))
       window.contentView!.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
-      let text = descendants(window.contentView!).compactMap { $0 as? NSTextView }.first!
+      // Focusing Help search adds a native field editor. Select the guide explicitly.
+      let guides = descendants(window.contentView!).compactMap { $0 as? NSTextView }.filter {
+        $0.accessibilityIdentifier() == "help.text"
+      }
+      precondition(guides.count == 1, "Help must expose exactly one guide text view")
+      let text = guides[0]
+      precondition(
+        !text.isFieldEditor && text.enclosingScrollView != nil,
+        "Help viewport checks must target the scrollable guide, not a field editor")
       precondition(
         text.visibleRect.width > 100 && text.visibleRect.height > 100,
         "Help must provide a usable visible text viewport")

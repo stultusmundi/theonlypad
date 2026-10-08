@@ -1,5 +1,29 @@
 # Continuation
 
+## Product verification and Help — 2026-10-08
+
+The isolated `test/admission-shutdown-settlement` branch at `4c00a29` contains
+only the reviewed test synchronization correction and held-read regression.
+Its full suite passes 848 tests and its local release package/archive/SBOM pass
+verification. Actual desktop execution stopped at runner initialization while
+macOS requested Enable UI Automation authentication: zero selected workflows
+executed. User readiness for a retry is pending; no grant is inferred. See
+[the package checkpoint](verification/packaged-checkpoint-2026-10-08.md).
+
+The separate `feat/searchable-help-reference` branch adds bounded offline Help
+search and a complete effective shortcut reference. Native checks pass after
+retained behavioral RED, and the shown guide viewport check passes after
+correcting the harness's mistaken field-editor selection. The current app/core
+suite passes 848 tests; the prepared Help desktop test bundle builds but its
+workflow is unrun. See [Help evidence](verification/searchable-help.md). H-09 is
+partial: complete recovery-message, desktop and accessibility acceptance remain.
+Root owns serial runtime; continue independent implementation while desktop
+authentication is pending. This checkpoint does not activate supervised editor
+search, change the selected engine/budget, or complete the private source-fit
+assembly. The Help release package/archive/SBOM now pass local verification.
+Next product work is the scoped binary-admission audit and implementation; the
+prepared packaged Help desktop workflow awaits authentication.
+
 ## Current correction work — 2026-10-08
 
 Work continues under the user's resumption. The retained-role assembly's five

@@ -5,7 +5,8 @@ import XCTest
 
 final class GUIProbe: XCTestCase {
   @MainActor
-  private func fixture() throws -> (XCUIApplication, URL) {
+  private func fixture(prepareState: ((URL) throws -> Void)? = nil) throws -> (XCUIApplication, URL)
+  {
     continueAfterFailure = false
     let environment = ProcessInfo.processInfo.environment
     let path = try XCTUnwrap(environment["GUI_PROBE_APP_PATH"])
@@ -23,6 +24,7 @@ final class GUIProbe: XCTestCase {
     addTeardownBlock {
       await MainActor.run { self.closeFixture(app) }
     }
+    try prepareState?(state)
     app.launch()
     XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
     return (app, state)
@@ -646,6 +648,114 @@ final class GUIProbe: XCTestCase {
             }, object: nil)
         ], timeout: 10), .completed)
     XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+  }
+
+  @MainActor
+  func testHelpSearchUsesEffectiveShortcutReference() throws {
+    let (app, _) = try fixture { state in
+      // SettingsStore.defaultDirectory uses Preferences below the isolated state root.
+      // GUIProbe does not link PadCore; this literal follows ShortcutProfile's strict v1 schema.
+      let preferences = state.appendingPathComponent("Preferences", isDirectory: true)
+      try FileManager.default.createDirectory(
+        at: preferences, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+      let profile = #"""
+        {"version":1,"overrides":[
+          {"commandID":"file.open","assignment":{
+            "kind":"assigned","key":"r","modifiers":["cmd","ctrl"]}},
+          {"commandID":"file.save","assignment":{"kind":"disabled"}}
+        ]}
+        """#
+      let shortcuts = preferences.appendingPathComponent("Shortcuts.json")
+      try Data(profile.utf8).write(to: shortcuts)
+      try FileManager.default.setAttributes(
+        [.posixPermissions: 0o600], ofItemAtPath: shortcuts.path)
+    }
+    let menu = app.menuBars.menuBarItems["TheOnlyPad"]
+    XCTAssertTrue(menu.waitForExistence(timeout: 5))
+    menu.click()
+    let command = menu.menus.menuItems["Help and Shortcuts"]
+    XCTAssertTrue(command.waitForExistence(timeout: 5))
+    XCTAssertEqual(
+      XCTWaiter.wait(
+        for: [
+          XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"), object: command)
+        ], timeout: 10), .completed)
+    XCTAssertTrue(command.isEnabled)
+    command.click()
+
+    let window = app.windows["TheOnlyPad Help"]
+    XCTAssertTrue(window.waitForExistence(timeout: 10))
+    let text = window.textViews["help.text"]
+    let search = window.searchFields["help.search"]
+    let next = window.buttons["help.next"]
+    let previous = window.buttons["help.previous"]
+    let status = window.staticTexts["help.matchStatus"]
+    for element in [text, search, next, previous, status] {
+      XCTAssertTrue(element.waitForExistence(timeout: 5))
+    }
+    let reference = try XCTUnwrap(text.value as? String)
+    let lines = Set(
+      reference.components(separatedBy: "\n").map {
+        $0.trimmingCharacters(in: .whitespaces)
+      })
+    for row in [
+      "Open… — cmd+ctrl+r", "Save — No shortcut",
+      "Help and Shortcuts — No shortcut", "New Tab — cmd+n",
+    ] {
+      XCTAssertTrue(lines.contains(row), "The real Help guide must show the effective row: \(row)")
+    }
+    XCTAssertFalse(lines.contains("Open… — cmd+o"))
+    XCTAssertFalse(lines.contains("Save — cmd+s"))
+    XCTAssertTrue(reference.contains("ctrl = Control"))
+    for heading in ["Documents and recovery", "Finding text", "Split views", "Keyboard shortcuts"] {
+      XCTAssertTrue(reference.contains(heading), "Search must retain the full guide: \(heading)")
+    }
+    XCTAssertTrue(reference.contains("ICU"))
+    XCTAssertTrue(reference.contains("some expensive patterns can delay cancellation"))
+
+    func assertSearchState(_ expectedStatus: String, navigationEnabled: Bool) {
+      XCTAssertEqual(
+        XCTWaiter.wait(
+          for: [
+            XCTNSPredicateExpectation(
+              predicate: NSPredicate { _, _ in
+                (status.value as? String) == expectedStatus
+                  && next.isEnabled == navigationEnabled
+                  && previous.isEnabled == navigationEnabled
+              }, object: nil)
+          ], timeout: 5), .completed)
+      XCTAssertEqual(status.value as? String, expectedStatus)
+      XCTAssertEqual(next.isEnabled, navigationEnabled)
+      XCTAssertEqual(previous.isEnabled, navigationEnabled)
+      XCTAssertEqual(text.value as? String, reference, "Help search must not alter the guide")
+    }
+    func replaceQuery(_ query: String) {
+      search.click()
+      app.typeKey("a", modifierFlags: .command)
+      app.typeKey(.delete, modifierFlags: [])
+      if !query.isEmpty { search.typeText(query) }
+    }
+    assertSearchState("", navigationEnabled: false)
+    search.click()
+    search.typeText("ICU")
+    // Count the literal occurrences in the actual accessible guide, independently of its search code.
+    let count = reference.lowercased().components(separatedBy: "icu").count - 1
+    XCTAssertGreaterThanOrEqual(count, 2, "ICU appears repeatedly in the retained guide")
+    assertSearchState("1 of \(count) matches", navigationEnabled: true)
+    next.click()
+    assertSearchState("2 of \(count) matches", navigationEnabled: true)
+    previous.click()
+    assertSearchState("1 of \(count) matches", navigationEnabled: true)
+    previous.click()
+    assertSearchState("\(count) of \(count) matches", navigationEnabled: true)
+    next.click()
+    assertSearchState("1 of \(count) matches", navigationEnabled: true)
+    // XCUI's text-view value is the full string; these status transitions do not claim exact selection.
+    replaceQuery("synthetic-help-no-match-9f31b7")
+    assertSearchState("No matches", navigationEnabled: false)
+    replaceQuery("")
+    assertSearchState("", navigationEnabled: false)
   }
 
   @MainActor

@@ -29,6 +29,8 @@ jobs:
         run: scripts/test-native-integration.sh
       - name: Search replacement callback safety
         run: scripts/test-search-replacement.sh
+      - name: Offline Help search and shortcut reference
+        run: scripts/test-help-reference.sh
       - name: Managed document lifecycle integration
         run: scripts/test-managed-documents.sh
       - name: Document transfer foundations
