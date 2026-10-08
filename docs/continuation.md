@@ -10,7 +10,14 @@ SPEC and QUALITY review. One author is preparing a fresh coherent implementation
 correction; Root owns all runtime execution. See
 [the correction record](verification/search-role-assembly-corrections.md).
 
-Next: review that complete candidate, rerun the unchanged focused definitions,
+Subsequent review found reused workspace names in four historical fixtures.
+Fresh reviewed definitions correct those associations and add duplicate-name
+negatives. Root reran only the four changed baselines: each reached its intended
+implementation assertion after complete metadata prequalification, with no
+infrastructure failures or timeouts. The later negatives remain unexecuted;
+physical workspace and prior-retention checks are separate.
+
+Next: review that complete candidate, run the reviewed focused definitions,
 and qualify the separate integrated controls and legitimate source-fit relation.
 Native role reads, measurement acceptance, helper packaging and editor search
 routing remain outstanding. This checkpoint changes documentation only; the
