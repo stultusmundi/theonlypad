@@ -27,7 +27,7 @@ admission and UI composition remain separate.
   idempotent and requires its creating thread. No crash test for foreign discard.
 - Existing worker/wire/codec/driver source and regression assertions remain intact.
 
-## Task1: Direct collector behavior
+### Task 1: Direct collector behavior
 
 Create Sources/SearchExecution/SearchParentResponseAccumulator.swift and
 Tests/SearchExecutionTests/SearchParentResponseAccumulatorTests.swift and
@@ -84,7 +84,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/parent-r
 Frozen behavioral RED adds absolute --package-path/--scratch-path selecting its
 ignored minimal package; record exact command and input membership per stage.
 
-## Task2: Genuine codec and helper factory
+### Task 2: Genuine codec and helper factory
 
 The codec test file is authored before implementation in Task1. Modify
 only the factory binding in Tests/SearchWorkerIntegration/RealSearchWorkerTests.swift
@@ -113,7 +113,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/parent-r
   artifact hashes, actual five methods and all stage/cleanup receipts. This is
   production response collection acceptance, not UI routing or memory proof.
 
-## Task3: Integrated component checkpoint
+### Task 3: Integrated component checkpoint
 
 Update dated verification, AGENTS, continuation and spec/plan states.
 
