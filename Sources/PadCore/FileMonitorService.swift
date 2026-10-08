@@ -166,7 +166,8 @@ public final class FileMonitorRegistration: @unchecked Sendable {
   public func cancel() { _ = cancelAndSnapshot() }
 }
 public enum FileActionError: Error, Equatable, Sendable {
-  case cancelled, capacity, invalidRequest, stopped, observationChanged, decoding, notDownloaded,
+  case cancelled, capacity, invalidRequest, stopped, observationChanged, decoding, notText,
+    notDownloaded,
     policy, readFailed
 }
 public final class FileActionToken: @unchecked Sendable {
@@ -1051,7 +1052,10 @@ private func movedCandidate(
 private func actionError(_ error: Error) -> FileActionError {
   if error is FileMaterializationError { return .policy }
   if isMaterializationRefusal(error) { return .notDownloaded }
-  if error is DocumentCodecError || error is ExternalDocumentDecodingError { return .decoding }
+  if error is EditableDocumentDecodingError || error is ExternalDocumentDecodingError {
+    return .notText
+  }
+  if error is DocumentCodecError { return .decoding }
   if let probe = error as? ExternalFileProbeError, case .observationChanged = probe {
     return .observationChanged
   }

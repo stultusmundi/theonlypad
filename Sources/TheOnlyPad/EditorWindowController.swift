@@ -873,6 +873,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case .decoding:
       message =
         "The disk copy cannot be decoded safely with this encoding. Your buffer is preserved. Use Open or Reopen with Encoding to choose an interpretation."
+    case .notText:
+      message =
+        "The disk copy contains NUL characters or an unsupported Unicode prefix and was refused as editable text. Your buffer is preserved. Inspect the file with a suitable read-only viewer or convert a copy to a supported text format."
     case .notDownloaded:
       message = "Download the file explicitly, then check it again. Your buffer is preserved."
     case .policy:
@@ -1665,7 +1668,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     Data, DecodedDocument
   ) {
     let bytes = try readBytes(url)
-    return (bytes, try DocumentCodec.decode(bytes, encoding: encoding))
+    return (bytes, try EditableDocumentDecoder.decode(bytes, encoding: encoding))
   }
   nonisolated private static func readBytes(_ url: URL) throws -> Data {
     let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])

@@ -39,6 +39,30 @@ final class FileMonitorActionTests: XCTestCase {
     wait(for: [done], timeout: 5)
     XCTAssertEqual(try Data(contentsOf: url), bytes)
   }
+  // The real read must refuse an editable snapshot, not publish binary bytes or hide it as I/O.
+  func testNULBearingDiskReadRefusesSnapshotAndPreservesExactFileBytes() throws {
+    let bytes = Data("before\u{0}after".utf8)
+    let (url, observation) = try fixture(bytes)
+    let service = FileMonitorService()
+    defer { service.stop() }
+    let done = expectation(description: "binary refusal")
+    _ = service.readOnce(
+      requestID: UUID(), url: url, matching: observation, fallbackEncoding: .utf8
+    ) { _, result in
+      switch result {
+      case .success: XCTFail("NUL-bearing disk bytes must not produce an editable snapshot")
+      case .failure(let error):
+        XCTAssertEqual(error, .notText, "Binary admission must retain its precise typed refusal")
+        XCTAssertNotEqual(
+          error, .readFailed, "Admission refusal must not be reported as an I/O error")
+        XCTAssertNotEqual(error, .observationChanged, "Unchanged fixture must reach text admission")
+      }
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 5)
+    XCTAssertEqual(try Data(contentsOf: url), bytes)
+  }
+
   func testRevalidationRejectsChangedFileWithoutChangingSnapshot() throws {
     let bytes = Data("before".utf8)
     let (url, observation) = try fixture(bytes)

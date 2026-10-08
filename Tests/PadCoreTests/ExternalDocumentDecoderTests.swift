@@ -71,4 +71,41 @@ final class ExternalDocumentDecoderTests: XCTestCase {
     XCTAssertFalse(explicit.hasBOM)
     XCTAssertEqual(try DocumentCodec.encode(explicit), bytes)
   }
+
+  // Removing the editable-text admission guard would admit these bytes as disk reloads.
+  func testReloadRefusesDecodedNULAcrossSupportedEncodings() throws {
+    for encoding in DocumentEncoding.allCases {
+      let document = DecodedDocument(text: "before\u{0}after", encoding: encoding)
+      let bytes = try DocumentCodec.encode(document)
+      XCTAssertThrowsError(
+        try ExternalDocumentDecoder.decode(bytes, fallbackEncoding: encoding),
+        "Disk reload must refuse decoded NUL for \(encoding)")
+      // The low-level codec remains byte-preserving, including legacy control bytes.
+      XCTAssertEqual(
+        try DocumentCodec.encode(DocumentCodec.decode(bytes, encoding: encoding)), bytes)
+    }
+  }
+
+  func testReloadAdmitsOrdinaryUTF16ZeroBytesAndPreservesUnicode() throws {
+    for encoding in [DocumentEncoding.utf16LE, .utf16BE] {
+      for marker in [false, true] {
+        let document = DecodedDocument(
+          text: "A😀e\u{301}\r\nالعربية\r", encoding: encoding, hasBOM: marker)
+        let bytes = try DocumentCodec.encode(document)
+        XCTAssertTrue(bytes.contains(0), "Fixture must contain ordinary UTF-16 zero bytes")
+        let decoded = try ExternalDocumentDecoder.decode(bytes, fallbackEncoding: encoding)
+        XCTAssertEqual(decoded, document)
+        XCTAssertEqual(try DocumentCodec.encode(decoded), bytes)
+      }
+    }
+  }
+
+  func testBOMSelectedNULCannotBypassReloadAdmissionWithLegacyFallback() throws {
+    for encoding in [DocumentEncoding.utf8, .utf16LE, .utf16BE] {
+      let bytes = try DocumentCodec.encode(
+        .init(text: "prefix\u{0}suffix", encoding: encoding, hasBOM: true))
+      XCTAssertThrowsError(
+        try ExternalDocumentDecoder.decode(bytes, fallbackEncoding: .windows1252))
+    }
+  }
 }

@@ -81,7 +81,7 @@ struct NativeDocumentSeed: Sendable {
     encoding: DocumentEncoding? = nil, limits: Limits = .standard
   ) throws -> Self {
     guard bytes.count <= limits.bytes else { throw NativeDocumentSeedError.limit }
-    let decoded = try DocumentCodec.decode(bytes, encoding: encoding)
+    let decoded = try EditableDocumentDecoder.decode(bytes, encoding: encoding)
     return try .init(
       id: id, kind: .opened, decoded: decoded, url: url, bytes: bytes,
       saved: decoded,
@@ -92,7 +92,7 @@ struct NativeDocumentSeed: Sendable {
     _ metadata: SessionTab, url: URL, originalBytes: Data, limits: Limits = .standard
   ) throws -> Self {
     guard originalBytes.count <= limits.bytes else { throw NativeDocumentSeedError.limit }
-    let decoded = try DocumentCodec.decode(originalBytes, encoding: metadata.encoding)
+    let decoded = try EditableDocumentDecoder.decode(originalBytes, encoding: metadata.encoding)
     return try validatedRestored(
       metadata, decoded: decoded, originalBytes: originalBytes,
       url: url, limits: limits)

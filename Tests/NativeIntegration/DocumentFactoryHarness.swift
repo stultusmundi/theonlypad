@@ -237,6 +237,130 @@ import PadCore
     let immutable = try NativeDocumentSeed.diskCopy(sourceName: "source", decoded: mutable)
     mutable.text = "later"
     check(immutable.text.utf16.elementsEqual(text.utf16), "seed captures immutable decoded value")
+
+    // Binary admission: removing either external seed guard must admit these valid decoded NULs.
+    // Literal bytes/text keep this independent of the codec's encoder and any new error cases.
+    let nulText = "A\u{0}B"
+    let nulFixtures: [(String, Data, DocumentEncoding, Bool)] = [
+      ("UTF8", Data([0x41, 0x00, 0x42]), .utf8, false),
+      ("UTF16LE", Data([0xFF, 0xFE, 0x41, 0x00, 0x00, 0x00, 0x42, 0x00]), .utf16LE, true),
+      ("UTF16BE", Data([0xFE, 0xFF, 0x00, 0x41, 0x00, 0x00, 0x00, 0x42]), .utf16BE, true),
+    ]
+    for (name, raw, encoding, bom) in nulFixtures {
+      let rawDecoded = try DocumentCodec.decode(raw, encoding: encoding)
+      check(
+        rawDecoded.text.utf16.elementsEqual(nulText.utf16)
+          && rawDecoded.encoding == encoding && rawDecoded.hasBOM == bom,
+        "binary admission \(name): raw codec retains literal decoded NUL")
+      check(
+        try DocumentCodec.encode(rawDecoded) == raw,
+        "binary admission \(name): raw codec remains byte reversible")
+      rejects("binary admission \(name): opened refuses decoded NUL before model creation") {
+        _ = try NativeDocumentSeed.opened(url: url, bytes: raw)
+      }
+      rejects("binary admission \(name): explicit encoding cannot bypass decoded NUL refusal") {
+        _ = try NativeDocumentSeed.opened(url: url, bytes: raw, encoding: encoding)
+      }
+      rejects("binary admission \(name): disk-only restoration refuses decoded NUL") {
+        _ = try NativeDocumentSeed.restored(
+          SessionTab(encoding: encoding), url: url, originalBytes: raw)
+      }
+    }
+
+    // Four 32-bit BOM orders must not be treated as an editable supported encoding.
+    let unsupportedMarkers: [(String, Data)] = [
+      ("UTF32BE", Data([0x00, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x00, 0x41])),
+      ("UTF32LE", Data([0xFF, 0xFE, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00])),
+      ("UTF32-2143", Data([0x00, 0x00, 0xFF, 0xFE, 0x00, 0x00, 0x41, 0x00])),
+      ("UTF32-3412", Data([0xFE, 0xFF, 0x00, 0x00, 0x00, 0x41, 0x00, 0x00])),
+    ]
+    for (name, raw) in unsupportedMarkers {
+      rejects("binary admission \(name): normal open refuses unsupported or ambiguous BOM") {
+        _ = try NativeDocumentSeed.opened(url: url, bytes: raw)
+      }
+      rejects("binary admission \(name): disk-only restore refuses unsupported BOM") {
+        _ = try NativeDocumentSeed.restored(
+          SessionTab(encoding: .latin1), url: url, originalBytes: raw)
+      }
+    }
+
+    // A raw-zero-byte heuristic would break these valid UTF16 documents. The expected
+    // supplementary character, mixed endings, encoding and BOM are all literal fixtures.
+    let safeText = "A😀\r\nB\rc\n"
+    let safeLE = Data([
+      0x41, 0x00, 0x3D, 0xD8, 0x00, 0xDE, 0x0D, 0x00, 0x0A, 0x00,
+      0x42, 0x00, 0x0D, 0x00, 0x63, 0x00, 0x0A, 0x00,
+    ])
+    let safeBE = Data([
+      0x00, 0x41, 0xD8, 0x3D, 0xDE, 0x00, 0x00, 0x0D, 0x00, 0x0A,
+      0x00, 0x42, 0x00, 0x0D, 0x00, 0x63, 0x00, 0x0A,
+    ])
+    func admitExact(
+      _ name: String, expectedText: String, raw: Data, encoding: DocumentEncoding, bom: Bool,
+      _ seed: () throws -> NativeDocumentSeed
+    ) {
+      do {
+        let model = try EditorDocumentFactory.make(seed())
+        check(
+          model.storage.string.utf16.elementsEqual(expectedText.utf16)
+            && model.savedText.utf16.elementsEqual(expectedText.utf16)
+            && model.encoding == encoding && model.savedEncoding == encoding
+            && model.hasBOM == bom && model.savedHasBOM == bom,
+          "binary admission \(name): exact editable text and saved encoding/BOM")
+        check(
+          !model.dirty && model.originalBytes == raw && model.url == url,
+          "binary admission \(name): clean model keeps exact disk bytes and URL")
+      } catch { check(false, "binary admission \(name): supported text must construct: \(error)") }
+    }
+    let safeFixtures: [(String, Data, DocumentEncoding, Bool)] = [
+      ("UTF16LE BOM", Data([0xFF, 0xFE]) + safeLE, .utf16LE, true),
+      ("UTF16BE BOM", Data([0xFE, 0xFF]) + safeBE, .utf16BE, true),
+      ("explicit UTF16LE without BOM", safeLE, .utf16LE, false),
+      ("explicit UTF16BE without BOM", safeBE, .utf16BE, false),
+    ]
+    for (name, raw, encoding, bom) in safeFixtures {
+      admitExact(name + " open", expectedText: safeText, raw: raw, encoding: encoding, bom: bom) {
+        try NativeDocumentSeed.opened(url: url, bytes: raw, encoding: bom ? nil : encoding)
+      }
+      admitExact(
+        name + " disk restore", expectedText: safeText, raw: raw, encoding: encoding, bom: bom
+      ) {
+        try NativeDocumentSeed.restored(
+          SessionTab(encoding: encoding), url: url, originalBytes: raw)
+      }
+    }
+    for (name, raw, encoding) in [
+      ("explicit UTF8", Data([0xC3, 0xA9, 0x0D, 0x0A]), DocumentEncoding.utf8),
+      ("explicit Windows1252", Data([0xE9, 0x0D, 0x0A]), DocumentEncoding.windows1252),
+      ("explicit Latin1", Data([0xE9, 0x0D, 0x0A]), DocumentEncoding.latin1),
+    ] {
+      admitExact(name, expectedText: "é\r\n", raw: raw, encoding: encoding, bom: false) {
+        try NativeDocumentSeed.opened(url: url, bytes: raw, encoding: encoding)
+      }
+    }
+
+    // Recovery already owns text: moving the admission guard into shared construction or
+    // DocumentCodec would lose this NUL, so exercise the unchanged real recovery paths.
+    let recoveredNUL = DecodedDocument(text: nulText)
+    if let recovery = make(
+      try .restored(SessionTab(), decoded: recoveredNUL, originalBytes: nil, url: nil),
+      "recovered-NUL")
+    {
+      check(
+        recovery.storage.string.utf16.elementsEqual(nulText.utf16) && recovery.url == nil
+          && recovery.originalBytes == nil && recovery.dirty,
+        "binary admission recovery: decoded no-file NUL remains exact and unsaved")
+    }
+    if let nulBackup = make(
+      try .backup(
+        originalPath: "/synthetic/nul-backup.txt", data: Data([0x41, 0x00, 0x42]),
+        encoding: .utf8), "backup-NUL")
+    {
+      check(
+        nulBackup.storage.string.utf16.elementsEqual(nulText.utf16) && nulBackup.url == nil
+          && nulBackup.dirty && nulBackup.recoveredName == "Backup — nul-backup.txt",
+        "binary admission recovery: backup NUL remains exact and unsaved")
+    }
     print("Factory checks: \(checks), failures: \(failures)")
     if failures != 0 { exit(1) }
   }

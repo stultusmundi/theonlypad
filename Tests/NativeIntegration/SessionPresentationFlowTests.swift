@@ -304,6 +304,183 @@ import XCTest
       JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
     XCTAssertEqual(wire["version"] as? Int, 2)
   }
+
+  func testNULDiskStartupAndFailedRetryPreserveUnresolvedSession() async throws {
+    let base = try directory()
+    let file = base.appendingPathComponent("nul-disk.txt")
+    let bytes = Data([0x41, 0x00, 0x42, 0x0A])
+    try bytes.write(to: file)
+    let tab = metadata(path: file.path)
+    let window = SessionWindow(tabs: [tab], selectedTabID: tab.id)
+    let session = EditorSession(windows: [window])
+    let store = SessionStore(directory: base.appendingPathComponent("Session"))
+    try store.save(session)
+    let sessionFile = store.directory.appendingPathComponent("Session.json")
+    let storedBytes = try Data(contentsOf: sessionFile)
+    let recovery = RecoveryCoordinator(directory: base.appendingPathComponent("Recovery"))
+    let coordinator = SessionCoordinator(
+      loadSession: { try store.load() },
+      claimRecovery: { try await recovery.claimStartup() },
+      saveSession: { try store.save($0) })
+    var importedWindows: [PreparedSessionWindow] = []
+    await coordinator.restore {
+      importedWindows.append($0)
+      return [:]
+    }
+    XCTAssertTrue(importedWindows.isEmpty, "Refused disk text must not reach window import")
+    XCTAssertTrue(coordinator.restorationComplete)
+    XCTAssertEqual(coordinator.unresolved.count, 1)
+    let entry = try XCTUnwrap(coordinator.unresolved.first)
+    XCTAssertEqual(entry.windowID, window.id)
+    XCTAssertEqual(entry.metadata, tab)
+    XCTAssertFalse(entry.hasRecovery)
+    XCTAssertFalse(entry.errorMessage.isEmpty)
+    XCTAssertEqual(try coordinator.captureSession(windows: []), session)
+    XCTAssertEqual(try Data(contentsOf: sessionFile), storedBytes)
+    XCTAssertEqual(try Data(contentsOf: file), bytes)
+
+    do {
+      _ = try await coordinator.retry(entry)
+      XCTFail("Retry must not turn the same NUL disk file into editable text")
+    } catch {
+      XCTAssertEqual(error as? EditableDocumentDecodingError, .suspectedBinary)
+    }
+    XCTAssertEqual(coordinator.unresolved.count, 1)
+    XCTAssertEqual(coordinator.unresolved.first?.windowID, window.id)
+    XCTAssertEqual(coordinator.unresolved.first?.metadata, tab)
+    XCTAssertEqual(coordinator.unresolved.first?.hasRecovery, false)
+    XCTAssertEqual(coordinator.unresolved.first?.errorMessage, entry.errorMessage)
+    XCTAssertEqual(try coordinator.captureSession(windows: []), session)
+    try await coordinator.persist(windows: [])
+    XCTAssertEqual(try store.load(), session, "Publication must retain the unresolved record")
+    XCTAssertEqual(try Data(contentsOf: file), bytes)
+  }
+
+  func testStoredNULRecoveryRestoresInsteadOfRejectedHistoricalDiskContent() async throws {
+    let diskFixtures: [Data] = [
+      Data([0x64, 0x00, 0x00, 0x00, 0x69, 0x00, 0x73, 0x00, 0x6B, 0x00]),
+      Data([0xFF, 0xFE, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00]),
+    ]
+    for diskBytes in diskFixtures {
+      let base = try directory()
+      let file = base.appendingPathComponent("historical-disk.txt")
+      try diskBytes.write(to: file)
+      let tab = SessionTab(
+        originalPath: file.path, pinned: true, encoding: .utf16LE, manualLanguage: .swift,
+        bookmarks: [0, 6],
+        presentation: SessionPresentation(
+          axis: .stacked,
+          panes: [
+            SessionPaneState(
+              selection: NSRange(location: 0, length: 0),
+              scrollOrigin: SessionScrollOrigin(x: 0, y: 120)),
+            SessionPaneState(
+              selection: NSRange(location: 6, length: 1),
+              scrollOrigin: SessionScrollOrigin(x: 8, y: 240)),
+          ], focusedPaneIndex: 1))
+      let window = SessionWindow(tabs: [tab], selectedTabID: tab.id)
+      let session = EditorSession(windows: [window])
+      let store = SessionStore(directory: base.appendingPathComponent("Session"))
+      try store.save(session)
+      let sessionFile = store.directory.appendingPathComponent("Session.json")
+      let sessionBytes = try Data(contentsOf: sessionFile)
+      let recoveryDirectory = base.appendingPathComponent("Recovery")
+      let recoveryStore = try RecoveryStore(directory: recoveryDirectory)
+      let snapshot = RecoverySnapshot(
+        id: tab.id, text: "A\u{0}🐱\r\nB", encoding: .utf16LE, hasBOM: true,
+        originalPath: file.path)
+      try recoveryStore.save(snapshot)
+      let recovery = RecoveryCoordinator(directory: recoveryDirectory)
+      let coordinator = SessionCoordinator(
+        loadSession: { try store.load() },
+        claimRecovery: { try await recovery.claimStartup() },
+        saveSession: { try store.save($0) })
+      var importedWindows: [PreparedSessionWindow] = []
+      await coordinator.restore {
+        importedWindows.append($0)
+        return [:]
+      }
+      XCTAssertEqual(importedWindows.count, 1)
+      let preparedWindow = try XCTUnwrap(importedWindows.first)
+      XCTAssertEqual(preparedWindow.id, window.id)
+      XCTAssertEqual(preparedWindow.selectedTabID, tab.id)
+      XCTAssertEqual(preparedWindow.tabs.count, 1)
+      let prepared = try XCTUnwrap(preparedWindow.tabs.first)
+      XCTAssertEqual(prepared.metadata, tab)
+      XCTAssertEqual(prepared.decoded.text, "A\u{0}🐱\r\nB")
+      XCTAssertEqual(Array(prepared.decoded.text.utf16), [65, 0, 0xD83D, 0xDC31, 13, 10, 66])
+      XCTAssertEqual(prepared.decoded.encoding, .utf16LE)
+      XCTAssertTrue(prepared.decoded.hasBOM)
+      XCTAssertNil(prepared.url, "Recovery must not adopt its historical disk destination")
+      XCTAssertNil(prepared.originalBytes)
+      XCTAssertEqual(prepared.resolvedPresentation?.presentation, tab.presentation)
+      XCTAssertEqual(prepared.resolvedPresentation?.bookmarks.offsets, [0, 6])
+      XCTAssertTrue(coordinator.unresolved.isEmpty)
+      XCTAssertTrue(coordinator.restorationComplete)
+      XCTAssertEqual(try recoveryStore.loadAll(), [snapshot])
+      XCTAssertEqual(try Data(contentsOf: sessionFile), sessionBytes)
+      XCTAssertEqual(try Data(contentsOf: file), diskBytes)
+    }
+  }
+
+  func testStoredUTF16DiskStartupAdmitsStructuralZeroBytesInBothByteOrders() async throws {
+    let fixtures: [(DocumentEncoding, Data)] = [
+      (
+        .utf16LE,
+        Data([
+          0xFF, 0xFE, 0x41, 0x00, 0x3D, 0xD8, 0x31, 0xDC, 0x0D, 0x00,
+          0x0A, 0x00, 0x42, 0x00,
+        ])
+      ),
+      (
+        .utf16BE,
+        Data([
+          0xFE, 0xFF, 0x00, 0x41, 0xD8, 0x3D, 0xDC, 0x31, 0x00, 0x0D,
+          0x00, 0x0A, 0x00, 0x42,
+        ])
+      ),
+    ]
+    for (encoding, bytes) in fixtures {
+      let base = try directory()
+      let file = base.appendingPathComponent("supported-utf16.txt")
+      try bytes.write(to: file)
+      let tab = SessionTab(
+        originalPath: file.path, pinned: true, encoding: encoding, manualLanguage: .swift,
+        selection: NSRange(location: 5, length: 1), bookmarks: [0, 5])
+      let window = SessionWindow(tabs: [tab], selectedTabID: tab.id)
+      let session = EditorSession(windows: [window])
+      let store = SessionStore(directory: base.appendingPathComponent("Session"))
+      try store.save(session)
+      let recovery = RecoveryCoordinator(directory: base.appendingPathComponent("Recovery"))
+      let coordinator = SessionCoordinator(
+        loadSession: { try store.load() },
+        claimRecovery: { try await recovery.claimStartup() },
+        saveSession: { try store.save($0) })
+      var importedWindows: [PreparedSessionWindow] = []
+      await coordinator.restore {
+        importedWindows.append($0)
+        return [:]
+      }
+      XCTAssertEqual(importedWindows.count, 1)
+      let preparedWindow = try XCTUnwrap(importedWindows.first)
+      XCTAssertEqual(preparedWindow.id, window.id)
+      XCTAssertEqual(preparedWindow.selectedTabID, tab.id)
+      XCTAssertEqual(preparedWindow.tabs.count, 1)
+      let prepared = try XCTUnwrap(preparedWindow.tabs.first)
+      XCTAssertEqual(prepared.metadata, tab)
+      XCTAssertEqual(prepared.decoded.text, "A🐱\r\nB")
+      XCTAssertEqual(prepared.decoded.encoding, encoding)
+      XCTAssertTrue(prepared.decoded.hasBOM)
+      XCTAssertEqual(prepared.originalBytes, bytes)
+      XCTAssertEqual(prepared.url, file)
+      XCTAssertEqual(prepared.resolvedPresentation?.presentation, tab.presentation)
+      XCTAssertEqual(prepared.resolvedPresentation?.bookmarks.offsets, [0, 5])
+      XCTAssertTrue(coordinator.unresolved.isEmpty)
+      XCTAssertTrue(coordinator.restorationComplete)
+      XCTAssertEqual(try store.load(), session)
+      XCTAssertEqual(try Data(contentsOf: file), bytes)
+    }
+  }
 }
 
 private final class FirstCheckpointWrite: @unchecked Sendable {

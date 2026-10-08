@@ -1,5 +1,24 @@
 # Continuation
 
+## Binary disk admission — 2026-10-08
+
+The isolated `feat/binary-text-admission` branch builds on reviewed Help `b64abd5`.
+Shared strict disk admission refuses decoded NUL/unsupported Unicode prefixes,
+while raw codecs and owned recovery/backup/history remain lossless. Full core
+852/0, focused50/0, factory198/0, close106/0 and shared ownership pass; the frozen
+session coordinator passes12/0 after an old-routing control fails three intended
+startup assertions. Source review has no blocking findings. See
+[the admission record](verification/binary-text-admission.md).
+
+E-06 is partial. Actual dirty-controller Reopen, desktop error presentation,
+universal binary classification and performance remain unverified. Desktop
+requires user-owned UI Automation authentication; continue independent work
+without inferring a grant. Local release packaging/archive/SBOM verification
+passes. Next is a reviewed production worker accumulator/helper assembly slice;
+the source audit identifies a missing production accumulator binding and concrete
+lifetime-thread composition. Editor search still uses its in-process service;
+private helper components are not production routing.
+
 ## Product verification and Help — 2026-10-08
 
 The isolated `test/admission-shutdown-settlement` branch at `4c00a29` contains
