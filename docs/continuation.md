@@ -2,7 +2,8 @@
 
 ## Production worker accumulator — 2026-10-08
 
-The isolated `feat/search-worker-accumulator` branch builds on binary admission
+The isolated `feat/search-worker-accumulator` branch implements the component at
+`45be7f3` and builds on binary admission
 `69d3f55`. The concrete strict UTF8 accumulator passes29 focused methods, the
 formatted worker/resolver selection119/0, and full app/core881/0. A frozen
 BOM-stripping mutation fails its exact Unicode oracle as intended. The first

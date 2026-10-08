@@ -55,6 +55,6 @@ Files: create `docs/verification/search-worker-accumulator.md`; update `docs/con
 
 - [x] Run the fresh integrated suite through direct watchdog, strict swift-format lint, public-file check and git diff check. Use a fresh240s focused/600s integrated guard, never nesting coordinators.
 - [x] Record planned/implemented/tested/remaining independently. Do not infer full feature completeness, actual helper process, memory or desktop evidence.
-- [ ] Make a scoped local commit after verified source review/checks. Continue next with checked lifetime startup/helper assembly; local checkpoint is not a request to stop.
+- [x] Make a scoped local commit after verified source review/checks. Continue next with checked lifetime startup/helper assembly; local checkpoint is not a request to stop.
 
-Actual verification: component29/0, formatted worker/resolver119/0, full app/core881/0. Independent SPEC and QUALITY approve exact sources with no blocking findings. Retained compiler availability failure and behavioral29/115 RED remain separate; frozen BOM mutation fails1/1. No helper/editor/RSS/desktop acceptance. Local commit is the remaining checkpoint operation.
+Actual verification: component29/0, formatted worker/resolver119/0, full app/core881/0. Independent SPEC and QUALITY approve exact sources with no blocking findings. Retained compiler availability failure and behavioral29/115 RED remain separate; frozen BOM mutation fails1/1. No helper/editor/RSS/desktop acceptance. Local implementation commit45be7f3 completes this component checkpoint. Continue with checked lifetime startup and helper assembly.
