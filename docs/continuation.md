@@ -6,8 +6,9 @@ Work continues under the user's resumption. The retained-role assembly's five
 source-review findings now have actual scoped regression evidence: 25 serial
 entries produced 20 intended assertions and five passing controls, with no
 infrastructure failures or timeouts. Corrected definitions passed independent
-SPEC and QUALITY review. One author is preparing a fresh coherent implementation
-correction; Root owns all runtime execution. See
+SPEC and QUALITY review. The third coherent private candidate has since passed
+independent source review for the targeted corrections and finite component
+selectors; Root owns all runtime execution. See
 [the correction record](verification/search-role-assembly-corrections.md).
 
 Subsequent review found reused workspace names in four historical fixtures.
@@ -23,10 +24,19 @@ Five independently reviewed callback controls each reproduced the intended
 certificate assertion after a valid actual baseline, with no infrastructure
 failures, timeouts or skips. Source mutations remained data and were never
 executed. Independent evidence review accepts that finite failing baseline.
-A third coherent source candidate is being prepared; it has no acceptance yet.
+Root then ran the unchanged 25 corrected definitions and five callback controls
+against the third candidate. All 30 single-case programs passed without
+infrastructure failures, timeouts or skips. Exact authority, capture and
+owned-process receipts passed independent actual-evidence audit. All historical
+failing evidence remains preserved.
 
-Next: review that complete candidate, run the reviewed focused definitions,
-and qualify the separate integrated controls and legitimate source-fit relation.
+Complete source-fit remains unaccepted: source review identified an authentic
+eight-iteration loop where a branch selects one, while the resolver forces the
+full lexical product. A branch-aware design and bounded characterization
+sequence passed independent SPEC and QUALITY review; additive regression
+definitions are being prepared. Next: reproduce and correct that limitation,
+then qualify the legitimate complete source-fit relation and separate integrated
+controls. The focused passes alone do not establish either gate.
 Native role reads, measurement acceptance, helper packaging and editor search
 routing remain outstanding. This checkpoint changes documentation only; the
 tested desktop package remains `f4d9207`. No new GUI access was granted.

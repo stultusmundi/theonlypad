@@ -96,19 +96,48 @@ Its independently accepted audit binds all five actual commands, authorities,
 captures and exact owned-process receipts. It does not accept the candidate or
 establish complete source-fit admission.
 
-Planned: correct the five findings coherently, review the whole candidate, then
-run the reviewed focused controls and the separate integrated surface plus 16
-groups. A legitimate independently enumerated source-fit invocation is required;
-refusing all inputs cannot qualify the gate.
+The third coherent candidate passed independent specification and quality review
+for the three narrow corrections and its finite component selectors. Root ran
+the unchanged 25 corrected definitions and five callback controls against that
+candidate. All 30 single-case programs passed, with no infrastructure failures,
+timeouts, skips or stderr output. Exact authorities, commands, complete captures
+and owned-process receipts passed independent actual-evidence audit. The
+successful historical positives now reach their subsequent negative
+checks, including duplicate workspace names. All earlier failing evidence remains
+preserved.
 
-Implemented: corrected test definitions and the retained failing candidate.
-A third coherent candidate addresses the subsequent callback, entry-chain and
-record-size findings. Its source preparation is in progress and has no
-implementation acceptance yet.
+The new finite result is
+`.local/search-campaign-swift-journal-20261007/root-role-assembly-v3-focused-actual-result-v1.json`
+(80,291 bytes; SHA256
+`a0031b8f00e607af86f38383d2a30afe92761f463eb641f87887e4a619ab6974`).
+A separate metadata audit corrects a redundant callback-output assertion in the
+initial verifier; it checks the exact output schema, flags and ordinary types.
+That correction does not change or rerun any inspected implementation or test.
+The independent finite audit is
+`.local/search-campaign-swift-journal-20261007/role-adapter-assembly-v3-focused-independent-actual-evidence-review-v1.json`
+(82,038 bytes; SHA256
+`1e03c07e932971dfb9bb9c5234e2a5110803799a016036a01ac5354bf70823dc`).
 
-Tested: the 25 scoped outcomes above, four corrected-fixture baseline outcomes,
-five callback baseline outcomes, and the earlier separately accepted
-missing-surface baseline. These do not establish the integrated 17-outcome GREEN.
+Complete source-fit remains unaccepted. Independent source review found that
+the resolver multiplies all eight iterations of an authentic fixture loop even
+when a branch selects one. This is a source finding, not a claimed full-fit
+runtime failure. The branch-aware design and its bounded characterization
+sequence passed separate specification and quality reviews. Additive definitions
+are being prepared before a separately authorized source correction.
+
+Planned: reproduce that conditional-selection limitation, correct it, then
+qualify a legitimate independently enumerated complete source-fit invocation and
+the separate integrated surface plus 16 groups. Refusing all inputs cannot
+qualify the gate.
+
+Implemented: the third coherent private candidate and unchanged focused test
+definitions; the conditional-selection correction is still outstanding.
+
+Tested: 30 passing focused programs, the retained failing baselines above, and
+the earlier separately accepted missing-surface baseline. The Path-defense
+presence check does not prove integrated source certification, and the seven
+contextless source-fit refusals do not prove legitimate complete-fit admission.
+These checks do not establish the integrated 17-outcome GREEN.
 
 Outstanding: complete source-fit admission, native role stages, full retained
 reads, final worker/envelope ownership, allocation/RSS and performance evidence,
