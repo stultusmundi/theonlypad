@@ -16,6 +16,11 @@ Full-scope implementation has resumed. Nonterminal settlement is committed at `f
 
 ## Active continuation evidence (2026-10-07)
 
+Current row count checked on 2026-10-08: the 76 A–I aggregate requirements
+have 65 partial implementations and 11 outstanding implementations. The dated
+64/12 summary above remains a historical checkpoint. No aggregate is fully
+verified across all its clauses, and these counts are not a completion percentage.
+
 Current continuation (2026-10-07): work remains active. The separately reviewed
 private search-campaign prerequisites now include counter33/0 plus three mutants,
 actual tiny own-process counter1/0, source submission18/0 plus two mutants, and
