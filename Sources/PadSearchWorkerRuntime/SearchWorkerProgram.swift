@@ -9,7 +9,7 @@ package enum SearchWorkerProgram {
     arguments: [String], inputFD: Int32, outputFD: Int32, controlFD: Int32,
     makeChannel: @escaping SearchWorkerChannelFactory,
     makeAccumulator: @escaping SearchWorkerAccumulatorFactory,
-    startParentLifetime: @escaping (Int32) -> Void
+    startParentLifetime: @escaping (Int32) throws -> Void
   ) -> Int32 {
     let bootstrap: SearchWorkerBootstrap
     do {
@@ -28,7 +28,11 @@ package enum SearchWorkerProgram {
     } catch {
       return 74
     }
-    startParentLifetime(controlFD)
+    do {
+      try startParentLifetime(controlFD)
+    } catch {
+      return 70
+    }
     do {
       let runtime = try SearchWorkerRuntime(
         generation: bootstrap.generation, channel: channel,

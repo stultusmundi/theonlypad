@@ -1,6 +1,6 @@
 # Checked search parent-lifetime startup design
 
-Status: independently reviewed; implementation and runtime evidence pending. Base: accumulator checkpoint1ca5f1f.
+Status: independently reviewed and implemented; focused, full-suite and separately selected actual child/peer checks pass. See `docs/verification/search-lifetime-startup.md`. Base: accumulator checkpoint1ca5f1f.
 
 ## Authority and boundaries
 
@@ -33,7 +33,7 @@ Internal-only operations allow deterministic syscall-boundary tests:
 
 ```swift
 typealias SearchParentLifetimeThreadEntry = @convention(c)
-  (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+  (UnsafeMutableRawPointer) -> UnsafeMutableRawPointer?
 final class SearchParentLifetimeThreadContext {
   let controlFD: Int32
   let run: (Int32) -> Void
@@ -59,7 +59,7 @@ Initialize attributes. Failure: report its returned pthread code, no destruction
 
 Failed create guarantees no callback: release retained context once, destroy attrs once and report creation as primary, cleanup code separately, threadCreated=false. Successful create transfers context irrevocably to the C trampoline even if the callback finishes before create returns. Destroy attrs once and never reclaim transferred context or detach/join/cancel the returned thread. If destruction fails after successful create, throw attributeDestruction with that code/threadCreated=true/no secondary code. The helper caller treats any startup error as fatal and exits promptly; it cannot retry or proceed as a longer-lived host.
 
-The C trampoline consumes the retained context once. An internal helper extracts fd/body and explicitly ends the box's strong ownership before calling body; production body is Never/_exit and will not run defers. The returning injected body is only an internal test boundary. It preserves actual context/trampoline ownership, including synchronous-before-create-return and deferred-after-return schedules. Null context is a trusted-contract violation that fails closed with _exit70. No mutable stack address is passed to the thread.
+The C trampoline consumes the retained context once. An internal helper extracts fd/body and explicitly ends the box's strong ownership before calling body; production body is Never/_exit and will not run defers. The returning injected body is only an internal test boundary. It preserves actual context/trampoline ownership, including synchronous-before-create-return and deferred-after-return schedules. The imported Darwin callback takes a nonoptional context pointer; the default adapter always passes the nonnull retained box, so there is no nullable-context branch. No mutable stack address is passed to the thread.
 
 Success proves a thread was created, not that its first read already ran. Lifetime EOF remains readable when scheduled. Startup must return without a readiness semaphore. Existing actual busy-main acceptance proves independent process termination while main is occupied.
 
@@ -80,3 +80,5 @@ Root selects the existing real lifetime occupied-main test under the harness-own
 ## Acceptance and remaining work
 
 Fresh deterministic/Program/neighboring suites, pure harness checks, actual busy-main child, source review and full app/core build/test must pass before local checkpoint. Use direct watchdog ownership; never nest a coordinator or infer cleanup from global PID absence. Raw synthetic logs remain ignored. Desktop auth is independently pending. Next: fixed helper product, entrypoint and nested packaging/real parent execution; then production parent binding/editor routing and adversarial/memory/desktop acceptance.
+
+Compiler qualification: the first attempted behavioral run was a setup failure, not an assertion RED. The imported pthread callback requires a nonoptional UnsafeMutableRawPointer parameter. The corrected spelling above retains the same ownership contract and all test oracles.

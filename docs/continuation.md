@@ -1,5 +1,21 @@
 # Continuation
 
+## Checked lifetime startup — 2026-10-08
+
+The isolated `feat/search-lifetime-startup` branch implements checked detached
+pthread startup and the worker Program's refusal before input processing.
+Independent specification and quality review approve it. Focused worker/starter
+133/0, full app/core895/0, pure harness56/0 and frozen lifecycle selection104/0
+pass. Separately selected actual busy-main lifetime and unrelated-peer checks
+each pass1/0 with exact child reap, channel cleanup and artifact bindings. See
+[the verification record](verification/search-lifetime-startup.md).
+
+Next: fixed `PadSearchWorker` executable composition and nested helper packaging,
+then production parent response binding and editor routing. Search remains
+in-process. No helper search, hard cancellation, memory/performance or desktop
+acceptance is inferred. UI Automation authentication remains user-owned and
+pending; continue independent work. No remote merge/push/release is authorized.
+
 ## Production worker accumulator — 2026-10-08
 
 The isolated `feat/search-worker-accumulator` branch implements the component at

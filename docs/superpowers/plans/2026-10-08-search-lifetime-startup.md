@@ -24,7 +24,7 @@ Files: create `Sources/SearchExecution/SearchParentLifetimeStarter.swift`, `Test
 
 Interfaces: exact package/internal types and error fields in the spec; new package `SearchParentLifetime.start(controlFD: Int32) throws`; internal overload takes operations/run; Program callback becomes throwing and returns70 on any error.
 
-- [ ] Write deterministic tests against real retained context/C trampoline with literal pthread error codes and exact call order. Example behavior:
+- [x] Write deterministic tests against real retained context/C trampoline with literal pthread error codes and exact call order. Example behavior:
 
 ```swift
 let fault = SearchParentLifetimeStartError(
@@ -35,10 +35,10 @@ let fault = SearchParentLifetimeStartError(
 
 The test operations capture a weak actual context during create and body checks absence before execution. Cover the finite schedules and failures listed in the spec; all expected errors/calls are independent literal fixtures. Test-only helpers remain in Tests.
 
-- [ ] Root observes missing-interface compiler RED, adds only a minimal compiling shell, then observes behavioral RED. Program throwing-signature mismatch is compiler evidence; missing error containment must have an executable failing assertion before final catch. Root commands run through direct `scripts/run-owned-search-tests.py --timeout 240 --output <fresh ignored directory> -- scripts/swift.sh test --scratch-path .build/lifetime-startup --filter 'SearchParentLifetimeStarterTests|SearchWorkerProgramTests'`.
-- [ ] Implement negative validation, attrs init/detach/cleanup, retain/create/transfer/reclaim, static C trampoline and explicit prebody context ownership end. Actual Darwin operations call pthread APIs with returned-code semantics and PTHREAD_CREATE_DETACHED. No extra host-lifetime manager.
-- [ ] Change Program starter to throwing; catch only this setup boundary and return70 before reader work. Root reruns focused GREEN, then existing SearchWorker/parent lifetime regressions, with complete source and owned-command receipts.
-- [ ] Independent reviewer checks actual sources, finite tests, context ownership and error precedence. Resolve important findings before fixture activation.
+- [x] Root observes missing-interface compiler RED, adds only a minimal compiling shell, then observes behavioral RED. Program throwing-signature mismatch is compiler evidence; missing error containment must have an executable failing assertion before final catch. Root commands run through direct `scripts/run-owned-search-tests.py --timeout 240 --output <fresh ignored directory> -- scripts/swift.sh test --scratch-path .build/lifetime-startup --filter 'SearchParentLifetimeStarterTests|SearchWorkerProgramTests'`.
+- [x] Implement negative validation, attrs init/detach/cleanup, retain/create/transfer/reclaim, static C trampoline and explicit prebody context ownership end. Actual Darwin operations call pthread APIs with returned-code semantics and PTHREAD_CREATE_DETACHED. No extra host-lifetime manager.
+- [x] Change Program starter to throwing; catch only this setup boundary and return70 before reader work. Root reruns focused GREEN, then existing SearchWorker/parent lifetime regressions, with complete source and owned-command receipts.
+- [x] Independent reviewer checks actual sources, finite tests, context ownership and error precedence. Resolve important findings before fixture activation.
 
 ## Task2: Frozen harness and actual independent lifetime
 
@@ -46,8 +46,8 @@ Files: modify only busy-main block in `Tests/SearchChildIntegration/FixtureMain.
 
 Consumes: package starter from1, original existing busy-main mode and real lifecycle test. Produces: frozen package includes actual starter+tests; actual occupied-main test runs production startup without semaphore.
 
-- [ ] Write pure inventory controls proving exact new test source is mandatory and frozen. Root runs `python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'`; baseline refusal precedes harness modification.
-- [ ] Replace fixture startup exactly:
+- [x] Write pure inventory controls proving exact new test source is mandatory and frozen. Root runs `python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'`; baseline refusal precedes harness modification.
+- [x] Replace fixture startup exactly:
 
 ```swift
 do { try SearchParentLifetime.start(controlFD: 3) }
@@ -55,13 +55,13 @@ catch { refuse() }
 ```
 
 Preserve following readiness metadata, main-loop body and all other fixture modes.
-- [ ] Root runs harness deterministic starter/lifetime/launcher/timer selection and then explicitly selects `SearchChildLifetimeProcessTests` with fresh source/fixture/bundle hashes under its own watchdog. Preserve exact exited0 consuming reap/channels cleanup; do not wrap the harness in another watchdog.
-- [ ] Root runs shared-spawn peer regression when source inventory changed. Independent review checks fixture/harness delta and actual evidence scope; no benign helper search claim.
+- [x] Root runs harness deterministic starter/lifetime/launcher/timer selection and then explicitly selects `SearchChildLifetimeProcessTests` with fresh source/fixture/bundle hashes under its own watchdog. Preserve exact exited0 consuming reap/channels cleanup; do not wrap the harness in another watchdog.
+- [x] Root runs shared-spawn peer regression when source inventory changed. Independent review checks fixture/harness delta and actual evidence scope; no benign helper search claim.
 
 ## Task3: Integrated evidence/local checkpoint
 
 Files: add `docs/verification/search-lifetime-startup.md`; update AGENTS, continuation, spec/plan states.
 
-- [ ] Root full app/core test under owned watchdog600s, strict format lint, public-source and staged-diff checks. No platform, GUI or memory success inferred.
-- [ ] Record compiler/behavioral failures, deterministic/actual process results and scope limits separately; preserve ignored raw evidence.
-- [ ] Scoped local commit; continue helper entrypoint/product/packaging. No remote publication/merge/push and no stop at this checkpoint.
+- [x] Root full app/core test under owned watchdog600s, strict format lint, public-source and staged-diff checks. No platform, GUI or memory success inferred.
+- [x] Record compiler/behavioral failures, deterministic/actual process results and scope limits separately; preserve ignored raw evidence.
+- [x] Scoped local commit; continue helper entrypoint/product/packaging. No remote publication/merge/push and no stop at this checkpoint.

@@ -215,6 +215,67 @@ final class SearchWorkerProgramTests: XCTestCase {
     XCTAssertEqual(result.last?.payload, Data([1, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0]))
   }
 
+  func testTypedLifetimeStartupFailureStopsBeforePendingRequestWork() throws {
+    enum StartupFailure: Error { case threadCreation }
+    let pending = try requestBytes()
+    let channel = ProgramChannel([pending])
+    var events: [String] = []
+    channel.onRead = { events.append("read") }
+    channel.onWrite = { _ in events.append("write") }
+    let code = SearchWorkerProgram.run(
+      arguments: arguments, inputFD: 101, outputFD: 202, controlFD: 303,
+      makeChannel: { input, output in
+        XCTAssertEqual(input, 101)
+        XCTAssertEqual(output, 202)
+        events.append("channel")
+        return channel
+      },
+      makeAccumulator: { _ in
+        events.append("accumulator")
+        return ProgramAccumulator()
+      },
+      startParentLifetime: { fd in
+        XCTAssertEqual(fd, 303)
+        events.append("lifetime")
+        throw StartupFailure.threadCreation
+      })
+    XCTAssertEqual(code, 70)
+    XCTAssertEqual(events, ["channel", "lifetime"])
+    XCTAssertEqual(channel.reads, 0)
+    XCTAssertTrue(channel.output.isEmpty)
+    XCTAssertEqual(channel.input, [pending], "Startup failure must leave the valid request unread")
+  }
+
+  func testSearchErrorFromLifetimeStartupIsFatalSetupNotSemanticTerminal() throws {
+    let pending = try requestBytes()
+    let channel = ProgramChannel([pending])
+    var events: [String] = []
+    channel.onRead = { events.append("read") }
+    channel.onWrite = { _ in events.append("write") }
+    let code = SearchWorkerProgram.run(
+      arguments: arguments, inputFD: 101, outputFD: 202, controlFD: 303,
+      makeChannel: { input, output in
+        XCTAssertEqual(input, 101)
+        XCTAssertEqual(output, 202)
+        events.append("channel")
+        return channel
+      },
+      makeAccumulator: { _ in
+        events.append("accumulator")
+        return ProgramAccumulator()
+      },
+      startParentLifetime: { fd in
+        XCTAssertEqual(fd, 303)
+        events.append("lifetime")
+        throw SearchError.invalidPattern
+      })
+    XCTAssertEqual(code, 70)
+    XCTAssertEqual(events, ["channel", "lifetime"])
+    XCTAssertEqual(channel.reads, 0)
+    XCTAssertTrue(channel.output.isEmpty, "Setup failure must not emit even a semantic terminal")
+    XCTAssertEqual(channel.input, [pending])
+  }
+
   private func run(
     _ channel: ProgramChannel,
     makeAccumulator: @escaping SearchWorkerAccumulatorFactory = { _ in ProgramAccumulator() }

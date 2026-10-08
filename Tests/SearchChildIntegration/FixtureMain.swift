@@ -74,12 +74,11 @@ func writeAll(_ bytes: Data) {
   refuse()
 }
 if mode == "parent-lifetime-busy-main" {
-  let started = DispatchSemaphore(value: 0)
-  Thread.detachNewThread {
-    started.signal()
-    SearchParentLifetime.run(controlFD: 3)
+  do {
+    try SearchParentLifetime.start(controlFD: 3)
+  } catch {
+    refuse()
   }
-  started.wait()
   // Occupy main without reading request EOF or servicing a run loop. The
   // dedicated lifetime reader must terminate the whole process independently.
   var announced = false

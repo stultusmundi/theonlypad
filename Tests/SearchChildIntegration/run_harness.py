@@ -24,6 +24,7 @@ let package = Package(
 '''
 FIXED = (
     'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift',
+    'Tests/SearchExecutionTests/SearchParentLifetimeStarterTests.swift',
     'Tests/SearchChildIntegration/SearchChildChannelTests.swift',
     'Tests/SearchChildIntegration/SearchChildLauncherTests.swift',
     'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift',

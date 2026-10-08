@@ -23,6 +23,7 @@ class HarnessTests(unittest.TestCase):
             'Sources/PadCore/Core.swift': 'import Foundation\n',
             'Sources/SearchExecution/Child.swift': 'import PadCore\n',
             'Tests/SearchExecutionTests/SearchChildLifecycleTests.swift': 'import XCTest\n',
+            'Tests/SearchExecutionTests/SearchParentLifetimeStarterTests.swift': '// synthetic checked lifetime starter tests\n',
             'Tests/SearchChildIntegration/SearchChildChannelTests.swift': '// real channel test source\n',
             'Tests/SearchChildIntegration/SearchChildLauncherTests.swift': '// launcher controls\n',
             'Tests/SearchChildIntegration/SearchChildLifetimeTests.swift': '// lifetime controls\n',
@@ -440,6 +441,41 @@ class HarnessTests(unittest.TestCase):
         (self.run / 'Package/Sources/PadCore/Extra.swift').symlink_to(self.root / 'Sources/PadCore/Core.swift')
         with self.assertRaises(ValueError):
             HARNESS.verify_frozen(self.run, manifest)
+
+    def test_lifetime_starter_test_is_required_exact_frozen_compiler_input(self):
+        import hashlib
+        relative = 'Tests/SearchExecutionTests/SearchParentLifetimeStarterTests.swift'
+        contents = b'import XCTest\n// synthetic checked lifetime startup tests\n'
+        source = self.root / relative
+        source.write_bytes(contents)
+        manifest = self.freeze()
+        entries = [item for item in manifest['sources'] if item['source'] == relative]
+        self.assertEqual(len(entries), 1, 'The deterministic starter test must be inventoried once')
+        item = entries[0]
+        frozen = 'Package/Tests/SearchExecutionTests/SearchParentLifetimeStarterTests.swift'
+        self.assertEqual(item['frozen'], frozen)
+        self.assertEqual(item['sha256'], hashlib.sha256(contents).hexdigest())
+        self.assertEqual(source.read_bytes(), contents)
+        self.assertEqual((self.run / frozen).read_bytes(), contents)
+        generated = [item for item in manifest['generated']
+                     if item['frozen'] == 'Package/Package.swift']
+        self.assertEqual(len(generated), 1)
+        package = (self.run / 'Package/Package.swift').read_bytes()
+        self.assertEqual(generated[0]['sha256'], hashlib.sha256(package).hexdigest())
+        self.assertIn(
+            b'.testTarget(name: "SearchExecutionTests", dependencies: ["SearchExecution", "PadCore"])',
+            package)
+        self.assertEqual(self.calls, [], 'Source freezing must not dispatch compiler stages')
+
+    def test_missing_lifetime_starter_test_refuses_before_watchdog_dispatch(self):
+        relative = 'Tests/SearchExecutionTests/SearchParentLifetimeStarterTests.swift'
+        source = self.root / relative
+        source.write_bytes(b'import XCTest\n// synthetic required startup test\n')
+        source.unlink()
+        with self.assertRaisesRegex(ValueError, 'missing source file'):
+            self.freeze()
+            HARNESS.execute(self.run, HARNESS.parse_args(['--build-only']), self.fake_watchdog)
+        self.assertEqual(self.calls, [], 'Missing required input must refuse before any stage')
 
 
 if __name__ == '__main__':
