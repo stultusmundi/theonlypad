@@ -53,6 +53,21 @@ Their duplicate-name and later negative branches remain unexecuted because the
 positive cases fail. These metadata checks do not exercise physical workspace
 validation or prior-workspace retention.
 
+Review of the next candidate found that its decoder certificate omitted the
+three callbacks passed to `json.loads`, metadata preparation validated an
+incomplete entry chain, and the source-fit record limit could not hold the
+required read evidence. These are separate source findings; the entry-chain and
+capacity findings have no actual runtime failure claim.
+
+Five fresh callback controls passed independent definition review. Root then
+executed them against the actual candidate certificate: all five reached their
+intended assertions, after successful certification of the genuine baseline.
+Four cases independently qualified synthetic source mutations as data before
+checking their admission; the mutated code was never executed. There were no
+infrastructure failures, timeouts or skips. Independent actual-evidence review
+accepted these finite results. The closure case stops at the missing `pairs`
+callback, so its later name and body-hash assertions remain unexecuted.
+
 Each owned group returned EPERM for signaling after the leader exited, with a
 complete singleton query of that exact unreaped group and a subsequent consuming
 wait. The accepted receipt is `exitedLeaderOnly`; this does not claim successful
@@ -73,17 +88,27 @@ The subsequent four-case evidence is
 Its independent evidence review verifies all four authority, command, capture
 and exact owned-process receipts within the same finite scope.
 
+The five-case callback evidence is
+`.local/search-campaign-swift-journal-20261007/root-decoder-callback-baseline-actual-evidence-v1.json`
+(14,809 bytes; SHA256
+`7a5c6a2d67102d77f59a4b3ac968841e6064d12ac4f8d9686c99cf30c9987dfb`).
+Its independently accepted audit binds all five actual commands, authorities,
+captures and exact owned-process receipts. It does not accept the candidate or
+establish complete source-fit admission.
+
 Planned: correct the five findings coherently, review the whole candidate, then
 run the reviewed focused controls and the separate integrated surface plus 16
 groups. A legitimate independently enumerated source-fit invocation is required;
 refusing all inputs cannot qualify the gate.
 
 Implemented: corrected test definitions and the retained failing candidate.
-The implementation correction is in progress and has no acceptance yet.
+A third coherent candidate addresses the subsequent callback, entry-chain and
+record-size findings. Its source preparation is in progress and has no
+implementation acceptance yet.
 
 Tested: the 25 scoped outcomes above, four corrected-fixture baseline outcomes,
-and the earlier separately accepted missing-surface baseline. These do not
-establish the integrated 17-outcome GREEN.
+five callback baseline outcomes, and the earlier separately accepted
+missing-surface baseline. These do not establish the integrated 17-outcome GREEN.
 
 Outstanding: complete source-fit admission, native role stages, full retained
 reads, final worker/envelope ownership, allocation/RSS and performance evidence,

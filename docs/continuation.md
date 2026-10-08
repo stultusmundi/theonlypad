@@ -17,6 +17,14 @@ implementation assertion after complete metadata prequalification, with no
 infrastructure failures or timeouts. The later negatives remain unexecuted;
 physical workspace and prior-retention checks are separate.
 
+The next candidate's source review found omitted JSON callbacks, premature
+entry-chain validation and a record-size limit below the required evidence size.
+Five independently reviewed callback controls each reproduced the intended
+certificate assertion after a valid actual baseline, with no infrastructure
+failures, timeouts or skips. Source mutations remained data and were never
+executed. Independent evidence review accepts that finite failing baseline.
+A third coherent source candidate is being prepared; it has no acceptance yet.
+
 Next: review that complete candidate, run the reviewed focused definitions,
 and qualify the separate integrated controls and legitimate source-fit relation.
 Native role reads, measurement acceptance, helper packaging and editor search
