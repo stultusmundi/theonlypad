@@ -1,5 +1,20 @@
 # Continuation
 
+## Production worker accumulator — 2026-10-08
+
+The isolated `feat/search-worker-accumulator` branch builds on binary admission
+`69d3f55`. The concrete strict UTF8 accumulator passes29 focused methods, the
+formatted worker/resolver selection119/0, and full app/core881/0. A frozen
+BOM-stripping mutation fails its exact Unicode oracle as intended. The first
+compiler run exposed a macOS15-only API; the reviewed strict-transcode correction
+keeps the macOS14 floor. See [the component record](verification/search-worker-accumulator.md).
+
+Independent specification and quality review approve the component. Next is checked dedicated lifetime
+startup and then helper assembly/packaging. Editor search remains in-process;
+helper process, hard cancellation, memory/performance and desktop acceptance are
+separate. Desktop UI Automation authentication remains user-owned and pending;
+continue independent work. No remote merge/push/release is authorized.
+
 ## Binary disk admission — 2026-10-08
 
 The isolated `feat/binary-text-admission` branch builds on reviewed Help `b64abd5`.
