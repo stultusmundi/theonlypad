@@ -324,8 +324,14 @@ final class DriverTestConnection: SearchChildConnection, @unchecked Sendable {
   let writeReturning = DriverTestCount()
   let closeEntered = DriverTestCount()
   let closeRelease = DriverTestGate()
+  /// The cancelled read still owns its return scope here; close may finish independently.
+  let cancelledReadReturning = DriverTestCount()
+  private let cancelledReadReturn: DriverTestGate?
 
-  init(holdClose: Bool = false) { if !holdClose { closeRelease.open() } }
+  init(holdClose: Bool = false, cancelledReadReturn: DriverTestGate? = nil) {
+    self.cancelledReadReturn = cancelledReadReturn
+    if !holdClose { closeRelease.open() }
+  }
 
   var snapshot: Snapshot {
     state.withValue {
@@ -376,20 +382,29 @@ final class DriverTestConnection: SearchChildConnection, @unchecked Sendable {
       $0.maximumReads = max($0.maximumReads, $0.activeReads)
     }
     defer { state.withValue { $0.activeReads -= 1 } }
-    let bytes: Data = try await withCheckedThrowingContinuation { continuation in
-      let immediate = state.withValue { state -> Result<Data, ReadFailure>? in
-        guard state.activeReads == 1 else { return .failure(.child(.protocolFailure)) }
-        if state.closed { return .failure(.child(.cancelled)) }
-        if !state.reads.isEmpty {
-          let result = state.reads.removeFirst()
-          return Self.prefix(result, maximum: maxBytes, remaining: &state.reads)
+    let bytes: Data
+    do {
+      bytes = try await withCheckedThrowingContinuation { continuation in
+        let immediate = state.withValue { state -> Result<Data, ReadFailure>? in
+          guard state.activeReads == 1 else { return .failure(.child(.protocolFailure)) }
+          if state.closed { return .failure(.child(.cancelled)) }
+          if !state.reads.isEmpty {
+            let result = state.reads.removeFirst()
+            return Self.prefix(result, maximum: maxBytes, remaining: &state.reads)
+          }
+          precondition(state.pendingRead == nil)
+          state.pendingRead = (maxBytes, continuation)
+          return nil
         }
-        precondition(state.pendingRead == nil)
-        state.pendingRead = (maxBytes, continuation)
-        return nil
+        readEntered.increment()
+        if let immediate { continuation.resume(with: immediate.mapError { $0.error }) }
       }
-      readEntered.increment()
-      if let immediate { continuation.resume(with: immediate.mapError { $0.error }) }
+    } catch {
+      if error as? SearchChildFailure == .cancelled {
+        cancelledReadReturning.increment()
+        if let cancelledReadReturn { await cancelledReadReturn.wait() }
+      }
+      throw error
     }
     state.withValue { $0.readBytes += bytes.count }
     return bytes
@@ -443,6 +458,7 @@ final class DriverTestConnection: SearchChildConnection, @unchecked Sendable {
     let gates = state.withValue { $0.gates }
     for gate in gates { gate.open() }
     closeRelease.open()
+    cancelledReadReturn?.open()
   }
   private static func prefix(
     _ result: Result<Data, ReadFailure>, maximum: Int,

@@ -60,10 +60,96 @@ import XCTest
     owner.release(lease)
     XCTAssertEqual(owner.accountingSnapshot.retained, 0)
     h.prepareCleanup()
+    let first = await owner.shutdown()
+    // Legacy shutdown joins child cleanup, but only observes parent settlement.
+    // Closing the injected connection does not join the driver's idle read owner.
+    await observed.sessionReleased.wait()
+    XCTAssertEqual(observed.releasedGeneration, identity.generation)
     let stopped = await owner.shutdown()
+    XCTAssertEqual(stopped.driver, first.driver)
     XCTAssertEqual(stopped.driverSettlement, .settled(admissionClosed: true))
     XCTAssertEqual(stopped.retainedActiveJobs, 0)
     XCTAssertEqual(stopped.retainedLeases, 0)
+  }
+
+  // Break: treating physical close/reap as proof that the parent idle read scope exited.
+  func testHealthyShutdownStaysPendingUntilActualIdleReadScopeExits() async throws {
+    let h = try DriverHarness()
+    h.system.reapOnSignal = true
+    let readReturn = DriverTestGate()
+    let connection = DriverTestConnection(cancelledReadReturn: readReturn)
+    let observed = AdmissionDriverObservation()
+    let driver = try makeDriver(h, observed: observed)
+    let owner = try SearchAdmissionController<String>(
+      driver: driver, accounting: AdmissionTestAccounting(), retry: AdmissionManualRetry())
+    addTeardownBlock {
+      connection.releaseAllGates()
+      h.prepareCleanup()
+      _ = await owner.shutdown()
+    }
+    defer {
+      connection.releaseAllGates()
+      h.releaseAllGates()
+    }
+    let delivered = DriverTestGate()
+    var deliveries: [SearchAdmissionDelivery] = []
+    _ = try owner.submit(
+      consumer: owner.register(), descriptor: descriptor(),
+      capture: { .init(text: "x", inputUTF16: 1, context: "held-idle-read") },
+      completion: {
+        deliveries.append($0)
+        delivered.open()
+      })
+    let identity = try await connect(h, connection: connection, observed: observed, pid: 7213)
+    connection.offer(try DriverTestWire.success(identity: identity))
+    await delivered.wait()
+    XCTAssertEqual(deliveries.count, 1)
+    guard case .completed(let lease) = try XCTUnwrap(deliveries.first) else {
+      return XCTFail("Actual driver success must publish a lease")
+    }
+    owner.release(lease)
+    assertEmpty(owner)
+    // Hello, terminal response, then the actual source-free idle read. Its return
+    // gate is independent of close(), the sole consuming reap, and child shutdown.
+    await connection.waitForReadCalls(3)
+    XCTAssertEqual(connection.readEntered.value, 3)
+    XCTAssertEqual(connection.snapshot.activeReads, 1)
+    XCTAssertFalse(observed.sessionReleased.isOpen)
+    let first = await owner.shutdown()
+    await connection.cancelledReadReturning.wait(for: 1)
+    XCTAssertTrue(first.driver.child.stopped)
+    XCTAssertTrue(first.driver.child.channelsClosed)
+    XCTAssertFalse(first.driver.parentLaneSettled)
+    XCTAssertEqual(first.driver.retainedParentLanes, 1)
+    XCTAssertEqual(first.driverSettlement, .pending)
+    XCTAssertEqual(first.retainedActiveJobs, 0)
+    XCTAssertEqual(first.retainedLeases, 0)
+    XCTAssertEqual(connection.snapshot.activeReads, 1)
+    XCTAssertFalse(readReturn.isOpen)
+    XCTAssertFalse(observed.sessionReleased.isOpen)
+    XCTAssertNil(observed.releasedGeneration)
+    assertEmpty(owner)
+    XCTAssertEqual(h.system.signals, [.init(pid: 7213, signal: SIGKILL)])
+    let polls = h.system.pollCount.value
+    let timers = h.timers.scheduled.value
+
+    readReturn.open()
+    // The driver emits this only after readLoop returns from read/discard scopes,
+    // readOwnerExited clears the session and matching codec-lane ownership ends.
+    await observed.sessionReleased.wait()
+    XCTAssertEqual(observed.releasedGeneration, identity.generation)
+    XCTAssertEqual(connection.snapshot.activeReads, 0)
+    let stopped = await owner.shutdown()
+    XCTAssertEqual(stopped.driver, first.driver)
+    XCTAssertEqual(stopped.driverSettlement, .settled(admissionClosed: true))
+    XCTAssertEqual(stopped.retainedActiveJobs, 0)
+    XCTAssertEqual(stopped.retainedLeases, 0)
+    assertEmpty(owner)
+    XCTAssertEqual(deliveries.count, 1)
+    XCTAssertEqual(h.system.launchCount.value, 1)
+    XCTAssertEqual(h.system.signals, [.init(pid: 7213, signal: SIGKILL)])
+    XCTAssertEqual(h.system.pollCount.value, polls)
+    XCTAssertEqual(h.timers.scheduled.value, timers)
   }
 
   func testCancellationKeepsReservationUntilActualReapAndCloseThenTerminalShutdown() async throws {
@@ -265,6 +351,7 @@ import XCTest
     XCTAssertEqual(admission.identity.generation, generation)
     XCTAssertEqual(admission.connectionGeneration, generation)
     XCTAssertEqual(admission.ticketNonce, admission.connectionNonce)
+    observed.expectSessionRelease(generation: admission.identity.generation)
     await connection.waitForWriteCalls(2)
     connection.offer(try DriverTestWire.childHello(generation: generation))
     await connection.waitForWriteCalls(7)
@@ -304,12 +391,23 @@ private final class AdmissionDriverObservation: @unchecked Sendable {
     var ticket: (UUID, SearchWireIdentity)?
     var connection: (UUID, UUID)?
     var cancelled = false
+    var expectedReleaseGeneration: UUID?
+    var releasedGeneration: UUID?
   }
   private let state = DriverTestLocked(State())
   let ticketStored = DriverTestGate()
   let connected = DriverTestGate()
   let coordinatorExited = DriverTestGate()
+  let sessionReleased = DriverTestGate()
   var cancelled: Bool { state.withValue { $0.cancelled } }
+  var releasedGeneration: UUID? { state.withValue { $0.releasedGeneration } }
+  func expectSessionRelease(generation: UUID) {
+    let released = state.withValue {
+      $0.expectedReleaseGeneration = generation
+      return $0.releasedGeneration == generation
+    }
+    if released { sessionReleased.open() }
+  }
   var admission: Admission? {
     state.withValue {
       guard let ticket = $0.ticket, let connection = $0.connection else { return nil }
@@ -330,6 +428,12 @@ private final class AdmissionDriverObservation: @unchecked Sendable {
       state.withValue { $0.cancelled = true }
     case .coordinatorScopeExited:
       coordinatorExited.open()
+    case .sessionReleased(let generation):
+      let matches = state.withValue {
+        $0.releasedGeneration = generation
+        return $0.expectedReleaseGeneration == generation
+      }
+      if matches { sessionReleased.open() }
     default: break
     }
   }
