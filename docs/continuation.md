@@ -39,16 +39,30 @@ after a payload-ordering defect was corrected without changing their oracles.
 Their actual isolated baseline passes all prerequisites and reaches the fixed
 missing-API assertion, with no infrastructure failures, timeouts or skips.
 Independent actual-evidence review accepts this surface-only failure. The
-selected positive and thirteen malformed-input checks remain unexecuted.
+selected positive and thirteen malformed-input checks were unexecuted at that
+baseline checkpoint.
 
 The first private selected-component implementation is frozen and failed
 independent source review. It rejects the accepted child entry ordinal and
 adds an unrelated guard dependency; its name validation and byte bounds also
 need correction. A smaller ledger-ceiling mismatch remains qualified without
 a capacity witness. This candidate was not executed. A fresh source correction
-is in progress, preserving the original fixture and expected results.
-Next: independently review the corrected implementation, then run its
-legitimate positive before the malformed-input checks. Complete
+proceeded in fresh immutable packets, preserving the original fixture and
+expected results. A second source review identified remaining predecode size,
+empty-product budget and edge-type checks. The third revision passed separate
+source SPEC and QUALITY review, then actual verification: its genuine valid
+case passes before all thirteen isolated refusals. The surface and whole-source
+identity regressions also pass; the old lexical characterization remains its
+exact original failure. Root and independent evidence review verified complete
+captures and cleanup receipts.
+
+The first behavioral attempt reached the valid positive and nine refusals before
+its 30-second safety deadline. That incomplete result is retained. An unchanged
+rerun with a 90-second deadline completed in 41.304145 seconds; neither deadline
+is an accepted product performance target. Additional boundary definitions are
+frozen but remain unexecuted pending separate review. Next: verify those name,
+edge, encoded-size, raw-image and empty-product controls, then expand the
+source-qualified call-context and real entry-state proof. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.

@@ -172,7 +172,8 @@ the ordinary-int8 prerequisite pass before the fixed missing-API assertion.
 Independent actual-evidence review accepts one surface target failure, with no
 infrastructure failures, timeouts or skips. Complete captures and exact owned
 process cleanup/reap receipts were verified. This tests API absence only; the
-selected positive and thirteen malformed-input cases remain unexecuted.
+selected positive and thirteen malformed-input cases were unexecuted at that
+baseline checkpoint.
 
 The surface result is
 `.local/search-campaign-swift-journal-20261007/root-selected-occurrences-task1-v2-surface-actual-result-v1.json`
@@ -183,7 +184,7 @@ Its independent audit is
 (22,606 bytes; SHA256
 `c653ca9c2849f29ff45749c50624bf9004bc32c5086b07246503b415f186a0c9`).
 A fresh source-only authority now scopes the private component implementation;
-no selected implementation or behavior is accepted yet.
+no selected implementation or behavior was accepted at that checkpoint.
 
 The first selected-component source candidate failed independent SPEC review:
 the child entry and first guard dependencies disagree with the unchanged valid
@@ -194,6 +195,41 @@ report and source relationships; the candidate remains immutable and unexecuted.
 Correction proceeds in a fresh source packet. The review is source evidence,
 not a selected behavioral failure or memory measurement.
 
+The second source revision still needed raw-derived decoded-image reservation,
+empty-product byte checks, an edge-list type guard and generic integer-width
+correction. It also remains immutable and unexecuted. The third revision passed
+separate source specification and quality reviews without changing the original
+controls, independent expected result, prior resolver bodies or entry bytes.
+
+Root executed the corrected component. Its valid case preserves all eight
+lexical tuples, selects ordinal1 and checks the complete child context and guard
+certificate before all thirteen isolated malformed-input refusals. Surface and
+whole-source identity regressions pass. The unchanged historical conditional
+characterization still reaches its exact lexical8-versus-selected1 assertion;
+the old API is not relabelled as fixed.
+
+The first behavioral run reached the positive and nine refusals before the
+30-second safety deadline; its exact owned group was signaled and reaped. This
+incomplete result is retained separately. An unchanged rerun with a fresh
+authority and 90-second deadline completed in 41.304145 seconds with all thirteen
+refusals and no final timeout, infrastructure failure, skip or stderr output.
+These deadlines and elapsed time do not establish a product performance budget.
+
+Root and independent evidence review checked all five exact authorities,
+commands, complete captures and process receipts. Normal exited leaders have
+the exact unreaped singleton-group query before consuming wait; the timeout has
+actual group-signal and consuming-wait evidence. No signal is sent after wait.
+The bounded actual result is
+`.local/search-campaign-swift-journal-20261007/root-selected-occurrences-task1-v3-actual-results-v1.json`
+(12,866 bytes; SHA256
+`67ffb4a8fc54fb596bdf3195f2783e351ac1e60003c4555722d04cd3685e263f`).
+Its independent audit is
+`.local/search-campaign-swift-journal-20261007/role-selected-occurrences-task1-v3-independent-actual-evidence-review-v1.json`
+(26,259 bytes; SHA256
+`e24a001b66eb1ce2d2ed509afe4960a3883e8234e8f35aa7072e867d6aef0337`).
+Additional boundary definitions are frozen but unexecuted; eligible full-API
+capacity, complete entry/activation/resources and source-fit remain unaccepted.
+
 Planned: add the separately versioned selected-occurrence relation, then qualify
 a legitimate independently enumerated complete source-fit invocation and the
 separate integrated surface plus 16 groups. Refusing all inputs cannot qualify
@@ -201,13 +237,14 @@ the gate.
 
 Implemented: the third coherent private candidate, unchanged focused test
 definitions, the narrow whole-source identity correction and corrected new
-selected-API definitions. The first selected-component source is frozen but
-unaccepted; its correction is in progress and requires fresh source review and
-actual verification.
+selected-API definitions. The third selected-component source is accepted within
+its finite checkpoint scope. Rejected earlier source revisions remain preserved.
 
 Tested: 30 passing focused programs, one passing identity component, the separate
 qualified conditional characterization failure, the new missing selected-API
-surface failure, the retained setup failure and
+surface failure, the corrected component's valid positive and thirteen isolated
+refusals, its surface and identity regressions, the retained incomplete timeout,
+the retained setup failure and
 failing baselines above, and the earlier separately accepted missing-surface
 baseline. The Path-defense
 presence check does not prove integrated source certification, and the seven
