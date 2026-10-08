@@ -121,7 +121,14 @@ preserved. This is finite component evidence, not allocation or full-helper
 acceptance. Separate admission-regression definitions
 were rejected before execution for accepting a successful result where two bound
 cases require an exact schema refusal. Their correction passed both source
-reviews but remains unexecuted. Their trusted-root interface uses a separate
+reviews. Root then ran the complete normal admission program under the reviewed
+watchdog: one original prerequisite, 13 complete component positive observations
+and 38 isolated refusals passed, totaling 52 observations. Independent actual
+review accepted the exact output, all 38 zero-touch observer receipts and complete
+consuming-cleanup evidence. These are repeated observations, not a distinct
+unit-test count. The six causal variants remain unexecuted; zero touches alone
+do not establish that the observer detects removed safeguards.
+Their trusted-root interface uses a separate
 static crosscheck; no live call-context conversion is implemented. Review of the
 frozen state-dependency inventory found two missing call associations to
 conditional source alternatives. Independent review and Root accepted a fresh

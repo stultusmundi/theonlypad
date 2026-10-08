@@ -402,8 +402,20 @@ failure. New normal and causal admission regressions remain separate gates.
 Separate admission-regression definitions were rejected before execution for
 letting two bound causal cases accept a complete result instead of requiring
 their specified schema refusal with zero protocol touches. A narrow correction
-passed both source reviews and remains unexecuted; no new key/AST causal run is
-claimed. The completed capture
+passed both source reviews. Root then executed the complete normal admission
+program once under its separately reviewed plan and issued authority. The exact
+95-line, 6,590-byte output and empty stderr establish one original prerequisite,
+13 complete component positive observations and 38 isolated refusals: 52
+observations altogether. All 38 observer receipts contain three ordinary-integer
+zero latches and null callback receipts. Complete typed watchdog receipts confirm
+exit zero and consuming cleanup; independent actual review accepted this finite
+scope with no findings. These observations are not a distinct unit-test count.
+No causal variant ran, so observer sensitivity to removed safeguards remains
+unproved. This does not establish full-helper, live-owner, allocation, RSS,
+editor-search or desktop acceptance. The first normal execution-plan draft was
+rejected without execution; its corrected plan binds the issued Root authority
+separately from the plan and capture auditor. Historical failures and all original
+assertions and limits remain preserved. Earlier component capture
 files were made read-only after review found
 that the watchdog-created files remained writable; their bytes and results
 were unchanged, and the initial review and correction history are preserved.
