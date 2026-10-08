@@ -48,6 +48,19 @@ checks leave the76
 aggregate requirement states unchanged and do not establish production search
 isolation, memory acceptance or a new packaged desktop checkpoint.
 
+## Current bounded checkpoint (2026-10-09)
+
+A fresh row recount finds 76 A–I aggregate requirements: 67 partial and nine
+outstanding implementations. The earlier64/12 and65/11 counts above retain their
+historical dates. No aggregate is signed off across all its clauses; this is not
+a completion percentage. Production parent composition passed939/0; the new
+standalone admission accounting/retry checkpoint passes962/0, including23 focused
+component methods and357 neighboring methods. See
+[collaborator evidence](verification/search-admission-production-collaborators.md).
+The editor still searches in-process, joined admission terminal ownership remains
+outstanding, and current distribution/desktop evidence is unchanged. No aggregate
+requirement status is changed by this documentation recount.
+
 ## Public repository
 
 | ID | Requirement | Observable acceptance criteria | Planned implementation location | Required tests/evidence | Plan | Implementation | Validation | Blocker |

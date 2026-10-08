@@ -288,3 +288,25 @@ cleanup and no PID/reap counters; never transfer observed counts to it. Producti
 admission accounting/retry and native search routing remain outstanding. Final
 independent checkpoint review approves the scoped local commit; no new desktop, hard-regex,
 RSS/performance or physical release acceptance is inferred.
+
+
+Production admission collaborators (2026-10-09): standalone checked logical
+accounting and default cancellable main-queue retry now pass focused23/0, frozen
+neighbor357/0 and full public app/core962/0, warning-free. Both public executables
+link; existing controller, driver, native routing, manifest and original tests
+remain unchanged. Source/test reviews approve the components; independent final checkpoint
+evidence review also approves the scoped local commit. Full command executed under the
+sole direct owned watchdog:
+
+```sh
+python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/admission-production-full-owned -- scripts/swift.sh test --scratch-path .build/admission-production-integrated
+```
+
+Use fresh watchdog output paths. Strict recursive Swift formatting and
+public-source checks pass. Logical content allowances are not RSS/capacity or a
+process-global budget; default retry delay is25ms and dropped/cancelled tokens do
+not certify physical queue release. Current distribution remains source4841d89.
+Legacy admission shutdown still prevents joined service cleanup; terminal ownership
+and native search routing remain next. See
+`docs/verification/search-admission-production-collaborators.md`. No new helper
+process, desktop, hard-regex, memory/performance or unavailable-platform acceptance.

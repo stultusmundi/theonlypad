@@ -47,7 +47,7 @@
 - Produces package `SearchAdmissionProductionAccounting: SearchAdmissionAccounting, Sendable`, `package init()`, package computed properties and package charge method. Internal helpers stay private.
 - Existing controller budget tests use `AdmissionScriptedDriver`, `AdmissionManualRetry`, `SearchAdmissionController<String>` and its internal existing snapshot; no source visibility widening.
 
-- [ ] **1. Independent author writes meaningful literal tests before implementation.** Example actual empty find oracle:
+- [x] **1. Independent author writes meaningful literal tests before implementation.** Example actual empty find oracle:
 
 ```swift
 let limits = try SearchWireLimits(
@@ -85,11 +85,11 @@ XCTAssertEqual(accounting.resident, 1_048_576)
   refusal invariance and release to zero retained. This is conservative
   metadata-budget execution, not100M source/memory/helper acceptance.
 
-- [ ] **2. Root reviews tests; different reviewer approves SPEC/QUALITY.** Hash all
+- [x] **2. Root reviews tests; different reviewer approves SPEC/QUALITY.** Hash all
   new tests and original collaborators, preserve authored bytes before any
   formatting, and do not edit assertions to accommodate implementation.
 
-- [ ] **3. Root executes compiler RED, then a reached behavioral control.** Proposed
+- [x] **3. Root executes compiler RED, then a reached behavioral control.** Proposed
   focused public command, with fresh output/scratch paths or exact frozen package:
 
 ```sh
@@ -103,7 +103,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admissio
   replace actual old sources or assertions to manufacture RED. Keep every
   generated input explicit, hashed and excluded from adoption.
 
-- [ ] **4. Source owner implements only the accounting file.** Checked helpers:
+- [x] **4. Source owner implements only the accounting file.** Checked helpers:
 
 ```swift
 private func add(_ lhs: UInt64, _ rhs: UInt64) throws -> UInt64 {
@@ -123,7 +123,7 @@ private func multiply(_ value: UInt64, by factor: UInt64) throws -> UInt64 {
   checked helpers, with the exact spec constants; invalid dimensions produce
   invalidDescriptor. Use no platform capacity guesses or raw-dimensions API.
 
-- [ ] **5. Root runs unchanged focused and accounting/controller tests GREEN.**
+- [x] **5. Root runs unchanged focused and accounting/controller tests GREEN.**
 
 ```sh
 python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admission-accounting-green-owned -- scripts/swift.sh test --scratch-path .build/admission-accounting-green --filter 'SearchAdmissionProductionAccounting|SearchAdmissionProductionIntegration'
@@ -152,7 +152,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admissio
 - Produces MainActor package final `SearchAdmissionDispatchRetryScheduler`, package init and schedule; fresh private MainActor token per call, no internal timer access.
 - Integration supplies `SearchAdmissionProductionAccounting()` plus actual scheduler through unchanged controller initializer. It may use current injected driver/system/channel/test gates; no process/helper/GUI.
 
-- [ ] **1. Independent author writes tests before source.** Real adapter ordering:
+- [x] **1. Independent author writes tests before source.** Real adapter ordering:
 
 ```swift
 let scheduler = SearchAdmissionDispatchRetryScheduler()
@@ -190,11 +190,11 @@ token.cancel()
   scheduler, keeping original legacy settlement rules. Release gates in all
   failure paths; preserve prior Task1 methods/harnesses verbatim.
 
-- [ ] **2. Root and independent reviewer approve new tests.** Record author pins,
+- [x] **2. Root and independent reviewer approve new tests.** Record author pins,
   unchanged prior tests/dependencies and MainActor/lifetime sensitivity before
   source implementation.
 
-- [ ] **3. Root records missing-API compiler RED and bounded reached RED.**
+- [x] **3. Root records missing-API compiler RED and bounded reached RED.**
 
 ```sh
 python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admission-retry-red-owned -- scripts/swift.sh test --scratch-path .build/admission-retry-red --filter SearchAdmissionDispatchRetry
@@ -206,7 +206,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admissio
   let wrong transport call assumeIsolated from another queue. No assertion/source
   adoption change; Root names each reached mutation/control narrowly.
 
-- [ ] **4. Source owner implements only retry file.** Token stores optional action
+- [x] **4. Source owner implements only retry file.** Token stores optional action
   and DispatchWorkItem, queue captures token weakly, and queueing is only:
 
 ```swift
@@ -218,7 +218,7 @@ DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(25_000_000), execu
   extracts/clears item and calls item.cancel. Repeated cancel/delayed no-op entry
   is safe. No new strong cycle, registry, detached task or alternate transport.
 
-- [ ] **5. Root runs real adapter and both-collaborator integration GREEN.**
+- [x] **5. Root runs real adapter and both-collaborator integration GREEN.**
 
 ```sh
 python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admission-production-green-owned -- scripts/swift.sh test --scratch-path .build/admission-production-green --filter 'SearchAdmissionProduction|SearchAdmissionDispatchRetry'
@@ -234,7 +234,7 @@ python3 scripts/run-owned-search-tests.py --timeout 240 --output .local/admissio
 **Files:** Update `AGENTS.md`, `docs/continuation.md`, spec/plan, and create
 `docs/verification/search-admission-production-collaborators.md`.
 
-- [ ] **1. Root runs neighboring admission/ledger/controller/parent/wire/resolver/
+- [x] **1. Root runs neighboring admission/ledger/controller/parent/wire/resolver/
   collector selections, then fresh full public app/core.** Fresh ignored paths;
   exact frozen source snapshots are permitted and must be bound explicitly:
 
@@ -250,16 +250,27 @@ git diff --check
   new changes/failures/concerns. These output directories must be fresh because
   the watchdog refuses overwriting earlier evidence.
 
-- [ ] **2. Record exact APIs/budgets/formula, tests and meaningful failures.**
+- [x] **2. Record exact APIs/budgets/formula, tests and meaningful failures.**
   Separate source facts from finite actual callback/injected integration results.
   Preserve compiler RED, reached RED and harness setup failures separately;
   record exact limits/no memory/native/terminal acceptance. Current package
   remains the previous4841d89 source snapshot unless rebuilt/tested separately.
 
-- [ ] **3. Independent final SPEC/QUALITY evidence review.** Different reviewer
+- [x] **3. Independent final SPEC/QUALITY evidence review.** Different reviewer
   reads complete source/reports/inventories/receipts/captures, checks original
   tests unchanged, all new identities and public states. Resolve every blocker.
   Root rechecks current tested pins/public/diff and commits exact scoped files
   locally. No pushes/merges/releases. Continue mandatory joined terminal-owner
   design before production controller/native activation; milestones do not end
   the authorized continuous build.
+
+## Current execution checkpoint
+
+Tasks1/2 are implemented and independently source-reviewed. Root actual focused
+23/0, frozen neighboring357/0 and fresh public app/core962/0 pass, with complete
+owned-watchdog receipts and unchanged input inventories. Independent final evidence
+review approves the scoped local commit. Detailed preparation/RED/GREEN histories
+are recorded in the verification document; no native/helper/terminal/RSS claim.
+Root also corrects the current requirements-matrix header using a literal row
+recount (67partial/9outstanding), preserving historical counts and all row states.
+This is an additional documentation-only scope item for final review.

@@ -1,11 +1,12 @@
 # Production search admission accounting and retry
 
-Status: planned; not implemented or tested. Based on accepted parent construction
+Original design-adoption status: planned; not implemented or tested. Based on accepted parent construction
 commit `4841d89`. BUILD_PROMPT authorizes routine design choices and independent
 review in place of repeated human approval. This is an architectural integration
 slice; tests and reached RED precede implementation.
 Independent specification/quality review approves this design and plan with
-no blockers. Implementation and runtime acceptance remain pending.
+no blockers. At that adoption gate, implementation and runtime acceptance remained pending;
+the implemented checkpoint below records subsequent verification.
 
 ## Selected approach
 
@@ -230,3 +231,13 @@ Its former HEAD14e426a and pending checkpoint/doc pins are historical: the
 reviewed construction is now committed at4841d89. Root selects the values,
 formula,25ms transport and collaborator-only scope above. No runtime evidence
 for these new components follows from the previous939/6 construction checkpoint.
+
+## Implemented component checkpoint
+
+Standalone accounting and retry sources are implemented. Focused23/0, frozen
+neighbor357/0 and fresh public app/core962/0 pass without warnings; both app and
+helper link. Independent test and source reviews approve the components. Independent
+final checkpoint evidence review also approves the scoped local commit. See the
+[verification record](../../verification/search-admission-production-collaborators.md).
+All exclusions and the mandatory next joined-terminal design above remain in
+force; current distribution stays at parent composition4841d89.

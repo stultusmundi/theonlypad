@@ -1,5 +1,25 @@
 # Continuation
 
+## Production admission collaborators — 2026-10-09
+
+The isolated `feat/search-admission-production-collaborators` branch implements
+standalone logical accounting and cancellable main-queue retry adapters. Focused
+23/0, frozen neighboring357/0 and fresh public app/core962/0 pass with no warnings;
+both app and helper link. Two finite retry controls each fail one intended
+assertion; the accounting wrong-formula control fails seven across three methods.
+Independent test/source reviews approve the components. Independent final checkpoint
+evidence review also approves the scoped local commit. See
+[verification](verification/search-admission-production-collaborators.md).
+
+Next: reviewed joined admission terminal ownership, then native document and folder
+search routing. A native callback may still borrow a charged result while closing;
+the terminal design must preserve that credit and avoid awaiting its own borrow.
+The editor still searches in-process. Local distribution remains source `4841d89`;
+no new packaged desktop, hard-regex, allocation/RSS, physical queue/thread release,
+IME/VoiceOver or additional platform acceptance follows. Current UI Automation
+authentication remains user-owned and pending; continue independent work. No
+remote push, merge or release is authorized.
+
 ## Fixed production parent composition — 2026-10-09
 
 The isolated `feat/search-parent-production-composition` branch adds the fixed
