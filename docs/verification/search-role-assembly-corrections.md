@@ -129,21 +129,49 @@ qualified name at different locations in the complete original controls. Neither
 the eight-iteration companion nor the conditional target was reached. Independent
 actual-evidence review accepted one infrastructure failure and zero target
 failures. This is a prerequisite indexing defect, not conditional-selection RED.
-The original sources, definitions and failed run remain preserved. A dedicated
-whole-source identity regression is being prepared before a source correction.
+The original sources, definitions and failed run remain preserved.
 
-Planned: reproduce and correct the whole-source identity refusal, reach the
-unchanged conditional-selection characterization, add the separately versioned
-selected-occurrence relation, then qualify a legitimate independently enumerated
-complete source-fit invocation and
-the separate integrated surface plus 16 groups. Refusing all inputs cannot
-qualify the gate.
+A dedicated whole-source identity regression then reproduced the exact old
+index refusal after a complete bootstrap positive. A narrow correction passed
+separate source specification and quality reviews. Its actual focused check now
+retains both definitions and their body-call owners, and passes the complete
+bootstrap and original control inventories. Independent actual-evidence review
+accepted one identity component pass, with no infrastructure failures, timeouts
+or skips. These inventories describe indexed syntax, not executed control bodies.
 
-Implemented: the third coherent private candidate and unchanged focused test
-definitions; the conditional-selection correction is still outstanding.
+A fresh separate activation of the unchanged conditional definitions then passed
+the ordinary-int8 companion and reached the fixed lexical8-versus-selected1
+assertion. Independent actual-evidence review accepted one qualified target
+failure and no infrastructure failures, timeouts or skips. The documented old
+lexical API remains unchanged; this characterizes missing selected-occurrence
+capacity. It is not a full resolve_recipe regression or complete-fit admission.
 
-Tested: 30 passing focused programs, the retained failing baselines above, and
-the earlier separately accepted missing-surface baseline. The Path-defense
+The identity result is
+`.local/search-campaign-swift-journal-20261007/root-source-index-identity-candidate-actual-green-result-v1.json`
+(3,368 bytes; SHA256
+`45876695eac966a75407c694f8f59e498b9e95cdcba1ff172e4ba41c3290fa10`).
+The conditional result is
+`.local/search-campaign-swift-journal-20261007/root-source-fit-conditional-candidate-actual-characterization-result-v1.json`
+(4,833 bytes; SHA256
+`d4d268979f7c57ac554cce7f50818eea5a7d4322c0fb41a4e98b9028c1ff5ab3`).
+Their independent audits bind exact authorities, commands, complete captures
+and owned-process cleanup/reap receipts. The selected-occurrence executable
+plan passed separate specification and quality reviews. Additive definitions
+for its new API are being prepared; no selected implementation is accepted yet.
+
+Planned: add the separately versioned selected-occurrence relation, then qualify
+a legitimate independently enumerated complete source-fit invocation and the
+separate integrated surface plus 16 groups. Refusing all inputs cannot qualify
+the gate.
+
+Implemented: the third coherent private candidate, unchanged focused test
+definitions and the narrow whole-source identity correction; the selected
+conditional implementation is still outstanding.
+
+Tested: 30 passing focused programs, one passing identity component, the separate
+qualified conditional characterization failure, the retained setup failure and
+failing baselines above, and the earlier separately accepted missing-surface
+baseline. The Path-defense
 presence check does not prove integrated source certification, and the seven
 contextless source-fit refusals do not prove legitimate complete-fit admission.
 These checks do not establish the integrated 17-outcome GREEN.
