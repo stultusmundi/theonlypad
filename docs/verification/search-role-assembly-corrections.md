@@ -353,8 +353,45 @@ component refusals. Independent source review rejected the first frozen
 implementation for two gaps: external dictionary keys reached comparison before
 bounded ordinary-key admission, and caller AST traversal descriptors were not
 authenticated before standard-library traversal. Root verified both findings.
-The candidate remains unexecuted; a fresh source correction is being prepared,
-and new behavior is unverified. The completed capture
+That candidate remains unexecuted. A fresh correction passed independent source
+specification and quality reviews, followed by a separately reviewed execution
+plan. Its first actual valid-case run passed the original prerequisite and then
+failed with an identity refusal: it required five catalogue rows, but the
+authentic complete prerequisite contains seven. The five authenticated selected
+role mappings are a different relation. The complete captures contain 381 stdout
+bytes and 3,345 stderr bytes; exit code one and consuming cleanup were verified.
+The remaining three programs were held. Independent failure review also found
+that later completion lookup fed all seven catalogue rows to the five-role
+resolver before filtering for the helper. This second finding is source
+evidence, not an executed downstream failure.
+
+A one-byte draft addressing only cardinality was rejected without execution.
+The fresh correction addresses both catalogue cardinality and completion lookup,
+preserving all seven original catalogue rows, the five authenticated mappings,
+ten completion paths, original fixtures, expected results and limits. Both
+independent source reviews passed. Root then ran all four original programs:
+the valid case, 22 association refusals and 27 admission refusals passed with
+exact output and complete cleanup receipts. The accounting program passed the
+original prerequisite and combined component positive, then failed at the
+constructor logical-byte counter assertion. It produced 476 stdout bytes and
+1,614 stderr bytes, exit code one and complete consuming-cleanup evidence.
+No additional accounting positive or refusal ran, and its final summary is
+absent. The actual counter value was not emitted. Independent actual-result
+review verified all three passes and the failure. Independent source investigation
+found two missing `header:` markers in the private prefix catalogue, accounting
+for a source-derived 14-byte discrepancy. Restoring their original spelling and
+sort order reproduces the entire frozen registry fixture. Root independently
+checked that equality and accepted the finding. These arithmetic values are
+source evidence; the failed run did not report its actual numeric counter.
+A narrow correction is being prepared with the original fixtures, counters and
+limits preserved. It has not been executed, and the four-program suite is not
+accepted as passing. Historical source approvals do not erase either actual
+failure.
+Separate admission-regression definitions were rejected before execution for
+letting two bound causal cases accept a complete result instead of requiring
+their specified schema refusal with zero protocol touches. A narrow correction
+passed both source reviews and remains unexecuted; no new key/AST causal run is
+claimed. The completed capture
 files were made read-only after review found
 that the watchdog-created files remained writable; their bytes and results
 were unchanged, and the initial review and correction history are preserved.
@@ -367,7 +404,11 @@ fresh documentary correction passed independent source review and Root audit:
 it retains the original source facts and 1,196 existing graph edges and adds
 four explicit links to the conditional alternatives. The corrected documentary
 inventory is accepted within that scope; the original remains preserved and
-unaccepted. Actual owner/default/closure proof is now in design. This inventory
+unaccepted. The owner/default/closure design was corrected after review found
+that genuine whole-helper startup requires source-fit, actual entry and resource
+prerequisites before live state can be observed. Both reviews accepted the
+corrected conditional design; those prerequisites and live checks remain
+unavailable. This inventory
 grants no operational metadata root, live callback/state proof or memory
 acceptance. All five
 unproved whole-function obligations remain unchanged.

@@ -100,14 +100,32 @@ zero component refusals. Independent source review rejected the first frozen
 implementation for two gaps: external dictionary keys were not bounded before
 comparison, and caller AST traversal descriptors were not authenticated before
 traversal. Root verified both findings; that candidate remains unexecuted and a
-fresh correction is being prepared. Their trusted-root interface uses a separate
+fresh correction passed independent source review. Its first actual valid-case
+run passed the original prerequisite, then failed because it expected five
+catalogue rows while the authentic catalogue contains seven. Independent review
+also found that later completion lookup traversed all seven rows through a
+five-role resolver. A fresh correction preserves the complete catalogue and
+uses the five authenticated role mappings. It passed both source reviews and
+three actual programs: the valid case, 22 association refusals and 27 admission
+refusals. The fourth program passed its valid case, then failed at the
+constructor logical-byte counter assertion; later accounting checks did not run.
+Complete failure evidence is independently reviewed and preserved. Source
+investigation found two omitted header markers in private registry keys; restoring
+them reproduces the complete original fixture. A narrow correction is being
+prepared; it has not been executed. Separate admission-regression definitions
+were rejected before execution for accepting a successful result where two bound
+cases require an exact schema refusal. Their correction passed both source
+reviews but remains unexecuted. Their trusted-root interface uses a separate
 static crosscheck; no live call-context conversion is implemented. Review of the
 frozen state-dependency inventory found two missing call associations to
 conditional source alternatives. Independent review and Root accepted a fresh
 documentary correction that preserves the original source facts and adds four
 explicit links. The original remains preserved and unaccepted. The corrected
-inventory establishes source associations only. Actual owner/default/closure
-proof is now in design; two-frame entry-state proof remains separate work. Complete
+inventory establishes source associations only. The corrected owner/default/
+closure design is accepted conditionally: genuine whole-helper startup requires
+independently established source-fit, entry and resource prerequisites before
+live state can be observed. Those prerequisites and live checks remain
+unavailable; two-frame entry-state proof remains separate work. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.
