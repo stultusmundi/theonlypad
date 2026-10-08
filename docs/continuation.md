@@ -41,9 +41,14 @@ missing-API assertion, with no infrastructure failures, timeouts or skips.
 Independent actual-evidence review accepts this surface-only failure. The
 selected positive and thirteen malformed-input checks remain unexecuted.
 
-The selected component is now being implemented privately under a fresh scoped
-source authority. Next: freeze and independently review that implementation,
-then run its legitimate positive before the malformed-input checks. Complete
+The first private selected-component implementation is frozen and failed
+independent source review. It rejects the accepted child entry ordinal and
+adds an unrelated guard dependency; its name validation and byte bounds also
+need correction. A smaller ledger-ceiling mismatch remains qualified without
+a capacity witness. This candidate was not executed. A fresh source correction
+is in progress, preserving the original fixture and expected results.
+Next: independently review the corrected implementation, then run its
+legitimate positive before the malformed-input checks. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.

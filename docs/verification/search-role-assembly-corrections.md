@@ -185,6 +185,15 @@ Its independent audit is
 A fresh source-only authority now scopes the private component implementation;
 no selected implementation or behavior is accepted yet.
 
+The first selected-component source candidate failed independent SPEC review:
+the child entry and first guard dependencies disagree with the unchanged valid
+input, global ASCII name validation is incomplete, and per-slot and
+pre-expansion byte checks need correction. The narrower ledger ceiling is
+recorded separately without a demonstrated capacity failure. Root verified the
+report and source relationships; the candidate remains immutable and unexecuted.
+Correction proceeds in a fresh source packet. The review is source evidence,
+not a selected behavioral failure or memory measurement.
+
 Planned: add the separately versioned selected-occurrence relation, then qualify
 a legitimate independently enumerated complete source-fit invocation and the
 separate integrated surface plus 16 groups. Refusing all inputs cannot qualify
@@ -192,8 +201,9 @@ the gate.
 
 Implemented: the third coherent private candidate, unchanged focused test
 definitions, the narrow whole-source identity correction and corrected new
-selected-API definitions. The selected component implementation is in progress
-and awaits source review and actual verification.
+selected-API definitions. The first selected-component source is frozen but
+unaccepted; its correction is in progress and requires fresh source review and
+actual verification.
 
 Tested: 30 passing focused programs, one passing identity component, the separate
 qualified conditional characterization failure, the new missing selected-API
