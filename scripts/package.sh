@@ -61,14 +61,25 @@ xcrun swift -module-cache-path "$PWD/.cache/packaging" "$stage/metadata.swift" "
 app_name=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$stage/Info.plist")
 app_version=$(/usr/libexec/PlistBuddy -c 'Print :DevelopmentVersion' "$stage/Info.plist")
 
+helper_name=PadSearchWorker
 scripts/swift.sh build --configuration release --product "$app_name"
+scripts/swift.sh build --configuration release --product "$helper_name"
 bin_path=$(scripts/swift.sh build --configuration release --show-bin-path)
+for product in "$app_name" "$helper_name"; do
+    if [ ! -f "$bin_path/$product" ] || [ -L "$bin_path/$product" ] || [ ! -s "$bin_path/$product" ] || [ ! -x "$bin_path/$product" ]; then
+        printf 'Missing regular executable product: %s\n' "$product" >&2
+        exit 1
+    fi
+done
 bundle="$stage/$app_name.app"
-mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources" "$bundle/Contents/Helpers"
 cp "$bin_path/$app_name" "$bundle/Contents/MacOS/$app_name"
+cp "$bin_path/$helper_name" "$bundle/Contents/Helpers/$helper_name"
+chmod 755 "$bundle/Contents/Helpers/$helper_name"
 # Remove linker debug-map paths from the distributable copy before signing.
 # The original build output remains available for local diagnostics.
 /usr/bin/strip -S "$bundle/Contents/MacOS/$app_name"
+/usr/bin/strip -S "$bundle/Contents/Helpers/$helper_name"
 cp "$stage/Info.plist" "$bundle/Contents/Info.plist"
 cp LICENSE "$bundle/Contents/Resources/LICENSE.txt"
 cp docs/third-party-notices.md "$bundle/Contents/Resources/ThirdPartyNotices.md"
@@ -77,7 +88,9 @@ iconutil --convert icns --output "$bundle/Contents/Resources/AppIcon.icns" "$sta
 plutil -lint "$bundle/Contents/Info.plist"
 
 if [ "${1:-}" = "--ad-hoc-sign" ]; then
+    codesign --force --sign - "$bundle/Contents/Helpers/$helper_name"
     codesign --force --sign - "$bundle"
+    codesign --verify --strict "$bundle/Contents/Helpers/$helper_name"
     codesign --verify --strict "$bundle"
 fi
 

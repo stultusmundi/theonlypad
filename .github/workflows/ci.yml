@@ -21,6 +21,10 @@ jobs:
         run: |
           python3 -m unittest discover -s Tests/SearchParentDriverIntegration -p 'test_*.py'
           scripts/test-search-parent-driver.sh
+      - name: Fixed search helper protocol integration
+        run: |
+          python3 -m unittest discover -s Tests/SearchWorkerIntegration -p 'test_*.py'
+          scripts/test-search-worker.sh
       - name: Public-source checks
         run: python3 scripts/check-public.py
       - name: Source formatting
@@ -70,8 +74,10 @@ jobs:
           scripts/test-document-recovery-ownership.sh "$build_path"
           scripts/test-document-factory.sh "$build_path"
           scripts/test-native-close-model.sh "$build_path"
-      - name: Package promotion rollback tests
-        run: python3 scripts/test-package-promotion.py
+      - name: Package validation and promotion rollback tests
+        run: |
+          python3 scripts/test-package-validation.py
+          python3 scripts/test-package-promotion.py
       - name: Local package
         run: scripts/package.sh
   dependency-review:

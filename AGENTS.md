@@ -242,3 +242,30 @@ Editable disk admission checkpoint (2026-10-08): full current core852/0 and focu
 Production worker accumulator checkpoint (2026-10-08): `scripts/swift.sh test --scratch-path .build/worker-accumulator --filter 'SearchWorkerUTF8AccumulatorTests|SearchWorkerAccumulatorRuntimeTests'` passes29 tests; `--filter SearchWorker` passes119 worker/resolver checks; the full matching app/core suite passes881/0. Root runs these through the checked-in direct owned watchdog, with600s for broad adversarial neighbors; do not nest existing coordinators. The first compiler exposed a macOS15-only initializer; strict-transcode validation/materialization preserves the macOS14 floor. A frozen Foundation BOM-stripping mutation fails1/1 against the unchanged literal Unicode oracle. These are concrete component/real wire-runtime checks, not helper process, editor routing, memory/performance or desktop acceptance. See `docs/verification/search-worker-accumulator.md`.
 
 Checked lifetime startup (2026-10-08): `scripts/swift.sh test --scratch-path .build/lifetime-startup --filter 'SearchParentLifetimeStarterTests|SearchWorker'` passes133 tests; full app/core895/0 and pure search-child harness56/0 pass. Run broad SwiftPM under the checked-in owned-process watchdog. `scripts/test-search-child-lifecycle.sh --filter 'SearchParentLifetimeStarterTests|SearchChildLifecycleTests|SearchChildLauncherStateTests|SearchChildLifetimeStateTests|SearchChildDispatchTimerTests|SearchChildSpawnInheritanceFixtureTests'` passes104 frozen tests. Separately selected `--filter SearchChildLifetimeProcessTests` and `--filter SearchChildSpawnInheritanceTests` each pass one actual process check, with exact generation-qualified reap/channel closure and matching artifact bindings. The coordinator directly owns its watchdog; never nest another. See `docs/verification/search-lifetime-startup.md`. Helper executable, editor routing, hard regex containment, memory/performance and desktop acceptance remain separate.
+
+
+Fixed production helper checkpoint (2026-10-08): public `PadSearchWorker` product
+and `Contents/Helpers/PadSearchWorker` packaging are implemented. Proven commands:
+
+```sh
+python3 -m unittest discover -s Tests/SearchWorkerIntegration -p 'test_*.py'
+scripts/test-search-worker.sh --build-only
+scripts/test-search-worker.sh
+scripts/test-search-worker.sh --application-bundle "$PWD/dist/TheOnlyPad.app"
+python3 scripts/test-package-validation.py
+python3 scripts/test-package-promotion.py
+```
+
+Coordinator20/0; built and final nested real-protocol selections each5/0 with all
+owned receipts and exact source/helper/test-bundle/app bindings. The coordinator
+directly owns each watchdog; never nest it inside another process-group watchdog.
+Full public app/core895/0 and native ad-hoc package/signatures/archive/SBOM pass.
+Package validation29/0 and promotion6/0 preserve original rollback controls; four
+copied real-package cases independently refuse at checker and promotion while
+preserving prior outputs. Helper tampering fails its direct signature check;
+shallow app verification is separate, so explicitly verify both. Retained fixture
+and harness corrections, hashes and scope are in
+`docs/verification/search-helper-production.md`. Editor/folder search still run
+in-process. Production parent collector/composition/admission, hard cancellation,
+memory/performance and current desktop acceptance remain outstanding. No remote
+publication, notarization or additional platform acceptance is claimed.

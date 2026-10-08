@@ -1,5 +1,24 @@
 # Continuation
 
+## Fixed production search helper — 2026-10-08
+
+The isolated `feat/search-helper-production` branch implements the fixed public
+`PadSearchWorker` product and nested helper packaging. Built and final nested
+protocol selections each pass5/0 with exact source/artifact/child cleanup bindings.
+Full app/core895/0, coordinator controls20/0, package validation29/0 and promotion
+regressions6/0 pass. Native ad-hoc package, explicit helper/app signatures and all7
+archive/SBOM members pass; four copied-package cases refuse at both checker and
+promotion while preserving prior outputs. Retained zero-deadline fixture and
+shallow-signature harness failures are documented in
+[the verification record](verification/search-helper-production.md).
+
+Next: production parent response accumulation, fixed driver/policy and admission
+composition, then native document and folder search routing. The app still uses
+in-process search. No hard cancellation, memory/performance, current desktop,
+Intel/macOS14 runtime or whole-product completion is inferred. UI Automation
+authentication remains user-owned and pending. No remote merge/push/release is
+authorized; continue independent implementation.
+
 ## Checked lifetime startup — 2026-10-08
 
 The isolated `feat/search-lifetime-startup` branch implements checked detached

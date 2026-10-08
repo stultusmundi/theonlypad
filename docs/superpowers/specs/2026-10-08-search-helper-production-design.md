@@ -1,6 +1,6 @@
 # Fixed search helper and nested packaging design
 
-Status: independently reviewed; implementation and actual verification pending. Base: reviewed lifetime checkpoint `e076afa`.
+Status: implemented and tested; independent source reviews approve composition, packaging and corrected fixtures. Built/nested protocol and refusal controls pass; final checkpoint specification/quality review approves the scope. Base: reviewed lifetime checkpoint `e076afa`.
 
 Architecture: one fixed SwiftPM helper binds the existing worker Program, Darwin
 channel, strict accumulator and checked lifetime starter. Package its release
@@ -12,7 +12,11 @@ system Foundation/Darwin only. Root exclusively owns serial compiler, actual
 child, packaging and GUI execution. BUILD authorizes routine design, tests and
 local commits; no remote merge, push, release or security-setting change.
 
-## Source findings and alternatives
+## Baseline source findings and alternatives
+
+The following findings describe pre-implementation baseline `e076afa`; they are
+retained design context. The implementation and tested state are recorded in
+[the verification record](../../verification/search-helper-production.md).
 
 The public manifest currently exposes PadCore and TheOnlyPad; SearchExecution and PadSearchWorkerRuntime are ordinary internal targets, and no production helper executable exists. The runtime target already depends on both PadCore and SearchExecution. Same-package access permits the new executable to use their package APIs without broadening them to public or adding unused library products.
 
@@ -53,7 +57,7 @@ import SearchExecution
 }
 ```
 
-This is proposed text, not an executed entry or a source file created by this task. It adds no environment-selected implementation, fixture mode, logging, alternate engine, limit override or file access. stdout contains protocol bytes exclusively; the entry prints nothing. stderr stays diagnostic-only and is `/dev/null` under the current launcher. Parse the actual three-value argv (`argv0`, `--generation`, nonzero canonical UUID), including the existing accepted UUID case equivalence. Keep parser rejection64, protocol failure65, startup/internal/input-sink70, channel/input/output74 and clean EOF0. SearchError results remain protocol terminals and permit a subsequent request rather than terminating the helper.
+This reviewed fixed composition is now implemented in the production entry and exercised by the built and nested helper checks. It adds no environment-selected implementation, fixture mode, logging, alternate engine, limit override or file access. stdout contains protocol bytes exclusively; the entry prints nothing. stderr stays diagnostic-only and is `/dev/null` under the current launcher. Parse the actual three-value argv (`argv0`, `--generation`, nonzero canonical UUID), including the existing accepted UUID case equivalence. Keep parser rejection64, protocol failure65, startup/internal/input-sink70, channel/input/output74 and clean EOF0. SearchError results remain protocol terminals and permit a subsequent request rather than terminating the helper.
 
 Use `_exit` after Program returns so startup failure cannot leave a newly created watcher hosting a longer-lived process; no Foundation exit handlers are required. The lifetime body also uses the existing `_exit` path. The Program's request cleanup executes before its return; `_exit` is not a claim of physical allocator reclamation or secure erasure.
 

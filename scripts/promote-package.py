@@ -6,34 +6,23 @@ process termination or rollback failure leaves a private backup in dist for
 manual recovery. No original artifacts are stored in the shell's staging dir.
 """
 import fcntl
-import hashlib
-import json
 import os
 import pathlib
-import plistlib
 import shutil
 import sys
 import tempfile
-import zipfile
+
+from package_validation import validate_package
 
 
 def validate(stage, names):
     app, archive, sbom = [stage / name for name in names]
-    info_path = app / 'Contents/Info.plist'
-    info = plistlib.loads(info_path.read_bytes())
-    binary_relative = pathlib.Path('Contents/MacOS') / info['CFBundleExecutable']
-    binary = (app / binary_relative).read_bytes()
-    inventory = json.loads(sbom.read_text())
-    component = inventory['metadata']['component']
-    if not any(item['alg'] == 'SHA-256' and item['content'] == hashlib.sha256(binary).hexdigest()
-               for item in component['hashes']):
-        raise ValueError('SBOM does not match staged executable')
-    with zipfile.ZipFile(archive) as zipped:
-        if zipped.testzip() is not None:
-            raise ValueError('Archive CRC validation failed')
-        for relative in (pathlib.Path('Contents/Info.plist'), binary_relative):
-            if zipped.read(str(pathlib.Path(app.name) / relative)) != (app / relative).read_bytes():
-                raise ValueError('Archive does not match staged bundle')
+    try:
+        return validate_package(app, archive, sbom)
+    except (ValueError, OSError):
+        if __name__ == '__main__':
+            raise SystemExit('Package promotion refused: staged artifacts failed validation.') from None
+        raise
 
 
 def promote(stage, dist, names):

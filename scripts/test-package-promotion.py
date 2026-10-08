@@ -26,10 +26,38 @@ class PromotionTests(unittest.TestCase):
             binary.write_bytes(b'synthetic executable')
             (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'Example'}))
             inventory = {'metadata': {'component': {'hashes': [{'alg': 'SHA-256', 'content': hashlib.sha256(binary.read_bytes()).hexdigest()}]}}}
+            # Extend the original valid fixture; original assertions and rename faults stay intact.
+            binary.chmod(0o755)
+            helper = app / 'Contents/Helpers/PadSearchWorker'
+            helper.parent.mkdir(parents=True)
+            helper.write_bytes(b'synthetic fixed helper executable')
+            helper.chmod(0o755)
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+                'CFBundleExecutable': 'Example', 'CFBundleName': 'Example',
+                'DevelopmentVersion': '0.1.0-dev', 'LSMinimumSystemVersion': '14.0',
+            }))
+            inventory.update({'bomFormat': 'CycloneDX', 'specVersion': '1.6', 'version': 1})
+            inventory['metadata']['component'].update({
+                'type': 'application', 'name': 'Example', 'version': '0.1.0-dev',
+                'bom-ref': 'application', 'licenses': [{'license': {'id': 'MIT'}}],
+                'properties': [{'name': 'external-package-count', 'value': '0'},
+                               {'name': 'minimum-macos', 'value': '14.0'}],
+            })
+            inventory['components'] = [{
+                'type': 'application', 'name': 'PadSearchWorker', 'version': '0.1.0-dev',
+                'bom-ref': 'helper:PadSearchWorker', 'licenses': [{'license': {'id': 'MIT'}}],
+                'hashes': [{'alg': 'SHA-256', 'content': hashlib.sha256(helper.read_bytes()).hexdigest()}],
+                'properties': [{'name': 'bundle-relative-path', 'value': 'Contents/Helpers/PadSearchWorker'}],
+            }]
+            inventory['dependencies'] = [
+                {'ref': 'application', 'dependsOn': ['helper:PadSearchWorker']},
+                {'ref': 'helper:PadSearchWorker', 'dependsOn': []},
+            ]
             (stage / names[2]).write_text(json.dumps(inventory))
             with zipfile.ZipFile(stage / names[1], 'w') as archive:
                 for file in (binary, app / 'Contents/Info.plist'):
                     archive.write(file, str(file.relative_to(stage)))
+                archive.write(helper, str(helper.relative_to(stage)))
             module.validate(stage, names)
             inventory['metadata']['component']['hashes'][0]['content'] = '0' * 64
             (stage / names[2]).write_text(json.dumps(inventory))

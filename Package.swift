@@ -7,11 +7,14 @@ let package = Package(
   products: [
     .library(name: "PadCore", targets: ["PadCore"]),
     .executable(name: "TheOnlyPad", targets: ["TheOnlyPad"]),
+    .executable(name: "PadSearchWorker", targets: ["PadSearchWorker"]),
   ],
   targets: [
     .target(name: "PadCore"),
     .target(name: "SearchExecution", dependencies: ["PadCore"]),
     .target(name: "PadSearchWorkerRuntime", dependencies: ["PadCore", "SearchExecution"]),
+    .executableTarget(
+      name: "PadSearchWorker", dependencies: ["PadSearchWorkerRuntime", "SearchExecution"]),
     .testTarget(
       name: "PadSearchWorkerRuntimeTests",
       dependencies: ["PadSearchWorkerRuntime", "PadCore", "SearchExecution"]),
