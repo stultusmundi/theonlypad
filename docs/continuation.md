@@ -111,8 +111,14 @@ refusals. The fourth program passed its valid case, then failed at the
 constructor logical-byte counter assertion; later accounting checks did not run.
 Complete failure evidence is independently reviewed and preserved. Source
 investigation found two omitted header markers in private registry keys; restoring
-them reproduces the complete original fixture. A narrow correction is being
-prepared; it has not been executed. Separate admission-regression definitions
+them reproduces the complete original fixture. The narrow correction passed both
+source reviews and all four unchanged original programs, followed by independent
+actual-evidence review. They establish four original prerequisites, 17 component
+positive observations and 72 isolated refusals with exact output and consuming
+cleanup. Original constructor and complete counter equality assertions passed;
+their numeric values were not printed. Both earlier actual failures remain
+preserved. This is finite component evidence, not allocation or full-helper
+acceptance. Separate admission-regression definitions
 were rejected before execution for accepting a successful result where two bound
 cases require an exact schema refusal. Their correction passed both source
 reviews but remains unexecuted. Their trusted-root interface uses a separate

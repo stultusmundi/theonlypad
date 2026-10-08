@@ -383,10 +383,22 @@ for a source-derived 14-byte discrepancy. Restoring their original spelling and
 sort order reproduces the entire frozen registry fixture. Root independently
 checked that equality and accepted the finding. These arithmetic values are
 source evidence; the failed run did not report its actual numeric counter.
-A narrow correction is being prepared with the original fixtures, counters and
-limits preserved. It has not been executed, and the four-program suite is not
-accepted as passing. Historical source approvals do not erase either actual
-failure.
+A narrow correction restores the two markers with the original fixtures,
+counters and limits preserved. Both source reviews and the exact execution-plan
+review passed. Root then ran all four unchanged original programs serially;
+independent actual-evidence review accepted all four with zero findings. The
+complete captures contain 818, 2,769, 2,855 and 2,538 stdout bytes respectively,
+empty stderr and exit code zero. Each has a complete typed consuming-cleanup
+receipt. The programs establish four original prerequisites, 17 component
+positive observations and 72 isolated refusals. Those are repeated observations,
+not a distinct unit-test count. The accounting program passed the unchanged
+ordinary-integer constructor equalities of 3,662,961 bytes and 121,959 nodes,
+and complete equalities of 3,793,255 bytes and 129,279 nodes. The values were
+asserted but not printed; intermediate phases were not individually measured.
+Helper exact-boundary cases use synthetic remaining counters and do not
+establish full-input capacity, allocation, RSS or performance acceptance.
+Historical source approvals and these fresh passes do not erase either actual
+failure. New normal and causal admission regressions remain separate gates.
 Separate admission-regression definitions were rejected before execution for
 letting two bound causal cases accept a complete result instead of requiring
 their specified schema refusal with zero protocol touches. A narrow correction
