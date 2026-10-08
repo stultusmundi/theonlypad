@@ -73,10 +73,21 @@ reviews. Its corrected definitions also passed both reviews, preserving the
 complete original fixture and expected results. The actual baseline passed the
 unchanged full-eight-profile and selected-profile case, then failed at the
 expected missing call-context API. Independent evidence review verified the
-source target, complete output and consuming process cleanup. Implementation is
-now in progress under a separate local authority; its behavior remains untested.
-The related argument-source design is undergoing interface review, with exact
-accounting and cross-component source provenance still gated. Actual
+source target, complete output and consuming process cleanup. The first frozen
+implementation then failed source review because complete AST source locations
+were not authenticated. It was preserved without execution. A narrow fresh
+correction passed separate source specification and quality reviews.
+Root executed all four unchanged component programs: four genuine component
+positives, fifteen additional positive observations and sixty isolated refusals
+pass, with the original full-eight-profile/selected-profile positive before each
+program. Independent actual-evidence review accepts their exact outputs,
+ordinary typed results, logical accounting and consuming process cleanup.
+These counts are finite observations, not distinct unit-test methods.
+The source-location regression design has separately passed both design reviews;
+its executable definitions are being written and its cases remain unexecuted.
+The related complete argument-source definitions are frozen and undergoing
+independent specification review. Their trusted-root interface uses a separate
+static crosscheck; no live call-context conversion is implemented. Actual
 owner/default/closure and two-frame entry-state proofs remain separate work. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
