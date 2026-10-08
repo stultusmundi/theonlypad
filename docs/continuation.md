@@ -1,5 +1,21 @@
 # Continuation
 
+## Current correction work — 2026-10-08
+
+Work continues under the user's resumption. The retained-role assembly's five
+source-review findings now have actual scoped regression evidence: 25 serial
+entries produced 20 intended assertions and five passing controls, with no
+infrastructure failures or timeouts. Corrected definitions passed independent
+SPEC and QUALITY review. One author is preparing a fresh coherent implementation
+correction; Root owns all runtime execution. See
+[the correction record](verification/search-role-assembly-corrections.md).
+
+Next: review that complete candidate, rerun the unchanged focused definitions,
+and qualify the separate integrated controls and legitimate source-fit relation.
+Native role reads, measurement acceptance, helper packaging and editor search
+routing remain outstanding. This checkpoint changes documentation only; the
+tested desktop package remains `f4d9207`. No new GUI access was granted.
+
 ## Active resumption — 2026-10-07
 
 The user resumed work until a new stop message arrives. This supersedes the pause below. Root resumed from `7592fb0` on the `build/native-editor` feature branch, preserving the existing ignored frozen evidence paths. Root owns serial runtime/GUI execution, public records and local commits; remote publication remains unauthorized.
