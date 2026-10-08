@@ -156,8 +156,34 @@ The conditional result is
 `d4d268979f7c57ac554cce7f50818eea5a7d4322c0fb41a4e98b9028c1ff5ab3`).
 Their independent audits bind exact authorities, commands, complete captures
 and owned-process cleanup/reap receipts. The selected-occurrence executable
-plan passed separate specification and quality reviews. Additive definitions
-for its new API are being prepared; no selected implementation is accepted yet.
+plan passed separate specification and quality reviews.
+
+The new selected-API definitions first failed source review because one payload
+table did not follow its derivation ledger. A fresh correction retains every
+named payload, source identity, full eight-profile oracle, branch outcome and
+target assertion. It changes the binding order, two same-name mutation indices
+and six qualification lines. Separate specification and quality reviews accept
+the corrected definitions. The rejected version remains preserved and was never
+executed.
+
+Root then ran the separately authorized missing-API selector against the actual
+whole corrected resolver. Complete bootstrap and source-identity positives and
+the ordinary-int8 prerequisite pass before the fixed missing-API assertion.
+Independent actual-evidence review accepts one surface target failure, with no
+infrastructure failures, timeouts or skips. Complete captures and exact owned
+process cleanup/reap receipts were verified. This tests API absence only; the
+selected positive and thirteen malformed-input cases remain unexecuted.
+
+The surface result is
+`.local/search-campaign-swift-journal-20261007/root-selected-occurrences-task1-v2-surface-actual-result-v1.json`
+(5,403 bytes; SHA256
+`4e39ebb38933962fe6b553aff33a43e6a2d5a6b8cc04c61d8179ad466903a841`).
+Its independent audit is
+`.local/search-campaign-swift-journal-20261007/role-selected-occurrences-task1-v2-surface-independent-actual-evidence-review-v1.json`
+(22,606 bytes; SHA256
+`c653ca9c2849f29ff45749c50624bf9004bc32c5086b07246503b415f186a0c9`).
+A fresh source-only authority now scopes the private component implementation;
+no selected implementation or behavior is accepted yet.
 
 Planned: add the separately versioned selected-occurrence relation, then qualify
 a legitimate independently enumerated complete source-fit invocation and the
@@ -165,11 +191,13 @@ separate integrated surface plus 16 groups. Refusing all inputs cannot qualify
 the gate.
 
 Implemented: the third coherent private candidate, unchanged focused test
-definitions and the narrow whole-source identity correction; the selected
-conditional implementation is still outstanding.
+definitions, the narrow whole-source identity correction and corrected new
+selected-API definitions. The selected component implementation is in progress
+and awaits source review and actual verification.
 
 Tested: 30 passing focused programs, one passing identity component, the separate
-qualified conditional characterization failure, the retained setup failure and
+qualified conditional characterization failure, the new missing selected-API
+surface failure, the retained setup failure and
 failing baselines above, and the earlier separately accepted missing-surface
 baseline. The Path-defense
 presence check does not prove integrated source certification, and the seven

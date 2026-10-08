@@ -30,13 +30,23 @@ infrastructure failures, timeouts or skips. Exact authority, capture and
 owned-process receipts passed independent actual-evidence audit. All historical
 failing evidence remains preserved.
 
-Complete source-fit remains unaccepted: source review identified an authentic
-eight-iteration loop where a branch selects one, while the resolver forces the
-full lexical product. A branch-aware design and bounded characterization
-sequence passed independent SPEC and QUALITY review; additive regression
-definitions are being prepared. Next: reproduce and correct that limitation,
-then qualify the legitimate complete source-fit relation and separate integrated
-controls. The focused passes alone do not establish either gate.
+Complete source-fit remains unaccepted. A reviewed source-identity correction
+now passes its actual component check. A separate run of the unchanged
+conditional definitions reaches the lexical8-versus-selected1 assertion after
+the ordinary-int8 companion passes; the old lexical API remains unchanged.
+New selected-API definitions also passed separate SPEC and QUALITY reviews
+after a payload-ordering defect was corrected without changing their oracles.
+Their actual isolated baseline passes all prerequisites and reaches the fixed
+missing-API assertion, with no infrastructure failures, timeouts or skips.
+Independent actual-evidence review accepts this surface-only failure. The
+selected positive and thirteen malformed-input checks remain unexecuted.
+
+The selected component is now being implemented privately under a fresh scoped
+source authority. Next: freeze and independently review that implementation,
+then run its legitimate positive before the malformed-input checks. Complete
+entry, activation, resource and source-fit verification and the separate
+integrated controls remain later gates. The focused passes and surface failure
+alone do not establish those gates.
 Native role reads, measurement acceptance, helper packaging and editor search
 routing remain outstanding. This checkpoint changes documentation only; the
 tested desktop package remains `f4d9207`. No new GUI access was granted.
