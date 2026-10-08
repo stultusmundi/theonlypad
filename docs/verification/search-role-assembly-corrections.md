@@ -123,10 +123,19 @@ the resolver multiplies all eight iterations of an authentic fixture loop even
 when a branch selects one. This is a source finding, not a claimed full-fit
 runtime failure. The branch-aware design and its bounded characterization
 sequence passed separate specification and quality reviews. Additive definitions
-are being prepared before a separately authorized source correction.
+passed separate specification and quality reviews. Their first actual run failed
+during setup: the source indexer refused two local functions with the same
+qualified name at different locations in the complete original controls. Neither
+the eight-iteration companion nor the conditional target was reached. Independent
+actual-evidence review accepted one infrastructure failure and zero target
+failures. This is a prerequisite indexing defect, not conditional-selection RED.
+The original sources, definitions and failed run remain preserved. A dedicated
+whole-source identity regression is being prepared before a source correction.
 
-Planned: reproduce that conditional-selection limitation, correct it, then
-qualify a legitimate independently enumerated complete source-fit invocation and
+Planned: reproduce and correct the whole-source identity refusal, reach the
+unchanged conditional-selection characterization, add the separately versioned
+selected-occurrence relation, then qualify a legitimate independently enumerated
+complete source-fit invocation and
 the separate integrated surface plus 16 groups. Refusing all inputs cannot
 qualify the gate.
 

@@ -183,4 +183,15 @@ The Python-only packaging subset is independently reviewed under `.local/search-
 
 ## Next allocation preparation
 
+The latest conditional source-fit characterization passed independent definition
+review but failed actual setup: name-only scope indexing refused two legitimate
+local definitions at different source locations in the unchanged complete
+controls. Independent audit confirms one infrastructure failure, zero target
+failures, and no companion result. The 30 accepted focused programs remain
+separate evidence. A dedicated whole-source identity regression precedes the
+index correction and another attempt at the unchanged conditional check. The
+selected-occurrence implementation plan is undergoing specification review;
+source implementation and complete-fit acceptance remain pending. See
+[assembly evidence](verification/search-role-assembly-corrections.md).
+
 Private independent streaming oracle is reviewed with14/0 and retained RED evidence under `.local/search-allocation-preparation/`. Only tiny vectors and bounded prefixes were evaluated; no full100MB matrix or native allocation result exists. Candidate builder source/tests are being prepared privately without native runtime ownership. The public allocation specification now distinguishes explicit capacities from opaque Swift storage and uses five fixed-counterpart comparisons followed by full selected-pair validation. No allocator or production budget is adopted. The driver runner is now adopted with19 pure checks and44 actual XCTest cases; direct-source loading and final transformations are verified.
