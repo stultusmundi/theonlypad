@@ -69,10 +69,15 @@ values; the corrected revision checks ordinary integer representations while
 preserving the original entry, fixtures and expected results.
 
 The next finite call-context design passed separate specification and quality
-reviews. Its exact schemas, source-qualified argument/copy provenance and
-complete eight-row iterator controls are being defined; no implementation or
-runtime result follows from design acceptance. Actual owner/default/closure and
-two-frame entry-state proofs remain separate work. Complete
+reviews. Its corrected definitions also passed both reviews, preserving the
+complete original fixture and expected results. The actual baseline passed the
+unchanged full-eight-profile and selected-profile case, then failed at the
+expected missing call-context API. Independent evidence review verified the
+source target, complete output and consuming process cleanup. Implementation is
+now in progress under a separate local authority; its behavior remains untested.
+The related argument-source design is undergoing interface review, with exact
+accounting and cross-component source provenance still gated. Actual
+owner/default/closure and two-frame entry-state proofs remain separate work. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.

@@ -267,8 +267,37 @@ entry/activation/resources and source-fit remain unaccepted.
 The next finite call-context design passed independent specification and quality
 review as an explicit component-only API amendment. It derives genuine dispatch
 index 13 from the complete source tuple and retains all eight original iterator
-rows. Exact schemas, independently constructed controls and copy accounting are
-being defined; implementation and runtime remain later gates. Actual owner,
+rows. Corrected exact definitions have since passed independent specification
+and separate quality review. Three negative fixtures needed coherent consumed
+producer dependencies; their correction preserved the genuine positive,
+original controls and expected results. The rejected definitions remain
+unexecuted and retained.
+
+Root executed one actual missing-API baseline against the unchanged five-module
+implementation. The original full-eight-profile and selected-profile positive
+passed first, then the test failed at
+`selected-context-component-api-missing`. The complete captures contain
+372 stdout bytes and 1,247 stderr bytes; the owned child exited with code 1 and
+was reaped under the accepted cleanup protocol. The 4.230541-second observation
+is not a performance target. Independent actual-evidence review accepted this
+surface failure with zero findings. No new component behavior or causal source
+mutant ran.
+
+The exact bounded acceptance is
+`.local/search-campaign-swift-journal-20261007/root-selected-context-task2a-surface-bounded-acceptance-v1.json`
+(2,066 bytes; SHA256
+`41434b326635d323675473c4b46bf004870296d0ef413e0c9280dc5c41e449b0`).
+The independent review is
+`.local/search-campaign-swift-journal-20261007/role-selected-context-task2a-surface-independent-actual-evidence-review-v1.json`
+(39,850 bytes; SHA256
+`e6866ece976044a19ad3f0125b94b581702cbe4939dddd0f63630915ca0ee0b2`).
+
+Implementation is now in progress under separate source-only authority. Its
+new behavior must pass source review before Root executes the fixed positive,
+API refusals, dependency-phase checks and accounting controls. The related
+argument-source design retains fourteen mappings, ten constructor completion
+sites and four complete lexical prefixes; exact numeric accounting and the
+cross-component interface remain separate gates. Actual owner,
 default, closure and two-frame entry proofs are staged separately. All five
 unproved whole-function obligations remain unchanged.
 
@@ -281,6 +310,7 @@ Implemented: the third coherent private candidate, unchanged focused test
 definitions, the narrow whole-source identity correction and corrected new
 selected-API definitions and corrected additional boundary controls. The third
 selected-component source is accepted within its finite checkpoint scope.
+The next call-context definitions are accepted; its implementation is in progress.
 Rejected earlier source and test-definition revisions remain preserved.
 
 Tested: 30 passing focused programs, one passing identity component, the separate
@@ -290,7 +320,9 @@ refusals, its surface and identity regressions, four additional boundary program
 with the counts above, the retained incomplete timeout,
 the retained setup failure and
 failing baselines above, and the earlier separately accepted missing-surface
-baseline. The Path-defense
+baseline.
+The call-context baseline establishes missing API surface only, after a genuine
+original positive; its new behavior remains unverified. The Path-defense
 presence check does not prove integrated source certification, and the seven
 contextless source-fit refusals do not prove legitimate complete-fit admission.
 These checks do not establish the integrated 17-outcome GREEN.
