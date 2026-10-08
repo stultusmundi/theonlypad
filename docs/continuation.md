@@ -83,12 +83,31 @@ pass, with the original full-eight-profile/selected-profile positive before each
 program. Independent actual-evidence review accepts their exact outputs,
 ordinary typed results, logical accounting and consuming process cleanup.
 These counts are finite observations, not distinct unit-test methods.
-The source-location regression design has separately passed both design reviews;
-its executable definitions are being written and its cases remain unexecuted.
-The related complete argument-source definitions are frozen and undergoing
-independent specification review. Their trusted-root interface uses a separate
-static crosscheck; no live call-context conversion is implemented. Actual
-owner/default/closure and two-frame entry-state proofs remain separate work. Complete
+The source-location regression design, executable definitions and controlled
+execution plan passed their separate reviews. Root ran the corrected source:
+the original prerequisite and four complete component positives passed before
+all twenty-three invalid cases were refused. Three separately selected
+comparisons against the preserved earlier source each passed the same five
+positive observations before reproducing the intended missing-refusal assertion.
+Independent actual-evidence review and Root's own audit accepted complete
+outputs, original source bindings and consuming cleanup. This remains component
+evidence, not complete source-fit or production search acceptance.
+The related complete argument-source definitions also passed both reviews.
+Their actual baseline passed the unchanged full-eight-profile/selected-profile
+positive, then stopped at the expected missing API. Independent evidence review
+accepts this baseline: one original positive, zero new component positives and
+zero component refusals. Independent source review rejected the first frozen
+implementation for two gaps: external dictionary keys were not bounded before
+comparison, and caller AST traversal descriptors were not authenticated before
+traversal. Root verified both findings; that candidate remains unexecuted and a
+fresh correction is being prepared. Their trusted-root interface uses a separate
+static crosscheck; no live call-context conversion is implemented. Review of the
+frozen state-dependency inventory found two missing call associations to
+conditional source alternatives. Independent review and Root accepted a fresh
+documentary correction that preserves the original source facts and adds four
+explicit links. The original remains preserved and unaccepted. The corrected
+inventory establishes source associations only. Actual owner/default/closure
+proof is now in design; two-frame entry-state proof remains separate work. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.

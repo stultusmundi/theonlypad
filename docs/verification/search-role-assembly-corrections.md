@@ -294,7 +294,8 @@ The independent review is
 
 The first frozen implementation failed independent source review because it
 checked AST shapes without authenticating complete standard source locations.
-It remains immutable and unexecuted. A narrow fresh correction pairs genuine
+It was preserved without execution at that source-review checkpoint. A narrow
+fresh correction pairs genuine
 scopes, calls and loops with their exact source fields and standard attribute
 presence and values. Separate specification and quality reviews accepted the
 corrected source with zero findings.
@@ -329,13 +330,66 @@ These are nineteen component positive observations, including four repeated
 genuine positives, and sixty refusals; they are not distinct unit-test methods.
 Logical counter/helper assertions passed, but full-capacity admission and
 physical allocation/RSS remain unaccepted. The separate source-location
-regression design passed both reviews; its definitions are being written and
-no coordinate or causal comparison has run. The complete argument-source
+regression design and executable definitions passed both specification and
+quality reviews; the exact controlled execution plan also passed independent
+review. Root completed four serial programs. The corrected source passed the
+original prerequisite and four complete component positives, then refused all
+twenty-three malformed inputs. Each separately selected earlier-source
+comparison passed the same five positive observations before its intended
+missing-refusal assertion: the Name, detached Call and detached For location
+changes respectively. Each produced the exact ten-line positive prefix and
+genuine four-frame traceback, exited with code one and completed consuming
+cleanup. The earlier source rejection remains in force. Independent actual
+review and Root's own audit accepted the exact source, output and typed receipt
+evidence with zero findings. These safety-bounded runs do not establish product
+performance, memory usage or full-fit acceptance. The complete argument-source
 definitions retain fourteen mappings, ten constructor completion sites and
-four complete lexical prefixes and are in independent specification review.
+four complete lexical prefixes and also passed both source reviews.
+Their actual missing-API baseline passed the original full-eight/selected-one
+positive before the expected assertion. Independent actual-evidence review
+verified complete output, source bindings and consuming process cleanup. This
+establishes one original positive, zero new component positives and zero
+component refusals. Independent source review rejected the first frozen
+implementation for two gaps: external dictionary keys reached comparison before
+bounded ordinary-key admission, and caller AST traversal descriptors were not
+authenticated before standard-library traversal. Root verified both findings.
+The candidate remains unexecuted; a fresh source correction is being prepared,
+and new behavior is unverified. The completed capture
+files were made read-only after review found
+that the watchdog-created files remained writable; their bytes and results
+were unchanged, and the initial review and correction history are preserved.
 Their cross-component interface is a separate static preflight. Actual owner,
-default, closure and two-frame entry proofs are staged separately. All five
+default, closure and two-frame entry proofs are staged separately. Independent
+review of the frozen state-dependency source inventory found two missing
+conditional-alias call associations to already retained source bodies. Root
+verified the finding against original source and existing graph entries. A
+fresh documentary correction passed independent source review and Root audit:
+it retains the original source facts and 1,196 existing graph edges and adds
+four explicit links to the conditional alternatives. The corrected documentary
+inventory is accepted within that scope; the original remains preserved and
+unaccepted. Actual owner/default/closure proof is now in design. This inventory
+grants no operational metadata root, live callback/state proof or memory
+acceptance. All five
 unproved whole-function obligations remain unchanged.
+
+The separate bounded coordinate acceptance is
+`.local/search-campaign-swift-journal-20261007/root-context-coordinate-finite-actual-acceptance-v1.json`
+(2,089 bytes; SHA256
+`0bc1e568d6a03ec276e7b5718f2e8c49f64e11c51d01eb62671c5e0bfaa44749`).
+The independent actual review is
+`.local/search-campaign-swift-journal-20261007/role-selected-context-coordinate-independent-actual-review-v1.json`
+(222,077 bytes; SHA256
+`5333b55f437d81aa943877b9a186d13e6c753ad3667a056d256aa4680c8f0441`).
+
+The source-finding acceptance is
+`.local/search-campaign-swift-journal-20261007/root-selected-argument-sources-implementation-spec-finding-acceptance-v1.json`
+(3,060 bytes; SHA256
+`c6b19dfbcbdb2e7463a548d505cb5adb55ef9e6b37235fc596c6d0e34931ed01`).
+The corrected documentary inventory acceptance is
+`.local/search-campaign-swift-journal-20261007/root-selected-state-prerequisite-inventory-documentary-source-acceptance-v2.json`
+(2,853 bytes; SHA256
+`2781ed346ea35f4b18811112d34da7c009be4dcac7c7f20967d5ca268251d73a`).
+Neither is a behavioral or complete-fit acceptance.
 
 Planned: add the separately versioned selected-occurrence relation, then qualify
 a legitimate independently enumerated complete source-fit invocation and the
