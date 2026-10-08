@@ -227,8 +227,50 @@ Its independent audit is
 `.local/search-campaign-swift-journal-20261007/role-selected-occurrences-task1-v3-independent-actual-evidence-review-v1.json`
 (26,259 bytes; SHA256
 `e24a001b66eb1ce2d2ed509afe4960a3883e8234e8f35aa7072e867d6aef0337`).
-Additional boundary definitions are frozen but unexecuted; eligible full-API
-capacity, complete entry/activation/resources and source-fit remain unaccepted.
+Additional boundary definitions first passed specification review but failed
+quality review before execution: the original equality helper recursively checks
+dictionary/list types, while tuple equality can accept numerically equal boolean
+or floating-point members. The new tests now require an ordinary two-member
+tuple with ordinary integer size counters, and ordinary integer product charges
+before successful and refusal-state comparisons. The rejected version remains
+immutable and unexecuted. Production, original controls, entry bytes, fixtures
+and independent expected results remain unchanged.
+
+After separate specification and quality acceptance, Root ran all four corrected
+boundary selectors serially. Name controls pass three positives/eight refusals;
+malformed-edge controls pass five refusals; size controls pass 40 positives/76
+refusals; product-budget controls pass three positives/three refusals. Each
+program first earns the unchanged genuine full-eight/selected-one API positive.
+These are four programs with 46 additional positive observations, 92 isolated
+input refusals and four genuine API positives, not 142 test methods. All four
+exit with zero, complete captures, empty stderr and consuming waits.
+
+Root and independent actual-evidence review verified the exact ten-field
+authorities, arguments, complete ordered markers, ordinary summary types and
+unchanged source/origin inventories. Each exited child has the exact unreaped
+singleton-group query before consuming wait; there is no after-wait signal or
+global absence claim. The bounded actual result is
+`.local/search-campaign-swift-journal-20261007/root-selected-occurrences-validation-v2-actual-results-v1.json`
+(15,480 bytes; SHA256
+`b5ef1fb0cda74582563ec1216a2b22d66a70f43f1ba44070e6ee965a7ad9a17c`).
+Its independent audit is
+`.local/search-campaign-swift-journal-20261007/role-selected-occurrences-validation-v2-independent-actual-evidence-review-v1.json`
+(39,964 bytes; SHA256
+`0b8b7ffa16916ada246840705d6165506880678f394b52ef98d44f6004eefaff`).
+
+The 8 MiB whitespace witness exercises a raw helper slot. Product checks use
+explicit synthetic remaining-capacity state on a genuine private instance;
+they do not establish eligible full-API capacity, allocation/RSS or a performance
+budget. No causal source mutant or bad-return checker was executed. Complete
+entry/activation/resources and source-fit remain unaccepted.
+
+The next finite call-context design passed independent specification and quality
+review as an explicit component-only API amendment. It derives genuine dispatch
+index 13 from the complete source tuple and retains all eight original iterator
+rows. Exact schemas, independently constructed controls and copy accounting are
+being defined; implementation and runtime remain later gates. Actual owner,
+default, closure and two-frame entry proofs are staged separately. All five
+unproved whole-function obligations remain unchanged.
 
 Planned: add the separately versioned selected-occurrence relation, then qualify
 a legitimate independently enumerated complete source-fit invocation and the
@@ -237,13 +279,15 @@ the gate.
 
 Implemented: the third coherent private candidate, unchanged focused test
 definitions, the narrow whole-source identity correction and corrected new
-selected-API definitions. The third selected-component source is accepted within
-its finite checkpoint scope. Rejected earlier source revisions remain preserved.
+selected-API definitions and corrected additional boundary controls. The third
+selected-component source is accepted within its finite checkpoint scope.
+Rejected earlier source and test-definition revisions remain preserved.
 
 Tested: 30 passing focused programs, one passing identity component, the separate
 qualified conditional characterization failure, the new missing selected-API
 surface failure, the corrected component's valid positive and thirteen isolated
-refusals, its surface and identity regressions, the retained incomplete timeout,
+refusals, its surface and identity regressions, four additional boundary programs
+with the counts above, the retained incomplete timeout,
 the retained setup failure and
 failing baselines above, and the earlier separately accepted missing-surface
 baseline. The Path-defense

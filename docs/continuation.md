@@ -59,10 +59,20 @@ captures and cleanup receipts.
 The first behavioral attempt reached the valid positive and nine refusals before
 its 30-second safety deadline. That incomplete result is retained. An unchanged
 rerun with a 90-second deadline completed in 41.304145 seconds; neither deadline
-is an accepted product performance target. Additional boundary definitions are
-frozen but remain unexecuted pending separate review. Next: verify those name,
-edge, encoded-size, raw-image and empty-product controls, then expand the
-source-qualified call-context and real entry-state proof. Complete
+is an accepted product performance target. Additional boundary controls now pass
+four serial programs: 46 additional positives and 92 isolated refusals, plus the
+genuine API positive before each program. Separate source and actual-evidence
+reviews verified the exact authorities, complete captures, unchanged inputs and
+owned-process cleanup. An earlier test-definition revision was rejected before
+execution because numeric equality could hide boolean or floating-point counter
+values; the corrected revision checks ordinary integer representations while
+preserving the original entry, fixtures and expected results.
+
+The next finite call-context design passed separate specification and quality
+reviews. Its exact schemas, source-qualified argument/copy provenance and
+complete eight-row iterator controls are being defined; no implementation or
+runtime result follows from design acceptance. Actual owner/default/closure and
+two-frame entry-state proofs remain separate work. Complete
 entry, activation, resource and source-fit verification and the separate
 integrated controls remain later gates. The focused passes and surface failure
 alone do not establish those gates.
