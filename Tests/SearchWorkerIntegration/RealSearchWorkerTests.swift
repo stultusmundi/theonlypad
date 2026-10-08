@@ -91,6 +91,69 @@ final class RealSearchWorkerTests: XCTestCase {
     }
   }
 
+  // Break: ordinary defaults selecting an echo/placeholder collector or replacing
+  // the healthy child after a semantic error cannot satisfy these literal results.
+  func testProductionDefaultsUseOrdinaryConstructorAndJoinedShutdown() async throws {
+    let helper = try OrdinaryHelperHarness()
+    var failure: Error?
+    do {
+      let first = try await helper.request(text: "x😀e\u{301}😀", pattern: "😀", operation: .find)
+      guard case .completed(let firstIdentity, let firstSource, let found) = first else {
+        throw HelperTestFailure("Ordinary constructor did not find supplementary scalars")
+      }
+      XCTAssertEqual(
+        Array(firstSource.utf16), [0x0078, 0xD83D, 0xDE00, 0x0065, 0x0301, 0xD83D, 0xDE00])
+      XCTAssertEqual(
+        found.matches, [NSRange(location: 1, length: 2), NSRange(location: 5, length: 2)])
+      XCTAssertNil(found.replacement)
+      XCTAssertEqual(firstIdentity.ordinal, 1)
+
+      let second = try await helper.request(
+        text: "é猫 😀 é猫", pattern: "(é)(猫)", mode: .regex,
+        operation: .replace(template: "$2:$1"))
+      guard case .completed(let secondIdentity, let secondSource, let replaced) = second else {
+        throw HelperTestFailure("Ordinary constructor did not expand regex captures")
+      }
+      XCTAssertEqual(
+        Array(secondSource.utf16), [0x00E9, 0x732B, 0x0020, 0xD83D, 0xDE00, 0x0020, 0x00E9, 0x732B])
+      XCTAssertEqual(
+        replaced.matches, [NSRange(location: 0, length: 2), NSRange(location: 6, length: 2)])
+      XCTAssertEqual(
+        Array(try XCTUnwrap(replaced.replacement).utf16),
+        [0x732B, 0x003A, 0x00E9, 0x0020, 0xD83D, 0xDE00, 0x0020, 0x732B, 0x003A, 0x00E9])
+      XCTAssertEqual(secondIdentity.generation, firstIdentity.generation)
+      XCTAssertEqual(secondIdentity.ordinal, 2)
+      XCTAssertNotEqual(secondIdentity.requestID, firstIdentity.requestID)
+
+      let invalid = try await helper.request(
+        text: "x", pattern: "(", mode: .regex, operation: .find)
+      guard case .semanticFailure(let invalidIdentity, let error) = invalid else {
+        throw HelperTestFailure("Ordinary constructor did not report invalidPattern")
+      }
+      XCTAssertEqual(error, .invalidPattern)
+      XCTAssertEqual(invalidIdentity.generation, firstIdentity.generation)
+      XCTAssertEqual(invalidIdentity.ordinal, 3)
+      XCTAssertNotEqual(invalidIdentity.requestID, secondIdentity.requestID)
+
+      let healthy = try await helper.request(text: "x😀e\u{301}😀", pattern: "😀", operation: .find)
+      guard case .completed(let healthyIdentity, let healthySource, let output) = healthy else {
+        throw HelperTestFailure("Ordinary constructor lost healthy reuse after semantic failure")
+      }
+      XCTAssertEqual(
+        Array(healthySource.utf16), [0x0078, 0xD83D, 0xDE00, 0x0065, 0x0301, 0xD83D, 0xDE00])
+      XCTAssertEqual(
+        output.matches, [NSRange(location: 1, length: 2), NSRange(location: 5, length: 2)])
+      XCTAssertNil(output.replacement)
+      XCTAssertEqual(healthyIdentity.generation, invalidIdentity.generation)
+      XCTAssertEqual(healthyIdentity.ordinal, invalidIdentity.ordinal + 1)
+      XCTAssertEqual(healthyIdentity.ordinal, 4)
+      XCTAssertNotEqual(healthyIdentity.requestID, invalidIdentity.requestID)
+    } catch { failure = error }
+    await helper.finish()
+    do { try helper.artifact.verify() } catch { if failure == nil { failure = error } }
+    if let failure { throw failure }
+  }
+
   private func withHelper(
     fragment: Bool = false, _ body: (RealHelperHarness) async throws -> Void
   ) async throws {
@@ -278,22 +341,36 @@ private final class RealHelperHarness {
     let observations = HelperObservations()
     self.observations = observations
     let timers = DispatchQueue(label: "search.worker.integration.timers")
-    let lifecycle = try SearchChildLifecycle(
-      executable: URL(fileURLWithPath: artifact.executable),
-      policy: SearchChildPolicy(
-        operationNanoseconds: 10_000_000_000, reapGraceNanoseconds: 2_000_000_000,
-        idleNanoseconds: 10_000_000_000, maximumRequestsPerChild: 8),
-      system: ObservedHelperSystem(observations: observations, fragment: fragment),
-      now: { DispatchTime.now().uptimeNanoseconds },
-      schedule: { SearchChildDispatchTimer(deadline: $0, queue: timers, action: $1) })
-    driver = try SearchParentWireDriver(
-      lifecycle: lifecycle, accumulatorFactory: { SearchParentResponseAccumulator(request: $0) },
-      maximumWireBytesPerChild: 1_000_000,
-      observe: {
-        if case .sessionReleased(let generation) = $0 {
-          observations.update { $0.released.append(generation) }
-        }
-      })
+    if artifact.mode == "packaged" {
+      let authenticatedBundle = URL(fileURLWithPath: try XCTUnwrap(artifact.applicationBundle))
+      driver = try SearchParentWireDriver(
+        applicationBundle: authenticatedBundle,
+        system: ObservedHelperSystem(observations: observations, fragment: fragment),
+        now: { DispatchTime.now().uptimeNanoseconds },
+        schedule: { SearchChildDispatchTimer(deadline: $0, queue: timers, action: $1) },
+        observe: {
+          if case .sessionReleased(let generation) = $0 {
+            observations.update { $0.released.append(generation) }
+          }
+        })
+    } else {
+      let lifecycle = try SearchChildLifecycle(
+        executable: URL(fileURLWithPath: artifact.executable),
+        policy: SearchChildPolicy(
+          operationNanoseconds: 10_000_000_000, reapGraceNanoseconds: 2_000_000_000,
+          idleNanoseconds: 10_000_000_000, maximumRequestsPerChild: 8),
+        system: ObservedHelperSystem(observations: observations, fragment: fragment),
+        now: { DispatchTime.now().uptimeNanoseconds },
+        schedule: { SearchChildDispatchTimer(deadline: $0, queue: timers, action: $1) })
+      driver = try SearchParentWireDriver(
+        lifecycle: lifecycle, accumulatorFactory: { SearchParentResponseAccumulator(request: $0) },
+        maximumWireBytesPerChild: 1_000_000,
+        observe: {
+          if case .sessionReleased(let generation) = $0 {
+            observations.update { $0.released.append(generation) }
+          }
+        })
+    }
   }
   func request(
     text: String, pattern: String, mode: SearchMode = .literal, operation: SearchExecutionOperation
@@ -382,6 +459,7 @@ private final class RealHelperHarness {
     case .exited(let code): exit = "exited:\(code)"
     case .signaled(let signal): exit = "signaled:\(signal)"
     }
+    print("WORKER-SCOPE scope=observed mode=\(artifact.mode)")
     print(
       "WORKER-SETTLED generation=\(child.generation.uuidString) pid=\(child.pid) exit=\(exit) reaps=\(observed.reaps.count) signals=\(observed.signals.count) released=\(observed.released.count)"
     )
@@ -390,5 +468,91 @@ private final class RealHelperHarness {
         "WORKER-SIGNAL generation=\(child.generation.uuidString) pid=\(signal.pid) signal=\(signal.signal) result=\(signal.result)"
       )
     }
+  }
+}
+
+/// The ordinary constructor is exercised without syscall or driver observers.
+/// Its joined receipt provides logical cleanup facts, never PID/reap evidence.
+private final class OrdinaryHelperHarness {
+  let artifact: HelperArtifact
+  let driver: SearchParentWireDriver
+  private var latest: SearchParentWireHandle?
+  private var generation: UUID?
+  private var ordinal: UInt64 = 0
+
+  init() throws {
+    let artifact = try HelperArtifact.load()
+    guard artifact.mode == "packaged", let applicationBundle = artifact.applicationBundle else {
+      throw HelperTestFailure("Ordinary constructor requires authenticated packaged artifact")
+    }
+    self.artifact = artifact
+    driver = try SearchParentWireDriver(applicationBundle: URL(fileURLWithPath: applicationBundle))
+  }
+
+  func request(
+    text: String, pattern: String, mode: SearchMode = .literal, operation: SearchExecutionOperation
+  ) async throws -> SearchParentWireOutcome {
+    let id = UUID()
+    let job = try SearchParentWireJob(
+      requestID: id, query: SearchQuery(pattern: pattern, mode: mode), operation: operation,
+      text: text, inputUTF16: text.utf16.count, scope: nil,
+      limits: SearchWireLimits(
+        maxTextUTF16: 128, maxOutputUTF16: 256, maxMatches: 16, cooperativeMilliseconds: 1_000))
+    let handle = try await driver.submit(job)
+    latest = handle
+    let outcome = try await driver.wait(for: handle)
+    ordinal += 1
+    let identity: SearchWireIdentity
+    switch outcome {
+    case .completed(let received, let source, _):
+      identity = received
+      guard Array(source.utf16) == Array(text.utf16) else {
+        throw HelperTestFailure("Ordinary source changed")
+      }
+    case .semanticFailure(let received, _): identity = received
+    case .failed: throw HelperTestFailure("Ordinary parent protocol/lifecycle failed")
+    }
+    guard identity.requestID == id, identity.ordinal == ordinal,
+      identity.generation.uuidString != "00000000-0000-0000-0000-000000000000",
+      generation == nil || generation == identity.generation
+    else {
+      throw HelperTestFailure("Ordinary result lacks exact generation/request/ordinal binding")
+    }
+    generation = identity.generation
+    return outcome
+  }
+
+  func finish() async {
+    let result = await driver.shutdownJoined(after: latest)
+    guard case .completed(let receipt) = result else {
+      XCTFail("Ordinary joined shutdown owner refused")
+      return
+    }
+    XCTAssertEqual(receipt.ownership, .admitted)
+    XCTAssertEqual(receipt.laneStop, .acknowledged)
+    XCTAssertTrue(receipt.shutdown.child.stopped)
+    XCTAssertTrue(receipt.shutdown.child.channelsClosed)
+    XCTAssertEqual(receipt.shutdown.child.cleanup, .noChild)
+    XCTAssertTrue(receipt.shutdown.parentLaneSettled)
+    XCTAssertEqual(receipt.shutdown.retainedParentLanes, 0)
+    guard let generation else {
+      XCTFail("Ordinary summary has no actual result generation")
+      return
+    }
+    let ownership: String
+    switch receipt.ownership {
+    case .admitted: ownership = "admitted"
+    case .refused: ownership = "refused"
+    }
+    let laneStop: String
+    switch receipt.laneStop {
+    case .acknowledged: laneStop = "acknowledged"
+    case .failed: laneStop = "failed"
+    }
+    let cleanup = receipt.shutdown.child.cleanup == .noChild ? "noChild" : "unsettled"
+    print("WORKER-SCOPE scope=ordinary mode=\(artifact.mode)")
+    print(
+      "WORKER-ORDINARY generation=\(generation.uuidString) ownership=\(ownership) laneStop=\(laneStop) stopped=\(receipt.shutdown.child.stopped ? 1 : 0) channelsClosed=\(receipt.shutdown.child.channelsClosed ? 1 : 0) cleanup=\(cleanup) parentSettled=\(receipt.shutdown.parentLaneSettled ? 1 : 0) retainedParentLanes=\(receipt.shutdown.retainedParentLanes)"
+    )
   }
 }

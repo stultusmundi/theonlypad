@@ -1,5 +1,24 @@
 # Continuation
 
+## Fixed production parent composition — 2026-10-09
+
+The isolated `feat/search-parent-production-composition` branch adds the fixed
+bundle-only driver constructor and shared real collaborator recipe. Focused12/0,
+neighbor331/0, pure runner32/0 and fresh public app/core939/0 pass. The current
+local package/archive/SBOM and both strict signatures verify. Six actual final
+nested-helper methods pass: five observed shared-recipe cases retain exact
+owned child cleanup, while one ordinary constructor case establishes separate
+logical joined cleanup with no PID/reap counters. Independent source reviews
+approve the changes and final checkpoint evidence; the scoped local commit is approved.
+See [verification](verification/search-parent-production-composition.md).
+
+Next: production admission accounting/retry ownership, then native document and
+folder search routing. The editor still uses in-process search. Current desktop
+UI Automation authentication remains user-owned and pending; continue independent
+work. No hard-regex, RSS/performance, physical input/IME/VoiceOver, Intel/macOS14
+runtime or whole-product completion follows. No remote push/merge/release is
+authorized.
+
 ## Production parent response collection — 2026-10-09
 
 The isolated `feat/search-parent-response-accumulator` branch adds the bounded,

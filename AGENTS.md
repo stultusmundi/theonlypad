@@ -272,3 +272,19 @@ publication, notarization or additional platform acceptance is claimed.
 
 
 Production parent response accumulator checkpoint (2026-10-09): direct/codec32/0, neighboring173/0 and current full app/core927/0 pass warning-free. The new owner-thread collector retains compact request metadata, bounded ranges and strict scalar-complete UTF8; source scalar authentication remains the existing reader's responsibility. Real-helper factory now uses the production collector: `scripts/test-search-worker.sh --application-bundle "$PWD/dist/TheOnlyPad.app"` passes all five actual methods against the freshly packaged final nested helper, with ten direct-watchdog receipts, exact source/artifact/test-bundle bindings and sole consuming cleanup verified. All five exits use actual owned SIGKILL after result credit; this does not establish catastrophic-regex containment. Local package/archive/SBOM and explicit helper/app signatures pass. Full test command executed directly under the accepted watchdog: `python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/parent-response-integrated-owned -- scripts/swift.sh test --scratch-path .build/parent-response-integrated`. Do not nest another watchdog around the helper coordinator. See `docs/verification/search-parent-response-accumulator.md`. Default parent composition/admission/native routing, allocation/RSS and current desktop acceptance remain outstanding.
+
+
+Production parent composition (2026-10-09): focused `SearchParentProduction`12/0,
+neighbor331/0, pure runner32/0 and full public app/core939/0 pass. Run focused/full
+Swift tests under the accepted direct owned watchdog as documented in
+`docs/verification/search-parent-production-composition.md`. Fresh package/checker
+and explicit strict helper/app signatures pass. `scripts/test-search-worker.sh
+--application-bundle "$PWD/dist/TheOnlyPad.app"` passes six actual methods using
+91 matching sources/two generated inputs and eleven direct watchdog receipts;
+never wrap this coordinator in another session-owning watchdog. Five observed
+shared-recipe methods retain exact PID/owned signal/sole consuming reap/session
+release. The sixth ordinary constructor method has genuine logical joined
+cleanup and no PID/reap counters; never transfer observed counts to it. Production
+admission accounting/retry and native search routing remain outstanding. Final
+independent checkpoint review approves the scoped local commit; no new desktop, hard-regex,
+RSS/performance or physical release acceptance is inferred.

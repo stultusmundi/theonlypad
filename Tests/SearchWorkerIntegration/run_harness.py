@@ -43,6 +43,7 @@ CASES = {
     'exact-preservation': 'testNoMatchReplacementPreservesEveryLiteralCodeUnit',
     'semantic-reuse': 'testSemanticErrorThenHealthyRequestUsesSameGeneration',
     'empty-fragmented': 'testEmptyThenFragmentedSupplementaryReplacement',
+    'production-defaults': 'testProductionDefaultsUseOrdinaryConstructorAndJoinedShutdown',
 }
 FIXED = (
     'Sources/PadSearchWorker/PadSearchWorkerMain.swift', 'Package.swift',
@@ -149,7 +150,10 @@ def parse_args(argv):
     selection.add_argument('--case', choices=tuple(CASES))
     parser.add_argument('--application-bundle', type=Path,
                         help='test the existing final nested helper selected by the production resolver')
-    return parser.parse_args(argv)
+    options = parser.parse_args(argv)
+    if options.case == 'production-defaults' and options.application_bundle is None:
+        parser.error('production-defaults requires --application-bundle')
+    return options
 
 
 def digest(data):
@@ -341,7 +345,7 @@ def verify_test_bundle(run, value, pinned):
         raise ValueError('test bundle changed')
 
 
-def verify_test_output(output, method):
+def verify_test_output(output, method, mode='built'):
     text = (output / 'stdout.log').read_text() + (output / 'stderr.log').read_text()
     # Require actual XCTest method identities, not a generic positive summary.
     identities = re.findall(r"Test Case '-\[SearchWorkerIntegrationTests\.RealSearchWorkerTests ([A-Za-z0-9_]+)\]' (started|passed|failed)", text)
@@ -350,13 +354,58 @@ def verify_test_output(output, method):
     counts = re.findall(r'Executed (\d+) tests?, with (\d+) failures', text)
     if not counts or any(pair != ('1', '0') for pair in counts):
         raise ValueError('selected method did not execute exactly once without failure')
-    receipts = re.findall(r'^WORKER-SETTLED generation=([A-F0-9-]{36}) pid=([1-9][0-9]*) exit=(exited:0|signaled:9) reaps=1 signals=([01]) released=1$', text, re.MULTILINE)
+    if mode not in ('built', 'packaged'):
+        raise ValueError('unknown authenticated helper mode')
+    ordinary = method == CASES['production-defaults']
+    scope = 'ordinary' if ordinary else 'observed'
+    if ordinary and mode != 'packaged':
+        raise ValueError('ordinary constructor requires packaged helper')
+    # Consume every raw marker; malformed and cross-scope rows cannot disappear
+    # merely because a receipt regex did not match them.
+    markers = [line for line in text.splitlines() if 'WORKER-' in line]
+    scope_line = 'WORKER-SCOPE scope=' + scope + ' mode=' + mode
+    if markers.count(scope_line) != 1:
+        raise ValueError('missing exact unique helper scope')
+    uuid = r'[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}'
+    if ordinary:
+        summaries = []
+        for line in markers:
+            if line == scope_line:
+                continue
+            summary = re.fullmatch(
+                r'WORKER-ORDINARY generation=(' + uuid + r') ownership=admitted '
+                r'laneStop=acknowledged stopped=1 channelsClosed=1 cleanup=noChild '
+                r'parentSettled=1 retainedParentLanes=0', line)
+            if summary is None:
+                raise ValueError('malformed or foreign ordinary helper marker')
+            summaries.append(summary.group(1))
+        if len(summaries) != 1 or summaries[0] == '00000000-0000-0000-0000-000000000000':
+            raise ValueError('missing exact ordinary joined shutdown summary')
+        return dict(method=method, generation=summaries[0], scope='ordinary', mode='packaged',
+                    ownership='admitted', laneStop='acknowledged', stopped=True,
+                    channelsClosed=True, cleanup='noChild', parentSettled=True,
+                    retainedParentLanes=0)
+    receipts, signal_rows = [], []
+    for line in markers:
+        if line == scope_line:
+            continue
+        receipt = re.fullmatch(
+            r'WORKER-SETTLED generation=(' + uuid + r') pid=([1-9][0-9]*) '
+            r'exit=(exited:0|signaled:9) reaps=1 signals=([01]) released=1', line)
+        signal = re.fullmatch(
+            r'WORKER-SIGNAL generation=(' + uuid + r') pid=([1-9][0-9]*) '
+            r'signal=([0-9]+) result=([0-9]+)', line)
+        if receipt is not None:
+            receipts.append(receipt.groups())
+        elif signal is not None:
+            signal_rows.append(signal.groups())
+        else:
+            raise ValueError('malformed or foreign observed helper marker')
     if len(receipts) != 1:
         raise ValueError('missing exact helper settlement summary')
     generation, pid, exit_status, signals = receipts[0]
     if generation == '00000000-0000-0000-0000-000000000000' or (exit_status == 'signaled:9' and signals != '1'):
         raise ValueError('invalid helper settlement summary')
-    signal_rows = re.findall(r'^WORKER-SIGNAL generation=([A-F0-9-]{36}) pid=([1-9][0-9]*) signal=([0-9]+) result=([0-9]+)$', text, re.MULTILINE)
     if len(signal_rows) != int(signals) or any(
             item[0] != generation or item[1] != pid or item[2] != '9'
             or int(item[3]) not in (0, errno.ESRCH) for item in signal_rows):
@@ -374,6 +423,8 @@ def execute(run, options, watchdog_main):
     helper = support = test_bundle = None
     helper_hash = support_hash = bundle_hash = None
     try:
+        if options.case == 'production-defaults' and options.application_bundle is None:
+            raise ValueError('production-defaults requires --application-bundle')
         manifest = json.loads((run / 'sources.json').read_text())
         manifest_hash = digest((run / 'sources.json').read_bytes())
         result['sourceManifestSHA256'] = manifest_hash
@@ -388,7 +439,9 @@ def execute(run, options, watchdog_main):
                   ('build-tests', 240, [swift, 'build', *common, '--build-tests', '-Xswiftc', '-enable-testing']),
                   ('test-binpath', 30, [swift, 'build', *common, '--show-bin-path'])]
         if not options.build_only:
-            selected = [options.case] if options.case else list(CASES)
+            selected = [options.case] if options.case else [
+                case for case in CASES if options.application_bundle is not None
+                or case != 'production-defaults']
             stages += [('test-' + case, 90, [swift, 'test', *common, '--skip-build', '--filter',
                          'RealSearchWorkerTests/' + CASES[case]]) for case in selected]
         directory = None
@@ -419,7 +472,7 @@ def execute(run, options, watchdog_main):
                 result['setupComplete'] = True
             elif stage.startswith('test-'):
                 case = stage.removeprefix('test-')
-                result['testsPassed'].append(verify_test_output(output, CASES[case]))
+                result['testsPassed'].append(verify_test_output(output, CASES[case], mode=helper['mode']))
         result['exit'] = 0
         return 0
     except (OSError, ValueError, TypeError, KeyError) as error:

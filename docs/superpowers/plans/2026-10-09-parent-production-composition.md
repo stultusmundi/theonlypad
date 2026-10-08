@@ -55,8 +55,8 @@ Foundation/Dispatch, original MIT; no external dependency.
   `SearchParentProductionPolicy.childPolicy() throws -> SearchChildPolicy` and
   `maximumWireBytesPerChild: UInt64`.
 
-- [ ] Independent design review resolves API/default/lifetime/test feasibility.
-- [ ] A different test author derives independent literal oracles before code.
+- [x] Independent design review resolves API/default/lifetime/test feasibility.
+- [x] A different test author derives independent literal oracles before code.
   A minimum policy test reads the actual recipe:
 
 ```swift
@@ -102,12 +102,12 @@ XCTAssertEqual(receipt.shutdown.retainedParentLanes, 0)
   Tests must always call real joined shutdown on constructed drivers, including
   assertion/throwing failure. No silent pending receipt, thread sleep or timeout
   skip is accepted as success.
-- [ ] Root freezes actual sources/tests and records missing-API compiler RED
+- [x] Root freezes actual sources/tests and records missing-API compiler RED
   separately. A second ignored generated extension uses deliberately wrong
   policy literals/eager missing-bundle refusal with existing injection APIs for
   behavioral RED. Preserve original literals and all already-passing controls;
   never adopt the generated shell or change production sources for this baseline.
-- [ ] A single source implementer writes the shared recipe after RED:
+- [x] A single source implementer writes the shared recipe after RED:
 
 ```swift
 extension SearchParentWireDriver {
@@ -153,7 +153,7 @@ enum SearchParentProductionPolicy {
   above and the existing throwing policy constructor, never try! or fallback.
   Imports are Foundation and Dispatch. The scheduler captures its queue directly,
   not self. No files are opened, launched or preflighted here.
-- [ ] Root executes focused GREEN under the direct watchdog, verifies exact
+- [x] Root executes focused GREEN under the direct watchdog, verifies exact
   frozen membership/hashes/receipts and gets independent source review. Proposed
   public reproduction filter (frozen runs supply absolute package/scratch paths):
 
@@ -172,15 +172,15 @@ overload; produce new packaged-only `production-defaults` selection plus explici
 ordinary/observed evidence scopes. Reuse the accepted artifact verifier and sole
 direct-watchdog coordinator.
 
-- [ ] Test author adds pure runner controls before validator/selection changes:
+- [x] Test author adds pure runner controls before validator/selection changes:
   new case without application bundle refuses before setup; default built selects
   the unchanged five; default packaged selects six; ordinary cleanup cannot
   masquerade as observed PID/reap/signals; malformed/missing logical cleanup and
   scope records refuse. All original pure assertions remain unchanged.
-- [ ] Root executes discriminating pure RED, preserving wrong-selector/no-new-API
+- [x] Root executes discriminating pure RED, preserving wrong-selector/no-new-API
   setup outcomes separately from assertion failures. No helper is launched by
   these pure cases.
-- [ ] Source owner updates the original five harness's packaged construction
+- [x] Source owner updates the original five harness's packaged construction
   using the shared recipe and actual ObservedHelperSystem/clock/timers/observer:
 
 ```swift
@@ -205,13 +205,13 @@ driver = try SearchParentWireDriver(
   subsequent same-generation healthy request with independent exact oracles.
   Use unchanged artifact verification before/after and always real joined close.
 
-- [ ] Validator distinguishes the ordinary summary's generation and actual
+- [x] Validator distinguishes the ordinary summary's generation and actual
   ownership/acknowledgement/stopped/channels/noChild/settled/zero-lane facts from
   observed exact PID/signal/reap rows. It never fills missing counters or emits a
   synthetic PID. Original five validators remain strict and source/artifact/test
   bindings apply to all six. Reject ordinary selection without an authenticated
   bundle rather than skip or invent one from a standalone executable path.
-- [ ] Root runs pure GREEN, independent helper/runner source review, local fresh
+- [x] Root runs pure GREEN, independent helper/runner source review, local fresh
   package and all six actual final nested methods. Validate each selected XCTest
   identity/count, all direct-watchdog stages and whole source/helper/test-bundle
   bindings. The five observed shared-recipe cases and one ordinary case are
@@ -227,7 +227,7 @@ scripts/test-search-worker.sh --application-bundle "$PWD/dist/TheOnlyPad.app"
 **Files:** Update `AGENTS.md`, `docs/continuation.md`, this spec/plan and create
 `docs/verification/search-parent-production-composition.md`.
 
-- [ ] Root runs the relevant composition/resolver/lifecycle/driver/codec/admission
+- [x] Root runs the relevant composition/resolver/lifecycle/driver/codec/admission
   selectors on exact frozen inputs, then a fresh public app/core build/test:
 
 ```sh
@@ -237,9 +237,19 @@ python3 scripts/check-public.py
 python3 scripts/check-package.py dist/TheOnlyPad.app dist/TheOnlyPad-0.1.0-dev-arm64.zip dist/TheOnlyPad.sbom.json
 ```
 
-- [ ] Record exact policies/commands/pins, genuine ordinary-versus-observed
+- [x] Record exact policies/commands/pins, genuine ordinary-versus-observed
   scopes, actual failing histories, limitations and planned/implemented/tested/
   blocked states. No RSS/hard-regex/GUI or native routing inference.
-- [ ] Independent final SPEC/QUALITY evidence review resolves findings. Root
-  rechecks tested inputs/public/whitespace, makes a scoped local commit and
+- [x] Independent final SPEC/QUALITY evidence review approves with no blockers. Root
+  rechecks tested inputs/public/whitespace for the scoped local commit and
   continues admission accounting/retry ownership before native activation.
+
+
+## Executed checkpoint
+
+Root verified focused12/0, neighbors331/0, pure runner32/0, full app/core939/0,
+fresh package/archive/SBOM/signatures and actual packaged helper6/0. Exact frozen
+inputs and owned receipts were checked; original RED/setup histories remain.
+Source reviews approve both tasks. Final independent evidence review approves
+the scoped local commit; see [verification](../../verification/search-parent-production-composition.md).
+Continue admission accounting/retry before native activation after this checkpoint.

@@ -1,10 +1,11 @@
 # Fixed production parent driver composition
 
-Status: planned architectural wiring step, based on verified collector commit
+Status: implemented, tested and independently evidence-reviewed wiring step;
+scoped local commit approved. Based on verified collector commit
 `ab5360f` (927 app/core tests and five final-nested helper methods passed).
 Root selects the first approach and the explicit operational defaults below.
 Independent specification/quality design review approves this contract and its
-executable plan; source tests/RED must precede code.
+executable plan; source tests/RED preceded code.
 BUILD_PROMPT authorizes routine design choices and replaces repeated human
 approval ceremony with documented independent review.
 
@@ -144,3 +145,14 @@ Root read it completely and verified all13 declared current source pins. Its
 recorded pre-commit staged snapshot remains historical; collector commitab5360f
 is now the actual base. Source callbacks and lifecycle contracts already exist;
 no runtime result is inferred from this design.
+
+
+## Implementation checkpoint
+
+The fixed recipe and scoped helper-test wiring are implemented and independently
+source-approved. Root records focused12/0, neighbors331/0, pure32/0, full939/0 and
+six final nested-helper methods with separate observed/ordinary evidence.
+Package/archive/SBOM and both signatures verify. See
+[verification](../../verification/search-parent-production-composition.md).
+Final independent evidence review approves the scoped local commit; admission accounting/retry and
+native activation remain separate outstanding work.
