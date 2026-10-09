@@ -10,14 +10,22 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-09-search-admission-service-design.md`
 
-**State:** PLANNED; implementation and runtime are unexecuted. The service design
-and public adoption and this plan have independent specification/quality
-approval. Task1 test-source authoring is in progress; executable gates remain
-pending. Baseline is locally committed `42513c0` with actual
-full993/0; native10/0 is separately verified. Existing app search remains
-in-process, and the distribution remains the earlier `4841d89`. Commands below
-are proposed future invocations, not proven commands. Concrete helper process
-observation remains a separately reviewed prerequisite for Task4.
+**State:** Task1 facade IMPLEMENTED, component TESTED and independently
+source/evidence APPROVED. Documentation adoption and scoped local commit remain
+PENDING at this record. The service design and this plan have
+independent specification/quality approval. Authenticated compiler API RED is
+followed by focused6/0, required neighboring7 classes96/0, and two actual-facade
+controls reaching exactly3 parent and2 settlement assertions with genuine cleanup.
+Retained recursive strict formatting passes with394 exact inputs/empty captures;
+all498 protected existing source/test/script/manifest bytes and modes match.
+Fresh matching public package999/0 binds399 inputs in28.200549s, includes all six
+formatted facade tests and builds app/helper executables without launch. See
+`docs/verification/search-admission-service.md`. Baseline remains committed
+`42513c0`; distribution remains `4841d89`, and editor search stays in-process.
+Task2 constructor/client/runner preparation remains source-only and unexecuted. Task2–4 compiler/factory/native/real-helper gates remain PLANNED. Commands
+below retain their proposed status; private Root coordinators establish no new
+published command. Concrete Task4 process observation/finite cleanup remains a
+separately reviewed prerequisite.
 
 ## Global constraints and sequence
 
@@ -39,9 +47,9 @@ observation remains a separately reviewed prerequisite for Task4.
 
 **Outputs:** adopted reviewed spec/plan, bounded author tasks and ignored immutable before-inventory.
 
-- [ ] Review V2 and this plan; resolve scope/signature/cleanup findings before implementation. Native-owner/quit/context/input producer decisions stay excluded.
-- [ ] Record actual branch/HEAD/worktree, inventory/hash/mode of every existing recursive PadCore/SearchExecution source, old SearchExecution test/harness, native runner/test, Package.swift, scripts/swift.sh, common parser/watchdog and relevant current docs. Protect old bytes rather than treating a source-backed transformation as an ordinary edit.
-- [ ] Assign tests/runner authors their new paths first. Production author owns only NEW Sources/SearchExecution/SearchAdmissionService.swift and starts after Root authenticates API RED. Tell every author they are not alone and must preserve other edits. Source report bytes remain separately pinned.
+- [x] Review V2 and this plan; resolve scope/signature/cleanup findings before implementation. Native-owner/quit/context/input producer decisions stay excluded.
+- [x] Record actual branch/HEAD/worktree, inventory/hash/mode of every existing recursive PadCore/SearchExecution source, old SearchExecution test/harness, native runner/test, Package.swift, scripts/swift.sh, common parser/watchdog and relevant current docs. Protect old bytes rather than treating a source-backed transformation as an ordinary edit.
+- [x] Assign tests/runner authors their new paths first. Production author owns only NEW Sources/SearchExecution/SearchAdmissionService.swift and starts after Root authenticates API RED. Tell every author they are not alone and must preserve other edits. Source report bytes remain separately pinned.
 - [ ] Root chooses one task at a time for actual runtime; log planned/implemented/tested/blocked independently. A scoped commit occurs only after its review/evidence gates, never from this private authoring task.
 
 ## Task 1 — reviewed facade tests, compiler API RED, actual facade, behavioral controls
@@ -58,11 +66,12 @@ observation remains a separately reviewed prerequisite for Task4.
 
 ### Step1 — author a genuine facade fixture and six focused methods
 
-- [ ] Build one test-owned actual controller with the existing JoinedAdmissionDriver/AdmissionTestAccounting/AdmissionManualRetry. Pass that actual controller into the proposed module-internal facade initializer. All exercise methods submit/register/cancel/unregister/release/borrow/close through the service, not through a controller stand-in.
-- [ ] Install async XCTest teardown synchronously immediately after fixture construction and before driver configuration, task creation or any suspension. Store every consumer/job ID, preparation/query/join gate and task handle independently of the service result. Cleanup can invoke the known actual test controller directly to cancel/release genuine fixture work when a facade mutant fails forwarding; this is cleanup authority, not an assertion outcome.
-- [ ] The existing JoinedAdmissionFixture private scope counters cannot be reused around direct service.submit: its own submit wrapper alone increments expected captures. New ServiceFixture counts successful capture outer returns, preparation entries/returns and genuine existing workerExited observations itself, and drives through service.submit. Do not edit old fixture counters or treat missing worker slots as actual returns.
-- [ ] Reuse JoinedAdmissionDriver.beginRescue/drainForwardedScopes/sealAndJoinRescueWaits with their existing real backend late-wait rescue. Cleanup first cancels actual known jobs, disables retry actions, releases all actual held gates, completes genuine sole wait if needed, awaits preparation/worker return, joins independently registered facade caller tasks, drains forwarded driver scopes and finally seals/joins actual rescue registration. Require no outstanding tasks/scopes or registrations-after-seal; no result-based early exit.
-- [ ] A successful completed scripted handle also needs its actual fixture-only cancel before the existing driver's forwarded-scope drain: that predicate requires real returned cancel for every submitted handle. After genuine worker/sole-wait return, snapshot exact submitted/returned-wait/cancelled handles; for each genuinely completed submitted handle lacking cancel, call that exact driver's real cancel and await its actual return, once. Never guess a handle, compete with an unfinished cancel, or mark return synthetically. Reuse the accepted native fixture's explicit completed-handle cleanup policy and report those cancels as fixture-only, distinct from facade runtime behavior.
+- [x] Build one test-owned actual controller with the existing JoinedAdmissionDriver/AdmissionTestAccounting/AdmissionManualRetry. Pass that actual controller into the proposed module-internal facade initializer. All exercise methods submit/register/cancel/unregister/release/borrow/close through the service, not through a controller stand-in.
+- [x] Install async XCTest teardown synchronously immediately after fixture construction and before driver configuration, task creation or any suspension. Store every consumer/job ID, preparation/query/join gate and task handle independently of the service result. Cleanup can invoke the known actual test controller directly to cancel/release genuine fixture work when a facade mutant fails forwarding; this is cleanup authority, not an assertion outcome.
+- [x] Before final driver/rescue-registration sealing, retain and await an independently owned actual controller terminal/helper-return fence; rescuing backend/preparation gates and callback counts alone cannot prove no future controller task entry. Use existing genuine controller operations as cleanup authority, separate from candidate facade outcomes. Preserve the requestless unsupported/legacy-selected cases and their raw refusal assertions; do not infer a general legacy helper-join guarantee. No production hooks, polling, empty-slot inference or ignored late-entry checks.
+- [x] The existing JoinedAdmissionFixture private scope counters cannot be reused around direct service.submit: its own submit wrapper alone increments expected captures. New ServiceFixture counts successful capture outer returns, preparation entries/returns and genuine existing workerExited observations itself, and drives through service.submit. Do not edit old fixture counters or treat missing worker slots as actual returns.
+- [x] Reuse JoinedAdmissionDriver.beginRescue/drainForwardedScopes/sealAndJoinRescueWaits with their existing real backend late-wait rescue. Cleanup first cancels actual known jobs, disables retry actions, releases all actual held gates, completes genuine sole wait if needed, awaits preparation/worker return, joins independently registered facade caller tasks, drains forwarded driver scopes and finally seals/joins actual rescue registration. Require no outstanding tasks/scopes or registrations-after-seal; no result-based early exit.
+- [x] A successful completed scripted handle also needs its actual fixture-only cancel before the existing driver's forwarded-scope drain: that predicate requires real returned cancel for every submitted handle. After genuine worker/sole-wait return, snapshot exact submitted/returned-wait/cancelled handles; for each genuinely completed submitted handle lacking cancel, call that exact driver's real cancel and await its actual return, once. Never guess a handle, compete with an unfinished cancel, or mark return synthetically. For this facade fixture, genuine sole backend completion, consumed sole wait, exact exclusively owned handle and actual preparation/worker returns authorize fixture-only cancellation independently of candidate callback delivery. Keep delivery assertions in the body. The native policy is reused only for exact handle/return/ownership safeguards, not delivery-dependent rescue authority; protected native fixtures remain unchanged. Report those cancels as fixture-only, distinct from facade runtime behavior.
 
 Required exact class `SearchAdmissionServiceTests` method names and narrow oracles:
 
@@ -123,9 +132,9 @@ and snapshot calls once, without a polling/inverted expectation oracle.
 
 ### Step2 — Root source review and absent-API compiler RED
 
-- [ ] Root/spec reviewer reads every new test/helper method and failure cleanup. Freeze all old/current dependencies with the exact new tests and an isolated generated Swift5/macOS14 test manifest; record protected membership/modes/origins. No public Package.swift edit.
-- [ ] Root invokes the accepted direct watchdog to compile that exact selection before the facade source exists. Require failures at intended SearchAdmissionService API references and record the actual compiler diagnostics; no dummy facade/prototype is introduced. Preserve receipt/source/error artifacts. Toolchain/dependency failure cannot be credited API RED.
-- [ ] Root authenticates RED and dispatches only the new facade source ownership.
+- [x] Root/spec reviewer reads every new test/helper method and failure cleanup. Freeze all old/current dependencies with the exact new tests and an isolated generated Swift5/macOS14 test manifest; record protected membership/modes/origins. No public Package.swift edit.
+- [x] Root invokes the accepted direct watchdog to compile that exact selection before the facade source exists. Require failures at intended SearchAdmissionService API references and record the actual compiler diagnostics; no dummy facade/prototype is introduced. Preserve receipt/source/error artifacts. Toolchain/dependency failure cannot be credited API RED.
+- [x] Root authenticates RED and dispatches only the new facade source ownership.
 
 Proposed focused command vector inside a reviewed direct coordinator (not an
 established command claim):
@@ -136,7 +145,7 @@ scripts/swift.sh test --package-path <frozen Package> --scratch-path <owned Buil
 
 ### Step3 — implement the exact thin facade, then Root focused GREEN
 
-- [ ] Production author creates this one class; no other production edit:
+- [x] Production author creates this one class; no other production edit:
 
 ```swift
 import Foundation
@@ -181,16 +190,20 @@ import PadCore
 }
 ```
 
-- [ ] Author source self-review verifies only private controller storage, module-internal injection initializer, exact DTO/errors/callbacks/IDs, no wrapping/cache/Task/legacy method or package override. Root runs matching focused6 and requires exact6 starts/passes, zero failures/skips/compiler warnings and strict input/receipt closure.
+- [x] Author source self-review verifies only private controller storage, module-internal injection initializer, exact DTO/errors/callbacks/IDs, no wrapping/cache/Task/legacy method or package override. Root runs matching focused6 and requires exact6 starts/passes, zero failures/skips/compiler warnings and strict input/receipt closure.
 
 ### Step4 — reviewed actual-facade mutants, then neighboring acceptance
 
-- [ ] Only now freeze the actual new facade and identical reviewed tests in two independent ignored copies. Root/source reviewer approves one mutation per copy, recording original adopted source bytes/hash separately and exact transformed source pins. No prototype source substitutes for the actual facade.
-- [ ] MutantA: in that actual shutdownJoined body, retain `await controller.shutdownJoined()` and all real cleanup; only when the observed parent is .callerRefused(.legacyModeSelected), rewrite it to .callerRefused(.differentJoinOwner), forwarding every other observation field unchanged. Expected method testRawParentRefusalAndFreshSettlementAreForwarded reaches exact raw-parent equality failures. Do not change controller/driver/test bytes or other branches.
-- [ ] MutantB: retain actual await and exact parent; only for observed parent .callerRefused(.legacyModeSelected), force driverSettlement to .settled(admissionClosed:true), forwarding other fields. The same named test reaches its explicit first-pending assertion; require full first DTO/current freshness witnesses as reviewed. No second join or cached synthetic task.
-- [ ] Root reviews actual full mutation diff and source closure before execution. Direct owned runtime must show all6 unique named starts/finishes, intended assertion scope, zero unexpected/cleanup/emergency/deadline failures or compiler warnings/skips, and exact wait/capture/group-cleanup receipts. Nonzero alone is not RED. Independent fixture cleanup must return for both mutants, preserving every failed attempt.
-- [ ] Run unchanged neighboring SearchAdmissionControllerTests, SearchAdmissionJoinedShutdownTests, SearchAdmissionJoinedDriverIntegrationTests, SearchAdmissionProductionAccountingTests, SearchAdmissionProductionIntegrationTests, SearchAdmissionProductionRetryIntegrationTests and SearchAdmissionDispatchRetrySchedulerTests from matching source. Run old parent/default policy compatibility as required by actual findings; do not duplicate their full state-machine matrix in facade tests.
+- [x] Only now freeze the actual new facade and identical reviewed tests in two independent ignored copies. Root/source reviewer approves one mutation per copy, recording original adopted source bytes/hash separately and exact transformed source pins. No prototype source substitutes for the actual facade.
+- [x] MutantA: in that actual shutdownJoined body, retain `await controller.shutdownJoined()` and all real cleanup; only when the observed parent is .callerRefused(.legacyModeSelected), rewrite it to .callerRefused(.differentJoinOwner), forwarding every other observation field unchanged. Expected method testRawParentRefusalAndFreshSettlementAreForwarded reaches exact raw-parent equality failures. Do not change controller/driver/test bytes or other branches.
+- [x] MutantB: retain actual await and exact parent; only for observed parent .callerRefused(.legacyModeSelected), force driverSettlement to .settled(admissionClosed:true), forwarding other fields. The same named test reaches its explicit first-pending assertion; require full first DTO/current freshness witnesses as reviewed. No second join or cached synthetic task.
+- [x] Root reviews actual full mutation diff and source closure before execution. Direct owned runtime must show all6 unique named starts/finishes, intended assertion scope, zero unexpected/cleanup/emergency/deadline failures or compiler warnings/skips, and exact wait/capture/group-cleanup receipts. Nonzero alone is not RED. Independent fixture cleanup must return for both mutants, preserving every failed attempt.
+- [x] Run unchanged neighboring SearchAdmissionControllerTests, SearchAdmissionJoinedShutdownTests, SearchAdmissionJoinedDriverIntegrationTests, SearchAdmissionProductionAccountingTests, SearchAdmissionProductionIntegrationTests, SearchAdmissionProductionRetryIntegrationTests and SearchAdmissionDispatchRetrySchedulerTests from matching source. Run old parent/default policy compatibility as required by actual findings; do not duplicate their full state-machine matrix in facade tests.
 - [ ] Independent source/evidence review gates Task1 acceptance. Root broadens to matching full public app/core build/tests, strict format and public checks at the planned checkpoint. Record exact executed commands/versions/counts only afterward.
+
+- [x] Matching fresh public package999/0 completed with399 exact inputs and the final formatted six tests; both app/helper executables built without launch.
+- [x] Retained recursive strict formatting exited0 in5.015s, with394 matching inputs and empty captures; all498 protected existing source/test/script/manifest bytes and modes remain unchanged.
+- [ ] Complete final independent Task1 source/evidence review, public-check evidence and documentation adoption before the scoped local commit. Constructor/package-access/native/real-helper acceptance is not supplied by the component or full-package run.
 
 ## Task 2 — package capability compiler contracts and actual fixed constructor
 
