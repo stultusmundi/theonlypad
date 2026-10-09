@@ -1,5 +1,12 @@
 # Continuation
 
+## Fixed admission service — design approved, implementation pending
+
+The joined admission component is locally committed at `42513c0`, with exact full993/0, native10/0, unchanged native3/0 and pure52/0 evidence retained. Its review-time records captured localcommitpending before that commit. The fixed service [design](superpowers/specs/2026-10-09-search-admission-service-design.md) and [plan](superpowers/plans/2026-10-09-search-admission-service.md) have independent specification/quality approval. Task1 test-source authoring has begun; no new facade implementation, compiler contract or fixed-service helper runtime is accepted yet. Concrete helper process observation remains a separately reviewed prerequisite.
+
+Next: review the six new facade tests and their independent failure cleanup, authenticate absent-API compiler RED, then implement the thin fixed facade and run matching GREEN and discriminating forwarding controls. Existing search remains in-process; native application ownership, editor/folder routing and quit integration remain outstanding. Distribution remains `4841d89`; UI Automation authentication remains user-owned and pending. No new packaged desktop, memory/performance or unavailable-platform acceptance follows.
+
+
 ## Joined admission terminal — 2026-10-09
 
 The isolated `feat/search-admission-joined-terminal` branch implements the additive joining capability, retained controller terminal owner, genuine helper-return drain and truthful current/residual-credit observations. Fresh public neighbors496/0 and full993/0 pass; both include joined27 and actual-driver4. App/helper link. New hidden native10, unchanged native3 and pure runner52 pass separately. Two native copied controls reach14/15 intended assertions; actual held-read control reaches2, all with genuine cleanup and exact inputs/receipts. Task2 and final whole-branch specification, quality, evidence, documentation and privacy reviews approve the scoped checkpoint. The local commit remains pending. See [verification](verification/search-admission-joined-terminal.md).
