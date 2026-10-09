@@ -328,3 +328,15 @@ python3 -B scripts/run-owned-search-tests.py --timeout 240 --output .local/searc
 
 
 Same-ledger pair component (2026-10-09): `scripts/swift.sh test --scratch-path .build/search-reservation-pair-public --filter 'SearchAdmissionReservationPairTests|SearchAdmissionLedgerTests'` passes23/0 (new9 plus unchanged legacy14). Matching frozen public neighbors125/0 and full1,025/0 preserve all prior1,016 methods. Three reviewed finite source controls fail as intended with all9 methods completed and0 unexpected failures: rollback4 assertions/2 methods, producer guard3/1, token alias20/8. Source snapshots, artifacts and direct owned-process receipts were verified; recursive strict format/public checks pass. This internal unused primitive adds synchronous paired admission/rollback and independent retirement only; producer/formula/worker/helper/editor/native/memory/desktop integration remain separate. See `docs/verification/search-reservation-pair.md`. Broad adversarial suites still require the accepted direct watchdog; never nest session-owning watchdogs.
+
+
+Prepared file reader component (2026-10-09): the inactive synchronous Input/I/O/Reader implementation has authentic compiler RED followed by unchanged16/0. Matching frozen public neighbors141/0 and full1,041/0 preserve all prior1,025 methods; app/helper builds pass without launch. Three copied actual-reader faults finish all16 tests and reach52/2/13 intended assertions across6/1/2 failed methods, with0 unexpected failures. The actual focused public command below passes16/0; exact source/artifact/direct-watchdog receipts and whole-candidate strict formatting were verified. Final independent component acceptance remains pending at this record. See `docs/verification/search-prepared-file-reader.md`. Concrete Darwin I/O, admitted producer/worker, task-return/quarantine, helper/editor routing, memory and desktop acceptance remain separate. Editor search remains in-process, distribution4841d89 unchanged.
+
+```sh
+python3 -B scripts/run-owned-search-tests.py --timeout 240 --output .local/search-prepared-file-reader-public-command/owned -- scripts/swift.sh test --scratch-path .build/search-prepared-file-reader-public-command --filter SearchAdmissionFileReaderTests
+```
+
+Use a fresh output directory when repeating; never nest this direct process-group watchdog.
+
+
+Prepared reader final review supersedes the pending state above: independent specification, quality, evidence, cleanup and privacy review accepts this inactive component and its matching tests. The source-only native adapter recipe still requires authentic compiler RED and separately reviewed implementation/GREEN before concrete acceptance. No producer, editor or memory/desktop acceptance follows.

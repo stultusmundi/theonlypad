@@ -491,3 +491,13 @@ production editor search routing remain pending. See
 [assembly evidence](verification/search-role-assembly-corrections.md).
 
 Private independent streaming oracle is reviewed with14/0 and retained RED evidence under `.local/search-allocation-preparation/`. Only tiny vectors and bounded prefixes were evaluated; no full100MB matrix or native allocation result exists. Candidate builder source/tests are being prepared privately without native runtime ownership. The public allocation specification now distinguishes explicit capacities from opaque Swift storage and uses five fixed-counterpart comparisons followed by full selected-pair validation. No allocator or production budget is adopted. The driver runner is now adopted with19 pure checks and44 actual XCTest cases; direct-source loading and final transformations are verified.
+
+
+## Prepared file reader checkpoint
+
+The inactive synchronous reader and sixteen scripted tests are adopted for final component review. Matching exact public-manifest candidate passes141 affected tests and full1,041/0, preserving all prior1,025 methods; the actual contributor focused command passes16/0. Safe copied faults produce52/2/13 assertions across6/1/2 methods, with all16 methods finishing. See [reader evidence](verification/search-prepared-file-reader.md).
+
+Final independent component acceptance and scoped commit remain pending at this record. Concrete Darwin adapter tests/recipe are source-reviewed conditionally but unexecuted; complete reader acceptance is their prerequisite. Controlled observer pure host evidence is independently accepted, while actual native framing and fixture authority remain separate planned work. Producer charge formula, admission worker/return/quarantine, helper/facade routing and production editor search remain unimplemented; ordinary editor search is still in-process. Distribution4841d89 and prior desktop checkpoint are unchanged.
+
+
+Prepared reader final specification/quality/evidence/cleanup/privacy review accepts the exact component checkpoint. The next authorized slice is authentic compiler RED for the source-reviewed concrete Darwin adapter tests, then minimal separately reviewed implementation and native GREEN. Scoped local commits are authorized; remote publication remains unauthorized. Helper/editor routing and memory/desktop acceptance remain outstanding.
