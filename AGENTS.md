@@ -325,3 +325,6 @@ Prepared UTF-8 component (2026-10-09): the internal synchronous decoder and fixe
 ```sh
 python3 -B scripts/run-owned-search-tests.py --timeout 240 --output .local/search-prepared-utf8-public-command/owned -- scripts/swift.sh test --scratch-path .build/search-prepared-utf8-public-command --filter SearchPreparedUTF8DecoderTests
 ```
+
+
+Same-ledger pair component (2026-10-09): `scripts/swift.sh test --scratch-path .build/search-reservation-pair-public --filter 'SearchAdmissionReservationPairTests|SearchAdmissionLedgerTests'` passes23/0 (new9 plus unchanged legacy14). Matching frozen public neighbors125/0 and full1,025/0 preserve all prior1,016 methods. Three reviewed finite source controls fail as intended with all9 methods completed and0 unexpected failures: rollback4 assertions/2 methods, producer guard3/1, token alias20/8. Source snapshots, artifacts and direct owned-process receipts were verified; recursive strict format/public checks pass. This internal unused primitive adds synchronous paired admission/rollback and independent retirement only; producer/formula/worker/helper/editor/native/memory/desktop integration remain separate. See `docs/verification/search-reservation-pair.md`. Broad adversarial suites still require the accepted direct watchdog; never nest session-owning watchdogs.

@@ -4,6 +4,16 @@ struct SearchAdmissionReservation: Hashable {
   fileprivate let id: UUID
 }
 
+struct SearchAdmissionReservationPair {
+  let base: SearchAdmissionReservation
+  let producer: SearchAdmissionReservation
+
+  fileprivate init(base: SearchAdmissionReservation, producer: SearchAdmissionReservation) {
+    self.base = base
+    self.producer = producer
+  }
+}
+
 struct SearchAdmissionLedgerSnapshot: Equatable {
   let active: UInt64
   let retained: UInt64
@@ -49,6 +59,21 @@ struct SearchAdmissionLedger {
     active = newActive.partialValue
     reservedRetained = newReserved.partialValue
     return reservation
+  }
+
+  /// Admit both phases together while preserving their independent retirement authority.
+  mutating func reservePair(
+    base: SearchAdmissionCharge, producer: SearchAdmissionCharge
+  ) throws -> SearchAdmissionReservationPair {
+    guard producer.retained == 0 else { throw SearchAdmissionFailure.invalidDescriptor }
+    let baseReservation = try reserve(base)
+    do {
+      let producerReservation = try reserve(producer)
+      return .init(base: baseReservation, producer: producerReservation)
+    } catch {
+      abandon(baseReservation)
+      throw error
+    }
   }
 
   mutating func abandon(_ reservation: SearchAdmissionReservation) {

@@ -1,3 +1,9 @@
+# Latest checkpoint: paired admission primitive verified
+
+The internal same-ledger `reservePair` primitive now admits base and producer charges transactionally, rejects producer retained credit before mutation, rolls back genuine second-admission failures and preserves independent token retirement. All previous ledger bodies and14 tests remain unchanged; it is not selected by the production controller yet. Focused public23/0, matching public neighbors125/0 and full1,025/0 preserve all prior1,016 methods plus new9. Three compiled finite controls produce intended assertions (rollback4, guard3, alias20), with all9 methods completed and0 unexpected failures. Exact source/artifact/owned-process bindings and strict format/public checks were verified. See `docs/verification/search-reservation-pair.md` for commands, source digests and limits.
+
+Continue into admitted file reading/preparation, real worker/Task return ownership and progress/helper/editor integration. Separate reviewed architectural drafts refine the controlled observer prerequisite; no original ABI artifact or new observer fixture was executed. Producer formulas/native mappings and100MB/1GB/performance/desktop acceptance remain unproved. Existing distribution artifacts stay unchanged. The user requests continuous implementation until explicitly stopped.
+
 # Continuation
 
 ## Current prepared-input component — 2026-10-09
