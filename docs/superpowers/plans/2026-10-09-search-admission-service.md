@@ -30,8 +30,7 @@ canonical `scripts/test-search-admission-service.sh` passes pure50, ordinary
 positive/five independent negative clients and constructor4/0; its separate
 copied eager-entry control authenticates1 intended assertion/0 unexpected.
 `scripts/test-search-admission-service-native.sh` passes pure51 and native2/0.
-Counts remain distinct from the prior full999/0. Task2/3 new files remain
-uncommitted; no optional native DTO rewrite mutant was added. Earlier failed
+Counts remain distinct from the prior full999/0. Task2/3 test/runner checkpoint is locally committed at `0f7c96e`; no optional native DTO rewrite mutant was added. Earlier failed
 runs remain preserved/uncredited. The exact Task4 corrective normative supplement
 is source-approved and adopted; ABI/prototype/fixture/finite-cleanup/runtime gates
 remain unchecked and unaccepted. No helper/runtime proof follows from adoption.

@@ -2,7 +2,7 @@
 
 ## Current factory/native checkpoint — 2026-10-09
 
-Task1 is committed at `5b5ad8c`; its matching public999/0 remains the separate latest full-suite checkpoint. Task2 final independent source/evidence review accepts the fixed construction, ordinary package capability and runner/control scope. Task3's adopted corrected fixture has a matching successful native run and final independent source/evidence acceptance within its two scripted native cases. Task2/3 new files remain uncommitted.
+Task1 is committed at `5b5ad8c`; its matching public999/0 remains the separate latest full-suite checkpoint. Task2 final independent source/evidence review accepts the fixed construction, ordinary package capability and runner/control scope. Task3's adopted corrected fixture has a matching successful native run and final independent source/evidence acceptance within its two scripted native cases. The Task2/3 test/runner checkpoint is locally committed at `0f7c96e`.
 
 Proven fixed commands:
 
