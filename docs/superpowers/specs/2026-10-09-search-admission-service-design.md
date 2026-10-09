@@ -376,7 +376,13 @@ the echo fixture, a script worker or a test-replaced engine as the search helper
 Copy the exact built worker executable into an isolated synthetic bundle at
 Contents/Helpers/PadSearchWorker, recording original/built/copied executable
 SHA256, mode, target/toolchain/build receipts and complete source binding. Freeze
-and bind the actual XCTest/parent executable too. The runtime service is created
+and bind the compiled test bundle to the same project sources/build receipts.
+Separately bind the actual OS XCTest HOST executable's exact path, bytes, mode
+and platform provenance; it may be the platform xctest host rather than the
+bundle Mach-O. Do not require a platform host to be built from project source,
+equate its proc_pidpath with the bundle payload, or permit an arbitrary executable
+override. Missing or unclassified host identity refuses the case. The runtime
+service is created
 by its uninstrumented package applicationBundle constructor; no executable,
 driver, timer, collector or engine override is passed to that constructor.
 
@@ -387,26 +393,98 @@ Validate captured/source/output units and exact lease lifecycle, then typed join
 close and all current parent/ledger facts. Each test retains unconditional service
 and fixture task cleanup before its first potentially suspending operation.
 
-The process harness must independently bind actual launched helper identity and
-generation to this exact executable/request, observe actual child birth/exit
-using a separately reviewed public OS observation mechanism, and never compete
-with the lifecycle's sole consuming wait. An absence of a child at the end is not
-proof of exact reap history. If extra launch/reap evidence needs existing internal
-launcher collaborators, keep it in a separately identified transparent forwarding
-companion using actual default launch/channel/reaper mechanics, with exact raw
-results unchanged; do not claim that injected companion alone proves the facade's
-public constructor. No new production observation hook is authorized by this
-spec. Association with the request means association with the submitted public
-test case: opaque consumer/job/lease capabilities, exact captured source/output
-and the reviewed one-owner protocol chain. The facade does not expose the wire
-request UUID, so independent recovery or crosschecking of that private UUID is
-not an acceptance requirement. Actual child/executable/argv generation evidence
-must come from the separately reviewed observer when genuinely observable; a
-transparent lower-seam companion remains separate evidence. Final absence or
-finite polling cannot prove an unseen birth/exit or consuming-reap history.
-The harness design/source/finite failure cleanup receives its own review
-before real execution. Raw signal submission and consuming wait termination
-status are distinct; do not demand signal9 merely because shutdown requested it.
+#### Task4 observer supplement — source contract, pending adoption and prototype gates
+
+For these three ordinary-factory cases, this supplement replaces the earlier
+witnessed-child-birth requirement with a narrower sampled live-identity and
+nonconsuming-exit requirement. Preserve the previous spec/design as history;
+these claims are not equivalent. No observer implementation or runtime is
+accepted by this supplement. Tasks1–3 acceptance precedes real-helper execution.
+
+Select one bounded test-only libproc/sysctl identity observer and acknowledged
+child kqueue exit registration. Require exact live parent/child PID and
+kernel-start identities, child PPID, helper path and declared argv generation,
+with matching live identity samples
+bracketing accepted registration, followed by one nonconsuming exit observation,
+genuine original facade join and current post-join absence. Initial no-child
+baseline plus one unique discovery is a fail-closed fixture policy; no repeated
+discovery or convenient candidate substitution is allowed. Registration
+acknowledgment is distinct from the exit event. No second wait/reaper, observer
+signal authority or production observation seam is authorized.
+
+This proves identity at fixed samples, not witnessed spawning, all launch history,
+continuous liveness or an independent consuming wait. A preflight empty queue
+and last live sample do not eliminate the timing gap before actual async join
+entry; kevent has no exact exit timestamp here. Reject observed early exit but do
+not claim no exit was possible in that gap or that join caused termination.
+Associate the submitted case through exact source/output and the single retained
+public owner's actual protocol chain. Opaque consumer/job/lease IDs do not expose
+the private wire request UUID; OS argv generation does not recover that UUID.
+
+If separately recorded spawn/consuming-reap evidence is needed, review a distinct
+transparent actual-default-launcher operations companion. It forwards each call
+and raw result exactly once, preserving the sole consuming wait. Its helper,
+generation and receipts remain separate; they cannot fill a missing observation
+for the public factory's different process. A final noChild/absence alone cannot
+prove unseen birth/exit or consuming-reap history. No raw status is inferred from
+signal submission, request success or clean join; neither exit0 nor signal9 is
+an assumed accepted observation.
+
+After actual request/lease/borrow retirement, require activeCharge == 1_048_576,
+retainedCharge == 0, reservedRetainedCharge == 0, retainedActiveJobs == 0,
+retainedLeases == 0 and retainedParentLanes == 0, with genuine
+admitted/acknowledged/closed/settled returned
+facts. Preserve original immutable raw parent/child.cleanup and refreshed
+settlement separately; do not synthesize generation or reap history. Clean kernel
+exit cannot replace genuine facade join; clean join cannot replace observer proof.
+Production accounting, formulas and policy remain unchanged.
+
+Choose original test-only C source at
+`Tests/SearchAdmissionServiceProcessIntegration/ProcessObserverBridge/include/ProcessObserverBridge.h`
+and `Tests/SearchAdmissionServiceProcessIntegration/ProcessObserverBridge/ProcessObserverBridge.c`,
+with a separate
+`ProcessObserver.swift` in that integration directory. First prepare the same
+bridge names in private `task-4-observer-api-prototype-drafts/`, with generated
+C target ProcessObserverBridge and executable ObserverABIProbe. No production or
+public app manifest/platform edit follows. Before observer implementation or real
+helper execution, separately review the exact prototype source/manifest/selection
+and prove installed declarations, explicit feature macros, import/link/ABI widths,
+alignment, count-versus-byte returns, captured errno/absence classifications,
+path/argv bounds, registration/exit flags, raw-status conversion and actual XCTest
+host/bundle launch selection. Missing APIs, permission or unclassified status is
+failure without skips, guessed constants or retry-to-pass. Installed headers and
+compile-only proof do not establish actual syscall/status/selection behavior;
+controlled process probes need their own reviewed sources and finite cleanup.
+
+Proposed fixed bounds are child capacity65 (saturation fails), argv16_384 bytes,
+SDK-bounded path storage with hard ceiling4096, event capacity2 and one owned queue.
+Parse only declared argv3/path/--generation/canonical nonzero UUID; do not decode,
+retain, hash or log environment tail or raw parser prefixes. Concrete ABI/error
+and status mappings remain unaccepted until the reviewed prototype establishes
+them. Original bridge code uses platform declarations; no Apple implementation
+code or external runtime package is adopted.
+
+One retained serial Dispatch queue owns the blocking event operation and exact
+completion acknowledgment; no Task.detached cooperative-pool blocking. Retain all
+handles before scheduling. Calculate remaining timeout from the fixed absolute
+join-phase deadline when the worker actually starts; missed scheduling, EINTR or
+timeout fails without restarting/extension. Proposed bounds remain delivery12s,
+identity/registration1s, event2.5s from publishing the join phase, cleanup owner20s
+from submit and outer test60s. These do not preempt arbitrary blocked syscalls or
+tasks; missing real returns fail. Disable all future producer/timer/
+executor registration synchronously before cleanup's first await. Independently
+retain and join the one genuine normal-or-rescue facade terminal task and every
+actual event worker; no result-dependent rescue or competing terminal owner.
+Consume exclusive queue ownership once only after all workers really return,
+require the exact close return0 and retain close uncertainty as failure with no
+retry. Descriptor numbers may be reused by other threads: no guaranteed nonreuse
+or post-close F_GETFD authority, retry or foreign descriptor action. Omit that
+sample from release acceptance. Outer watchdog termination is infrastructure
+containment, never successful inner worker/queue/helper cleanup.
+
+The concrete observer, fixture, pure discriminators and runner receive separate
+source/finite-failure-cleanup review before execution. No checkbox or command is
+runtime-accepted by this source-only supplement.
 
 Invoke the checked-in owned-process watchdog directly in the harness process for
 each build/test/run stage; never wrap the coordinator in another process-group

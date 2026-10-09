@@ -22,10 +22,19 @@ Fresh matching public package999/0 binds399 inputs in28.200549s, includes all si
 formatted facade tests and builds app/helper executables without launch. See
 `docs/verification/search-admission-service.md`. Baseline remains committed
 `42513c0`; distribution remains `4841d89`, and editor search stays in-process.
-Task2 constructor/client/runner preparation remains source-only and unexecuted. Task2–4 compiler/factory/native/real-helper gates remain PLANNED. Commands
-below retain their proposed status; private Root coordinators establish no new
-published command. Concrete Task4 process observation/finite cleanup remains a
-separately reviewed prerequisite.
+Task1 is locally committed at `5b5ad8c`; the preceding Task1 pending-commit
+paragraph records the earlier checkpoint. Current Tasks2/3 are IMPLEMENTED,
+TESTED and independently source/evidence
+ACCEPTED within the fixed constructor/compiler and scripted native scopes. The
+canonical `scripts/test-search-admission-service.sh` passes pure50, ordinary
+positive/five independent negative clients and constructor4/0; its separate
+copied eager-entry control authenticates1 intended assertion/0 unexpected.
+`scripts/test-search-admission-service-native.sh` passes pure51 and native2/0.
+Counts remain distinct from the prior full999/0. Task2/3 new files remain
+uncommitted; no optional native DTO rewrite mutant was added. Earlier failed
+runs remain preserved/uncredited. The exact Task4 corrective normative supplement
+is source-approved and adopted; ABI/prototype/fixture/finite-cleanup/runtime gates
+remain unchecked and unaccepted. No helper/runtime proof follows from adoption.
 
 ## Global constraints and sequence
 
@@ -225,9 +234,17 @@ import PadCore
 
 **Outputs:** exact package-access compiler contract and real fixed constructor/error tests, without helper process or native activation claims.
 
+**Accepted checkpoint:** matching default coordinator0 with11 strict receipts,
+97 origins/522 copies/6 generated; pure50 and constructor4/0. Separate actual
+copied eager-entry control retains raw exit1 with1 intended assertion/0 unexpected,
+coordinator0 and4 strict receipts/87 origins/89 copies/2 generated. Final
+independent Task2 source/evidence review accepts this bounded scope. Compiler
+clients are compile-only; no successful helper execution is claimed. Historical
+fixture/parser failures remain retained and uncredited as intended RED.
+
 ### Step1 — test-only sibling compiler client and discriminating pure parser controls
 
-- [ ] Generate an isolated Swift5/macOS14 package with actual recursive PadCore/SearchExecution and a sibling client target in the same package. AllowedClient imports SearchExecution normally, never @testable. First compile it to prove generic/package/module/API validity. The positive client's source should contain:
+- [x] Generate an isolated Swift5/macOS14 package with actual recursive PadCore/SearchExecution and a sibling client target in the same package. AllowedClient imports SearchExecution normally, never @testable. First compile it to prove generic/package/module/API validity. The positive client's source should contain:
 
 ```swift
 import Foundation
@@ -253,7 +270,7 @@ import SearchExecution
 }
 ```
 
-- [ ] Each negative fixture is compiled separately, not added to passing XCTest or linked together. Use known typed function parameters to avoid undefined driver/controller expressions:
+- [x] Each negative fixture is compiled separately, not added to passing XCTest or linked together. Use known typed function parameters to avoid undefined driver/controller expressions:
 
 ```swift
 @MainActor func forbiddenLegacy(_ service: SearchAdmissionService<String>) async {
@@ -273,8 +290,8 @@ import SearchExecution
 }
 ```
 
-- [ ] Root reviews diagnostic parser pure synthetic controls before any actual compiler stage. Require intended fixture path/line plus wrong-member/access/initializer diagnostic and nonzero actual receipt, after positive client success from identical inputs/toolchain. Generic module/package lookup failure, wrong diagnostic line, syntax error, compiler timeout or extra unrelated error rejects contract evidence. Bind exact observed wording during Root's actual first run; do not fabricate a diagnostic.
-- [ ] Pure runner tests discriminate missing/duplicate/wrong starts, zero tests, skips/failures/warnings, changed origins/modes/membership/generated manifest, symlink roots, wrapper/common/watchdog/fixture changes, wrong artifact source binding, receipt wait/return/capture/truncation/cleanup/timeouts, and negative compiler falsely passing due unrelated errors. Pure tests use temporary synthetic bytes only; Root executes them.
+- [x] Root reviews diagnostic parser pure synthetic controls before any actual compiler stage. Require intended fixture path/line plus wrong-member/access/initializer diagnostic and nonzero actual receipt, after positive client success from identical inputs/toolchain. Generic module/package lookup failure, wrong diagnostic line, syntax error, compiler timeout or extra unrelated error rejects contract evidence. Bind exact observed wording during Root's actual first run; do not fabricate a diagnostic.
+- [x] Pure runner tests discriminate missing/duplicate/wrong starts, zero tests, skips/failures/warnings, changed origins/modes/membership/generated manifest, symlink roots, wrapper/common/watchdog/fixture changes, wrong artifact source binding, receipt wait/return/capture/truncation/cleanup/timeouts, and negative compiler falsely passing due unrelated errors. Pure tests use temporary synthetic bytes only; Root executes them.
 
 ### Step2 — actual package constructor tests and finite no-eager companion
 
@@ -287,16 +304,16 @@ Required `SearchAdmissionServiceConstructionTests` exact4 methods:
 | testMissingFixedHelperDeliversActualLaunchFailedENOENTWithoutFallback | Fresh synthetic bundle without fixed helper; inert sibling/build/PATH markers; real production accounting/capture/prepare/parent/launcher receives tiny request; async exact child launchFailed(ENOENT), no completion lease, clean actual joined facts; no in-process fallback |
 | testActualParentConstructionDoesNotEnterInjectedLauncherBeforeBegin | Existing internal actual parent ctor(system:now:schedule:) with finite launch-entry counter and real existing parent begin/submit transition discriminator; zero launch entries before actual lifecycle begin; injected lower-seam evidence explicitly distinct from public factory process history |
 
-- [ ] Install async cleanup before any test setup suspension. Actual package service is retained independently; store every consumer/job and completion task; cancel/unregister exact IDs even after setup failure and await typed joined separately without interpreting it as successful cleanup. Missing-path case creates no owned helper; unexpected PID/process evidence or quarantine/first-outcome mismatch is infrastructure failure, retained for review.
-- [ ] For injected no-eager companion use an event/counter on existing SearchChildSystem.launch and declared clock/timer gates, no new production hook/state mutation. Constructor calls no begin; first real submit establishes launch entry. A source-reviewed eager-launch mutation in a copied actual constructor chain must fail the before-entry oracle with finite fixture cleanup. Avoid proving absence by sleeping, polling or an inverted expectation.
-- [ ] Fresh launcher condition includes real nonquarantined start and standard reapable SIGCHLD precondition; do not alter signal policy to force GREEN. Validate missing helper on the retained spawn lane before pipes; preserve ENOENT mapping only if it actually wins. Root records any deadline/cancel/quarantine/error as failure to reach this intended case, not as an alternate expected outcome.
+- [x] Install async cleanup before any test setup suspension. Actual package service is retained independently; store every consumer/job and completion task; cancel/unregister exact IDs even after setup failure and await typed joined separately without interpreting it as successful cleanup. Missing-path case creates no owned helper; unexpected PID/process evidence or quarantine/first-outcome mismatch is infrastructure failure, retained for review.
+- [x] For injected no-eager companion use an event/counter on existing SearchChildSystem.launch and declared clock/timer gates, no new production hook/state mutation. Constructor calls no begin; first real submit establishes launch entry. A source-reviewed eager-launch mutation in a copied actual constructor chain must fail the before-entry oracle with finite fixture cleanup. Avoid proving absence by sleeping, polling or an inverted expectation.
+- [x] Fresh launcher condition includes real nonquarantined start and standard reapable SIGCHLD precondition; do not alter signal policy to force GREEN. Validate missing helper on the retained spawn lane before pipes; preserve ENOENT mapping only if it actually wins. Root records any deadline/cancel/quarantine/error as failure to reach this intended case, not as an alternate expected outcome.
 
 ### Step3 — runner source/evidence closure and Root execution
 
-- [ ] Runner freezes exact actual recursive PadCore/SearchExecution, Task1 new tests/harness and constructor4, ordinary compiler fixtures, runner/pure/shell bytes, public manifest, unchanged wrapper/common/watchdog. Classify compiled versus runner-only provenance explicitly. Seal generated manifest/sources inventories, preserve public macOS14 and Swift5.
-- [ ] Copy frozen Python bytes directly for common parser/watchdog without stale pyc. Invoke watchdog.main directly for each exact toolchain/build/compiler/test stage in the coordinator process. No outer supervisor, arbitrary filter/skip-build or source-transform escape. Only declared generated Build/wrapper cache roots exempted from source membership; no adopted input under them.
-- [ ] Root source-reviews runner/test failure paths, runs matching pure cases, then positive compiler, independent negatives, actual constructor4. Require exact named4 execution, zero warnings/skips/errors on positive stages, strict genuine receipts and before/after origin/mode/hash/membership. Negative diagnostic stages retain expected nonzero and their original logs, never rewritten GREEN receipts.
-- [ ] Proposed new command `scripts/test-search-admission-service.sh` becomes a proven command only after this exact source passes. Record generated manifest and executed command vectors in evidence; do not update AGENTS with an invented command before success.
+- [x] Runner freezes exact actual recursive PadCore/SearchExecution, Task1 new tests/harness and constructor4, ordinary compiler fixtures, runner/pure/shell bytes, public manifest, unchanged wrapper/common/watchdog. Classify compiled versus runner-only provenance explicitly. Seal generated manifest/sources inventories, preserve public macOS14 and Swift5.
+- [x] Copy frozen Python bytes directly for common parser/watchdog without stale pyc. Invoke watchdog.main directly for each exact toolchain/build/compiler/test stage in the coordinator process. No outer supervisor, arbitrary filter/skip-build or source-transform escape. Only declared generated Build/wrapper cache roots exempted from source membership; no adopted input under them.
+- [x] Root source-reviews runner/test failure paths, runs matching pure cases, then positive compiler, independent negatives, actual constructor4. Require exact named4 execution, zero warnings/skips/errors on positive stages, strict genuine receipts and before/after origin/mode/hash/membership. Negative diagnostic stages retain expected nonzero and their original logs, never rewritten GREEN receipts.
+- [x] Proposed new command `scripts/test-search-admission-service.sh` becomes a proven command only after this exact source passes. Record generated manifest and executed command vectors in evidence; do not update AGENTS with an invented command before success.
 
 ## Task 3 — exactly two facade-native boundary cases in a separate host
 
@@ -310,11 +327,19 @@ native sources/runner/shell stay unchanged.
 test seam, existing joining collaborator/finite gates. No AppDelegate or native
 document context choice. Generated isolated host macOS26/Swift5 only.
 
-- [ ] Author exact `NativeAdmissionServiceTests.testCaptureRefusalThroughFacadePreservesAdmission` and `testJoinedFacadeInsideBorrowPreservesResidualCreditUntilRealReturn`.
-- [ ] First case enters the real controller capture callback through service.submit, genuine Timer/action/modal loop, public Task.immediate registered BEFORE construction; the facade returns exact synchronousCallbackActive while real callback/loop remain live. Verify actual public consumer disposition/credit unchanged and genuine outer callback return before outside close. The task's actual handle is retained even if synchronous construction returns or suspends.
-- [ ] Second case completes a real service lease, uses Timer-owned actual service.withResult plus native loop and registered inner facade joined task; two inside observations preserve parent/lease1/retained3 under tiny test accounting. Stop loop on actual inner returns, join task and let true outer borrow return; later facade observation preserves parent and observes lease0/retained0. No wait for own destructor or simulated scope marker.
-- [ ] Test-only native helpers are independent new private helpers or reviewed source-relative reuse of accessible existing collaborators; old native fixture helpers are private and cannot simply be imported. Install rescue before scheduling native actions; invalidate timers, stop actual loop on reached intended failure boundary, release genuine gates and join every task independently. Emergency stop/loop deadline/unfinished cleanup rejects both GREEN and behavioral RED.
-- [ ] Root source-reviews finite failure branches and native runner. New runner freezes actual sources/native2/dependencies only, owns direct watchdog, rejects old hosts with no skip. Require exact2 unique starts/passes and source/receipt closure. A frozen actual-facade result-rewrite mutant must reach an exact new native DTO assertion if added; do not rerun whole previous ten-case controller matrix as facade acceptance.
+- [x] Author exact `NativeAdmissionServiceTests.testCaptureRefusalThroughFacadePreservesAdmission` and `testJoinedFacadeInsideBorrowPreservesResidualCreditUntilRealReturn`.
+- [x] First case enters the real controller capture callback through service.submit, genuine Timer/action/modal loop, public Task.immediate registered BEFORE construction; the facade returns exact synchronousCallbackActive while real callback/loop remain live. Verify actual public consumer disposition/credit unchanged and genuine outer callback return before outside close. The task's actual handle is retained even if synchronous construction returns or suspends.
+- [x] Second case completes a real service lease, uses Timer-owned actual service.withResult plus native loop and registered inner facade joined task; two inside observations preserve parent/lease1/retained3 under tiny test accounting. Stop loop on actual inner returns, join task and let true outer borrow return; later facade observation preserves parent and observes lease0/retained0. No wait for own destructor or simulated scope marker.
+- [x] Test-only native helpers are independent new private helpers or reviewed source-relative reuse of accessible existing collaborators; old native fixture helpers are private and cannot simply be imported. Install rescue before scheduling native actions; invalidate timers, stop actual loop on reached intended failure boundary, release genuine gates and join every task independently. Emergency stop/loop deadline/unfinished cleanup rejects both GREEN and behavioral RED.
+- [x] Root source-reviews finite failure branches and native runner. New runner freezes actual sources/native2/dependencies only, owns direct watchdog, rejects old hosts with no skip. Require exact2 unique starts/passes and source/receipt closure. A frozen actual-facade result-rewrite mutant must reach an exact new native DTO assertion if added; do not rerun whole previous ten-case controller matrix as facade acceptance.
+
+**Accepted checkpoint:** corrected matching native coordinator0, pure51 and
+exact native2/0;90 origins/90 copies/1 generated and5 strict receipts/artifact
+audited, with final independent Task3 source/evidence acceptance. The original
+native2/1/0 run remains preserved/uncredited. The conditional optional native DTO
+rewrite mutant was not added; the completed review/execution step does not claim
+that control ran. Counts remain distinct from Task2 selections and full999/0.
+Scripted native evidence is not successful helper or editor routing acceptance.
 
 Task3 supplements Task1 forwarding with the two genuine boundary contexts named
 by V2. It does not duplicate every accepted controller callback/retirement test or
@@ -324,14 +349,19 @@ raise the app deployment floor.
 
 **Prerequisite:** Tasks1–3 source/evidence reviews accepted. This phase cannot run
 until its process-observation source and finite-cleanup design receive a separate
-Root/spec/quality review; the observer choice below remains explicit unresolved
-architectural work, not an imagined existing utility.
+Root/spec/quality review. The exact Task4 observer supplement below is an adopted source contract after
+Tasks1–3 acceptance; prototype ABI/error/status/host-selection and concrete
+fixture/cleanup/runtime gates remain unaccepted. No runtime follows from it.
 
 **New files/ownership:** proposed bounded directory
 `Tests/SearchAdmissionServiceProcessIntegration/` with `SearchAdmissionServiceProcessTests.swift`,
-`run_harness.py`, `test_runner.py`, test-only process observer source, and new
-`scripts/test-search-admission-service-process.sh`. Root assigns exact observer
-filename only when its source design is chosen/reviewed. No production hook or
+`run_harness.py`, `test_runner.py`, `ProcessObserver.swift`,
+`ProcessObserverBridge/include/ProcessObserverBridge.h`,
+`ProcessObserverBridge/ProcessObserverBridge.c`, and new
+`scripts/test-search-admission-service-process.sh`. The bridge is original test-only
+C source, with the same bridge filenames first privately prepared in
+`task-4-observer-api-prototype-drafts/` under generated C target ProcessObserverBridge
+and executable ObserverABIProbe. No production hook or
 existing helper/launcher/runner edit is authorized.
 
 **Inputs:** actual public worker target PadSearchWorkerMain + actual
@@ -339,22 +369,41 @@ PadSearchWorkerRuntime/PadCore/SearchExecution, new facade; public manifest and
 fixed helper location. **Outputs:** a matching tiny real public-helper/facade
 protocol/artifact/process proof, separately labeled from injected construction.
 
-### Step1 — settle and review process observation before real execution
+### Step1 — Task4 observer supplement and separately reviewed prototype gates
 
-- [ ] Root compares a non-consuming public OS child birth/exit observer with a
-   separately identified transparent existing internal-launcher observation
-   companion. Select the actual mechanism using available source/API evidence;
-   do not invent a production hook or claim internal injection alone is the public
-   package factory. Read concrete observer code before adopting it.
-- [ ] Observer contract requires exact parent/child birth identity, executable
-   hash/path and observed argv generation binding, actual exit observation, bounded event
-   registration/release and genuine failure cleanup. No second waitpid/reap or
-   signaling authority. A final noChild snapshot alone cannot prove history.
-- [ ] If the public OS observer cannot expose a raw consuming reap status, preserve
-   that proof limit and use a separately labeled transparent companion when needed.
-   Do not synthesize a reap, make up generation, or reinterpret signal submission
-   as signaled termination. Normal lifetime EOF exit0 remains a possible actual
-   status; uncertainty is reported exactly rather than force-fit to signal9.
+- [x] Review/adopt this narrow supplement while retaining original spec/plan/design
+   history. It replaces witnessed birth for the three ordinary-factory cases with
+   exact sampled live parent/child PID/kernel-start identities, child PPID and
+   helper path/declared-argv generation bracketed
+   around acknowledged child kqueue exit registration, one nonconsuming exit event,
+   genuine facade join and current post-join absence. No second wait/reaper, observer
+   signal, production hook or convenient repeated discovery. Identity samples are
+   not witnessed spawn, all history, continuous liveness or consuming-wait proof.
+- [ ] Carry the timing limit into every classifier/receipt: last live sample and
+   empty preflight queue precede actual async join entry but leave a gap; kevent
+   supplies no exact exit timestamp here. Reject observed early exit without
+   claiming no unseen gap exit or that join caused termination.
+- [ ] First author/review original bounded C/header and Swift prototype/manifest
+   sources, then Root proves exact imports/linkage/native ABI widths/alignment,
+   child-count versus bytes, errno/absent-PID/path/argv contracts, acknowledgment
+   versus termination flags and raw-status mapping. Proposed bounds: child65,
+   argv16_384, SDK path maximum<=4096, event capacity2, queue1. Saturation/refusal/
+   unknown flags/status fail, with no guessed constants or fallback. Declared
+   argv3 validation must discard environment tail without decoding/hash/logging.
+   Compile-only proof and installed headers do not establish syscall behavior;
+   any controlled process probe needs separate exact source/cleanup/runner review.
+- [ ] Review actual XCTest selection/launch syntax in that isolated gate. Bind the
+   project-built test BUNDLE and helper to matching project source/build receipts;
+   separately bind actual OS XCTest HOST executable path/bytes/mode/platform
+   provenance. It may be platform xctest, not bundle Mach-O; no project-source
+   requirement for platform host and no proc_pidpath substitution. Missing or
+   unclassified host refuses; no arbitrary executable override or invented command.
+- [ ] Preserve optional spawn/raw consuming-wait proof as a separately reviewed
+   transparent actual-default-launcher operations companion, forwarding every call/
+   result once unchanged. Its process/generation/receipts cannot fill the public
+   case's missing observation. No expected exit0/signal9 is inferred from signal
+   submission, request outcome or join; only reviewed actual raw-status mapping
+   may classify observed termination. Final noChild cannot prove unseen history.
 - [ ] The facade's consumer/job/lease IDs are opaque and do not expose wire requestUUID.
    The OS observer may bind PID/executable/argv generation. Associate the exact
    submitted test case through exact source/output plus this single owner's actual
@@ -365,6 +414,18 @@ protocol/artifact/process proof, separately labeled from injected construction.
    helper bytes/argv generation, wrong submitted-case association, observed exit without genuine owned cleanup and late
    registrations must fail the evidence classifier. Record observer choice and
    measured proof boundary in the adopted plan supplement.
+- [ ] Review the concrete observer executor and owner before execution: one retained
+   serial Dispatch queue plus exact C-worker completion acknowledgment, no
+   Task.detached blocking. Retain handles before starting; compute remaining timeout
+   from the fixed absolute join-phase deadline at actual worker start, with no
+   EINTR retry, fresh deadline or extension. Proposed delivery12s/registration1s/
+   event2.5s-from-join-phase/owner20s-from-submit/outer60s limits do not preempt
+   arbitrary blocked work or certify its return. Cleanup disables future producers/
+   timer/executor registrations synchronously before its first await, joins all
+   actual workers and the one retained normal-or-rescue service terminal owner,
+   then consumes queue ownership for exactly one close requiring return0. Unknown
+   close fails without retry; no FD-number nonreuse or post-close F_GETFD authority.
+   Outer watchdog kill is infrastructure containment, not successful inner cleanup.
 
 ### Step2 — exact source/artifact build and three tiny actual tests
 
@@ -373,8 +434,9 @@ protocol/artifact/process proof, separately labeled from injected construction.
    observer/runner/common/watchdog/wrapper/manifest inputs. Generated test manifest
    is separately pinned; actual public manifest is unchanged provenance.
 - [ ] Direct watchdog stages build actual public PadSearchWorker and matching
-   XCTest/parent from the identical inventory. Bind built/copied parent/helper
-   hashes/modes and complete compiler receipts before actual execution. No private
+   test bundle from the identical inventory. Bind bundle/helper hashes/modes and
+   complete project compiler receipts; separately bind actual platform XCTest host
+   path/bytes/mode/provenance before execution. No private
    accumulator/echo/script/engine fixture can substitute for public worker code.
 - [ ] Place only exact built helper bytes at the synthetic bundle's
    Contents/Helpers/PadSearchWorker; call the ordinary package factory with that
@@ -399,6 +461,12 @@ Required exact `SearchAdmissionServiceProcessTests` methods:
    dependent cleanup. Requests use maxTextUTF166, maxOutputUTF166, maxMatches4,
    cooperativeMilliseconds1000 (existing valid SearchWireLimits), not large/adversarial
    regex or real files. No application window or input posting occurs.
+- [ ] After genuine request/lease/borrow retirement require resident
+   activeCharge == 1_048_576; retainedCharge/reservedRetainedCharge/retainedActiveJobs/
+   retainedLeases/retainedParentLanes0 and actual admitted/acknowledged/closed/
+   settled returned facts. Preserve immutable raw parent/child.cleanup separately
+   from refreshed settlement; no fabricated generation/reap or accounting change.
+   Clean exit cannot replace facade join and clean join cannot replace observation.
 - [ ] Root runs exact3 selected methods with public-helper proof and all direct
    owned-process receipts. Require correct expected outputs, exact parent/helper
    artifact/source/argv-generation/process binding and declared submitted-case association, real exit/cleanup evidence,
@@ -437,9 +505,10 @@ and do not change app floor. Scripted backend x/y is a forwarding proof only;
 actual Unicode input/output proof occurs in Task4. Native immediate fixture has
 the explicit separate26 host. Runtime ownership remains serial Root-only.
 
-Unresolved observation choice: Task4 must select/review actual public OS process
-observation source and any distinct transparent launcher companion, with concrete
-argv-generation/submitted-case/consuming-wait proof limits, before its real execution. This is a
+Task4 observer supplement selects a candidate bounded sampled-live-identity/
+nonconsuming-exit boundary; its adoption, exact bridge/prototype ABI/error/status/
+host-selection proof, concrete observer/fixture/cleanup sources and any distinct
+transparent launcher companion remain reviewed gates before real execution. This is a
 declared blocking gate for Task4 runtime, not permission to leave fabricated
 commands or source hooks. It does not block authoring/review of the thin Task1
 facade or Task2 constructor/API tests after V2 approval. No subsequent native-owner

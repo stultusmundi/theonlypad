@@ -1,5 +1,46 @@
 # Fixed admission service — Task1 verification
 
+## Current factory/native checkpoint — 2026-10-09
+
+Task1 is committed at `5b5ad8c`; its matching public999/0 remains the separate latest full-suite checkpoint. Task2 final independent source/evidence review accepts the fixed construction, ordinary package capability and runner/control scope. Task3's adopted corrected fixture has a matching successful native run and final independent source/evidence acceptance within its two scripted native cases. Task2/3 new files remain uncommitted.
+
+Proven fixed commands:
+
+```sh
+scripts/test-search-admission-service.sh
+scripts/test-search-admission-service-native.sh
+```
+
+| Root-executed evidence | Actual result | Scope |
+| --- | --- | --- |
+| Task2 corrected default | Coordinator0; pure50; constructor4/0 | One ordinary sibling compiler client succeeds; five independently compiled forbidden clients retain expected exit1 and exact fixture diagnostics |
+| Separate Task2 copied eager-entry control | Raw test1;1 test/1 intended assertion/0 unexpected; coordinator0 | Authenticated behavioral RED at constructor-entry assertion line141; actual original parent teardown returned |
+| Task3 corrected native default | Coordinator0; pure51; native2/0 | Exact two hidden AppKit/modal facade tests with actual controller and scripted backend; no helper or shown window |
+| Retained first native fixture run | 2 tests/1 failure/0 unexpected | Capture-refusal assertion incorrectly required closed admission; corrected phase-specific expectation is tested separately; first run remains preserved and uncredited |
+
+Task2's current default binds97 source origins,522 copies and6 generated manifests, all11 direct-watchdog receipts, exact compiler diagnostics and the actual built XCTest artifact/build receipt. Its separate eager control binds87 origins,89 copies,2 generated manifests and4 receipts, preserving raw test exit1. Reviewed expectation timing/guard repair produces exactly the intended assertion while retaining genuine unconditional parent cleanup. Earlier missing-dependency/pure restoration infrastructure failures, rejected initializer diagnostic default125 and eager1-test/2-failure/1-unexpected coordinator125 remain preserved; none was retroactively credited as clean intended RED. Final independent review accepts Task2 within this bounded scope. Ordinary allowed-client compilation is compile-only; constructor ordering at the injected launch seam is distinct from public-factory construction/missing-helper checks and does not establish unseen child history.
+
+Task3's matching run binds90 origins,90 copies and1 generated macOS26/Swift5 manifest, all5 genuine owned-process receipts and the actual XCTest bundle/source/build artifact. Public floor14 remains unchanged. It executes exactly `testCaptureRefusalThroughFacadePreservesAdmission` and `testJoinedFacadeInsideBorrowPreservesResidualCreditUntilRealReturn`. The first invokes the facade from a real Timer-owned modal capture callback, verifies synchronous-callback refusal and preserved admission, then confirms actual outer callback return and queued-probe usability. The second joins during a genuine native withResult borrow, preserves residual lease/credit inside that borrow, and observes release only after actual outer return. Both retain independent real controller/task cleanup, with no emergency release or deadline accepted as a pass. The scripted backend supplies finite component results; these cases do not exercise a successful helper. Task3 final independent specification, quality, cleanup, evidence and privacy review accepts this bounded scripted native scope; no optional native DTO rewrite mutant was added.
+
+Both commands freeze actual matching sources, unchanged public manifest/wrapper/common/watchdog provenance, test dependencies and separately declared generated manifests. They invoke the accepted watchdog directly in the coordinator and must not be nested under another process-group supervisor. Positive runs have zero warnings, skips or unexpected failures. Pure50, pure51, constructor4 and native2 selections overlap source and serve different roles; they are not additions to the prior full999 count.
+
+| Current test/runner source | Bytes | SHA256 |
+| --- | --- | --- |
+| Tests/SearchAdmissionServiceIntegration/SearchAdmissionServiceConstructionTests.swift | 18935 | ee02d8060a17c1a2030ee379162b6d59404406719dc9bf11fd3f983170ca6139 |
+| Tests/SearchAdmissionServiceNativeIntegration/NativeAdmissionServiceTests.swift | 24412 | 747c38db9fd8ab5e243e2be22627607eaf922ee10095b834403c98f57df7e6f5 |
+| Tests/SearchAdmissionServiceNativeIntegration/run_harness.py | 26440 | 20136ff13a1a1df9109aba6ee5a02880a30ae0a9cbc42e6c53a66f8d63918f61 |
+| Tests/SearchAdmissionServiceNativeIntegration/test_runner.py | 34162 | c6a42f048be89216024de6e3d3652cccea932ab44ff1cf3af2469e058fcfc982 |
+
+These files have mode0644; the native shell has mode0755. The matching native stage ran on ARM64 macOS26.6.2 with the declared Swift5 test-host policy; deployment/source settings do not establish macOS14 or Intel runtime support. Raw logs, failed snapshots, inventories and review packets remain ignored locally.
+
+Task4's corrective normative supplement now has independent source approval. It addresses the earlier observer design's three findings without changing that preserved NO-GO record. The exact reviewed spec/plan supplement is now adopted after Task3 acceptance; concrete observer/prototype, finite cleanup and controlled probe source still need separate review before execution. Source approval supplies no compiler/syscall/status-mapping/host-selection or helper runtime proof. No observer implementation/prototype/runtime is accepted or executed.
+
+Editor search remains in-process; distribution stays `4841d89`, with UI Automation authentication user-owned and pending. This checkpoint proves neither actual public-facade helper search nor editor/folder/quit routing, packaged desktop, hard-regex containment, allocation/RSS, memory/performance, additional-platform or whole-product acceptance.
+
+## Retained Task1 pre-commit record
+
+The original record below preserves its then-pending commit and later-task preparation states; the current checkpoint above supersedes those states without replacing its evidence.
+
 Date: 2026-10-09. Task1's thin `SearchAdmissionService<Context>` facade is
 implemented, component-tested and independently source/evidence approved.
 The scoped local commit remains pending at this record. The [design](../superpowers/specs/2026-10-09-search-admission-service-design.md)
