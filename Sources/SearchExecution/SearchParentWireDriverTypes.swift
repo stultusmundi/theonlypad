@@ -101,6 +101,11 @@ package protocol SearchParentWireDriving: AnyObject, Sendable {
   func shutdown() async -> SearchParentWireShutdown
 }
 
+package protocol SearchParentWireJoining: SearchParentWireDriving {
+  func shutdownJoined(after handle: SearchParentWireHandle?) async
+    -> SearchParentJoinedShutdownResult
+}
+
 // Logical terminal-join facts; neither payload release nor cold eligibility.
 package enum SearchParentJoinedShutdownResult: Sendable, Equatable {
   case completed(SearchParentJoinedShutdownCompletion)

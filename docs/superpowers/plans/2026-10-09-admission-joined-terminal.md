@@ -2,8 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox syntax for tracking. Root owns all serial runtime; source authors/reviewers never invoke Swift, helpers, GUI or watchdogs independently.
 
-Status: independent source-only SPEC/QUALITY/PLAN review approves execution.
-No new implementation or runtime acceptance is established yet.
+Status: Tasks 1–2 are implemented, tested and independently approved. Fresh
+public neighbors496/0, full993/0 with app/helper linking, native10/0, unchanged
+native3/0 and pure52/0 pass; exact native controls reach14/15 intended failures
+with genuine cleanup. Task 3 final whole-branch review approves the scoped
+checkpoint; the local commit remains pending.
+Fixed service/native owner design is in progress; no routing is activated.
 
 **Goal:** Add an admission terminal owner that drains actual request scopes before joining the parent and reports residual charged payloads without upgrading original diagnostics.
 
@@ -64,6 +68,7 @@ Additive scripted and actual-driver tests:
 Additive hidden native and pure runner contracts:
 
 - `Tests/SearchAdmissionJoinedNativeIntegration/NativeJoinedAdmissionTests.swift`: separate hidden AppKit tests with native modal entry and tiny synthetic payloads; no edits to old native module.
+- `Tests/SearchAdmissionJoinedNativeIntegration/NativeJoinedRetirementTests.swift`: two actual provisional Context destruction ordering tests, revised after the original nested-async scheduling experiment failed; preserve the original evidence.
 - `Tests/SearchAdmissionJoinedNativeIntegration/run_harness.py`: explicit frozen native coordinator using existing common freeze/receipt utilities and direct watchdog.
 - `Tests/SearchAdmissionJoinedNativeIntegration/test_runner.py`: pure synthetic execution/source/receipt rejection tests.
 - `scripts/test-search-admission-joined-native.sh`: archive-compatible relative-root entry.
@@ -86,7 +91,7 @@ test files remain bytewise unchanged.
 from spec; `SearchAdmissionController.shutdownJoined()` for Task2 composition.
 The existing package initializer and `shutdown()` signature remain unchanged.
 
-- [ ] **1. Author additive scripted tests and a finite event harness.**
+- [x] **1. Author additive scripted tests and a finite event harness.**
 
 Use a Joining forwarder over the unchanged `AdmissionScriptedDriver` for existing
 actual submit/wait/cancel behavior. Forward identical handles, values and errors;
@@ -187,7 +192,7 @@ cleanup before any suspending
 setup. All held fixture gates must be released in unconditional teardown and
 all fixture-created tasks joined on failure as well as success.
 
-- [ ] **2. Independent test review and Root RED.**
+- [x] **2. Independent test review and Root RED.**
 
 Review full new tests/harness and all protected originals against spec; freeze
 exact sources/manifest in a fresh ignored minimal package or exact repository
@@ -204,7 +209,7 @@ wrong implementations in frozen copies only. Tests stay unchanged in production.
 Root verifies method starts/failures, intended assertions, source bindings and
 complete owned-process receipts. No compiler failure is counted as behavior.
 
-- [ ] **3. Fresh implementer writes the smallest accepted production change.**
+- [x] **3. Fresh implementer writes the smallest accepted production change.**
 
 Add protocol, result values and concrete conformance. In controller, select mode
 and retain owner before callbacks/suspension; close/fence immediately. Implement
@@ -223,7 +228,10 @@ with the final handle; store raw result independent of caller cancellation.
 After joined command, share only an in-flight current refresh query. On query
 error report pending. After it actually returns, apply the spec's three-part
 retirement gate. Clear local Job payload in a separate helper, return from it,
-then abandon reservation and remove Job. No original parent enum rewriting.
+then abandon reservation and remove Job. Actual synchronous ledger observation
+inside destruction retains credit; queued terminal calls are observed after the
+real outer return. No unproven retirement guard requirement or original parent
+enum rewriting.
 Borrowed invalid leases remain until real outer return. Build new observation
 from actual ledger snapshot/current counts without exposing mutable ledger state.
 
@@ -232,7 +240,16 @@ exceptional driver shutdown alias; its current observation uses the same fresh
 refresh path. Legacy-first original path retains bounded semantics and all old
 oracles. Do not introduce timer polling, second wait or a synthetic success.
 
-- [ ] **4. Root focused GREEN and independent source review.**
+Reachability correction: original nested async destructor tests did not run their
+inner Task until outer destruction returned. Preserve the original tests/report/run
+and withdrawn source finding. Rename/re-specify the two native ordering methods:
+actual synchronous live ledger observation during destruction, followed by genuine
+queued terminal results afterward. Independently review them, then require a
+frozen credit-before-clear mutant to reach live6/3/reservation1 failures with complete
+cleanup and unchanged-source GREEN. This neither credits the original failed recipe
+nor justifies a private retirement guard. Resolve warnings in the revised new source.
+
+- [x] **4. Root focused GREEN and independent source review.**
 
 Freeze the final actual source with unchanged tests; run the same filter under
 direct watchdog in a unique GREEN path. Verify exact unique methods/no unexpected
@@ -255,7 +272,7 @@ runner freeze/receipt checks and checked-in watchdog.
 **Produces:** Finite actual-codec/injected-process evidence and hidden AppKit
 borrow/capture/accounting reentry evidence. No real helper or visible desktop.
 
-- [ ] **1. Add event-driven actual parent integration tests.**
+- [x] **1. Add event-driven actual parent integration tests.**
 
 Construct actual `SearchParentWireDriver` with unchanged harness lifecycle and
 factory, then actual admission controller. Observe existing generation-qualified
@@ -273,7 +290,7 @@ Use tiny strings/limits; process/channel collaborators are injected. Uncondition
 cleanup opens every read/upload/close gate, prepares synthetic reaping and joins
 fixture tasks. A failure deadline is an outer watchdog, never a timing oracle.
 
-- [ ] **2. Add hidden native cases and exact-source runner controls.**
+- [x] **2. Add hidden native cases and exact-source runner controls.**
 
 Create separate class `NativeJoinedAdmissionTests` with:
 
@@ -286,20 +303,46 @@ Create separate class `NativeJoinedAdmissionTests` with:
 - `testRetryCancelReentryRefusesWhileJoinedCloseSetupIsLive`: actual pending retry token cancel enters native loop during accepted joined close; inner repeated joined caller gets finite synchronousCallbackActive rather than awaiting the owner's close stack; outer owner then finishes real join. Token cancellation/fixture loop state stay genuine.
 - `testInlineRetryFailureCancelReentryRefusesBeforeFailClosedReturns`: test-only inline scheduler triggers existing failClosed path; its real token cancel invokes native loop. Inner joined caller sees scope refusal; no capture/delivery restart; outside caller subsequently observes authentic terminal state. Preserve old inline-failure oracle.
 
+Also retain class `NativeJoinedRetirementTests`, revised at Task1 reachability reassessment:
+
+- `testQueuedJoinedRequestObservesRetirementAfterDestructorReturns`: genuine provisional Context destruction enters `.modalPanel`; the real Timer action synchronously observes ledger active6/reserved3/reservation1 and registers a queued joined Task. After actual destructor/outer caller return, await that real task and require raw parent unchanged/current closed/job0/active2/reserved0. The earlier live ledger value remains immutable.
+- `testQueuedLegacyRequestPreservesOriginalReceiptAfterDestructorReturns`: same real live ledger boundary and later queued legacy call; require exact original completion.shutdown, backend legacy0, and genuine post-return retired state.
+
+Use genuine capture/request/sole-wait/provisional results, no production hooks or
+marker mutation. Stop the ordering loop on the actual synchronous ledger/action
+boundary, explicitly distinct from an async terminal return; join all fixture tasks.
+
+For the seven refusal methods, use public `Task.immediate` from the real MainActor
+Timer/action so the depth guard executes before an actual callback returns. Root
+must prove this current-host behavior and a reached guard-removal control. A wrong
+call can suspend: capture its real public mutation/result and release the loop on
+an explicit action boundary, then await the actual task after outer return. An
+emergency-only release is infrastructure, never accepted RED. Borrowed-result
+positive join remains on the existing synchronous Timer-owned borrow pattern.
+
 Private new native target/action/loop helpers have a bounded trace and one
-emergency failure timer. Only actual completion/refusal stops successful loop;
-no sleep/polling or success based on timeout. Register rescue before native action;
+emergency failure timer. Each loop stops on its declared authentic boundary:
+actual returned refusal/borrow observation, or the ordering case's synchronous
+live ledger/action boundary. A guard-removal control may stop on its explicit
+reached mutation-failure boundary before joining the suspended caller afterward;
+never treat emergency-only release as successful RED. No sleep/polling or success
+based on timeout. Reserve task registration before synchronous-start construction,
+then retain the actual returned handle before any further suspension. Register
+rescue before native action;
 invalidate timers and release/join Tasks on every exit. Keep old native module
 and its own runner bytewise unchanged.
 
 The new native runner freezes complete actual PadCore/SearchExecution, the two
 new scripted test dependencies it needs, unchanged original harnesses, new native
 module, its own Python/shell/common/watchdog sources and public manifest. Generate
-only a minimal macOS14/Swift5 package. No Swift source transformation or private
+only an isolated macOS26/Swift5 native test package, with explicit older-host
+rejection for public immediate-task availability. The app/public manifest remains
+macOS14 and the old native runner remains unchanged. No Swift source transformation or private
 extension. Include only declared test modules required by its class; if original
 native module is included to share helpers, select/require all three original
 methods as well (never filter them out silently). Prefer independent tiny native
-helpers so the new runner has exactly eight required new methods.
+helpers so the new runner has exactly ten required new methods (eight admission
+cases plus two retirement ordering cases).
 
 Runner checks before/after stages: exact source membership/hash/modes and origin
 bytes; declared class/methods no conditionals/skips/duplicates; matching manifest;
@@ -312,9 +355,10 @@ Pure runner tests use synthetic temporary archives/receipts only. Prove ordinary
 valid named execution accepted; missing/duplicate/wrong/skipped/failed/zero-test
 logs rejected; changed source/manifest/origin/protected inventory refused; strict
 receipt return/wait/cleanup/capture/timeouts rejected; frozen shell command and
-generated language/deployment settings preserved. They do not run Swift/AppKit.
+generated Swift5/macOS26 native-test settings preserved; older-host refusal is
+explicit and the public macOS14 manifest remains unchanged. They do not run Swift/AppKit.
 
-- [ ] **3. Independent tests/runner review, Root behavioral controls and GREEN.**
+- [x] **3. Independent tests/runner review, Root behavioral controls and GREEN.**
 
 Absent behavior must be discriminated in frozen ignored copies: remove the
 whole-capture callback guard and reproduce actual native refusal failure; replace
@@ -342,7 +386,7 @@ Resolve every material finding before marking Task2 complete.
 
 **Files:** Documentation above; no runtime changes without a new witnessed cause.
 
-- [ ] **1. Run focused neighboring and fresh full public app/core under Root supervision.**
+- [x] **1. Run focused neighboring and fresh full public app/core under Root supervision.**
 
 Freeze exact current input hashes before commands and verify unchanged membership
 after. Use unique paths; commands are the established public interface:
@@ -361,7 +405,7 @@ counts are separate from ordinary public suite. Do not rerun passed checks absen
 changes/failure/remaining concern; do not wrap native coordinators in another
 watchdog. No new package/desktop result follows solely from public build.
 
-- [ ] **2. Record implemented/tested/pending/blocked states and independent final review.**
+- [x] **2. Record implemented/tested/pending/blocked states and independent final review.**
 
 New verification record states exact terminal result grammar/refusal precedence,
 mode/drain/borrow/credit boundaries, direct commands, meaningful RED/GREEN and

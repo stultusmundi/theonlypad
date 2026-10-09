@@ -1,5 +1,11 @@
 # Continuation
 
+## Joined admission terminal — 2026-10-09
+
+The isolated `feat/search-admission-joined-terminal` branch implements the additive joining capability, retained controller terminal owner, genuine helper-return drain and truthful current/residual-credit observations. Fresh public neighbors496/0 and full993/0 pass; both include joined27 and actual-driver4. App/helper link. New hidden native10, unchanged native3 and pure runner52 pass separately. Two native copied controls reach14/15 intended assertions; actual held-read control reaches2, all with genuine cleanup and exact inputs/receipts. Task2 and final whole-branch specification, quality, evidence, documentation and privacy reviews approve the scoped checkpoint. The local commit remains pending. See [verification](verification/search-admission-joined-terminal.md).
+
+Next: fixed production service composition and one native application owner, then document/folder adapters. Preserve original parent refusal and residual borrowers as explicit outcomes. Editor search remains in-process; distribution remains source `4841d89`. UI Automation authentication remains user-owned and pending. No new packaged desktop, helper routing, memory/performance, physical input, IME/VoiceOver or additional platform acceptance follows. Continue authorized local implementation; no remote push/merge/release.
+
 ## Production admission collaborators — 2026-10-09
 
 The isolated `feat/search-admission-production-collaborators` branch implements

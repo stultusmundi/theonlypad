@@ -28,6 +28,8 @@ enum SearchAdmissionEvent: Equatable {
 }
 
 @MainActor package final class SearchAdmissionController<Context> {
+  private enum TerminalMode { case unused, legacy, joined }
+
   private final class Job {
     let id: SearchJobID
     let consumer: SearchConsumerID
@@ -84,12 +86,23 @@ enum SearchAdmissionEvent: Equatable {
   private let retry: any SearchAdmissionRetryScheduler
   private let prepare: SearchAdmissionPreparing
   private let observe: (@MainActor (SearchAdmissionEvent) -> Void)?
+  private var terminalMode: TerminalMode = .unused
   private var terminalCommand: Task<SearchParentWireShutdown, Never>?
+  private var joinedCommand: Task<SearchParentJoinedShutdownResult, Never>?
+  private var joinedLegacyAlias: Task<SearchParentWireShutdown, Never>?
+  private var joinedRefresh: (id: UUID, task: Task<SearchParentWireSettlement, Never>)?
+  private var joinedDrainFinished = false
+  private var synchronousInvocationDepth = 0
   private var terminalCommandFinished = false
   private var driverSettlement: SearchParentWireSettlement = .pending
   private var queryTerminalEligible = false
   private var worker: Task<Void, Never>?
   private var cancellation: Task<Void, Never>?
+  // Slots above control ordinary progress. These references retain the actual
+  // helpers even when an exit callback clears its progress slot before return.
+  private var requestReturn: Task<Void, Never>?
+  private var cancellationReturn: Task<Void, Never>?
+  private var inspectionReturn: Task<Void, Never>?
   private var ledger: SearchAdmissionLedger
   private var consumers: Set<SearchConsumerID> = []
   private var jobs: [SearchJobID: Job] = [:]
@@ -134,10 +147,30 @@ enum SearchAdmissionEvent: Equatable {
 
   /// Terminal only. The command receipt is historical; settlement excludes launcher quarantine.
   package func shutdown() async -> SearchAdmissionShutdown {
+    if case .joined = terminalMode {
+      let parent = await joinedCommand!.value
+      let receipt: SearchParentWireShutdown
+      switch parent {
+      case .completed(let completion):
+        receipt = completion.shutdown
+      case .callerRefused:
+        if joinedLegacyAlias == nil {
+          let driver = driver
+          joinedLegacyAlias = Task { await driver.shutdown() }
+        }
+        receipt = await joinedLegacyAlias!.value
+      }
+      let observation = await joinedObservation(parent)
+      return SearchAdmissionShutdown(
+        driver: receipt, driverSettlement: observation.driverSettlement,
+        retainedActiveJobs: observation.retainedActiveJobs,
+        retainedLeases: observation.retainedLeases)
+    }
     if terminalCommand == nil {
-      beginShutdown()
+      terminalMode = .legacy
       let driver = driver
       terminalCommand = Task { await driver.shutdown() }
+      beginShutdown()
     }
     let receipt = await terminalCommand!.value
     terminalCommandFinished = true
@@ -145,6 +178,129 @@ enum SearchAdmissionEvent: Equatable {
     return SearchAdmissionShutdown(
       driver: receipt, driverSettlement: driverSettlement,
       retainedActiveJobs: jobs.count, retainedLeases: leases.count)
+  }
+
+  package func shutdownJoined() async -> SearchAdmissionJoinedShutdownResult {
+    guard synchronousInvocationDepth == 0 else {
+      return .callerRefused(.synchronousCallbackActive)
+    }
+    switch terminalMode {
+    case .legacy:
+      return .callerRefused(.legacyModeSelected)
+    case .unused:
+      guard let joiningDriver = driver as? any SearchParentWireJoining else {
+        return .callerRefused(.unsupportedDriver)
+      }
+      terminalMode = .joined
+      joinedCommand = Task { [self, joiningDriver] in
+        await drainJoinedRequest()
+        return await joiningDriver.shutdownJoined(after: lastHandle)
+      }
+      // The retained owner exists before any reentrant close collaborator runs.
+      beginShutdown()
+    case .joined:
+      break
+    }
+    let parent = await joinedCommand!.value
+    return .observed(await joinedObservation(parent))
+  }
+
+  private func drainJoinedRequest() async {
+    // In particular, a held submit may install cancellation only after the
+    // first await. Re-read its retained helper after the sole worker returns.
+    if let requestReturn { await requestReturn.value }
+    if let cancellationReturn { await cancellationReturn.value }
+    if let inspectionReturn { await inspectionReturn.value }
+    requestReturn = nil
+    cancellationReturn = nil
+    inspectionReturn = nil
+    joinedDrainFinished = true
+  }
+
+  private func joinedObservation(_ parent: SearchParentJoinedShutdownResult) async
+    -> SearchAdmissionJoinedShutdownObservation
+  {
+    if joinedRefresh == nil {
+      let driver = driver
+      let handle = lastHandle
+      joinedRefresh = (
+        UUID(),
+        Task {
+          do { return try await driver.settlement(after: handle) } catch { return .pending }
+        }
+      )
+    }
+    let refresh = joinedRefresh!
+    let settlement = await refresh.task.value
+    if joinedRefresh?.id == refresh.id { joinedRefresh = nil }
+    driverSettlement = settlement
+    retireJoinedJob(parent, settlement: settlement)
+    let snapshot = ledger.snapshot
+    return SearchAdmissionJoinedShutdownObservation(
+      parent: parent, driverSettlement: settlement,
+      retainedActiveJobs: jobs.count, retainedLeases: leases.count,
+      activeCharge: snapshot.active, retainedCharge: snapshot.retained,
+      reservedRetainedCharge: snapshot.reservedRetained)
+  }
+
+  private func retireJoinedJob(
+    _ parent: SearchParentJoinedShutdownResult, settlement: SearchParentWireSettlement
+  ) {
+    guard joinedDrainFinished,
+      case .completed(let completion) = parent,
+      completion.ownership == .admitted, completion.laneStop == .acknowledged,
+      completion.shutdown.parentLaneSettled,
+      settlement == .settled(admissionClosed: true),
+      let active, let job = jobs[active]
+    else { return }
+    clearJoinedPayload(job)
+    // Payload aliases in the clearing helper have genuinely returned before
+    // reservation credit changes or the metadata leaves the active registry.
+    if let reservation = job.reservation {
+      ledger.abandon(reservation)
+      job.reservation = nil
+    }
+    self.active = nil
+    jobs.removeValue(forKey: job.id)
+  }
+
+  private func clearJoinedPayload(_ job: Job) {
+    job.capture = nil
+    job.completion = nil
+    job.captured = nil
+    job.provisional = nil
+  }
+
+  private func beginSynchronousInvocation() {
+    let increment = synchronousInvocationDepth.addingReportingOverflow(1)
+    precondition(!increment.overflow)
+    synchronousInvocationDepth = increment.partialValue
+  }
+
+  private func endSynchronousInvocation() {
+    precondition(synchronousInvocationDepth > 0)
+    synchronousInvocationDepth -= 1
+  }
+
+  private func deliver(
+    _ completion: (@MainActor (SearchAdmissionDelivery) -> Void)?,
+    _ value: SearchAdmissionDelivery
+  ) {
+    beginSynchronousInvocation()
+    defer { endSynchronousInvocation() }
+    completion?(value)
+  }
+
+  private func notify(_ event: SearchAdmissionEvent) {
+    beginSynchronousInvocation()
+    defer { endSynchronousInvocation() }
+    observe?(event)
+  }
+
+  private func cancelRetryToken(_ token: (any SearchAdmissionRetryToken)?) {
+    beginSynchronousInvocation()
+    defer { endSynchronousInvocation() }
+    token?.cancel()
   }
 
   private func beginShutdown() {
@@ -178,7 +334,7 @@ enum SearchAdmissionEvent: Equatable {
     retryID = nil
     let token = retryToken
     retryToken = nil
-    token?.cancel()
+    cancelRetryToken(token)
   }
 
   package func release(_ id: SearchResultLeaseID) {
@@ -263,6 +419,7 @@ enum SearchAdmissionEvent: Equatable {
   }
 
   private func pump() {
+    if case .joined = terminalMode { return }
     guard !admissionClosed || terminalCommandFinished, queryID == nil, retryID == nil else {
       return
     }
@@ -277,6 +434,7 @@ enum SearchAdmissionEvent: Equatable {
   }
 
   private func startInspection() {
+    if case .joined = terminalMode { return }
     guard queryID == nil else { return }
     let id = UUID()
     queryID = id
@@ -291,6 +449,7 @@ enum SearchAdmissionEvent: Equatable {
       { result = .failure(.driver(error)) } catch { result = .failure(.internalFailure) }
       self?.inspected(result, id: id, handle: handle, terminalEligible: eligible)
     }
+    inspectionReturn = queryTask
   }
 
   private func inspected(
@@ -300,6 +459,7 @@ enum SearchAdmissionEvent: Equatable {
     guard queryID == id else { return }
     queryID = nil
     queryTask = nil
+    if case .joined = terminalMode { return }
     guard handle == lastHandle else {
       driverSettlement = .pending
       scheduleRetry()
@@ -348,6 +508,7 @@ enum SearchAdmissionEvent: Equatable {
   }
 
   private func scheduleRetry() {
+    if case .joined = terminalMode { return }
     guard !admissionClosed || terminalCommandFinished, retryID == nil,
       active != nil || !queue.isEmpty || terminalCommandFinished
     else { return }
@@ -355,7 +516,7 @@ enum SearchAdmissionEvent: Equatable {
     retryID = id
     schedulingRetry = true
     retryFiredInline = false
-    let token = retry.schedule { [weak self] in
+    let token = scheduleRetryToken { [weak self] in
       guard let self, self.retryID == id else { return }
       if self.schedulingRetry {
         self.retryFiredInline = true
@@ -368,22 +529,30 @@ enum SearchAdmissionEvent: Equatable {
     schedulingRetry = false
     if retryFiredInline {
       retryID = nil
-      token.cancel()
+      cancelRetryToken(token)
       failClosed(.internalFailure)
     } else {
       retryToken = token
     }
   }
 
+  private func scheduleRetryToken(_ action: @escaping @MainActor () -> Void)
+    -> any SearchAdmissionRetryToken
+  {
+    beginSynchronousInvocation()
+    defer { endSynchronousInvocation() }
+    return retry.schedule(action)
+  }
+
   private func failClosed(_ failure: SearchAdmissionFailure) {
     admissionClosed = true
     retryID = nil
-    retryToken?.cancel()
+    cancelRetryToken(retryToken)
     retryToken = nil
     if let active, let job = jobs[active] {
       let completion = job.completion
       job.completion = nil
-      completion?(.failed(failure))
+      deliver(completion, .failed(failure))
     }
     let queued = queue.compactMap { jobs.removeValue(forKey: $0) }
     queue.removeAll()
@@ -391,11 +560,13 @@ enum SearchAdmissionEvent: Equatable {
       let completion = job.completion
       job.completion = nil
       job.capture = nil
-      completion?(.failed(failure))
+      deliver(completion, .failed(failure))
     }
   }
 
   private func captureNext() {
+    beginSynchronousInvocation()
+    defer { endSynchronousInvocation() }
     guard active == nil, !admissionClosed, !queue.isEmpty else { return }
     let id = queue.removeFirst()
     guard let job = jobs[id] else {
@@ -426,6 +597,7 @@ enum SearchAdmissionEvent: Equatable {
         await self?.prepareAndSubmit(id)
         self?.preparationScopeExited(id)
       }
+      requestReturn = worker
     }
   }
 
@@ -486,13 +658,17 @@ enum SearchAdmissionEvent: Equatable {
   private func preparationScopeExited(_ id: SearchJobID) {
     guard active == id, let job = jobs[id] else { return }
     worker = nil
-    if !job.attemptedSubmit {
+    if case .joined = terminalMode {
+      // Even cancelled preparation that never attempted submit retains its
+      // reservation until the joined parent's immutable facts admit retirement.
+      job.readyForSettlement = true
+    } else if !job.attemptedSubmit {
       finishCapture(job, failure: job.failure ?? .internalFailure)
     } else {
       job.readyForSettlement = true
       pump()
     }
-    observe?(.workerExited(id))
+    notify(.workerExited(id))
   }
 
   private func cancelDriver(_ job: Job) {
@@ -505,6 +681,7 @@ enum SearchAdmissionEvent: Equatable {
       _ = try? await driver.cancel(handle)
       self?.cancellationExited(id)
     }
+    cancellationReturn = cancellation
   }
 
   private func cancellationExited(_ id: SearchJobID) {
@@ -535,7 +712,7 @@ enum SearchAdmissionEvent: Equatable {
       jobs.removeValue(forKey: job.id)
       let completion = job.completion
       job.completion = nil
-      completion?(.completed(lease))
+      deliver(completion, .completed(lease))
       pump()
     } catch {
       failClosed(.internalFailure)
@@ -557,7 +734,7 @@ enum SearchAdmissionEvent: Equatable {
     let completion = job.cancelled ? nil : job.completion
     job.completion = nil
     job.capture = nil
-    completion?(.failed(failure))
+    deliver(completion, .failed(failure))
     pump()
   }
 }

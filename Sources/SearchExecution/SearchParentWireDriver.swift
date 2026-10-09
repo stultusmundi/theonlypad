@@ -22,7 +22,7 @@ enum SearchParentDriverEvent: Sendable, Equatable {
   case sessionReleased(UUID)
 }
 
-package final class SearchParentWireDriver: SearchParentWireDriving {
+package final class SearchParentWireDriver: SearchParentWireJoining {
   private let state: SearchParentDriverState
   init(
     lifecycle: SearchChildLifecycle,

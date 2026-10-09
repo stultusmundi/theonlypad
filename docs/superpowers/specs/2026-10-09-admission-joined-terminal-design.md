@@ -1,14 +1,17 @@
 # Joined admission terminal ownership
 
-Status: independent source-only SPEC/QUALITY/PLAN review approves this design
-and its implementation plan. Implementation, new test execution, service factory
-and native activation remain outstanding.
+Status: implementation and Tasks 1–2 have independent SPEC/QUALITY/evidence
+approval. Fresh full public app/core993/0, hidden native10/0, unchanged native3/0
+and pure runner52/0 pass. Required native controls reach14/15 intended failures
+with genuine cleanup. Final whole-branch review approves the scoped checkpoint;
+the local commit remains pending. Fixed service composition and native activation
+remain outstanding.
 Baseline is local `3bc4899`: accounting/retry components23/0, neighboring357/0,
 full app/core962/0. Existing distribution remains source4841d89.
 
 ## Problem and chosen boundary
 
-The admission controller currently owns only `SearchParentWireDriving`. Its
+Before this slice, the admission controller owned only `SearchParentWireDriving`. Its
 retained `shutdown()` task selects the parent's legacy terminal mode. Calling
 the concrete parent's joined entry afterward permanently refuses conversion.
 A new production service cannot safely compose those two calls as joined close.
@@ -192,7 +195,12 @@ Retire an active Job/reservation only when all of these facts hold:
 
 Clear captured/provisional payloads in a separate helper and return from that
 helper before abandoning the reservation/removing the Job. Do not invoke a
-completion callback. This also covers attempted-submit errors conservatively.
+completion callback. During genuine payload destruction, a synchronous native
+ledger observation must still report the reservation. A queued joined or legacy
+request is observed after the real clearing helper returns; its later result
+reports the actual retired state. This does not certify nested async terminal
+execution during destruction or establish a retirement guard requirement.
+This also covers attempted-submit errors conservatively.
 On refused ownership/caller, failed lane stop or pending current settlement,
 keep the Job/reservation and report its real credit/counts. A later observation
 may retire a pending reservation only after the same gate genuinely holds;
@@ -240,7 +248,19 @@ preserved parent refusals/lane failures/uncertain child, and conservative charge
 Actual codec composition holds the idle read return independently of close/reap,
 then requires genuine generation-qualified `sessionReleased` and lane acknowledgment.
 Native hidden tests exercise joined residual borrow and real capture/accounting
-modal refusal; no shown window, posted input or helper is required.
+modal refusal. Two additional native ordering tests exercise actual provisional
+Context destruction: synchronous live ledger active6/reserved3/reservation1,
+then genuine queued joined/legacy results with job0/active2/reserved0 after the
+clearing helper returns. A frozen credit-before-clear mutant must fail the live
+ledger oracle; unchanged actual source must pass. Recursive async observations
+during destruction remain an unproven reachability hypothesis, separately recorded.
+
+The seven synchronous-scope refusal cases use verified public `Task.immediate`
+to enter the real depth guard before suspension, as specified by
+[SE-0472](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0472-task-start-synchronously-on-caller-context.md). Their isolated native runner
+requires a macOS26 test host/manifest and rejects older hosts explicitly, without
+skipping tests. The public app/package remains macOS14. The native runner requires
+ten new methods in total. No shown window, posted input or helper is required.
 
 Root alone executes compilers, runtime, real child and GUI tests under accepted
 direct owned-process supervision. No nested watchdog. Meaningful compiler RED
