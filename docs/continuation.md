@@ -11,24 +11,28 @@ Independent review traced this to the fixture's shared setter/getter annotation.
 A new behavioral regression completed one method with three ordinary assertion
 failures against the authentic report. Independent review approved the exact
 one-expression annotation correction; the decoder and original tests remain
-unchanged. Fresh generation preparation must also rebind the fixed materializer
-and retain the already verified inner-command receipt check. Focused regression
-coverage precedes that preparation; no corrected native GREEN is claimed.
+unchanged. The fixed materializer now has a reviewed five-site correction. Its
+unchanged focused tests pass all five cases; restoring the old generation causes three
+relevant failures and restoring the old namespace causes two. Independent review
+accepts this focused evidence. Fresh native preparation must retain the verified
+inner-command receipt check; no corrected native GREEN is claimed.
 
 Both managed-close diagnostic arms failed the controller/window weak-reference
 assertions. The retained-source arm reached five stale adapter refusals without
 additional assertion failures. These results do not identify the retaining root.
-A passive Endpoint weak-probe source is reviewed. Its copy-only preparation
-refused an AppKit header alias before creating namespaces or running native code.
-The diagnosed guard incompatibility has a reviewed plan for two exact SDK aliases;
-probe runtime and the retaining root remain outstanding.
+The revised passive Endpoint probe completed one native test with the same two
+controller/window failures and reported the wrapper absent at its observation.
+Independent review accepts that bounded failure evidence; the retaining root
+remains unknown. The earlier copy-only SDK-alias refusal is preserved. A bounded
+retention diagnostic is being designed; no lifetime fix is adopted.
 
 The seven-case macro chronology run passed six methods and failed the refused
-insertion case: it recorded an edit that never changed the document. A subsequent
-four-case diagnostic failed eight assertions, including a shared caret setup
-error. Exactly four setup-call moves are source-reviewed for a fresh snapshot;
-the failed results are preserved. Committed-edit recording design must also
-preserve existing callback and undo admission protections. No macro fix is adopted.
+insertion case: it recorded an edit that never changed the document. The revised
+four-case diagnostic removes the caret setup failures: three controls pass while
+the active-recording case retains four ordinary failures, including replay of
+text that was never inserted. Independent evidence review accepts that failure
+result. Committed-edit recording design must preserve existing callback and undo
+admission protections. No macro fix is adopted; earlier failed runs are retained.
 
 Continue those local regression, diagnostic and implementation stages, then finish
 native acceptance, production search routing and the broader requirements matrix.
