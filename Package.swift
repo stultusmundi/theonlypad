@@ -18,7 +18,7 @@ let package = Package(
     .testTarget(
       name: "PadSearchWorkerRuntimeTests",
       dependencies: ["PadSearchWorkerRuntime", "PadCore", "SearchExecution"]),
-    .executableTarget(name: "TheOnlyPad", dependencies: ["PadCore"]),
+    .executableTarget(name: "TheOnlyPad", dependencies: ["PadCore", "SearchExecution"]),
     .testTarget(name: "PadCoreTests", dependencies: ["PadCore"]),
     .testTarget(name: "SearchExecutionTests", dependencies: ["SearchExecution", "PadCore"]),
   ],

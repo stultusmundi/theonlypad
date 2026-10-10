@@ -1,4 +1,22 @@
-# Latest checkpoint: paired admission primitive verified
+# Latest checkpoint: application search owner verified
+
+The internal application search owner and explicit closure source adapter now
+compile in the app target. `scripts/test-application-search-owner.sh` passes all
+sixteen original component tests. A separate fresh frozen public package passes
+1,041 existing tests and builds both executables without warnings. Different
+source and actual evidence reviews approve this inactive component; see
+[owner verification](verification/application-search-owner.md).
+
+Continue with native document source construction, callback fencing, nonmodal
+search edits and permanent revision-exhaustion refusal, then panel and AppDelegate
+lifecycle wiring. The reviewed fourteen native clients are prepared; native
+implementation and runtime acceptance remain outstanding. Controlled observer
+parent prerequisites proceed separately. Editor search remains in-process and
+distribution stays source `4841d89`. No new desktop, hard-regex, memory/performance
+or additional-platform acceptance follows. The user requests continuous work
+until explicitly stopped. Earlier entries below are historical checkpoints.
+
+# Earlier checkpoint: paired admission primitive verified
 
 The internal same-ledger `reservePair` primitive now admits base and producer charges transactionally, rejects producer retained credit before mutation, rolls back genuine second-admission failures and preserves independent token retirement. All previous ledger bodies and14 tests remain unchanged; it is not selected by the production controller yet. Focused public23/0, matching public neighbors125/0 and full1,025/0 preserve all prior1,016 methods plus new9. Three compiled finite controls produce intended assertions (rollback4, guard3, alias20), with all9 methods completed and0 unexpected failures. Exact source/artifact/owned-process bindings and strict format/public checks were verified. See `docs/verification/search-reservation-pair.md` for commands, source digests and limits.
 
