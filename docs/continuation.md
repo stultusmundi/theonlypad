@@ -1,4 +1,44 @@
-# Latest checkpoint: native search adapter validation in progress
+# Latest checkpoint: native diagnostic failures reviewed — 2026-10-11
+
+The application search owner remains inactive; editor search still runs in-process.
+The latest full public package evidence remains 1,041 passing tests. No new full
+suite, distribution package or desktop acceptance is claimed at this checkpoint.
+
+The controlled native parent compiled and ran once under the owned watchdog,
+producing a complete 96-row report and natural exit zero. The strict decoder
+rejected it: three spawn-attribute getter rows incorrectly mark consumed authority.
+Independent review traced this to the fixture's shared setter/getter annotation.
+A new behavioral regression completed one method with three ordinary assertion
+failures against the authentic report. Independent review approved the exact
+one-expression annotation correction; the decoder and original tests remain
+unchanged. Fresh generation preparation must also rebind the fixed materializer
+and retain the already verified inner-command receipt check. Focused regression
+coverage precedes that preparation; no corrected native GREEN is claimed.
+
+Both managed-close diagnostic arms failed the controller/window weak-reference
+assertions. The retained-source arm reached five stale adapter refusals without
+additional assertion failures. These results do not identify the retaining root.
+A passive Endpoint weak-probe source is reviewed. Its copy-only preparation
+refused an AppKit header alias before creating namespaces or running native code.
+The diagnosed guard incompatibility has a reviewed plan for two exact SDK aliases;
+probe runtime and the retaining root remain outstanding.
+
+The seven-case macro chronology run passed six methods and failed the refused
+insertion case: it recorded an edit that never changed the document. A subsequent
+four-case diagnostic failed eight assertions, including a shared caret setup
+error. Exactly four setup-call moves are source-reviewed for a fresh snapshot;
+the failed results are preserved. Committed-edit recording design must also
+preserve existing callback and undo admission protections. No macro fix is adopted.
+
+Continue those local regression, diagnostic and implementation stages, then finish
+native acceptance, production search routing and the broader requirements matrix.
+Current privacy pattern checks pass. Distribution remains source `4841d89`;
+memory/performance, physical IME, VoiceOver and additional-platform acceptance
+remain outstanding. No testing access is needed for the current local stages.
+Continue until explicitly stopped; remote pushes, merges and releases remain
+unauthorized.
+
+# Earlier checkpoint: native search adapter validation in progress
 
 The application search owner remains an internal, inactive component. The latest
 full public package evidence is still 1,041 passing tests; it is separate from
