@@ -30,7 +30,7 @@ FIXED=('scripts/swift.sh','scripts/run-owned-search-tests.py',
 SHARED_MARKER='PASS shared storage/undo, exact Unicode, revisions, selections, bounded detach/reattach, lifetime'
 PACKAGE='''// swift-tools-version: 6.0
 import PackageDescription
-let package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"NativeRouting",dependencies:["PadCore"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])
+let package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])
 '''
 
 
@@ -179,7 +179,7 @@ def freeze(root,run,suite,prebuilt=False):
     if suite!='close':
         for item in items:
             name=item['source'];path=Path(name)
-            if name.startswith('Sources/PadCore/'):
+            if name.startswith(('Sources/PadCore/', 'Sources/SearchExecution/')):
                 generate('Package/'+name,(run/item['frozen']).read_bytes(),name)
             elif name.startswith('Sources/TheOnlyPad/') and path.name!='TheOnlyPadApplication.swift':
                 data=(run/item['frozen']).read_bytes()

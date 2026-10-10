@@ -11,6 +11,28 @@ SPEC=importlib.util.spec_from_file_location('native_regressions',Path(__file__).
 RUNNER=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(RUNNER)
 
 class NativeRunnerTests(unittest.TestCase):
+    def test_search_module_sources_are_available_to_real_native_consumers(self):
+        root, run = self.fixture()
+        module = root / 'Sources/SearchExecution/Child.swift'
+        consumer = root / 'Sources/TheOnlyPad/ApplicationSearchOwner.swift'
+        consumer.write_text('import SearchExecution\n// synthetic native consumer\n')
+        manifest = RUNNER.freeze(root, run, 'transfer')
+        frozen = run / 'Package/Sources/SearchExecution/Child.swift'
+        self.assertTrue(frozen.is_file(), 'Native consumer import requires frozen SearchExecution source')
+        self.assertEqual(frozen.read_bytes(), module.read_bytes())
+        self.assertEqual((run / 'Package/Sources/NativeRouting/ApplicationSearchOwner.swift').read_bytes(), consumer.read_bytes())
+        RUNNER.verify(run, manifest)
+        frozen.write_text('// post-freeze source substitution\n')
+        with self.assertRaises(ValueError):
+            RUNNER.verify(run, manifest)
+
+    def test_native_package_graph_exposes_search_execution_dependency(self):
+        root, run = self.fixture()
+        RUNNER.freeze(root, run, 'transfer')
+        package = (run / 'Package/Package.swift').read_text()
+        self.assertIn('.target(name:"SearchExecution",dependencies:["PadCore"])', package)
+        self.assertIn('.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"])', package)
+
     def test_help_requires_its_named_positive_suite(self):
         text="Test Suite 'HelpReferenceTests' passed\nExecuted 5 tests, with 0 failures\n"
         try:
