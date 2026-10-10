@@ -1,4 +1,35 @@
-# Latest checkpoint: application search owner verified
+# Latest checkpoint: native search adapter validation in progress
+
+The application search owner remains an internal, inactive component. The latest
+full public package evidence is still 1,041 passing tests; it is separate from
+the native adapter diagnostics. The shared native regression coordinator and
+eleven standalone runners now include SearchExecution. Their accepted results
+are recorded in [native runner verification](verification/native-regression-runners.md).
+
+The private native adapter candidate has not passed its full fourteen-case
+acceptance suite: the retained run completed ten passing and four failed methods.
+Focused diagnostics preserve those failures. Two lifetime variants each retain
+the controller, document, pane and window at the immediate observation boundary;
+their fixture references are nil. The retaining root remains unknown. A Unicode
+undo/redo diagnostic reaches one ordinary macro-count failure, with recording
+still active and command additions observed across the shouldChange delegate
+call during replay. Recording policy and a safe correction remain under review.
+
+Synthetic materializer and report-decoder tests pass their corrected twelve-case
+baselines. Separately reviewed fault copies reach their intended assertions;
+these checks establish test discrimination, not native child/report provenance.
+The next native parent prerequisite is a separately reviewed, source-bound
+three-stage compiler preparation. No new native parent/child execution is claimed.
+
+Continue the focused undo and lifetime investigations, then complete matching
+native adapter acceptance before production factory, panel and quit integration.
+Editor search remains in-process. Distribution remains source `4841d89`; no new
+packaged desktop, regex containment, memory/performance, physical IME, VoiceOver
+or additional-platform acceptance follows. No user input or testing access is
+needed for the current authorized local work. Continue until explicitly stopped;
+remote pushes, merges and release publication remain unauthorized.
+
+# Earlier checkpoint: application search owner verified
 
 The internal application search owner and explicit closure source adapter now
 compile in the app target. `scripts/test-application-search-owner.sh` passes all
