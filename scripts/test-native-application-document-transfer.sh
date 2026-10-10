@@ -12,6 +12,7 @@ from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]);package=run/'Package'
 items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
+items += [(p,package/'Sources/SearchExecution'/p.name) for p in Path('Sources/SearchExecution').glob('*.swift')]
 items += [(p,package/'Sources/NativeRouting'/p.name) for p in Path('Sources/TheOnlyPad').glob('*.swift') if p.name!='TheOnlyPadApplication.swift']
 items += [(Path('Tests/NativeIntegration/NativeApplicationDocumentTransferTests.swift'),package/'Tests/NativeRoutingTests/NativeApplicationDocumentTransferTests.swift')]
 manifest=[]
@@ -24,7 +25,7 @@ if text.count(needle)!=1:raise SystemExit('Expected exactly one native transfer 
 owner.write_text(text.replace(needle,'native: interceptTransferNative(makeTransferNative()))')+'\n'+access.read_text())
 manifest.append({'source':str(access),'sha256':hashlib.sha256(access.read_bytes()).hexdigest()})
 (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
-(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"NativeRouting",dependencies:["PadCore"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')
+(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')
 PY
 python3 - "$run" <<'PY'
 from pathlib import Path

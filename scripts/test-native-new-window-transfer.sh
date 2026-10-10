@@ -12,6 +12,7 @@ from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]);package=run/'Package'
 items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
+items += [(p,package/'Sources/SearchExecution'/p.name) for p in Path('Sources/SearchExecution').glob('*.swift')]
 items += [(p,package/'Sources/NativeRouting'/p.name) for p in Path('Sources/TheOnlyPad').glob('*.swift') if p.name!='TheOnlyPadApplication.swift']
 items += [(Path('Tests/NativeIntegration/NativeNewWindowTransferTests.swift'),package/'Tests/NativeRoutingTests/NativeNewWindowTransferTests.swift')]
 manifest=[]
@@ -105,7 +106,7 @@ intake=package/'Sources/NativeRouting/NativeDocumentIntakeController.swift'
 intake.write_text(intake.read_text().replace('        try model.installRecoveryAdoption(receipt, expectedOwnershipGeneration: generation)', '        newWindowAdoptionCalls += 1\n        try model.installRecoveryAdoption(receipt, expectedOwnershipGeneration: generation)')+'\n@MainActor var newWindowAdoptionCalls = 0\n')
 (run/'frozen-sources.json').write_text(json.dumps([{'source':str(p.relative_to(package)), 'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(package.rglob('*.swift'))],indent=2)+'\n')
 (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
-(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"NativeRouting",dependencies:["PadCore"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')
+(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])\n')
 PY
 python3 - "$run" <<'PY'
 from pathlib import Path

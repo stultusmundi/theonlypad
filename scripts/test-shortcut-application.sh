@@ -18,14 +18,16 @@ python3 - "$run" <<'PY'
 from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]); package=run/'Package'
-core=package/'Sources/PadCore'; native=package/'Sources/ShortcutApplication'; tests=package/'Tests/ShortcutApplicationTests'
-for directory in [core,native,tests]: directory.mkdir(parents=True)
+core=package/'Sources/PadCore'; execution=package/'Sources/SearchExecution'; native=package/'Sources/ShortcutApplication'; tests=package/'Tests/ShortcutApplicationTests'
+for directory in [core,execution,native,tests]: directory.mkdir(parents=True)
 manifest=[]
 def freeze(source,destination):
     contents=source.read_bytes(); destination.write_bytes(contents)
     manifest.append({'source':source.as_posix(),'destination':str(destination.relative_to(package)),'sha256':hashlib.sha256(contents).hexdigest()})
 for source in sorted(Path('Sources/PadCore').glob('*.swift')):
     freeze(source,core/source.name)
+for source in sorted(Path('Sources/SearchExecution').glob('*.swift')):
+    freeze(source,execution/source.name)
 for source in sorted(Path('Sources/TheOnlyPad').glob('*.swift')):
     if source.name!='TheOnlyPadApplication.swift': freeze(source,native/source.name)
 for name,access,marker,private_marker in [
@@ -49,7 +51,8 @@ let package = Package(
   platforms: [.macOS(.v14)],
   targets: [
     .target(name: "PadCore"),
-    .target(name: "ShortcutApplication", dependencies: ["PadCore"]),
+    .target(name: "SearchExecution", dependencies: ["PadCore"]),
+    .target(name: "ShortcutApplication", dependencies: ["PadCore", "SearchExecution"]),
     .testTarget(name: "ShortcutApplicationTests", dependencies: ["ShortcutApplication", "PadCore"]),
   ],
   swiftLanguageModes: [.v5]
