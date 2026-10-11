@@ -1,4 +1,38 @@
-# Latest checkpoint: native prerequisites and diagnostic designs — 2026-10-11
+# Latest checkpoint: primitive storage and explicit-edit authority verified — 2026-10-11
+
+The private custom text storage passes fifteen native parity/observation tests
+and two separately selected sequence-exhaustion tests. Shared panes still use
+the same backing storage. Character and attribute writes publish their scalar
+completion before editing notifications; these results do not establish native
+edit provenance or a controller recording hook.
+
+The value-only explicit-edit context passes 41 ordinary tests and four separate
+ID boundary checks. Six deliberate guard-removal variants each fail their
+selected assertions after real positive prerequisites. Different evidence
+reviews and current Root checks accept this component scope. The variants are
+test-discrimination evidence, not additional passing tests or an editor fix.
+
+The next implementation joins the real controller, weak storage binding,
+postcommit recording, recording integrity and the explicit edit route. It must
+preserve accepted no-op accounting, invalidate recording state ABA, and retire
+bindings safely through document removal, transfer and retained window/model
+lifetimes. Native typing/undo/composition recording remains a separate integration
+stage; the original refused-insertion and undo failures remain unresolved.
+
+The pool-scoped close diagnostics pass their two separately selected cases while
+preserving the original failed immediate weak-reference assertions. This does
+not identify a retaining root or establish a production lifetime repair. The
+corrected controlled parent/getter prerequisites are accepted at their limited
+fixture scope; they do not establish application search routing.
+
+The application search owner remains inactive and editor search stays in-process.
+The latest full public package evidence is still 1,041 passing tests; distribution
+stays source `4841d89`. No new full suite, package, desktop, memory/performance,
+physical IME, VoiceOver or additional-platform acceptance is claimed. Continue
+authorized local implementation until explicitly stopped. Remote pushes, merges
+and releases remain unauthorized.
+
+# Earlier checkpoint: native prerequisites and diagnostic designs — 2026-10-11
 
 The application search owner remains inactive; editor search still runs in-process.
 The latest full public package evidence remains 1,041 passing tests. No new full
