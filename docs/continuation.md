@@ -1,4 +1,4 @@
-# Latest checkpoint: primitive storage and explicit-edit authority verified — 2026-10-11
+# Latest checkpoint: explicit-edit recording regressions verified — 2026-10-11
 
 The private custom text storage passes fifteen native parity/observation tests
 and two separately selected sequence-exhaustion tests. Shared panes still use
@@ -12,9 +12,20 @@ selected assertions after real positive prerequisites. Different evidence
 reviews and current Root checks accept this component scope. The variants are
 test-discrimination evidence, not additional passing tests or an editor fix.
 
-The next implementation joins the real controller, weak storage binding,
-postcommit recording, recording integrity and the explicit edit route. It must
-preserve accepted no-op accounting, invalidate recording state ABA, and retire
+Two actual controller tests reproduce a same-identity recording restart bug
+with fourteen expected refusal/state assertion failures. A separate real-storage
+pair passes the attribute-only control and reproduces one incomplete-recording
+snapshot failure after an unrecorded text write. These are verified regression
+baselines, with no unexpected failures or compiler warnings. The new controller
+adapter compiled without warnings and passed eight selected native tests: the
+recording-restart pair, completeness pair, three explicit-edit controls and one
+equal-content wrapper refusal. This establishes a focused regression repair in
+isolated source. Production adoption, Stop/Save callback coverage, native typing,
+undo/composition and broader lifecycle acceptance remain outstanding.
+
+The next stages complete the private controller adapter and adopt it in the
+application. They must preserve accepted no-op accounting, recording identity
+fences, postcommit recording and integrity checks, and retire
 bindings safely through document removal, transfer and retained window/model
 lifetimes. Native typing/undo/composition recording remains a separate integration
 stage; the original refused-insertion and undo failures remain unresolved.
