@@ -52,33 +52,49 @@ passes: retained cleanup preserves the original suspension and retry restores a
 fresh binding. Corrected asynchronous setup awaits genuine intake completion;
 both terminal tests now pass, including fresh bindings for the moved and existing
 destination documents. Three Start/token tests also pass, covering callback
-state fencing and genuine old/current transfer-token behavior. These transfer
-tests still need execution against the combined candidate.
+state fencing and genuine old/current transfer-token behavior. The same six tests
+now pass against the combined five-source candidate, in a separate run from its 39
+regressions. Binding exhaustion, partial installation, refused repair and new or
+replacement endpoint boundaries remain under test development.
 
 The refused-native-edit repair passes all eight original ghost-command accounting
 oracles while preserving the unchanged-document controls. A separate native-input
 probe reaches actual singular and plural permission returns before mutation. Its
 first editing notification exposes an attribute commit instead of the earlier
 character record, so seven strict character-slot assertions remain failed; they
-are unavailable diagnostic prerequisites, not recording acceptance. A bounded
-direct scalar journal is being implemented to observe the actual character
-commit without interpreting attribute metadata as character evidence.
+are unavailable diagnostic prerequisites, not recording acceptance. Two bounded
+direct scalar-journal tests now pass. They capture the actual character commit
+at sequence 11 independently of later attribute commits at sequences 12–14;
+the selected singular and plural permission returns occur at sequence 10. This
+establishes selected return-to-publication ordering, without proving every
+intervening callback safe or granting native recording authority.
 
 Six undo diagnostics pass. On the tested host, bare Foundation and the actual
 application undo manager both report `canUndo` after an empty explicit group;
 the rejected edit without a caller-created group leaves it false. Real sentinel
 registration/undo controls pass. This disproves the assumed empty-group flag
 contract, but does not retroactively pass the original failure or authorize a
-cosmetic history repair. A reviewed test-contract correction remains pending.
-These private candidates are not adopted in the application; native recording,
-the original chronology acceptance and current desktop acceptance remain outstanding.
+cosmetic history repair. The reviewed test correction removes only the caller-created
+empty group from the rejected-edit case and preserves every original assertion. That case and
+the six diagnostics pass together. Restoring the authentic eager recording
+code causes precisely the three ghost-command, count and replay assertions to
+fail, confirming the corrected test still detects the bug. The earlier failed
+run remains preserved.
+
+Actual bookmarked-edit diagnostics are being added for controller approval
+followed by final native refusal. They check pending bookmark, typing and
+composition state independently of observational undo flags; no repair is
+claimed before those tests run. These private candidates are not adopted in the
+application; native recording, the original chronology acceptance and current
+desktop acceptance remain outstanding.
 
 The next stages complete the private controller adapter and adopt it in the
 application. They must preserve accepted no-op accounting, recording identity
 fences, postcommit recording and integrity checks, and retire
 bindings safely through document removal, transfer and retained window/model
 lifetimes. Native typing/undo/composition recording remains a separate integration
-stage; the original refused-insertion and undo failures remain unresolved.
+stage; the private refused-insertion repair and corrected test contract do not
+establish complete native recording or a production undo-history repair.
 
 The pool-scoped close diagnostics pass their two separately selected cases while
 preserving the original failed immediate weak-reference assertions. This does
