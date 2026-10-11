@@ -148,3 +148,105 @@ final class ExtensionCatalogTests: XCTestCase {
     }
   }
 }
+
+// SPDX-License-Identifier: MIT
+// Synthetic input only; this regression never loads or executes binary code.
+extension ExtensionCatalogTests {
+  func testWindowsPluginBinaryFeedbackPreservesCatalogAfterEachRefusal() throws {
+    let (catalog, file) = try fixture()
+    let installed = try catalog.install(from: file)
+    try catalog.setEnabled(id: installed.id, enabled: true)
+    let state = catalog.directory.appendingPathComponent("Catalog.json")
+    let before = try Data(contentsOf: state)
+    let entries = try catalog.load()
+    let commands = try catalog.enabledCommands()
+    for name in ["synthetic.dll", "synthetic.DLL", "renamed.json"] {
+      let binary = file.deletingLastPathComponent().appendingPathComponent(name)
+      try Data([0x4d, 0x5a, 0, 1, 2, 3]).write(to: binary)
+      for inspectOnly in [true, false] {
+        XCTAssertThrowsError(
+          try {
+            if inspectOnly {
+              _ = try catalog.inspect(url: binary)
+            } else {
+              _ = try catalog.install(from: binary)
+            }
+          }()
+        ) { error in
+          XCTAssertTrue(error is ExtensionCatalogError)
+          XCTAssertTrue(
+            error.localizedDescription.contains("Windows Notepad++"),
+            "Rejected binary should explain the Windows plugin incompatibility")
+          XCTAssertTrue(
+            error.localizedDescription.contains("JSON"),
+            "Rejected binary should identify the accepted manifest format")
+        }
+        XCTAssertEqual(try Data(contentsOf: state), before)
+        XCTAssertEqual(try catalog.load(), entries)
+        XCTAssertEqual(try catalog.enabledCommands(), commands)
+      }
+    }
+  }
+
+  func testDeclarativeJSONWithDLLFilenameRetainsPublicAPICompatibility() throws {
+    let (catalog, file) = try fixture()
+    let manifest = try catalog.inspect(url: file)
+    let renamed = file.deletingLastPathComponent().appendingPathComponent("declarative.dll")
+    try Data(contentsOf: file).write(to: renamed)
+    XCTAssertEqual(try catalog.inspect(url: renamed), manifest)
+    let installed = try catalog.install(from: renamed)
+    XCTAssertEqual(installed.manifest, manifest)
+    XCTAssertFalse(installed.enabled)
+  }
+
+  func testTruncatedSignatureAndCorruptJSONKeepInvalidManifestRefusal() throws {
+    let (catalog, file) = try fixture()
+    for bytes in [Data([0x4d]), Data("not JSON".utf8)] {
+      try bytes.write(to: file)
+      XCTAssertThrowsError(try catalog.inspect(url: file)) { error in
+        guard let failure = error as? ExtensionCatalogError else {
+          XCTFail("Expected catalog error")
+          return
+        }
+        guard case .invalidManifest = failure else {
+          XCTFail("Incomplete signature and corrupt JSON must remain invalid manifests")
+          return
+        }
+      }
+      XCTAssertFalse(FileManager.default.fileExists(atPath: catalog.directory.path))
+    }
+  }
+
+  func testBinaryFeedbackPreservesSymlinkAndManifestLimitPriority() throws {
+    let (catalog, file) = try fixture()
+    let installed = try catalog.install(from: file)
+    try catalog.setEnabled(id: installed.id, enabled: true)
+    let state = catalog.directory.appendingPathComponent("Catalog.json")
+    let before = try Data(contentsOf: state)
+    let commands = try catalog.enabledCommands()
+    let binary = file.deletingLastPathComponent().appendingPathComponent("target.dll")
+    try Data([0x4d, 0x5a]).write(to: binary)
+    let link = file.deletingLastPathComponent().appendingPathComponent("symlink.dll")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: binary)
+    XCTAssertThrowsError(try catalog.install(from: link)) { error in
+      guard let failure = error as? ExtensionCatalogError, case .unsafeLocation = failure else {
+        XCTFail("Symlink safety must precede binary classification")
+        return
+      }
+    }
+    XCTAssertEqual(try Data(contentsOf: state), before)
+    XCTAssertEqual(try catalog.enabledCommands(), commands)
+    var oversized = Data(repeating: 32, count: 65_537)
+    oversized[0] = 0x4d
+    oversized[1] = 0x5a
+    try oversized.write(to: binary)
+    XCTAssertThrowsError(try catalog.install(from: binary)) { error in
+      guard let failure = error as? ExtensionCatalogError, case .limit = failure else {
+        XCTFail("Manifest limit must precede binary classification")
+        return
+      }
+    }
+    XCTAssertEqual(try Data(contentsOf: state), before)
+    XCTAssertEqual(try catalog.enabledCommands(), commands)
+  }
+}

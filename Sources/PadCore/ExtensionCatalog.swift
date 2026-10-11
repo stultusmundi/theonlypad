@@ -44,13 +44,19 @@ public struct EnabledExtensionCommand: Equatable, Sendable, Identifiable {
   public let transform: LineTransform
 }
 public enum ExtensionCatalogError: Error, LocalizedError {
-  case invalidManifest, invalidCatalog, incompatibleVersion, unsupportedCapability, duplicate,
+  case invalidManifest, invalidCatalog, incompatibleVersion, unsupportedCapability,
+    unsupportedBinary, duplicate,
     missing, unsafeLocation, limit
   public var errorDescription: String? {
     switch self {
     case .invalidManifest:
       return
         "The extension manifest is invalid or contains unsupported fields. No extension was installed."
+    case .unsupportedBinary:
+      return String(
+        localized:
+          "Executable plugin binaries, including Windows Notepad++ plugins, cannot be installed. TheOnlyPad accepts declarative JSON extension manifests."
+      )
     case .invalidCatalog:
       return "The installed extension catalog is invalid. Existing data was left unchanged."
     case .incompatibleVersion: return "This extension API or catalog version is not supported."
@@ -91,6 +97,10 @@ public struct ExtensionCatalog: Sendable {
       let data = try read(
         url, maximum: Self.manifestLimit, privateFile: false, missingAllowed: false)
     else { throw ExtensionCatalogError.invalidManifest }
+    // This prefix only selects an actionable diagnostic; it does not validate executable files.
+    if data.starts(with: [UInt8(0x4d), UInt8(0x5a)]) {
+      throw ExtensionCatalogError.unsupportedBinary
+    }
     let object: Any
     do { object = try JSONSerialization.jsonObject(with: data) } catch {
       throw ExtensionCatalogError.invalidManifest

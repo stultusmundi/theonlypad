@@ -1,3 +1,9 @@
+## Active extension checkpoint — 2026-10-11
+
+Work continues under the latest explicit user instruction. Windows plugin rejection now gives actionable JSON/compatibility feedback after the unchanged secure read, with guidance in the native manager. The formatted integrated public app builds and passes 1045 tests; the unchanged hidden native extension workflow also passes. See [verification](verification/windows-plugin-feedback.md). Visible chooser/error and packaged acceptance remain outstanding.
+
+The private controlled String typing candidate passes two real native forward/inactive-Unicode controls. Its genuine attribute-callback regression and five additional refusal/quota/undo-history controls are still being verified before adoption. No private macro/search source is included in the extension checkpoint. Continue implementation and verification; do not treat this checkpoint as task completion or a pause.
+
 # Latest checkpoint: combined recording regressions verified — 2026-10-11
 
 The private custom text storage passes fifteen native parity/observation tests

@@ -117,7 +117,9 @@ final class ExtensionManagerController: NSWindowController, NSTableViewDataSourc
             "Capability: text.transform. Commands edit document text only when you run them.")
     } else {
       details.stringValue = String(
-        localized: "Install a declarative extension manifest to add text-transformation commands.")
+        localized:
+          "Install a declarative JSON extension manifest to add text-transformation commands. Windows Notepad++ plugin binaries are not supported."
+      )
     }
     updateControls()
   }
@@ -189,6 +191,10 @@ final class ExtensionManagerController: NSWindowController, NSTableViewDataSourc
     guard !busy, let window else { return }
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.json]
+    panel.message = String(
+      localized:
+        "Choose a declarative JSON extension manifest. Windows Notepad++ plugin binaries are not supported."
+    )
     panel.allowsMultipleSelection = false
     panel.canChooseDirectories = false
     panel.beginSheetModal(for: window) { [weak self] response in

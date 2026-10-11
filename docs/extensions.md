@@ -1,6 +1,6 @@
 # Declarative local extensions
 
-The current extension API accepts local JSON manifests defining named commands backed by the existing `LineTransform` operations. It does not load executable plugin code and is not compatible with Windows Notepad++ plugin binaries.
+The current extension API accepts local JSON manifests defining named commands backed by the existing `LineTransform` operations. It does not load executable plugin code and is not compatible with Windows Notepad++ plugin binaries. MZ-prefixed input receives a specific incompatibility message after the normal safe file read. This prefix is a diagnostic hint, not executable-file validation; other non-JSON data is also rejected.
 
 Each manifest requires exactly `apiVersion`, `id`, `name`, `version`, `capabilities`, and `commands`. API version is `1`; `version` is a three-part numeric version such as `1.0.0`. IDs use lowercase ASCII letters/numbers with dot or hyphen separators. The only accepted capability list is `["text.transform"]`. Each command requires a unique local `id`, `title`, and `transform`. Supported transformations are `sorted`, `deduplicated`, `trimTrailingWhitespace`, `uppercase`, `lowercase`, `indent`, and `outdent`.
 
