@@ -26,6 +26,14 @@ It uses a fixed Cancel response at the Save-dialog boundary, so real dialog and
 persistence acceptance remain separate. Production adoption, native typing,
 undo/composition and broader lifecycle acceptance remain outstanding.
 
+The inherited storage-processing boundary now has a verified private repair.
+Four real native cases reproduced 39 missing-barrier assertions before the
+change and pass afterward. A broader run passes 28 selected tests covering
+processing, explicit recording, the Stop boundary and storage parity. These
+results preserve the existing backing and notification checks; they do not
+establish native edit provenance or repair the original undo failure. The
+persistent incomplete-recording notice is still under development.
+
 The next stages complete the private controller adapter and adopt it in the
 application. They must preserve accepted no-op accounting, recording identity
 fences, postcommit recording and integrity checks, and retire
