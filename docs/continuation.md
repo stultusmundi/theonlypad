@@ -1,4 +1,4 @@
-# Latest checkpoint: native diagnostic failures reviewed — 2026-10-11
+# Latest checkpoint: native prerequisites and diagnostic designs — 2026-10-11
 
 The application search owner remains inactive; editor search still runs in-process.
 The latest full public package evidence remains 1,041 passing tests. No new full
@@ -14,8 +14,12 @@ one-expression annotation correction; the decoder and original tests remain
 unchanged. The fixed materializer now has a reviewed five-site correction. Its
 unchanged focused tests pass all five cases; restoring the old generation causes three
 relevant failures and restoring the old namespace causes two. Independent review
-accepts this focused evidence. Fresh native preparation must retain the verified
-inner-command receipt check; no corrected native GREEN is claimed.
+accepts this focused evidence. Fresh preparation passed three actual compiler/link
+stages without warnings and retained the verified inner-command receipt check.
+Binding generation then refused before writing outputs. The published artifact
+manifest used absolute paths where the consumer requires fixed relative paths;
+the refusal and original manifests are preserved. A fresh generation needs that
+input contract corrected and reviewed. No corrected native GREEN is claimed.
 
 Both managed-close diagnostic arms failed the controller/window weak-reference
 assertions. The retained-source arm reached five stale adapter refusals without
@@ -24,7 +28,13 @@ The revised passive Endpoint probe completed one native test with the same two
 controller/window failures and reported the wrapper absent at its observation.
 Independent review accepts that bounded failure evidence; the retaining root
 remains unknown. The earlier copy-only SDK-alias refusal is preserved. A bounded
-retention diagnostic is being designed; no lifetime fix is adopted.
+diagnostic now has reviewed test source that moves explicit native borrows into
+synchronous helper scopes while preserving the real asynchronous close and all
+four immediate weak-reference assertions. That new case compiled without warnings
+and completed with the same controller/window failures and absent Endpoint probe;
+independent review accepts this failure evidence. The named explicit fixture borrows are
+not necessary for this fresh reproduction. The retaining root remains unknown,
+and no lifetime fix is adopted.
 
 The seven-case macro chronology run passed six methods and failed the refused
 insertion case: it recorded an edit that never changed the document. The revised
@@ -32,7 +42,11 @@ four-case diagnostic removes the caret setup failures: three controls pass while
 the active-recording case retains four ordinary failures, including replay of
 text that was never inserted. Independent evidence review accepts that failure
 result. Committed-edit recording design must preserve existing callback and undo
-admission protections. No macro fix is adopted; earlier failed runs are retained.
+admission protections. The revised design has scoped review approval for scalar
+text-storage observations and explicit recording integrity/save transitions.
+The next step is storage behavior tests and a Swift 5 subclass compatibility
+check, followed by implementation. No macro fix is adopted; earlier failed runs
+and the independent undo assertion are retained.
 
 Continue those local regression, diagnostic and implementation stages, then finish
 native acceptance, production search routing and the broader requirements matrix.
