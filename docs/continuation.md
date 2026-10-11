@@ -81,11 +81,14 @@ code causes precisely the three ghost-command, count and replay assertions to
 fail, confirming the corrected test still detects the bug. The earlier failed
 run remains preserved.
 
-Actual bookmarked-edit diagnostics are being added for controller approval
-followed by final native refusal. They check pending bookmark, typing and
-composition state independently of observational undo flags; no repair is
-claimed before those tests run. These private candidates are not adopted in the
-application; native recording, the original chronology acceptance and current
+The three actual bookmarked-edit diagnostics now reproduce a separate
+bookkeeping bug. The empty-group control passes; ordinary typing and explicit
+replacement both reach controller approval followed by final native refusal,
+with eleven pending-bookmark and typing-state equality failures. Text, primitive
+sequence, revision, ownership, recorder and composition state remain unchanged.
+The undo flags and metadata generation are separate observations. A value-only
+proposal and final-decision repair is under design; no bookkeeping fix is claimed.
+These private candidates are not adopted in the application; native recording, the original chronology acceptance and current
 desktop acceptance remain outstanding.
 
 The next stages complete the private controller adapter and adopt it in the
