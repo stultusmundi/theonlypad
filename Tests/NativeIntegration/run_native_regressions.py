@@ -72,8 +72,9 @@ def discover(root,suite,prebuilt):
             for name in ('PadCoreTests','SearchExecutionTests'):
                 paths.update((root/'Tests'/name).glob('*.swift'))
     else:
-        paths.update(root/'Sources/TheOnlyPad'/(name+'.swift') for name in CLOSE_SOURCES)
+        paths.update((root/'Sources/TheOnlyPad').glob('*.swift'))
         paths.update((root/'Sources/PadCore').glob('*.swift'))
+        paths.update((root/'Sources/SearchExecution').glob('*.swift'))
     optional=root/'Sources/TheOnlyPad/DocumentAppliedSettings.swift'
     if optional.exists() or optional.is_symlink(): paths.add(optional)
     names=CLOSE_HARNESSES if suite=='close' else (SUITES[suite][0],)
@@ -252,9 +253,14 @@ def freeze(root,run,suite,prebuilt=False):
                  'Tests/NativeIntegration/'+name)
         generate('Package/Package.swift',PACKAGE.encode())
     else:
-        for name in (*CLOSE_SOURCES,'DocumentAppliedSettings'):
-            path=run/'Original/Sources/TheOnlyPad'/(name+'.swift')
-            if path.exists(): generate('NativeSources/'+path.name,path.read_bytes(),'Sources/TheOnlyPad/'+path.name)
+        # Custom storage has an authentic controller owner. Compile the captured
+        # native dependency graph, excluding only the application's entry point.
+        for item in items:
+            name=item['source']
+            if name.startswith('Sources/TheOnlyPad/') and name.endswith('.swift'):
+                path=run/item['frozen']
+                if path.name!='TheOnlyPadApplication.swift':
+                    generate('NativeSources/'+path.name,path.read_bytes(),name)
         if not prebuilt:
             for item in items:
                 name=item['source']
@@ -297,24 +303,90 @@ def manifest_inputs(run,manifest,prefix,suffix):
     return sorted(run/item['frozen'] for item in manifest['sources']+manifest['generated']
                   if item['frozen'].startswith(prefix) and item['frozen'].endswith(suffix))
 
+def build_package_identity(binary, run, core_objects, search_objects):
+    """Bind the compiler package operand to the captured module/object selection."""
+    description = binary / 'description.json'
+    if not description.is_file():
+        raise ValueError('package consumers require compiler description')
+    raw = read_real(binary, description)
+    if len(raw) > 4 * 1024 * 1024:
+        raise ValueError('compiler description exceeds bound')
+    commands = json.loads(raw).get('swiftCommands')
+    if not isinstance(commands, dict):
+        raise ValueError('missing compiler command groups')
+    package_names = []
+    for module, objects in (('PadCore', core_objects), ('SearchExecution', search_objects)):
+        groups = [value for value in commands.values()
+                  if isinstance(value, dict) and value.get('moduleName') == module]
+        if len(groups) != 1:
+            raise ValueError('ambiguous compiler module group')
+        group = groups[0]
+        arguments = group.get('otherArguments')
+        if not isinstance(arguments, list) or arguments.count('-package-name') != 1:
+            raise ValueError('missing or duplicate compiler package operand')
+        index = arguments.index('-package-name') + 1
+        value = arguments[index] if index < len(arguments) else None
+        if not isinstance(value, str) or re.fullmatch(r'[A-Za-z0-9_]{1,128}', value) is None:
+            raise ValueError('invalid compiler package operand')
+        package_names.append(value)
+        if group.get('moduleOutputPath') != str(binary / 'Modules' / (module + '.swiftmodule')):
+            raise ValueError('compiler module output differs from captured artifact')
+        declared = group.get('objects')
+        if not isinstance(declared, list) or any(not isinstance(x, str) for x in declared):
+            raise ValueError('invalid compiler object roster')
+        if len(set(declared)) != len(declared) or sorted(declared) != sorted(map(str, objects)):
+            raise ValueError('compiler object roster differs from captured artifacts')
+        sources = group.get('sources')
+        if not isinstance(sources, list) or any(not isinstance(x, str) or not Path(x).is_absolute() for x in sources):
+            raise ValueError('invalid compiler source roster')
+        if len(set(sources)) != len(sources) or sorted(Path(x).name + '.o' for x in sources) != sorted(x.name for x in objects):
+            raise ValueError('compiler source/object pairing differs')
+        # Real coordinator captures actual source bytes separately. Pure artifact
+        # fixtures lack that manifest and do not claim compiler provenance.
+        original = run / 'Original/Sources' / module
+        if original.is_dir():
+            if sorted(x.name for x in original.glob('*.swift')) != sorted(Path(x).name for x in sources):
+                raise ValueError('compiler source roster differs from frozen sources')
+            for source in sources:
+                source = Path(source)
+                if read_real(source.parent, source) != read_real(original, original / source.name):
+                    raise ValueError('compiler source bytes differ from frozen sources')
+    if package_names[0] != package_names[1]:
+        raise ValueError('compiler modules have different package identities')
+    return package_names[0], raw
+
 def freeze_core(binary,run):
     binary=Path(binary).resolve()
-    objects=sorted((binary/'PadCore.build').glob('*.o'))
-    modules=sorted((binary/'Modules').glob('PadCore.*'))
+    core_objects=sorted((binary/'PadCore.build').glob('*.o'))
+    search_objects=sorted((binary/'SearchExecution.build').glob('*.o'))
+    core_modules=sorted((binary/'Modules').glob('PadCore.*'))
+    search_modules=sorted((binary/'Modules').glob('SearchExecution.*'))
+    objects=[*core_objects,*search_objects]
+    modules=[*core_modules,*search_modules]
     paths=[*objects,*modules]
-    if not objects or not (binary/'Modules/PadCore.swiftmodule').is_file():
+    if not core_objects or not (binary/'Modules/PadCore.swiftmodule').is_file():
         raise ValueError('verified debug build must contain PadCore objects and module')
+    if search_objects or search_modules:
+        if not search_objects or not (binary/'Modules/SearchExecution.swiftmodule').is_file():
+            raise ValueError('SearchExecution artifacts require both objects and module')
+    package_name, description_bytes = build_package_identity(binary, run, core_objects, search_objects) if search_objects else (None, None)
+    if package_name is not None:
+        paths.append(binary / 'description.json')
     items=[]
     for path in paths:
         relative=path.relative_to(binary);target=run/'Core'/relative
-        target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(read_real(binary,path))
+        target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_bytes(description_bytes if path == binary / 'description.json' else read_real(binary,path))
         items.append(dict(source=relative.as_posix(),frozen=target.relative_to(run).as_posix(),sha256=digest(target)))
-    if objects!=sorted((binary/'PadCore.build').glob('*.o')) or modules!=sorted((binary/'Modules').glob('PadCore.*')):
+    if (core_objects!=sorted((binary/'PadCore.build').glob('*.o'))
+        or search_objects!=sorted((binary/'SearchExecution.build').glob('*.o'))
+        or core_modules!=sorted((binary/'Modules').glob('PadCore.*'))
+        or search_modules!=sorted((binary/'Modules').glob('SearchExecution.*'))):
         raise ValueError('build outputs changed during capture')
     for item in items:
         if hashlib.sha256(read_real(binary,binary/item['source'])).hexdigest()!=item['sha256']:
             raise ValueError('build output bytes changed during capture')
-    manifest=dict(version=1,sourceDirectory=str(binary),sources=items,generated=[],inputTrees=['Core'])
+    manifest=dict(version=1,sourceDirectory=str(binary),sources=items,generated=[],inputTrees=['Core'],packageName=package_name)
     (run/'build-inputs.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -426,12 +498,17 @@ def execute(run,args,watchdog_main):
             core=freeze_core(binary,run);core_hash=digest(run/'build-inputs.json');result['buildManifestSHA256']=core_hash
             native_sources=manifest_inputs(run,manifest,'NativeSources/','.swift')
             core_objects=manifest_inputs(run,core,'Core/PadCore.build/','.o')
+            search_objects=manifest_inputs(run,core,'Core/SearchExecution.build/','.o')
+            if any(b'import SearchExecution' in path.read_bytes() for path in native_sources):
+                if not search_objects or not (run/'Core/Modules/SearchExecution.swiftmodule').is_file():
+                    raise ValueError('native SearchExecution consumer requires captured objects and module')
             for name in CLOSE_HARNESSES:
-                command=['/usr/bin/xcrun','swiftc','-swift-version','5','-target',platform.machine()+'-apple-macosx14.0',
+                package_arguments = ['-package-name', core['packageName']] if core['packageName'] is not None else []
+                command=['/usr/bin/xcrun','swiftc','-swift-version','5',*package_arguments,'-target',platform.machine()+'-apple-macosx14.0',
                     '-module-cache-path',run/'cache','-parse-as-library','-I',run/'Core/Modules',
                     *native_sources,
                     run/'Original/Tests/NativeIntegration'/(name+'.swift'),
-                    *core_objects,'-o',run/name]
+                    *core_objects,*search_objects,'-o',run/name]
                 stage(name+'.compile',command,120)
                 binary_hash=digest(run/name)
                 result.setdefault('binaryHashes',{})[name]=binary_hash

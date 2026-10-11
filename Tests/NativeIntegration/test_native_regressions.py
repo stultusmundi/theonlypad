@@ -582,4 +582,109 @@ suffix
         (run/'Core/Modules/Unrecorded.swiftmodule').write_bytes(b'extra module')
         with self.assertRaises(ValueError): RUNNER.verify(run,core)
 
+    def test_close_freezes_actual_custom_storage_and_owner_dependencies(self):
+        root, run = self.fixture('close', prebuilt=True)
+        storage = root / 'Sources/TheOnlyPad/DocumentCommitTextStorage.swift'
+        controller = root / 'Sources/TheOnlyPad/EditorWindowController.swift'
+        storage.write_text('import AppKit\n// synthetic custom storage owner dependency\n')
+        controller.write_text('import SearchExecution\n// synthetic authentic controller dependency\n')
+        (root / 'Sources/TheOnlyPad/EditorDocument.swift').write_text('// synthetic model uses custom storage\n')
+        manifest = RUNNER.freeze(root, run, 'close', True)
+        for original in (storage, controller):
+            frozen = run / 'NativeSources' / original.name
+            self.assertTrue(frozen.is_file(), 'Native close must include the actual model dependency graph')
+            self.assertEqual(frozen.read_bytes(), original.read_bytes())
+        RUNNER.verify(run, manifest)
+        (run / 'NativeSources' / storage.name).write_text('// substitution')
+        with self.assertRaises(ValueError):
+            RUNNER.verify(run, manifest)
+
+    def test_close_captures_actual_search_objects_and_module_companions(self):
+        binary = Path(self.temp.name) / 'debug'
+        (binary / 'PadCore.build').mkdir(parents=True)
+        (binary / 'SearchExecution.build').mkdir()
+        (binary / 'Modules').mkdir()
+        (binary / 'PadCore.build/Core.swift.o').write_bytes(b'synthetic core object')
+        (binary / 'Modules/PadCore.swiftmodule').write_bytes(b'synthetic core module')
+        objects = binary / 'SearchExecution.build/Child.swift.o'
+        module = binary / 'Modules/SearchExecution.swiftmodule'
+        companion = binary / 'Modules/SearchExecution.swiftdoc'
+        objects.write_bytes(b'synthetic actual search object')
+        module.write_bytes(b'synthetic search module')
+        companion.write_bytes(b'synthetic module companion')
+        description = {'swiftCommands': {}}
+        for name, filename in (('PadCore', 'Core.swift'), ('SearchExecution', 'Child.swift')):
+            description['swiftCommands'][name] = dict(moduleName=name,
+                moduleOutputPath=str((binary / 'Modules' / (name + '.swiftmodule')).resolve()),
+                objects=[str((binary / (name + '.build') / (filename + '.o')).resolve())],
+                sources=[str(binary / 'SyntheticSources' / name / filename)],
+                otherArguments=['-package-name', 'synthetic_native_package'])
+        (binary / 'description.json').write_text(json.dumps(description))
+        run = Path(self.temp.name) / 'capture'
+        run.mkdir()
+        manifest = RUNNER.freeze_core(binary, run)
+        for original in (objects, module, companion):
+            frozen = run / 'Core' / original.relative_to(binary)
+            self.assertTrue(frozen.is_file(), 'Native controller import requires actual captured search artifacts')
+            self.assertEqual(frozen.read_bytes(), original.read_bytes())
+        RUNNER.verify(run, manifest)
+        (run / 'Core' / objects.relative_to(binary)).write_bytes(b'substitution')
+        with self.assertRaises(ValueError):
+            RUNNER.verify(run, manifest)
+
+    def package_identity_fixture(self, binary):
+        binary = binary.resolve()
+        (binary / 'PadCore.build').mkdir(parents=True)
+        (binary / 'SearchExecution.build').mkdir()
+        (binary / 'Modules').mkdir()
+        commands = {}
+        for module in ('PadCore', 'SearchExecution'):
+            source = binary / 'SyntheticSources' / module / 'One.swift'
+            source.parent.mkdir(parents=True)
+            source.write_text('// synthetic source\n')
+            obj = binary / (module + '.build') / 'One.swift.o'
+            obj.write_bytes(b'synthetic object')
+            output = binary / 'Modules' / (module + '.swiftmodule')
+            output.write_bytes(b'synthetic module')
+            commands[module] = dict(moduleName=module, moduleOutputPath=str(output),
+                sources=[str(source)], objects=[str(obj)],
+                otherArguments=['-swift-version', '5', '-package-name', 'synthetic_native_package'])
+        description = dict(swiftCommands=commands)
+        (binary / 'description.json').write_text(json.dumps(description))
+        return description
+
+    def test_close_captures_matching_package_identity_and_description(self):
+        binary = Path(self.temp.name) / 'identity-debug'
+        self.package_identity_fixture(binary)
+        run = Path(self.temp.name) / 'identity-run'
+        run.mkdir()
+        manifest = RUNNER.freeze_core(binary, run)
+        self.assertEqual(manifest.get('packageName'), 'synthetic_native_package',
+            'Native package consumers require the actual matching compiler package identity')
+        captured = run / 'Core/description.json'
+        self.assertTrue(captured.is_file(), 'Compiler package provenance must be captured')
+        self.assertEqual(captured.read_bytes(), (binary / 'description.json').read_bytes())
+        captured.write_bytes(b'{}')
+        with self.assertRaises(ValueError):
+            RUNNER.verify(run, manifest)
+
+    def test_close_refuses_mismatched_or_ambiguous_package_identity(self):
+        mutations = ('mismatch', 'missing', 'duplicate', 'duplicateGroup', 'objectMismatch', 'moduleMismatch')
+        for kind in mutations:
+            with self.subTest(kind=kind):
+                binary = Path(self.temp.name) / ('bad-' + kind)
+                description = self.package_identity_fixture(binary)
+                search = description['swiftCommands']['SearchExecution']
+                if kind == 'mismatch': search['otherArguments'][-1] = 'different_package'
+                elif kind == 'missing': search['otherArguments'] = ['-swift-version', '5']
+                elif kind == 'duplicate': search['otherArguments'] += ['-package-name', 'synthetic_native_package']
+                elif kind == 'duplicateGroup': description['swiftCommands']['duplicate'] = dict(search)
+                elif kind == 'objectMismatch': search['objects'] = [str(binary / 'SearchExecution.build/Wrong.swift.o')]
+                elif kind == 'moduleMismatch': search['moduleOutputPath'] = str(binary / 'Modules/Unrelated.swiftmodule')
+                (binary / 'description.json').write_text(json.dumps(description))
+                run = Path(self.temp.name) / ('run-' + kind)
+                run.mkdir()
+                with self.assertRaises(ValueError, msg='Package identity ambiguity must refuse before native compile'):
+                    RUNNER.freeze_core(binary, run)
+
 if __name__=='__main__': unittest.main()

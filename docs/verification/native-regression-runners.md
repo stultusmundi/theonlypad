@@ -55,3 +55,13 @@ These eleven invocations executed 233 tests with no failures, unexpected failure
 The managed runner and nine standalone runners retain their existing process ownership and narrow `exit: 0, timedOut: false` receipts. They do not provide the shared coordinator's strict cleanup evidence. The shortcut runner uses the unchanged direct owned-process watchdog and retains separate toolchain and test wait/capture receipts. Do not add a second session-owning watchdog around these commands.
 
 This checkpoint verifies compatibility of the dependency repair. The new native search factory's separate failing diagnostics, production supervised-search routing, current packaged desktop acceptance, and memory/performance acceptance remain outstanding.
+
+## Complete source graph and package identity, 2026-10-11
+
+The shared coordinator now freezes the complete native application graph, excluding its executable entry point, and copies both PadCore and SearchExecution objects and module companions for direct harness compilation. When using an existing build, it reads the captured SwiftPM description once and derives the shared package identity from the actual compiler groups. Direct native compilation receives that identity so package-scoped SearchExecution types remain accessible. Bounded metadata, matching source rosters and source-byte checks reject incompatible or substituted builds; artifact hashes alone remain insufficient provenance.
+
+The adopted coordinator passes all 46 pure contracts using the command above. Four additive cases cover complete dependency freezing and package identity; original controls remain intact. The positive metadata fixtures use canonical temporary paths. These pure cases inject compiler/watchdog receipts and do not execute native harnesses.
+
+A separately frozen candidate application completed seven actual coordinator stages: 106 close-model checks, 198 factory checks and one shared-pane ownership scenario, all without failures. Each stage had complete owned-process receipts and verified source, object, module and binary bindings. The earlier missing-package compiler failure is retained as a harness prerequisite failure, with no native test credit. This candidate evidence verifies the repaired coordinator; its unadopted application changes and current public native acceptance remain separate. Direct native compiler invocations had no warnings, but did not use a warnings-as-errors flag.
+
+No watchdog nesting, package-access widening or test suppression was introduced. Standalone runner compatibility, visible desktop, physical input and performance acceptance remain separate work.
