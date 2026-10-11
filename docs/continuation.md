@@ -32,7 +32,24 @@ change and pass afterward. A broader run passes 28 selected tests covering
 processing, explicit recording, the Stop boundary and storage parity. These
 results preserve the existing backing and notification checks; they do not
 establish native edit provenance or repair the original undo failure. The
-persistent incomplete-recording notice is still under development.
+persistent incomplete-recording notice now passes four hidden native tests after
+a baseline with seven missing-row assertions. The tests cover actual label text,
+accessibility metadata, visibility, repeated refresh, deliberate discard and
+callback-created intervals. A source-review layout finding was corrected before
+execution. The combined run passes 32 selected native tests. A separate real
+visibility-setter reentry test exposes one stale-display failure after Discard;
+recorder state remains correct and a later status update restores the display.
+Its immediate display repair, visible UI and VoiceOver acceptance remain pending.
+
+A first actual transfer test now verifies that recording bindings are retired
+before checkpoint pause acquisition. The transfer failure-and-retry case also
+passes: retained cleanup preserves the original suspension and retry restores a
+fresh binding. The existing-destination-document case stopped during asynchronous
+setup and is being corrected; it does not establish destination repair. A separate
+refused-native-edit test reaches eight ghost-command accounting failures while
+the document remains unchanged. These private candidates are not adopted in the
+application; native recording, the original undo failure and current desktop
+acceptance remain outstanding.
 
 The next stages complete the private controller adapter and adopt it in the
 application. They must preserve accepted no-op accounting, recording identity
