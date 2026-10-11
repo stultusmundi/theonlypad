@@ -55,7 +55,11 @@ destination documents. Three Start/token tests also pass, covering callback
 state fencing and genuine old/current transfer-token behavior. The same six tests
 now pass against the combined five-source candidate, in a separate run from its 39
 regressions. Binding exhaustion, partial installation, refused repair and new or
-replacement endpoint boundaries remain under test development.
+replacement endpoint boundaries now have five independently reviewed test cases.
+Their first build stopped at a throwing test callback where the real application
+contract requires a nonthrowing callback. No cases ran. The reviewed test
+correction is now prepared for fresh runs; the original failed build and four
+unexecuted preparations remain preserved.
 
 The refused-native-edit repair passes all eight original ghost-command accounting
 oracles while preserving the unchanged-document controls. A separate native-input
@@ -86,8 +90,19 @@ bookkeeping bug. The empty-group control passes; ordinary typing and explicit
 replacement both reach controller approval followed by final native refusal,
 with eleven pending-bookmark and typing-state equality failures. Text, primitive
 sequence, revision, ownership, recorder and composition state remain unchanged.
-The undo flags and metadata generation are separate observations. A value-only
-proposal and final-decision repair is under design; no bookkeeping fix is claimed.
+The undo flags and metadata generation are separate observations. The private
+value-only proposal and final-decision candidate now passes those same three
+tests. Independent review accepts this refused-edit regression scope. Successful
+edit, bookmark undo, prior history, no-op and typing-run controls are being added
+before integration; the three passes do not establish those behaviors.
+
+Two passive callback-census tests also pass. The selected successful insertion
+observes its final permission return immediately followed by character backing
+entry, with no monitored callback in that interval. This qualifies no additional
+injection surface and does not prove universal callback absence or native edit
+authority. A separate compatibility experiment will exercise the existing
+controlled edit helper's actual undo, redo, selection and permission behavior
+before any plain-typing dispatch change.
 These private candidates are not adopted in the application; native recording, the original chronology acceptance and current
 desktop acceptance remain outstanding.
 
