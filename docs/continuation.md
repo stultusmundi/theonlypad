@@ -20,7 +20,10 @@ baselines, with no unexpected failures or compiler warnings. The new controller
 adapter compiled without warnings and passed eight selected native tests: the
 recording-restart pair, completeness pair, three explicit-edit controls and one
 equal-content wrapper refusal. This establishes a focused regression repair in
-isolated source. Production adoption, Stop/Save callback coverage, native typing,
+isolated source. A separate Stop/Save regression fails before the correction and
+passes afterward: an old Stop cannot adopt a callback-created stopped successor.
+It uses a fixed Cancel response at the Save-dialog boundary, so real dialog and
+persistence acceptance remain separate. Production adoption, native typing,
 undo/composition and broader lifecycle acceptance remain outstanding.
 
 The next stages complete the private controller adapter and adopt it in the
