@@ -1,4 +1,4 @@
-# Latest checkpoint: explicit-edit recording regressions verified — 2026-10-11
+# Latest checkpoint: combined recording regressions verified — 2026-10-11
 
 The private custom text storage passes fifteen native parity/observation tests
 and two separately selected sequence-exhaustion tests. Shared panes still use
@@ -39,17 +39,39 @@ callback-created intervals. A source-review layout finding was corrected before
 execution. The combined run passes 32 selected native tests. A separate real
 visibility-setter reentry test exposes one stale-display failure after Discard;
 recorder state remains correct and a later status update restores the display.
-Its immediate display repair, visible UI and VoiceOver acceptance remain pending.
+The private display repair now passes that original test and five additional
+native controls. It coalesces nested refreshes, checks current attachment and
+recorder state, and makes at most two synchronous attempts. Repeated state
+changes can defer convergence until a later real status boundary. The combined
+five-source candidate passes 39 unchanged regression tests. Visible UI and
+VoiceOver acceptance remain pending.
 
 A first actual transfer test now verifies that recording bindings are retired
 before checkpoint pause acquisition. The transfer failure-and-retry case also
 passes: retained cleanup preserves the original suspension and retry restores a
-fresh binding. The existing-destination-document case stopped during asynchronous
-setup and is being corrected; it does not establish destination repair. A separate
-refused-native-edit test reaches eight ghost-command accounting failures while
-the document remains unchanged. These private candidates are not adopted in the
-application; native recording, the original undo failure and current desktop
-acceptance remain outstanding.
+fresh binding. Corrected asynchronous setup awaits genuine intake completion;
+both terminal tests now pass, including fresh bindings for the moved and existing
+destination documents. Three Start/token tests also pass, covering callback
+state fencing and genuine old/current transfer-token behavior. These transfer
+tests still need execution against the combined candidate.
+
+The refused-native-edit repair passes all eight original ghost-command accounting
+oracles while preserving the unchanged-document controls. A separate native-input
+probe reaches actual singular and plural permission returns before mutation. Its
+first editing notification exposes an attribute commit instead of the earlier
+character record, so seven strict character-slot assertions remain failed; they
+are unavailable diagnostic prerequisites, not recording acceptance. A bounded
+direct scalar journal is being implemented to observe the actual character
+commit without interpreting attribute metadata as character evidence.
+
+Six undo diagnostics pass. On the tested host, bare Foundation and the actual
+application undo manager both report `canUndo` after an empty explicit group;
+the rejected edit without a caller-created group leaves it false. Real sentinel
+registration/undo controls pass. This disproves the assumed empty-group flag
+contract, but does not retroactively pass the original failure or authorize a
+cosmetic history repair. A reviewed test-contract correction remains pending.
+These private candidates are not adopted in the application; native recording,
+the original chronology acceptance and current desktop acceptance remain outstanding.
 
 The next stages complete the private controller adapter and adopt it in the
 application. They must preserve accepted no-op accounting, recording identity
