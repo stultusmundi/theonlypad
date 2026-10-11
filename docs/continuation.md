@@ -1,10 +1,16 @@
-## Active extension checkpoint — 2026-10-11
+# Active checkpoint — 2026-10-11
 
 Work continues under the latest explicit user instruction. Windows plugin rejection now gives actionable JSON/compatibility feedback after the unchanged secure read, with guidance in the native manager. The formatted integrated public app builds and passes 1045 tests; the unchanged hidden native extension workflow also passes. See [verification](verification/windows-plugin-feedback.md). Visible chooser/error and packaged acceptance remain outstanding.
 
-The private controlled String typing candidate passes two real native forward/inactive-Unicode controls. Its genuine attribute-callback regression and five additional refusal/quota/undo-history controls are still being verified before adoption. No private macro/search source is included in the extension checkpoint. Continue implementation and verification; do not treat this checkpoint as task completion or a pause.
+The shared native runner now freezes the complete application dependency graph and forwards the actual SwiftPM package identity. Its public pure suite passes 46 tests. A separately frozen candidate passes 106 close-model checks, 198 factory checks and one shared-pane ownership scenario; this is candidate compatibility evidence, not current public native acceptance. See [runner verification](verification/native-regression-runners.md).
 
-# Latest checkpoint: combined recording regressions verified — 2026-10-11
+The independently verified private macro candidate passes all 17 combined native tests: seven undo/redo chronology cases, six approval controls, two aggregate callback-capacity cases and two exact-UTF-16 payload cases. The original combined attempt retained a previously diagnosed test-created empty undo group and passed 16 cases with one fixture-contract failure. The successor carries forward the independently reviewed fixture correction, preserving every assertion. Wider capacity coverage at the two actual explicit-edit entry points remains test-source work; public adoption and physical input acceptance remain outstanding.
+
+The private document-map candidate passes four actual native controller tests, including reentrant reopen through the original panel-close callback, Unicode navigation, coarse positions and stale-edit refusal. A separate coarse-refresh callback test failed to compile because its test closure captured external non-Sendable controller types. Its test-only actor-capture correction preserves callback synchrony and assertions; actual callback and next-boundary acceptance remain pending. The private distraction-free candidate passes nine mode and exit-focus tests. Its separate key-window/fullscreen harness compiled after an existing test-access correction, then aborted in its first async test without a completed case. Fixed-message stage diagnostics are prepared; the cause and routing behavior remain unverified.
+
+These private changes are not included in the current public application checkpoint. Production supervised-search routing, memory and hard-cancellation acceptance, remaining BUILD_PROMPT features, current packaged desktop testing, physical IME and VoiceOver acceptance remain outstanding. Distribution artifacts remain unchanged. Continue implementation and verification; this checkpoint is neither completion nor a pause. The older records below retain their original component scope and are superseded by this active status where applicable.
+
+## Earlier component checkpoint: combined recording regressions — 2026-10-11
 
 The private custom text storage passes fifteen native parity/observation tests
 and two separately selected sequence-exhaustion tests. Shared panes still use
