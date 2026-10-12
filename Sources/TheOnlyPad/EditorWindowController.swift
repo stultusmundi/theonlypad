@@ -1,5 +1,6 @@
 import AppKit
 import PadCore
+import SearchExecution
 
 struct SessionWindowCheckpointCapture: Sendable {
   let window: SessionWindow
@@ -52,23 +53,45 @@ private enum EditorSaveFailure: Error {
   case uncertain(PendingDocumentPublication)
 }
 
+@MainActor private struct DocumentSearchNativeBinding {
+  let windowID: UUID
+  let endpointID: UUID
+  let documentID: UUID
+  let paneID: UUID
+  let ownershipGeneration: UUID
+  let assignment: DocumentAssignment
+  let registryIdentity: ObjectIdentifier
+  let windowIdentity: ObjectIdentifier
+
+}
+
+@MainActor private enum NativeEditMode {
+  case interactive
+  case searchBorrow(binding: DocumentSearchNativeBinding, credential: DocumentSearchCredential)
+}
+
 /// One synchronous native edit admission owns this proposal. The actual delegate claims
 /// it before calling application code; nested native edits keep their normal bookkeeping.
 @MainActor private final class NativeEditPreparation {
   let editor: NSTextView
   let range: NSRange
   let replacement: String
+  let mode: NativeEditMode
   let validate: @MainActor () -> Bool
   var delegateClaimed = false
+  var controlledStringInsertion = false
+  var controlledFactsValid: (@MainActor () -> Bool)?
+  var macroFactsValid: (@MainActor () -> Bool)?
   var commit: (@MainActor () -> Bool)?
 
   init(
-    editor: NSTextView, range: NSRange, replacement: String,
+    editor: NSTextView, range: NSRange, replacement: String, mode: NativeEditMode,
     validate: @escaping @MainActor () -> Bool
   ) {
     self.editor = editor
     self.range = range
     self.replacement = replacement
+    self.mode = mode
     self.validate = validate
   }
 }
@@ -110,7 +133,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   var onOpenLargeFile: ((URL) -> Void)?
   var onOpenedURL: ((URL) -> Void)?
   private static var pendingCloses: [UUID: (RecoveryCoordinator, Task<Error?, Never>)] = [:]
-  private var documents: [EditorDocument] = []
+  private var documents: [EditorDocument] = [] { didSet { reconcileMacroMembership(oldValue) } }
   private var selectedID: UUID?
   private let tabs = NSPopUpButton(frame: .zero, pullsDown: false)
   private let tabBar = DocumentTabBar()
@@ -120,6 +143,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let workspaceSplit = NSSplitView()
   private lazy var workspace = WorkspaceSidebar { [weak self] url in self?.open(url) }
   private let status = NSTextField(labelWithString: "")
+  private let macroRecordingIncompleteStatus = NSTextField(
+    wrappingLabelWithString:
+      "Macro recording is incomplete. Some text changes were outside the supported recording boundary. The captured commands are retained, but this recording cannot be saved as a complete sequence. Use Macro → Discard Recording to start again."
+  )
+  private var macroNoticeRendering = false
+  private var macroNoticeRenderPending = false
   private let panePresentationStatus = NSTextField(wrappingLabelWithString: "")
   private let panePresentationRow = NSStackView()
   private let restorePanePresentationButton = NSButton(
@@ -309,6 +338,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     configureWrap(document, enabled: wrap)
     refreshInteractivity(document)
+    installApprovedViewRouting(document)
   }
 
   private func openedTarget(_ document: EditorDocument, pane source: EditorPane? = nil)
@@ -913,9 +943,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var backupManager: BackupManagerController?
   private var outline: OutlineController?
   private var comparison: ComparisonController?
-  private var recordingDocumentID: UUID?
-  private var recordedCommands: [MacroCommand] = []
-  private var recordedUnits = 0
+  private var recordingDocumentID: UUID? { didSet { recorderIdentityWritten() } }
+  private var recordedCommands: [MacroCommand] = [] { didSet { recorderCommandsWritten() } }
+  private var recordedUnits = 0 { didSet { recorderUnitsWritten() } }
   private var macroSaving = false
   private var replayCancellation: MacroCancellation?
   var isRecordingMacro: Bool { recordingDocumentID != nil }
@@ -924,6 +954,993 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private let saveServices: EditorSaveServices
   private let chooseSaveDestination: ((URL?, String) -> URL?)?
   private let errorHandler: ((Error) -> Void)?
+
+  // APPROVED-VIEW-BROKER-BEGIN
+  private static let approvedViewBroker = ApprovedViewCommitBroker()
+  private final class ApprovedRouteAssociation {
+    let value: ApprovedViewRoute
+    weak var document: EditorDocument?
+    weak var pane: EditorPane?
+    weak var storage: DocumentCommitTextStorage?
+    weak var window: NSWindow?
+    weak var manager: GuardedDocumentUndoManager?
+    init(
+      value: ApprovedViewRoute, document: EditorDocument, pane: EditorPane,
+      storage: DocumentCommitTextStorage, window: NSWindow,
+      manager: GuardedDocumentUndoManager
+    ) {
+      self.value = value
+      self.document = document
+      self.pane = pane
+      self.storage = storage
+      self.window = window
+      self.manager = manager
+    }
+  }
+  private var approvedRoutes: [ObjectIdentifier: ApprovedRouteAssociation] = [:]
+  private var approvedRouteSerial: UInt64 = 0
+  private var approvedRouteSerialExhausted = false
+
+  // A native lifecycle retirement may find no association. Still fence a
+  // callback-bearing installation, including same-window/view ABA.
+  private var approvedRouteRetirementSerial: UInt64 = 0
+  private var approvedRouteRetirementExhausted = false
+  private func noteApprovedRouteRetirement() {
+    guard !approvedRouteRetirementExhausted else { return }
+    let (next, overflow) = approvedRouteRetirementSerial.addingReportingOverflow(1)
+    if overflow {
+      approvedRouteRetirementExhausted = true
+    } else {
+      approvedRouteRetirementSerial = next
+    }
+  }
+
+  struct ApprovedRouteRecorderFence: Equatable {
+    let epoch: UUID?
+    let documentID: UUID?
+    let active: Bool?
+    let reason: MacroRecordingGap?
+    let noticePending: Bool?
+    let recordingID: UUID?
+    let serial: UInt64
+    let exhausted: Bool
+    let compatibilityPhase: UInt8
+    let commands: [MacroCommand]
+    let units: Int
+    let saving: Bool
+    let saveAttemptID: UUID?
+    static func == (lhs: Self, rhs: Self) -> Bool {
+      guard lhs.epoch == rhs.epoch, lhs.documentID == rhs.documentID,
+        lhs.active == rhs.active, lhs.reason == rhs.reason,
+        lhs.noticePending == rhs.noticePending, lhs.recordingID == rhs.recordingID,
+        lhs.serial == rhs.serial, lhs.exhausted == rhs.exhausted,
+        lhs.compatibilityPhase == rhs.compatibilityPhase, lhs.units == rhs.units,
+        lhs.saving == rhs.saving, lhs.saveAttemptID == rhs.saveAttemptID,
+        lhs.commands.count == rhs.commands.count
+      else { return false }
+      return zip(lhs.commands, rhs.commands).allSatisfy { pair in
+        switch pair {
+        case (.transform(let a), .transform(let b)): return a == b
+        case (.replace(let al, let an, let a), .replace(let bl, let bn, let b)):
+          return al == bl && an == bn && a.utf16.elementsEqual(b.utf16)
+        default: return false
+        }
+      }
+    }
+  }
+
+  // Pure value snapshot. This is route-install fencing, not recording authority.
+  func nativeMacroApprovedRouteRecorderFence() -> ApprovedRouteRecorderFence {
+    let phase: UInt8
+    switch compatibilitySetterPhase {
+    case .none: phase = 0
+    case .identityNil: phase = 1
+    case .identityNonNil: phase = 2
+    case .commandsAfterNil: phase = 3
+    case .commandsAfterNonNil: phase = 4
+    }
+    return ApprovedRouteRecorderFence(
+      epoch: recordingIntegrity?.epoch,
+      documentID: recordingIntegrity?.documentID, active: recordingIntegrity?.active,
+      reason: recordingIntegrity?.firstReason, noticePending: recordingIntegrity?.noticePending,
+      recordingID: recordingDocumentID, serial: recordingStateSerial,
+      exhausted: recordingStateSerialExhausted, compatibilityPhase: phase,
+      commands: recordedCommands, units: recordedUnits, saving: macroSaving,
+      saveAttemptID: recordingSaveAttempt?.id)
+  }
+
+  private static var approvedContextCount: Int { macroCommitContext?.entryCount ?? 64 }
+  private static var approvedContextAvailable: Bool {
+    guard let context = macroCommitContext else { return false }
+    return !context.overflowBarrierIsActive && !context.frameIssuerIsExhausted
+  }
+
+  // A replacement is retirement, never a permission-time association refresh.
+  override var window: NSWindow? {
+    willSet { retireAllApprovedRoutes() }
+  }
+
+  private func retireAllApprovedRoutes() {
+    noteApprovedRouteRetirement()
+    Self.approvedViewBroker.retire(owner: ObjectIdentifier(self))
+    let old = approvedRoutes
+    approvedRoutes.removeAll()
+    for association in old.values {
+      association.pane?.editor.retireApprovedViewOwner(self)
+      if let storage = association.storage {
+        association.manager?.retireApprovedHistoryOwner(self, storageID: ObjectIdentifier(storage))
+      }
+    }
+  }
+
+  func nativeApprovedViewRetire(storageID: ObjectIdentifier) {
+    noteApprovedRouteRetirement()
+    Self.approvedViewBroker.retire(owner: ObjectIdentifier(self), storage: storageID)
+    let keys = approvedRoutes.filter { $0.value.value.lease.storageID == storageID }.map(\.key)
+    for key in keys {
+      guard let association = approvedRoutes.removeValue(forKey: key) else { continue }
+      association.pane?.editor.retireApprovedViewOwner(self)
+      association.manager?.retireApprovedHistoryOwner(self, storageID: storageID)
+    }
+  }
+
+  func nativeApprovedViewRetire(_ view: DocumentTextView) {
+    noteApprovedRouteRetirement()
+    guard let association = approvedRoutes[ObjectIdentifier(view)] else { return }
+    nativeApprovedViewRetire(storageID: association.value.lease.storageID)
+  }
+
+  private func approvedStoredRoute(_ association: ApprovedRouteAssociation) -> Bool {
+    let value = association.value
+    guard !windowClosed, !preparingToQuit, projectionToken == nil,
+      transferProjection == nil, settledTransferProjection == nil,
+      approvedRoutes[value.viewID] === association,
+      macroBindings[value.lease.storageID] == value.lease,
+      let document = association.document, let pane = association.pane,
+      let storage = association.storage, let manager = association.manager,
+      association.window != nil,
+      ObjectIdentifier(document) == value.lease.documentObjectID,
+      document.id == value.lease.documentID,
+      document.ownershipGeneration == value.lease.ownershipGeneration,
+      documents.contains(where: { $0 === document }),
+      document.panePool.contains(where: { $0 === pane }), pane.isAttached,
+      pane.document === document, pane.id == value.paneID,
+      ObjectIdentifier(pane.editor) == value.viewID,
+      ObjectIdentifier(storage) == value.lease.storageID,
+      document.storage === storage, document.undoManager === manager,
+      ObjectIdentifier(manager) == value.managerID,
+      value.lease.endpointID == applicationRouting?.endpointID,
+      value.lease.assignment == applicationRouting?.assignment,
+      storage.nativeMacroHasBinding(self, lease: value.lease)
+    else { return false }
+    return true
+  }
+
+  private func approvedNativeRoute(_ association: ApprovedRouteAssociation) -> Bool {
+    guard let pane = association.pane, let storage = association.storage,
+      let boundWindow = association.window, let manager = association.manager
+    else { return false }
+    return window === boundWindow && pane.editor.window === boundWindow
+      && ObjectIdentifier(boundWindow) == association.value.windowID
+      && pane.editor.textStorage === storage && pane.editor.documentUndo === manager
+      && pane.editor.approvedViewOwner === self
+      && pane.editor.approvedViewStorage === storage
+      && pane.editor.approvedViewWindow === boundWindow
+      && pane.editor.approvedViewRoute == association.value
+  }
+
+  // Stored state only: never invoke native admission/getters from this predicate.
+  // Managed installation requires the current exact registry projection and open
+  // active membership. Unmanaged controllers retain their lawful local route.
+  private func approvedInstallMemberCurrent(
+    _ document: EditorDocument, pane: EditorPane, storage: DocumentCommitTextStorage,
+    lease: MacroBindingLease
+  ) -> Bool {
+    guard !windowClosed, !preparingToQuit, projectionToken == nil,
+      transferProjection == nil, settledTransferProjection == nil,
+      documents.contains(where: { $0 === document }),
+      document.panePool.contains(where: { $0 === pane }), pane.document === document,
+      pane.isAttached, lease.paneIDs.contains(pane.id),
+      document.storage === storage, !storage.nativeMacroBindingIsSuspended,
+      lease.controllerID == ObjectIdentifier(self),
+      lease.documentObjectID == ObjectIdentifier(document), lease.documentID == document.id,
+      lease.storageID == ObjectIdentifier(storage),
+      lease.ownershipGeneration == document.ownershipGeneration,
+      macroBindings[ObjectIdentifier(storage)] == lease,
+      storage.nativeMacroHasBinding(self, lease: lease),
+      lease.endpointID == applicationRouting?.endpointID,
+      lease.assignment == applicationRouting?.assignment
+    else { return false }
+    if let routing = applicationRouting {
+      guard projectionValid, routing.assignment.windowID == sessionID,
+        routing.registry.handle(id: document.id) === document,
+        routing.registry.assignment(of: document.id) == routing.assignment,
+        routing.registry.closeStatus(documentID: document.id) == .open,
+        routing.registry.adoptionStatus(documentID: document.id) == .active,
+        let expected = routing.registry.window(id: sessionID)
+      else { return false }
+      return nativeMacroTerminalProjectionMatches(
+        expected,
+        revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
+    }
+    return true
+  }
+
+  private func installApprovedViewRouting(_ document: EditorDocument) {
+    guard let storage = document.storage as? DocumentCommitTextStorage,
+      let lease = macroBindings[ObjectIdentifier(storage)], !approvedRouteSerialExhausted,
+      !approvedRouteRetirementExhausted,
+      storage.nativeMacroHasBinding(self, lease: lease)
+    else { return }
+    let ownership = document.ownershipGeneration
+    let manager = document.undoManager
+    for pane in document.panePool where pane.isAttached {
+      guard approvedInstallMemberCurrent(document, pane: pane, storage: storage, lease: lease)
+      else { continue }
+      let view = pane.editor
+      let recorder = nativeMacroApprovedRouteRecorderFence()
+      let retirement = approvedRouteRetirementSerial
+      let generation = approvedRouteSerial
+      let prior = approvedRoutes[ObjectIdentifier(view)]
+      let revision = document.editRevision
+      let mutation = document.closeMutationGeneration
+      let panes = document.panePool.filter(\.isAttached).map(\.id)
+      var actualWindow: NSWindow?
+      let native = withMacroCallbackBarrier {
+        actualWindow = window
+        return actualWindow != nil && view.window === actualWindow
+          && view.textStorage === storage && view.documentUndo === manager
+      }
+      guard native, let actualWindow,
+        approvedInstallMemberCurrent(document, pane: pane, storage: storage, lease: lease),
+        !windowClosed, !preparingToQuit,
+        !approvedRouteRetirementExhausted, approvedRouteRetirementSerial == retirement,
+        !approvedRouteSerialExhausted, approvedRouteSerial == generation,
+        nativeMacroApprovedRouteRecorderFence() == recorder,
+        approvedRoutes[ObjectIdentifier(view)] === prior,
+        document.editRevision == revision, document.closeMutationGeneration == mutation,
+        document.ownershipGeneration == ownership,
+        document.storage === storage, document.undoManager === manager,
+        document.panePool.filter(\.isAttached).map(\.id) == panes,
+        macroBindings[ObjectIdentifier(storage)] == lease,
+        storage.nativeMacroHasBinding(self, lease: lease),
+        documents.contains(where: { $0 === document }), pane.document === document,
+        pane.isAttached, lease.paneIDs.contains(pane.id),
+        projectionToken == nil, transferProjection == nil, settledTransferProjection == nil
+      else { continue }
+      if let old = prior, old.value.lease == lease, old.window === actualWindow,
+        old.pane === pane, old.storage === storage, old.manager === manager
+      {
+        // Equality alone does not prove that both native weak owners remain installed.
+        // Reassign the same authenticated association using pure stored-field setters.
+        guard approvedInstallMemberCurrent(document, pane: pane, storage: storage, lease: lease),
+          !approvedRouteRetirementExhausted,
+          approvedRouteRetirementSerial == retirement,
+          !approvedRouteSerialExhausted, approvedRouteSerial == generation,
+          nativeMacroApprovedRouteRecorderFence() == recorder,
+          approvedRoutes[ObjectIdentifier(view)] === old,
+          macroBindings[ObjectIdentifier(storage)] == lease,
+          storage.nativeMacroHasBinding(self, lease: lease)
+        else { continue }
+        view.installApprovedViewOwner(
+          self, storage: storage, window: actualWindow, route: old.value)
+        manager.installApprovedHistoryOwner(self, association: old.value)
+        continue
+      }
+      let (next, overflow) = approvedRouteSerial.addingReportingOverflow(1)
+      guard !overflow else {
+        approvedRouteSerialExhausted = true
+        retireAllApprovedRoutes()
+        return
+      }
+      approvedRouteSerial = next
+      let value = ApprovedViewRoute(
+        lease: lease, viewID: ObjectIdentifier(view),
+        paneID: pane.id, windowID: ObjectIdentifier(actualWindow),
+        managerID: ObjectIdentifier(manager), generation: next)
+      // Deliberate removal by this attempt is pure. Capture the owned baseline
+      // afterwards, so it cannot invalidate its own final retirement fence.
+      if approvedRoutes[value.viewID] != nil { nativeApprovedViewRetire(view) }
+      let ownedRetirement = approvedRouteRetirementSerial
+      let association = ApprovedRouteAssociation(
+        value: value, document: document,
+        pane: pane, storage: storage, window: actualWindow, manager: manager)
+      guard approvedInstallMemberCurrent(document, pane: pane, storage: storage, lease: lease),
+        approvedRoutes.count < 64, approvedRoutes[value.viewID] == nil,
+        !approvedRouteRetirementExhausted, approvedRouteRetirementSerial == ownedRetirement,
+        nativeMacroApprovedRouteRecorderFence() == recorder,
+        macroBindings[ObjectIdentifier(storage)] == lease,
+        storage.nativeMacroHasBinding(self, lease: lease),
+        document.ownershipGeneration == ownership, document.editRevision == revision,
+        document.closeMutationGeneration == mutation,
+        !windowClosed, !preparingToQuit, projectionToken == nil,
+        transferProjection == nil, settledTransferProjection == nil
+      else { continue }
+      approvedRoutes[value.viewID] = association
+      view.installApprovedViewOwner(self, storage: storage, window: actualWindow, route: value)
+      manager.installApprovedHistoryOwner(self, association: value)
+    }
+  }
+
+  // Callback-bearing terminal route phase. The consumed suspension commit has
+  // already returned and the process has recorded its finished flag.
+  func nativeMacroCompleteTerminalApprovedRoutes(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws {
+    let recorder = nativeMacroApprovedRouteRecorderFence()
+    guard nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID)
+    else { throw ApplicationDocumentTransferError.pendingLayout }
+    for document in documents {
+      guard nativeMacroApprovedRouteRecorderFence() == recorder,
+        nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID),
+        let lease = refreshMacroBinding(document)
+      else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+      guard nativeMacroApprovedRouteRecorderFence() == recorder,
+        nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID),
+        macroBindings[ObjectIdentifier(document.storage)] == lease
+      else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+      // Layout attachment survives tab changes; only the current document is displayed.
+      guard document === current else { continue }
+      for pane in document.panePool where pane.isAttached {
+        guard let association = approvedRoutes[ObjectIdentifier(pane.editor)],
+          association.value.lease == lease, association.pane === pane,
+          approvedStoredRoute(association)
+        else {
+          throw ApplicationDocumentTransferError.pendingLayout
+        }
+        let retirement = approvedRouteRetirementSerial
+        let generation = approvedRouteSerial
+        let native = withMacroCallbackBarrier { approvedNativeRoute(association) }
+        guard native, !approvedRouteRetirementExhausted,
+          approvedRouteRetirementSerial == retirement,
+          !approvedRouteSerialExhausted, approvedRouteSerial == generation,
+          nativeMacroApprovedRouteRecorderFence() == recorder,
+          nativeMacroTerminalProjectionMatches(
+            expected, revision: revision, endpointID: endpointID),
+          approvedRoutes[ObjectIdentifier(pane.editor)] === association,
+          approvedStoredRoute(association)
+        else {
+          throw ApplicationDocumentTransferError.pendingLayout
+        }
+      }
+    }
+    guard nativeMacroApprovedRouteRecorderFence() == recorder,
+      nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID)
+    else { throw ApplicationDocumentTransferError.pendingLayout }
+  }
+
+  private func approvedRecorder(_ route: ApprovedViewRoute) -> ApprovedRecorderState? {
+    guard let identity = macroIdentity(route.lease, paneID: route.paneID),
+      let integrity = recordingIntegrity
+    else { return nil }
+    let phase: UInt8
+    switch compatibilitySetterPhase {
+    case .none: phase = 0
+    case .identityNil: phase = 1
+    case .identityNonNil: phase = 2
+    case .commandsAfterNil: phase = 3
+    case .commandsAfterNonNil: phase = 4
+    }
+    return ApprovedRecorderState(
+      identity: identity, active: integrity.active,
+      firstReason: integrity.firstReason, compatibilityPhase: phase, saving: macroSaving,
+      saveAttempt: recordingSaveAttempt?.id, commands: recordedCommands, units: recordedUnits)
+  }
+
+  private func approvedSnapshot(_ association: ApprovedRouteAssociation) -> ApprovedViewSnapshot? {
+    guard approvedStoredRoute(association), let document = association.document,
+      let storage = association.storage, let recorder = approvedRecorder(association.value)
+    else { return nil }
+    return ApprovedViewSnapshot(
+      route: association.value, recorder: recorder,
+      primitive: storage.nativeMacroPrimitiveState, revision: document.editRevision,
+      closeMutation: document.closeMutationGeneration, bookmarks: document.bookmarks,
+      pending: document.pendingBookmarks, pendingUndo: document.pendingBookmarksHaveUndo)
+  }
+
+  func nativeApprovedHistoryBegin(
+    _ manager: GuardedDocumentUndoManager,
+    association expected: ApprovedViewRoute, action: ApprovedHistoryAction
+  ) -> ApprovedHistoryInvocation? {
+    guard let association = approvedRoutes[expected.viewID],
+      association.value == expected, association.manager === manager,
+      approvedStoredRoute(association)
+    else { return nil }
+    let native = withMacroCallbackBarrier { approvedNativeRoute(association) }
+    guard native, approvedStoredRoute(association) else { return nil }
+    return Self.approvedViewBroker.beginHistory(
+      owner: ObjectIdentifier(self),
+      manager: ObjectIdentifier(manager), association: expected, action: action,
+      contextCount: Self.approvedContextCount, contextAvailable: Self.approvedContextAvailable)
+  }
+
+  func nativeApprovedHistoryFinish(_ invocation: ApprovedHistoryInvocation?) {
+    if let invocation { Self.approvedViewBroker.finishHistory(invocation) }
+  }
+
+  func nativeApprovedDecisionBegin(
+    _ view: DocumentTextView, range: NSRange?,
+    replacement: String?, singular: Bool
+  ) -> ApprovedDecisionCapture? {
+    guard nativeEditPreparation == nil, Self.macroCommitContext?.hasActiveExplicitFrame == false,
+      let association = approvedRoutes[ObjectIdentifier(view)],
+      approvedStoredRoute(association),
+      Self.approvedViewBroker.historyMatches(association.value)
+    else { return nil }
+    var prepared: MacroPreparedReplacement?
+    let before = approvedSnapshot(association)
+    let native = withMacroCallbackBarrier {
+      guard approvedNativeRoute(association), let storage = association.storage else {
+        return false
+      }
+      if singular, let range, let replacement, range.length <= 4096,
+        replacement.utf16.count <= 4096
+      {
+        prepared = storage.prepareApprovedCharacters(in: range, with: replacement)
+      }
+      return true
+    }
+    let after = approvedSnapshot(association)
+    guard native, let before, after == before,
+      !before.primitive.exhausted, !before.primitive.backingReentry
+    else { return nil }
+    return Self.approvedViewBroker.beginDecision(
+      view: ObjectIdentifier(view),
+      snapshot: before, range: range, replacement: replacement,
+      before: prepared?.beforeUTF16Count,
+      replacementCount: prepared?.replacementUTF16Count, singular: singular,
+      contextCount: Self.approvedContextCount, contextAvailable: Self.approvedContextAvailable)
+  }
+
+  static func withApprovedViewDecisionBarrier<Value>(
+    _ decision: ApprovedDecisionCapture?,
+    _ body: () throws -> Value
+  ) rethrows -> Value {
+    let barrier = approvedViewBroker.beginBarrier(
+      decision: decision,
+      contextCount: approvedContextCount, contextAvailable: approvedContextAvailable)
+    defer { approvedViewBroker.finishBarrier(barrier) }
+    if let context = macroCommitContext {
+      if barrier == nil { return try context.withRejectedCallbackBarrier(body) }
+      return try context.withCallbackBarrier(body)
+    }
+    return try body()
+  }
+
+  func nativeApprovedDecisionFinish(
+    _ view: DocumentTextView,
+    decision: ApprovedDecisionCapture?, result: Bool
+  ) {
+    guard let decision else { return }
+    guard let association = approvedRoutes[ObjectIdentifier(view)] else {
+      Self.approvedViewBroker.cancelDecision(decision)
+      return
+    }
+    let native = withMacroCallbackBarrier { approvedNativeRoute(association) }
+    Self.approvedViewBroker.finishDecision(
+      decision, result: result,
+      actual: native ? approvedSnapshot(association) : nil,
+      contextCount: Self.approvedContextCount, contextAvailable: Self.approvedContextAvailable)
+  }
+
+  static func nativeApprovedDecisionCancel(_ decision: ApprovedDecisionCapture?) {
+    if let decision { approvedViewBroker.cancelDecision(decision) }
+  }
+
+  private func approvedBookkeepingBefore(
+    _ view: NSTextView, range: NSRange,
+    replacement: String?, edge: ApprovedBookkeepingEdge
+  )
+    -> (ApprovedDecisionCapture?, ApprovedViewSnapshot?)
+  {
+    guard let replacement, let association = approvedRoutes[ObjectIdentifier(view)],
+      let snapshot = approvedSnapshot(association)
+    else { return (nil, nil) }
+    return (
+      Self.approvedViewBroker.beginBookkeeping(
+        view: ObjectIdentifier(view),
+        range: range, replacement: replacement, edge: edge, actual: snapshot), snapshot
+    )
+  }
+
+  private func approvedBookkeepingAfter(
+    _ view: NSTextView,
+    edge: ApprovedBookkeepingEdge,
+    before: (ApprovedDecisionCapture?, ApprovedViewSnapshot?)
+  ) {
+    let after = approvedRoutes[ObjectIdentifier(view)].flatMap { approvedSnapshot($0) }
+    Self.approvedViewBroker.finishBookkeeping(before.0, edge: edge, before: before.1, after: after)
+  }
+
+  func nativeApprovedReserve(
+    storageID: ObjectIdentifier, range: NSRange,
+    replacement: String, before: Int, changed: Bool
+  ) -> ApprovedViewReservation? {
+    let route = Self.approvedViewBroker.pendingRoute(storage: storageID)
+    let snapshot = route.flatMap { value in
+      approvedRoutes[value.viewID].flatMap { approvedSnapshot($0) }
+    }
+    return Self.approvedViewBroker.reserve(
+      range: range, replacement: replacement,
+      before: before, changed: changed, actual: snapshot,
+      contextCount: Self.approvedContextCount, contextAvailable: Self.approvedContextAvailable)
+  }
+
+  func nativeApprovedAttributes(storageID: ObjectIdentifier) {
+    Self.approvedViewBroker.burnPending(owner: ObjectIdentifier(self), storage: storageID)
+  }
+
+  private func consumeApprovedView(
+    _ reservation: ApprovedViewReservation,
+    observation: PrimitiveCommitObservation
+  ) -> Bool {
+    // Post-backing sink reads C's stored values only. No native/model callout.
+    defer { Self.approvedViewBroker.discardReservation(reservation) }
+    let route = Self.approvedViewBroker.reservationRoute(reservation)
+    guard !windowClosed, !preparingToQuit, projectionToken == nil,
+      transferProjection == nil, settledTransferProjection == nil,
+      let state = approvedRecorder(route),
+      state.firstReason == nil, !state.saving, state.saveAttempt == nil,
+      state.compatibilityPhase == 0, !state.identity.recorderStateSerialExhausted,
+      recordingStateSerial <= UInt64.max - 2,
+      recordedCommands.count < 10_000, recordedUnits >= 0, recordedUnits <= 10_000_000,
+      reservation.unitCost <= 10_000_000 - recordedUnits,
+      let command = Self.approvedViewBroker.consume(
+        reservation, recorder: state,
+        currentLease: macroBindings[reservation.lease.storageID], observation: observation,
+        contextCount: Self.approvedContextCount, contextAvailable: Self.approvedContextAvailable)
+    else {
+      markRecordingGap(reservation.epoch, reason: .unsupportedCharacterMutation, activeOnly: true)
+      return false
+    }
+    withOwnedRecorderMutation {
+      recordedCommands.append(command)
+      recordedUnits += reservation.unitCost
+    }
+    return true
+  }
+  // APPROVED-VIEW-BROKER-END
+
+  // TASK2A-SCALAR-ADAPTER-BEGIN
+  private static let macroCommitContext = NativeMacroCommitContext()
+  private static var macroBindingSerial: UInt64 = 0
+  private var macroBindings: [ObjectIdentifier: MacroBindingLease] = [:]
+  private var recordingIntegrity: MacroRecordingIntegrity?
+  private var recordingStateSerial: UInt64 = 0
+  private var recordingStateSerialExhausted = false
+  private var recordingSaveAttempt: MacroRecordingSaveAttempt?
+  private var recorderOwnedMutationDepth = 0
+  private var compatibilitySetterPhase: MacroCompatibilityPhase = .none
+
+  // Shared lexical processing barrier also covers unbound storage dispatch.
+  // No callback is retained; missing context still executes the native body once.
+  static func withNativeMacroProcessingBarrier<Value>(
+    _ body: () throws -> Value
+  ) rethrows -> Value {
+    let barrier = approvedViewBroker.beginBarrier(
+      contextCount: approvedContextCount,
+      contextAvailable: approvedContextAvailable)
+    defer { approvedViewBroker.finishBarrier(barrier) }
+    if let context = macroCommitContext {
+      if barrier == nil { return try context.withRejectedCallbackBarrier(body) }
+      return try context.withCallbackBarrier(body)
+    }
+    return try body()
+  }
+
+  private func withMacroCallbackBarrier<Value>(_ body: () throws -> Value) rethrows -> Value {
+    let barrier = Self.approvedViewBroker.beginBarrier(
+      contextCount: Self.approvedContextCount,
+      contextAvailable: Self.approvedContextAvailable)
+    defer { Self.approvedViewBroker.finishBarrier(barrier) }
+    if let context = Self.macroCommitContext {
+      if barrier == nil { return try context.withRejectedCallbackBarrier(body) }
+      return try context.withCallbackBarrier(body)
+    }
+    return try body()
+  }
+
+  private func withOwnedRecorderMutation(_ body: () -> Void) {
+    let incoming = recorderOwnedMutationDepth
+    recorderOwnedMutationDepth = incoming < 64 ? incoming + 1 : 64
+    defer { recorderOwnedMutationDepth = incoming }
+    body()
+  }
+
+  private func markRecordingGap(_ epoch: UUID?, reason: MacroRecordingGap, activeOnly: Bool = false)
+  {
+    guard let epoch, var value = recordingIntegrity, value.epoch == epoch,
+      !activeOnly || value.active
+    else { return }
+    if value.firstReason == nil { value.firstReason = reason }
+    value.noticePending = true
+    recordingIntegrity = value
+  }
+
+  private func advanceRecordingSerial() {
+    let (next, overflow) = recordingStateSerial.addingReportingOverflow(1)
+    if overflow {
+      recordingStateSerialExhausted = true
+      markRecordingGap(recordingIntegrity?.epoch, reason: .recorderStateSerialExhausted)
+    } else {
+      recordingStateSerial = next
+    }
+  }
+
+  private func beginRecordingIntegrity(_ id: UUID) {
+    recordingSaveAttempt = nil
+    macroSaving = false
+    compatibilitySetterPhase = .none
+    recordingStateSerial = 0
+    recordingStateSerialExhausted = false
+    recordingIntegrity = MacroRecordingIntegrity(epoch: UUID(), documentID: id, active: true)
+    if Self.macroCommitContext == nil {
+      markRecordingGap(recordingIntegrity?.epoch, reason: .contextUnavailable, activeOnly: true)
+    }
+  }
+
+  private func recorderIdentityWritten() {
+    if recorderOwnedMutationDepth == 0 {
+      recordingSaveAttempt = nil
+      macroSaving = false
+      if let id = recordingDocumentID {
+        beginRecordingIntegrity(id)
+        compatibilitySetterPhase = .identityNonNil
+      } else {
+        if var value = recordingIntegrity {
+          value.active = false
+          recordingIntegrity = value
+        }
+        compatibilitySetterPhase = .identityNil
+      }
+    }
+    advanceRecordingSerial()
+  }
+
+  private func recorderCommandsWritten() {
+    if recorderOwnedMutationDepth == 0 {
+      switch compatibilitySetterPhase {
+      case .identityNil: compatibilitySetterPhase = .commandsAfterNil
+      case .identityNonNil: compatibilitySetterPhase = .commandsAfterNonNil
+      default:
+        compatibilitySetterPhase = .none
+        markRecordingGap(recordingIntegrity?.epoch, reason: .externalRecorderWrite)
+      }
+    }
+    advanceRecordingSerial()
+  }
+
+  private func recorderUnitsWritten() {
+    if recorderOwnedMutationDepth == 0 {
+      let phase = compatibilitySetterPhase
+      compatibilitySetterPhase = .none
+      switch phase {
+      case .commandsAfterNil:
+        if recordingDocumentID == nil && recordedCommands.isEmpty && recordedUnits == 0 {
+          recordingIntegrity = nil
+          recordingSaveAttempt = nil
+          macroSaving = false
+        }
+      case .commandsAfterNonNil: break
+      default: markRecordingGap(recordingIntegrity?.epoch, reason: .externalRecorderWrite)
+      }
+    }
+    advanceRecordingSerial()
+  }
+
+  private func stopRecordingIntegrity() {
+    compatibilitySetterPhase = .none
+    if var value = recordingIntegrity {
+      value.active = false
+      recordingIntegrity = value
+    }
+    withOwnedRecorderMutation { recordingDocumentID = nil }
+  }
+
+  private var unresolvedRecording: Bool { recordingIntegrity?.firstReason != nil }
+
+  private func retireMacroBinding(_ document: EditorDocument) {
+    retireControlledStringRouting(document)
+    let key = ObjectIdentifier(document.storage)
+    guard let lease = macroBindings.removeValue(forKey: key) else { return }
+    if recordingIntegrity?.documentID == lease.documentID {
+      markRecordingGap(recordingIntegrity?.epoch, reason: .explicitCommitRefused, activeOnly: true)
+    }
+    (document.storage as? DocumentCommitTextStorage)?.unbindMacroOwner(self, lease: lease)
+  }
+
+  func nativeMacroRetireBinding(_ lease: MacroBindingLease) {
+    guard macroBindings[lease.storageID] == lease else { return }
+    for document in documents where ObjectIdentifier(document.storage) == lease.storageID {
+      retireControlledStringRouting(document)
+    }
+    macroBindings.removeValue(forKey: lease.storageID)
+    if recordingIntegrity?.documentID == lease.documentID {
+      markRecordingGap(recordingIntegrity?.epoch, reason: .explicitCommitRefused, activeOnly: true)
+    }
+  }
+
+  private func reconcileMacroMembership(_ old: [EditorDocument]) {
+    for document in old where !documents.contains(where: { $0 === document }) {
+      retireMacroBinding(document)
+    }
+    for document in documents { _ = refreshMacroBinding(document) }
+  }
+
+  private func refreshMacroBinding(_ document: EditorDocument) -> MacroBindingLease? {
+    guard !windowClosed, !preparingToQuit, projectionToken == nil,
+      transferProjection == nil, settledTransferProjection == nil,
+      documents.contains(where: { $0 === document }),
+      let storage = document.storage as? DocumentCommitTextStorage
+    else {
+      retireMacroBinding(document)
+      return nil
+    }
+    if let routing = applicationRouting {
+      guard projectionValid, routing.registry.handle(id: document.id) === document,
+        routing.registry.assignment(of: document.id) == routing.assignment,
+        routing.registry.closeStatus(documentID: document.id) == .open,
+        routing.registry.adoptionStatus(documentID: document.id)?.blocksAdmission == false
+      else {
+        retireMacroBinding(document)
+        return nil
+      }
+    }
+    guard !storage.nativeMacroBindingIsSuspended else { return nil }
+    let key = ObjectIdentifier(storage)
+    let panes = document.panePool.filter(\.isAttached).map(\.id)
+    if var existing = macroBindings[key],
+      existing.documentObjectID == ObjectIdentifier(document),
+      existing.ownershipGeneration == document.ownershipGeneration,
+      existing.endpointID == applicationRouting?.endpointID,
+      existing.assignment == applicationRouting?.assignment
+    {
+      existing.paneIDs = panes
+      guard storage.bindMacroOwner(self, lease: existing) else { return nil }
+      macroBindings[key] = existing
+      installControlledStringRouting(document)
+      installApprovedViewRouting(document)
+      return existing
+    }
+    retireMacroBinding(document)
+    let (serial, overflow) = Self.macroBindingSerial.addingReportingOverflow(1)
+    guard !overflow else { return nil }
+    Self.macroBindingSerial = serial
+    let lease = MacroBindingLease(
+      controllerID: ObjectIdentifier(self),
+      documentObjectID: ObjectIdentifier(document), documentID: document.id,
+      storageID: key, ownershipGeneration: document.ownershipGeneration,
+      endpointID: applicationRouting?.endpointID, assignment: applicationRouting?.assignment,
+      serial: serial, paneIDs: panes)
+    guard storage.bindMacroOwner(self, lease: lease) else { return nil }
+    macroBindings[key] = lease
+    installControlledStringRouting(document)
+    installApprovedViewRouting(document)
+    return lease
+  }
+
+  // TASK2B-TERMINAL-BINDING-BEGIN
+  // Callback-free final projection predicate; native endpoint/admission callbacks
+  // must finish before both peer predicates and the final release are evaluated.
+  func nativeMacroTerminalProjectionMatches(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) -> Bool {
+    guard let routing = applicationRouting, !windowClosed, !preparingToQuit,
+      projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
+      projectionValid, routing.endpointID == endpointID,
+      routing.assignment.windowID == sessionID, expected.id == sessionID,
+      routing.registry.workspaceRevision == revision,
+      routing.registry.window(id: sessionID) == expected, expected.groups.count == 1,
+      expected.groups[0].id == routing.assignment.groupID,
+      expected.focusedGroupID == expected.groups[0].id,
+      expected.groups[0].documentIDs == documents.map(\.id),
+      selectedID == expected.groups[0].selectedDocumentID,
+      host.displayedIDs == (current?.panePool.filter(\.isAttached).map(\.id) ?? [])
+    else { return false }
+    return documents.allSatisfy { document in
+      routing.registry.handle(id: document.id) === document
+        && routing.registry.assignment(of: document.id) == routing.assignment
+        && routing.registry.closeStatus(documentID: document.id) == .open
+        && routing.registry.adoptionStatus(documentID: document.id) == .active
+        && routing.registry.metadata(id: document.id)?.pinned == document.pinned
+    }
+  }
+
+  func nativeMacroRepairTerminalBindings(excluding token: MacroTransferSuspension) -> Bool {
+    for document in documents where ObjectIdentifier(document.storage) != token.storageID {
+      guard refreshMacroBinding(document) != nil else { return false }
+    }
+    return true
+  }
+
+  func nativeMacroFinishTransferBinding(
+    _ token: MacroTransferSuspension, document: EditorDocument,
+    expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws {
+    guard
+      nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID),
+      document.id == token.documentID, ObjectIdentifier(document) == token.documentObjectID,
+      documents.contains(where: { $0 === document }),
+      let storage = document.storage as? DocumentCommitTextStorage,
+      ObjectIdentifier(storage) == token.storageID, storage.canFinishMacroBinding(token),
+      macroBindings[token.storageID] == nil, let routing = applicationRouting
+    else { throw ApplicationDocumentTransferError.pendingLayout }
+    let (serial, overflow) = Self.macroBindingSerial.addingReportingOverflow(1)
+    guard !overflow else { throw ApplicationDocumentTransferError.pendingLayout }
+    let lease = MacroBindingLease(
+      controllerID: ObjectIdentifier(self),
+      documentObjectID: token.documentObjectID, documentID: document.id,
+      storageID: token.storageID, ownershipGeneration: document.ownershipGeneration,
+      endpointID: endpointID, assignment: routing.assignment, serial: serial,
+      paneIDs: document.panePool.filter(\.isAttached).map(\.id))
+    guard storage.finishMacroBinding(token, owner: self, lease: lease) else {
+      throw ApplicationDocumentTransferError.pendingLayout
+    }
+    // No callback, await or throwing operation follows the storage commit.
+    macroBindings[token.storageID] = lease
+    Self.macroBindingSerial = serial
+    installControlledStringRouting(document)
+  }
+
+  private func nativeMacroStartBindingAvailable(_ document: EditorDocument) -> Bool {
+    guard Self.macroCommitContext != nil, !windowClosed, !preparingToQuit,
+      projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
+      documents.contains(where: { $0 === document }),
+      let storage = document.storage as? DocumentCommitTextStorage,
+      !storage.nativeMacroBindingIsSuspended,
+      let lease = macroBindings[ObjectIdentifier(storage)],
+      lease.controllerID == ObjectIdentifier(self),
+      lease.documentObjectID == ObjectIdentifier(document), lease.documentID == document.id,
+      lease.storageID == ObjectIdentifier(storage),
+      lease.ownershipGeneration == document.ownershipGeneration,
+      lease.endpointID == applicationRouting?.endpointID,
+      lease.assignment == applicationRouting?.assignment,
+      lease.paneIDs == document.panePool.filter(\.isAttached).map(\.id),
+      storage.nativeMacroHasBinding(self, lease: lease)
+    else { return false }
+    if let routing = applicationRouting {
+      guard let expected = routing.registry.window(id: sessionID) else { return false }
+      return nativeMacroTerminalProjectionMatches(
+        expected,
+        revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
+    }
+    return true
+  }
+  // TASK2B-TERMINAL-BINDING-END
+
+  func nativeMacroCapture(_ lease: MacroBindingLease) -> MacroPrimitiveCapture? {
+    guard !windowClosed, macroBindings[lease.storageID] == lease else { return nil }
+    let epoch = recordingIntegrity.flatMap {
+      $0.active && $0.documentID == lease.documentID && recordingDocumentID == lease.documentID
+        ? $0.epoch : nil
+    }
+    return MacroPrimitiveCapture(lease: lease, epoch: epoch)
+  }
+
+  private func macroIdentity(_ lease: MacroBindingLease, paneID: UUID) -> MacroContextIdentity? {
+    guard let value = recordingIntegrity, value.active,
+      value.documentID == lease.documentID, recordingDocumentID == lease.documentID,
+      lease.paneIDs.contains(paneID)
+    else { return nil }
+    return MacroContextIdentity(
+      documentID: lease.documentID, paneID: paneID,
+      storageID: lease.storageID, ownershipGeneration: lease.ownershipGeneration,
+      recordingEpoch: value.epoch, recorderStateSerial: recordingStateSerial,
+      recorderStateSerialExhausted: recordingStateSerialExhausted)
+  }
+
+  private func explicitMacroSeed(
+    _ document: EditorDocument, pane: EditorPane,
+    expected: NSString, range: NSRange, replacement: String
+  ) -> MacroExplicitSeed? {
+    guard let lease = refreshMacroBinding(document),
+      let identity = macroIdentity(lease, paneID: pane.id),
+      let storage = document.storage as? DocumentCommitTextStorage
+    else { return nil }
+    let count = replacement.utf16.count
+    let replacementUnits = replacement as NSString
+    let noOp =
+      range.length == count
+      && (0..<count).allSatisfy {
+        expected.character(at: range.location + $0) == replacementUnits.character(at: $0)
+      }
+    let preparedReplacement = storage.prepareExplicitCharacters(in: range, with: replacement)
+    guard preparedReplacement.beforeUTF16Count == expected.length,
+      preparedReplacement.replacementUTF16Count == count,
+      preparedReplacement.changedCharacters == !noOp
+    else { return nil }
+    let contract = MacroContextPrimitiveContract(
+      kind: noOp ? .explicitAcceptedNoOp : .changedCharacters, range: range,
+      beforeUTF16Count: expected.length, replacementUTF16Count: count)
+    return MacroExplicitSeed(
+      lease: lease, identity: identity,
+      primitive: preparedReplacement.primitive, contract: contract,
+      commands: recordedCommands, units: recordedUnits,
+      command: .replace(location: range.location, length: range.length, text: replacement),
+      preparedReplacement: preparedReplacement)
+  }
+
+  private func explicitMacroFactsValid(
+    _ seed: MacroExplicitSeed,
+    storage: DocumentCommitTextStorage
+  ) -> Bool {
+    !windowClosed && macroBindings[seed.lease.storageID] == seed.lease
+      && macroIdentity(seed.lease, paneID: seed.identity.paneID) == seed.identity
+      && recordedCommands == seed.commands && recordedUnits == seed.units
+      && !storage.nativeMacroBindingIsSuspended
+      && storage.nativeMacroHasBinding(self, lease: seed.lease)
+      && storage.nativeMacroPrimitiveState == seed.primitive
+      && !recordingStateSerialExhausted && recordingStateSerial <= UInt64.max - 2
+      && recordedUnits >= 0 && recordedUnits <= 10_000_000
+      && seed.contract.replacementUTF16Count <= 10_000_000 - recordedUnits
+      && recordedCommands.count < 10_000
+  }
+
+  func nativeMacroPublish(
+    _ capture: MacroPrimitiveCapture?, delivery: MacroExplicitDelivery?,
+    observation: PrimitiveCommitObservation, approved: ApprovedViewReservation? = nil
+  ) {
+    // Pure local/value sink: no model/storage/registry/undo/UI/callback access.
+    if let delivery {
+      let seed = delivery.seed
+      guard let context = Self.macroCommitContext,
+        !windowClosed, macroBindings[seed.lease.storageID] == seed.lease,
+        macroIdentity(seed.lease, paneID: seed.identity.paneID) == seed.identity,
+        recordedCommands == seed.commands, recordedUnits == seed.units,
+        !recordingStateSerialExhausted, recordingStateSerial <= UInt64.max - 2,
+        recordedCommands.count < 10_000, recordedUnits >= 0, recordedUnits <= 10_000_000,
+        seed.contract.replacementUTF16Count <= 10_000_000 - recordedUnits
+      else {
+        markRecordingGap(
+          seed.identity.recordingEpoch, reason: .explicitCommitRefused, activeOnly: true)
+        return
+      }
+      let completion = MacroContextPrimitiveCompletion(
+        kind: observation.kind == .characters ? .characters : .attributes,
+        range: observation.range, beforeUTF16Count: observation.beforeUTF16Count,
+        afterUTF16Count: observation.afterUTF16Count,
+        replacementUTF16Count: observation.replacementUTF16Count,
+        changedCharacters: observation.changedCharacters,
+        state: MacroContextPrimitiveState(
+          sequence: observation.sequence,
+          exhausted: observation.sequenceExhausted, backingReentry: observation.backingReentry))
+      guard
+        context.consumeExplicitPermit(
+          delivery.permit, identity: seed.identity,
+          completion: completion)
+      else {
+        markRecordingGap(
+          seed.identity.recordingEpoch, reason: .explicitCommitRefused, activeOnly: true)
+        return
+      }
+      withOwnedRecorderMutation {
+        recordedCommands.append(seed.command)
+        recordedUnits += seed.contract.replacementUTF16Count
+      }
+    } else if let approved, consumeApprovedView(approved, observation: observation) {
+      // Exact approved character replacement was appended by the pure sink once.
+    } else if let capture {
+      if observation.sequenceExhausted {
+        markRecordingGap(capture.epoch, reason: .primitiveSequenceExhausted, activeOnly: true)
+      } else if observation.kind == .characters && observation.changedCharacters {
+        markRecordingGap(capture.epoch, reason: .unsupportedCharacterMutation, activeOnly: true)
+      }
+    }
+  }
+
+  private func recordingSaveStillCurrent(_ attempt: MacroRecordingSaveAttempt) -> Bool {
+    guard let value = recordingIntegrity else { return false }
+    return macroSaving && recordingSaveAttempt?.id == attempt.id && value.epoch == attempt.epoch
+      && value.documentID == attempt.documentID && !value.active && value.firstReason == nil
+      && recordingDocumentID == nil && !recordingStateSerialExhausted
+      && recordingStateSerial == attempt.serial && recordedCommands == attempt.commands
+      && recordedUnits == attempt.units
+  }
+  // TASK2A-SCALAR-ADAPTER-END
 
   convenience init(
     id: UUID = UUID(), restoreStartup: Bool = true,
@@ -991,6 +2008,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     workspaceSplit.addSubview(workspace)
     workspaceSplit.addSubview(host)
     workspace.isHidden = true
+    macroRecordingIncompleteStatus.setAccessibilityIdentifier("macro.recording.incomplete")
+    macroRecordingIncompleteStatus.identifier = .init("macro.recording.incomplete")
+    macroRecordingIncompleteStatus.setAccessibilityLabel("Incomplete macro recording")
+    macroRecordingIncompleteStatus.setAccessibilityValue(macroRecordingIncompleteStatus.stringValue)
+    macroRecordingIncompleteStatus.isHidden = true
     checkpointStatus.setAccessibilityIdentifier("session.checkpoint.status")
     checkpointStatus.identifier = .init("session.checkpoint.status")
     checkpointStatus.setAccessibilityLabel("Session checkpoint status")
@@ -1020,15 +2042,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       NSStackView(views: [restorePanePresentationButton, discardPanePresentationButton]))
     panePresentationRow.isHidden = true
     let stack = NSStackView(views: [
-      tabBar, tabs, languagePicker, diskStatusRow, workspaceSplit, status, checkpointStatusRow,
-      panePresentationRow,
+      tabBar, tabs, languagePicker, diskStatusRow, workspaceSplit, status,
+      macroRecordingIncompleteStatus, checkpointStatusRow, panePresentationRow,
     ])
     stack.orientation = .vertical
     stack.alignment = .leading
     stack.spacing = 8
     stack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
     window.contentView = stack
-    for view in [tabBar, tabs, languagePicker, workspaceSplit, status, checkpointStatusRow] {
+    for view in [
+      tabBar, tabs, languagePicker, workspaceSplit, status, checkpointStatusRow,
+      macroRecordingIncompleteStatus,
+    ] {
       view.translatesAutoresizingMaskIntoConstraints = false
       view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -20).isActive = true
     }
@@ -1729,18 +2754,49 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       open(url, encoding: DocumentEncoding.allCases[picker.indexOfSelectedItem])
     case "document.encoding": showEncoding()
     case "macro.start":
-      guard let current, !current.saving, recordingDocumentID == nil, !macroSaving else { return }
+      guard let current, !current.saving, recordingDocumentID == nil, !macroSaving,
+        recordingSaveAttempt == nil
+      else { return }
+      let integrity = recordingIntegrity
+      let serial = recordingStateSerial
+      let exhausted = recordingStateSerialExhausted
+      let commands = recordedCommands
+      let units = recordedUnits
+      func factsStillCurrent() -> Bool {
+        self.current === current && !current.saving && recordingDocumentID == nil
+          && !macroSaving && recordingSaveAttempt == nil
+          && recordingIntegrity?.epoch == integrity?.epoch
+          && recordingIntegrity?.documentID == integrity?.documentID
+          && recordingIntegrity?.active == integrity?.active
+          && recordingIntegrity?.firstReason == integrity?.firstReason
+          && recordingStateSerial == serial && recordingStateSerialExhausted == exhausted
+          && recordedCommands == commands && recordedUnits == units
+      }
       guard allowLeavingUnsavedRecording() else { return }
-      recordedCommands = []
-      recordedUnits = 0
-      recordingDocumentID = current.id
+      if applicationRouting != nil {
+        guard (try? requireApplicationEndpoint()) != nil else { return }
+      }
+      guard factsStillCurrent(), refreshMacroBinding(current) != nil,
+        nativeMacroStartBindingAvailable(current), factsStillCurrent()
+      else { return }
+      beginRecordingIntegrity(current.id)
+      withOwnedRecorderMutation {
+        recordedCommands = []
+        recordedUnits = 0
+        recordingDocumentID = current.id
+      }
       refresh()
     case "macro.stop": stopRecording()
     case "macro.discard":
       guard !macroSaving else { return }
-      recordingDocumentID = nil
-      recordedCommands = []
-      recordedUnits = 0
+      recordingIntegrity = nil
+      recordingSaveAttempt = nil
+      compatibilitySetterPhase = .none
+      withOwnedRecorderMutation {
+        recordingDocumentID = nil
+        recordedCommands = []
+        recordedUnits = 0
+      }
       refresh()
     case "macro.cancel": cancelMacroReplay()
     case "file.new": newDocument()
@@ -1962,12 +3018,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return current?.saving == false && visiblePanes.count == 2
     case "macro.start":
       return current != nil && current?.saving == false && recordingDocumentID == nil
-        && !macroSaving && recordedCommands.isEmpty
+        && !macroSaving && recordingSaveAttempt == nil && recordedCommands.isEmpty
+        && !unresolvedRecording && current.map(nativeMacroStartBindingAvailable) == true
     case "macro.stop":
-      return !macroSaving && (recordingDocumentID != nil || !recordedCommands.isEmpty)
+      return !macroSaving
+        && (recordingDocumentID != nil || !recordedCommands.isEmpty || unresolvedRecording)
         && current?.saving == false
     case "macro.discard":
-      return !macroSaving && (recordingDocumentID != nil || !recordedCommands.isEmpty)
+      return !macroSaving
+        && (recordingDocumentID != nil || !recordedCommands.isEmpty || unresolvedRecording)
     case "macro.cancel": return replayCancellation != nil
     case "file.reopenClosed":
       if let routing = applicationRouting {
@@ -2342,6 +3401,215 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     scheduleRecovery()
   }
 
+  // Tiny source-owned String insertion prototype; ordinary/native provenance stays separate.
+  private func installControlledStringRouting(_ document: EditorDocument) {
+    for pane in document.panePool {
+      if pane.isAttached {
+        pane.editor.installControlledStringOwner(self)
+      } else {
+        pane.editor.retireControlledStringOwner(self)
+      }
+    }
+  }
+
+  private func retireControlledStringRouting(_ document: EditorDocument) {
+    nativeApprovedViewRetire(storageID: ObjectIdentifier(document.storage))
+    for pane in document.panePool { pane.editor.retireControlledStringOwner(self) }
+  }
+
+  func controlledStringInsertion(
+    _ editor: DocumentTextView, replacement: String
+  ) -> ControlledStringInsertionResult {
+    guard editor.controlledStringOwner === self,
+      let source = pane(for: editor), source.isAttached, current === source.document,
+      focusedPane === source, recordingDocumentID == source.document.id,
+      recordingIntegrity?.active == true,
+      recordingIntegrity?.documentID == source.document.id,
+      !editor.isComposingText, !editor.hasMarkedText(),
+      !source.document.undoManager.isUndoing, !source.document.undoManager.isRedoing,
+      editor.selectedRanges.count == 1,
+      editor.selectedRange().length == 0,
+      !replacement.isEmpty, !replacement.utf16.contains(where: { $0 == 10 || $0 == 13 }),
+      source.document.storage.length <= 4096, replacement.utf16.count <= 4096,
+      let storage = source.document.storage as? DocumentCommitTextStorage
+    else { return .unhandled }
+    // A nested same-C invocation cannot escape an occupied explicit preparation.
+    guard nativeEditPreparation == nil else { return .handledRefused }
+    let document = source.document
+    let selection = editor.selectedRange()
+    let expected = storage.string
+    let native = expected as NSString
+    guard selection.location >= 0, selection.location <= native.length,
+      selection.location == 0 || selection.location == native.length
+        || !(0xDC00...0xDFFF).contains(native.character(at: selection.location))
+    else { return .handledRefused }
+    let seed = explicitMacroSeed(
+      document, pane: source, expected: native,
+      range: selection, replacement: replacement)
+    let revision = document.editRevision
+    let ownership = document.ownershipGeneration
+    let mutation = document.closeMutationGeneration
+    let initialLease = macroBindings[ObjectIdentifier(storage)]
+    let hadBinding = initialLease.map { storage.nativeMacroHasBinding(self, lease: $0) } ?? false
+    let endpoint = applicationRouting?.endpointID
+    let assignment = applicationRouting?.assignment
+    let panes = document.panePool.filter(\.isAttached).map(\.id)
+    let primitive = storage.nativeMacroPrimitiveState
+    @MainActor func editingStillValid() -> Bool {
+      guard editor.controlledStringOwner === self, current === document, focusedPane === source,
+        source.editor === editor, source.document === document, source.isAttached,
+        editor.textStorage === storage, document.storage === storage,
+        editor.selectedRange() == selection, editor.selectedRanges.count == 1,
+        document.editRevision == revision, document.ownershipGeneration == ownership,
+        document.closeMutationGeneration == mutation,
+        applicationRouting?.endpointID == endpoint, applicationRouting?.assignment == assignment,
+        document.panePool.filter(\.isAttached).map(\.id) == panes,
+        macroBindings[ObjectIdentifier(storage)] == initialLease,
+        nativeEditContextStillValid(
+          document, source: source, context: nil,
+          requireFocus: true, operationID: nil),
+        storage.string.utf16.elementsEqual(expected.utf16)
+      else { return false }
+      if hadBinding, let initialLease {
+        return storage.nativeMacroHasBinding(self, lease: initialLease)
+      }
+      return true
+    }
+    @MainActor func stillAdmitted() -> Bool {
+      withMacroCallbackBarrier {
+        applicationAllows(.select, document: document)
+          && applicationAllows(.edit, document: document) && editingStillValid()
+      }
+    }
+    let scope: MacroContextScope?
+    if let seed, let context = Self.macroCommitContext,
+      recordedCommands.count < 10_000, recordedUnits >= 0, recordedUnits <= 10_000_000,
+      seed.contract.replacementUTF16Count <= 10_000_000 - recordedUnits
+    {
+      scope = Self.approvedViewBroker.beginExplicitScope(
+        in: context, identity: seed.identity,
+        primitive: seed.primitive, contract: seed.contract)
+    } else {
+      scope = nil
+    }
+    var scopeFinished = false
+    @MainActor func finishScope() {
+      guard !scopeFinished, let scope else { return }
+      scopeFinished = true
+      _ = Self.macroCommitContext?.finish(scope)
+    }
+    defer { finishScope() }
+    guard stillAdmitted() else { return .handledRefused }
+    // Own a lawful native group even when this entry had no caller-supplied group.
+    withMacroCallbackBarrier { editor.documentUndo.beginUndoGrouping() }
+    defer {
+      finishScope()
+      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
+    }
+    guard stillAdmitted() else { return .handledRefused }
+    withMacroCallbackBarrier { editor.breakUndoCoalescing() }
+    guard stillAdmitted() else { return .handledRefused }
+    let preparation = NativeEditPreparation(
+      editor: editor, range: selection,
+      replacement: replacement, mode: .interactive, validate: editingStillValid)
+    preparation.controlledStringInsertion = true
+    nativeEditPreparation = preparation
+    defer { nativeEditPreparation = nil }
+    guard
+      withMacroCallbackBarrier({
+        editor.shouldChangeText(in: selection, replacementString: replacement)
+      }), stillAdmitted(), preparation.controlledFactsValid?() == true
+    else { return .handledRefused }
+    // Derive representation and authentic current capture before any issue/bookkeeping.
+    let prepared = storage.prepareControlledCharacters(in: selection, with: replacement)
+    guard editingStillValid(),
+      prepared.replacement.beforeUTF16Count == native.length,
+      preparation.controlledFactsValid?() == true
+    else { return .handledRefused }
+    let delivery: MacroExplicitDelivery?
+    if let seed, let scope, let context = Self.macroCommitContext,
+      explicitMacroFactsValid(seed, storage: storage),
+      let capture = prepared.capture, capture.lease == seed.lease,
+      capture.epoch == seed.identity.recordingEpoch,
+      context.admitFinalDecision(
+        scope, decision: .admitted(UUID()),
+        identity: seed.identity, primitive: primitive),
+      let permit = context.issueExplicitPermit(scope, identity: seed.identity, primitive: primitive)
+    {
+      delivery = MacroExplicitDelivery(seed: seed, permit: permit, capture: capture)
+    } else {
+      finishScope()
+      delivery = nil
+      // Missing owner/binding must not depend on a nonexistent storage sink.
+      // Only the authentic current active interval of this exact editing document is marked.
+      if let value = recordingIntegrity, value.active, value.documentID == document.id,
+        recordingDocumentID == document.id
+      {
+        markRecordingGap(value.epoch, reason: .explicitCommitRefused, activeOnly: true)
+      }
+    }
+    // Pure stored-value guard/metadata, then the sole shared actual backing entry.
+    guard preparation.commit?() == true else { return .handledRefused }
+    guard storage.replaceControlledCharacters(prepared, delivery: delivery) else {
+      if let seed {
+        markRecordingGap(
+          seed.identity.recordingEpoch,
+          reason: .explicitCommitRefused, activeOnly: true)
+      }
+      return .handledRefused
+    }
+    withMacroCallbackBarrier { editor.didChangeText() }
+    withMacroCallbackBarrier { editor.documentUndo.setActionName("Typing") }
+    // No later UI/recording refusal can repeat or roll back this committed native edit.
+    return .handledCommitted
+  }
+
+  private func prepareControlledStringEdit(_ preparation: NativeEditPreparation) -> Bool {
+    guard let source = pane(for: preparation.editor), mayMutate(source), preparation.validate()
+    else { return false }
+    let document = source.document
+    var updated: DocumentBookmarks?
+    if !document.bookmarks.offsets.isEmpty {
+      do {
+        var bookmarks = document.bookmarks
+        try bookmarks.remap(
+          through: TextEdit(
+            range: preparation.range,
+            replacement: preparation.replacement), inUTF16: document.storage.mutableString)
+        updated = bookmarks
+      } catch { return false }
+    }
+    let beforeBookmarks = document.bookmarks
+    let beforePending = document.pendingBookmarks
+    let beforePendingUndo = document.pendingBookmarksHaveUndo
+    let beforeTyping = document.typingBookmarkNextLocation
+    let beforeRevision = document.editRevision
+    let beforeOwnership = document.ownershipGeneration
+    let beforeMutation = document.closeMutationGeneration
+    // Unlike strict explicit/search preparation, recorder identity/serial refusal does
+    // not deny an otherwise admitted controlled ordinary edit.
+    preparation.controlledFactsValid = { [weak document] in
+      guard let document else { return false }
+      return document.bookmarks == beforeBookmarks && document.pendingBookmarks == beforePending
+        && document.pendingBookmarksHaveUndo == beforePendingUndo
+        && document.typingBookmarkNextLocation == beforeTyping
+        && document.editRevision == beforeRevision
+        && document.ownershipGeneration == beforeOwnership
+        && document.closeMutationGeneration == beforeMutation
+    }
+    preparation.commit = { [weak self, weak document, weak preparation] in
+      guard let self, let document, let preparation,
+        self.nativeEditPreparation === preparation,
+        preparation.controlledFactsValid?() == true
+      else { return false }
+      document.pendingBookmarks = updated
+      document.pendingBookmarksHaveUndo = false
+      document.typingBookmarkNextLocation = nil
+      return true
+    }
+    return true
+  }
+
   /// Primitive checks only: callers run owner admission before this final fence.
   private func nativeEditContextStillValid(
     _ document: EditorDocument, source: EditorPane, context: PaneCommandContext?,
@@ -2375,6 +3643,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     action: String, context: PaneCommandContext? = nil, requireFocus: Bool = true,
     operationID: UUID? = nil, cancellation: MacroCancellation? = nil
   ) -> Bool {
+    applyNativeTextEdit(
+      document, source: source, expected: expected, edit: edit, action: action,
+      context: context, requireFocus: requireFocus, operationID: operationID,
+      cancellation: cancellation, mode: .interactive)
+  }
+
+  @discardableResult private func applyNativeTextEdit(
+    _ document: EditorDocument, source: EditorPane, expected: String, edit: TextEdit,
+    action: String, context: PaneCommandContext?, requireFocus: Bool,
+    operationID: UUID?, cancellation: MacroCancellation?, mode: NativeEditMode
+  ) -> Bool {
     guard nativeEditPreparation == nil,
       documents.contains(where: { $0 === document }),
       !document.saving, !preparingToQuit, !windowClosed, source.isAttached,
@@ -2397,37 +3676,125 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let ownership = document.ownershipGeneration
     let mutation = document.closeMutationGeneration
     @MainActor func snapshotStillValid() -> Bool {
-      self.nativeEditContextStillValid(
-        document, source: source, context: context, requireFocus: requireFocus,
-        operationID: operationID, cancellation: cancellation)
-        && document.editRevision == revision && document.ownershipGeneration == ownership
-        && document.closeMutationGeneration == mutation
-        && document.storage.string.utf16.elementsEqual(expected.utf16)
+      @MainActor func nativeSnapshot() -> Bool {
+        self.nativeEditContextStillValid(
+          document, source: source, context: context, requireFocus: requireFocus,
+          operationID: operationID, cancellation: cancellation)
+          && document.editRevision == revision && document.ownershipGeneration == ownership
+          && document.closeMutationGeneration == mutation
+          && document.storage.string.utf16.elementsEqual(expected.utf16)
+      }
+      guard nativeSnapshot() else { return false }
+      switch mode {
+      case .interactive:
+        return true
+      case .searchBorrow(let binding, let credential):
+        guard let window = self.window, ObjectIdentifier(window) == binding.windowIdentity,
+          (try? self.inspectDocumentSearchSource(
+            document: document, pane: source, window: window, binding: binding)) == credential
+        else { return false }
+        // Inspection runs real owner callbacks; reread transaction-only facts afterward too.
+        return nativeSnapshot()
+      }
     }
     @MainActor func stillAdmitted() -> Bool {
-      (context == nil || self.applicationAllows(.select, document: document))
-        && self.applicationAllows(.edit, document: document) && snapshotStillValid()
+      withMacroCallbackBarrier {
+        (context == nil || self.applicationAllows(.select, document: document))
+          && self.applicationAllows(.edit, document: document) && snapshotStillValid()
+      }
     }
+    let customStorage = document.storage as? DocumentCommitTextStorage
+    let macroSeed: MacroExplicitSeed?
+    let macroScope: MacroContextScope?
+    if recordingDocumentID == document.id {
+      guard recordedUnits >= 0, recordedUnits <= 10_000_000 else { return false }
+      let fits =
+        recordedCommands.count < 10_000
+        && replacement.utf16.count <= 10_000_000 - recordedUnits
+      if !fits {
+        if case .searchBorrow = mode { return false }
+        // Interactive capacity stop stays in the original delegate preflight.
+        macroSeed = nil
+        macroScope = nil
+      } else {
+        guard
+          let seed = explicitMacroSeed(
+            document, pane: source, expected: native,
+            range: range, replacement: replacement), let context = Self.macroCommitContext,
+          let scope = Self.approvedViewBroker.beginExplicitScope(
+            in: context, identity: seed.identity,
+            primitive: seed.primitive, contract: seed.contract)
+        else {
+          markRecordingGap(recordingIntegrity?.epoch, reason: .contextUnavailable, activeOnly: true)
+          return false
+        }
+        macroSeed = seed
+        macroScope = scope
+      }
+    } else {
+      macroSeed = nil
+      macroScope = nil
+    }
+    var macroScopeFinished = false
+    @MainActor func finishMacroScope() {
+      guard !macroScopeFinished, let scope = macroScope else { return }
+      macroScopeFinished = true
+      _ = Self.macroCommitContext?.finish(scope)
+    }
+    defer { finishMacroScope() }
     guard stillAdmitted() else { return false }
-    editor.breakUndoCoalescing()
+    withMacroCallbackBarrier { editor.breakUndoCoalescing() }
     guard stillAdmitted() else { return false }
     let preparation = NativeEditPreparation(
-      editor: editor, range: range, replacement: replacement, validate: snapshotStillValid)
+      editor: editor, range: range, replacement: replacement, mode: mode,
+      validate: snapshotStillValid)
     self.nativeEditPreparation = preparation
     defer { self.nativeEditPreparation = nil }
-    guard editor.shouldChangeText(in: range, replacementString: replacement), stillAdmitted()
+    guard
+      withMacroCallbackBarrier({
+        editor.shouldChangeText(in: range, replacementString: replacement)
+      }), stillAdmitted()
     else { return false }
-    editor.documentUndo.beginUndoGrouping()
-    // Undo-group notifications may run application code too. Publish no edit
-    // bookkeeping until the target and proposal are valid after that boundary.
-    guard stillAdmitted(), preparation.commit?() ?? !preparation.delegateClaimed else {
-      editor.documentUndo.endUndoGrouping()
+    withMacroCallbackBarrier { editor.documentUndo.beginUndoGrouping() }
+    guard stillAdmitted(), preparation.macroFactsValid?() ?? !preparation.delegateClaimed else {
+      finishMacroScope()
+      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
       return false
     }
-    editor.textStorage?.replaceCharacters(in: range, with: replacement)
-    editor.didChangeText()
-    editor.documentUndo.endUndoGrouping()
-    editor.documentUndo.setActionName(action)
+    let delivery: MacroExplicitDelivery?
+    if let seed = macroSeed, let scope = macroScope {
+      guard let storage = customStorage, explicitMacroFactsValid(seed, storage: storage),
+        let capture = nativeMacroCapture(seed.lease), capture.epoch == seed.identity.recordingEpoch,
+        let context = Self.macroCommitContext,
+        context.admitFinalDecision(
+          scope, decision: .admitted(UUID()),
+          identity: seed.identity, primitive: storage.nativeMacroPrimitiveState),
+        let permit = context.issueExplicitPermit(
+          scope, identity: seed.identity,
+          primitive: storage.nativeMacroPrimitiveState)
+      else {
+        finishMacroScope()
+        withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
+        return false
+      }
+      delivery = MacroExplicitDelivery(seed: seed, permit: permit, capture: capture)
+    } else {
+      delivery = nil
+    }
+    // After issuance: pure guarded prederived bookkeeping, then direct backing.
+    guard preparation.commit?() ?? !preparation.delegateClaimed else {
+      finishMacroScope()
+      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
+      return false
+    }
+    if let storage = customStorage, let delivery {
+      storage.replaceExplicitCharacters(delivery: delivery)
+    } else {
+      editor.textStorage?.replaceCharacters(in: range, with: replacement)
+    }
+    withMacroCallbackBarrier { editor.didChangeText() }
+    withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
+    withMacroCallbackBarrier { editor.documentUndo.setActionName(action) }
     return true
   }
 
@@ -2543,8 +3910,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           source.editor.breakUndoCoalescing()
           document.undoManager.beginUndoGrouping()
           self.setBookmarks(document, value: result.0)
-          document.undoManager.endUndoGrouping()
           document.undoManager.setActionName("Bookmarks")
+          document.undoManager.endUndoGrouping()
         }
         if let offset = result.1 {
           source.editor.setSelectedRange(NSRange(location: offset, length: 0))
@@ -3121,7 +4488,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   private func installCallbacks(for pane: EditorPane) {
     let document = pane.document
+    _ = refreshMacroBinding(document)
     let editor = pane.editor
+    if pane.isAttached { editor.installControlledStringOwner(self) }
     editor.delegate = self
     editor.canChangeSelection = { [weak self, weak document, weak pane] in
       guard let self, let document, let pane else { return false }
@@ -3289,6 +4658,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       return
     }
     for document in closing {
+      retireMacroBinding(document)
       invalidateFileState(document)
       if !document.dirty { closedDocuments.append(document) }
       discardRecovery(document.id)
@@ -3454,6 +4824,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
   func windowWillClose(_ notification: Notification) {
     windowClosed = true
+    for document in documents { retireMacroBinding(document) }
     diskActions?.cancel()
     locateActions?.cancel()
     diskConflict?.close()
@@ -3542,8 +4913,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard let source = pane(for: textView), mayMutate(source) else { return false }
     let document = source.document
     do {
+      let approvedPending = approvedBookkeepingBefore(
+        textView, range: affectedCharRange,
+        replacement: replacementString, edge: .clearPending)
       document.pendingBookmarks = nil
+      approvedBookkeepingAfter(textView, edge: .clearPending, before: approvedPending)
+      let approvedUndoFlag = approvedBookkeepingBefore(
+        textView, range: affectedCharRange,
+        replacement: replacementString, edge: .clearUndoFlag)
       document.pendingBookmarksHaveUndo = false
+      approvedBookkeepingAfter(textView, edge: .clearUndoFlag, before: approvedUndoFlag)
       if document.undoManager.isUndoing || document.undoManager.isRedoing {
         document.typingBookmarkNextLocation = nil
       }
@@ -3610,8 +4989,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       let replacementString
     else { return true }
     let count = replacementString.utf16.count
-    guard recordedCommands.count < 10_000, count <= 10_000_000 - recordedUnits else {
-      recordingDocumentID = nil
+    guard recordedUnits >= 0, recordedUnits <= 10_000_000,
+      recordedCommands.count < 10_000, count <= 10_000_000 - recordedUnits
+    else {
+      stopRecordingIntegrity()
       let alert = NSAlert()
       alert.messageText = "Macro recording limit reached"
       alert.informativeText =
@@ -3619,23 +5000,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       alert.runModal()
       return true
     }
-    recordedCommands.append(
-      .replace(
-        location: affectedCharRange.location, length: affectedCharRange.length,
-        text: replacementString))
-    recordedUnits += count
+    // Delegate permission is not a primitive commit. Successful unsupported
+    // native character writes remain disclosed by the storage observation sink.
     return true
   }
 
   private func prepareNativeEdit(_ preparation: NativeEditPreparation) -> Bool {
+    if preparation.controlledStringInsertion { return prepareControlledStringEdit(preparation) }
     guard let source = pane(for: preparation.editor), mayMutate(source), preparation.validate()
     else { return false }
     let document = source.document
     let count = preparation.replacement.utf16.count
     if recordingDocumentID == document.id,
-      recordedCommands.count >= 10_000 || count > 10_000_000 - recordedUnits
+      recordedUnits < 0 || recordedUnits > 10_000_000
+        || recordedCommands.count >= 10_000 || count > 10_000_000 - recordedUnits
     {
-      recordingDocumentID = nil
+      if case .searchBorrow = preparation.mode { return false }
+      stopRecordingIntegrity()
       let alert = NSAlert()
       alert.messageText = "Macro recording limit reached"
       alert.informativeText =
@@ -3652,7 +5033,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           inUTF16: document.storage.mutableString)
         bookmarks = updated
       } catch {
-        present(error)
+        if case .interactive = preparation.mode { present(error) }
         return false
       }
     }
@@ -3665,29 +5046,33 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let recordingID = recordingDocumentID
     let commands = recordedCommands
     let units = recordedUnits
-    let command: MacroCommand? =
-      recordingID == document.id
-      ? .replace(
-        location: preparation.range.location, length: preparation.range.length,
-        text: preparation.replacement) : nil
-    preparation.commit = { [weak self, weak document] in
-      guard let self, let document,
-        self.recordingDocumentID == recordingID, self.recordedCommands == commands,
-        self.recordedUnits == units
+    let recordingEpoch = recordingIntegrity?.epoch
+    let recordingSerial = recordingStateSerial
+    let primitive = (document.storage as? DocumentCommitTextStorage)?.nativeMacroPrimitiveState
+    preparation.macroFactsValid = { [weak self, weak document] in
+      guard let self, let document else { return false }
+      return self.recordingDocumentID == recordingID && self.recordedCommands == commands
+        && self.recordedUnits == units && self.recordingIntegrity?.epoch == recordingEpoch
+        && self.recordingStateSerial == recordingSerial
+        && (recordingID == nil || !self.recordingStateSerialExhausted)
+        && (document.storage as? DocumentCommitTextStorage)?.nativeMacroPrimitiveState == primitive
+    }
+    preparation.commit = { [weak document, weak preparation] in
+      guard let document, let preparation, preparation.macroFactsValid?() == true
       else { return false }
       document.pendingBookmarks = bookmarks
       document.pendingBookmarksHaveUndo = bookmarks != nil && noOp
       document.typingBookmarkNextLocation = nil
-      if let command {
-        self.recordedCommands.append(command)
-        self.recordedUnits += count
-      }
       return true
     }
     return true
   }
 
   private func allowLeavingUnsavedRecording() -> Bool {
+    if unresolvedRecording {
+      renderMacroRecordingIncompleteStatus()
+      return false
+    }
     guard !recordedCommands.isEmpty else { return true }
     let alert = NSAlert()
     alert.messageText = "The macro recording has not been saved"
@@ -3708,9 +5093,29 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       alert.runModal()
       return
     }
-    recordingDocumentID = nil
-    refresh()
-    guard !recordedCommands.isEmpty else { return }
+    stopRecordingIntegrity()
+    // Capture this stopped interval before refresh invokes owner/session callbacks.
+    let stopped: MacroRecordingSaveAttempt?
+    if let value = recordingIntegrity, !value.active, value.firstReason == nil,
+      recordingDocumentID == nil, !recordingStateSerialExhausted,
+      !recordedCommands.isEmpty, !macroSaving, recordingSaveAttempt == nil
+    {
+      stopped = MacroRecordingSaveAttempt(
+        id: UUID(), epoch: value.epoch,
+        documentID: value.documentID, serial: recordingStateSerial,
+        commands: recordedCommands, units: recordedUnits)
+    } else {
+      stopped = nil
+    }
+    withMacroCallbackBarrier { refresh() }
+    guard let stopped, !windowClosed, !preparingToQuit, !macroSaving,
+      recordingSaveAttempt == nil, let currentStopped = recordingIntegrity,
+      currentStopped.epoch == stopped.epoch, currentStopped.documentID == stopped.documentID,
+      !currentStopped.active, currentStopped.firstReason == nil,
+      recordingDocumentID == nil, !recordingStateSerialExhausted,
+      recordingStateSerial == stopped.serial, recordedCommands == stopped.commands,
+      recordedUnits == stopped.units
+    else { return }
     let alert = NSAlert()
     alert.messageText = "Save recorded macro"
     alert.informativeText =
@@ -3721,26 +5126,43 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     alert.accessoryView = name
     alert.addButton(withTitle: "Save")
     alert.addButton(withTitle: "Cancel")
-    guard alert.runModal() == .alertFirstButtonReturn else { return }
-    guard let macro = recordingSnapshot(named: name.stringValue) else { return }
+    guard withMacroCallbackBarrier({ alert.runModal() }) == .alertFirstButtonReturn,
+      !macroSaving, recordingSaveAttempt == nil,
+      let current = recordingIntegrity, current.epoch == stopped.epoch,
+      current.documentID == stopped.documentID, !current.active, current.firstReason == nil,
+      recordingDocumentID == nil, recordingStateSerial == stopped.serial,
+      !recordingStateSerialExhausted, recordedCommands == stopped.commands,
+      recordedUnits == stopped.units,
+      let macro = recordingSnapshot(named: name.stringValue)
+    else { return }
+    recordingSaveAttempt = stopped
     macroSaving = true
     Task { [weak self] in
       do {
         try await Task.detached {
           try MacroLibrary(directory: MacroLibrary.defaultDirectory).save(macro)
         }.value
-        self?.recordedCommands = []
-        self?.recordedUnits = 0
-        self?.macroSaving = false
+        guard let self, self.recordingSaveStillCurrent(stopped) else { return }
+        self.withOwnedRecorderMutation {
+          self.recordedCommands = []
+          self.recordedUnits = 0
+          self.recordingIntegrity = nil
+          self.recordingSaveAttempt = nil
+          self.macroSaving = false
+        }
       } catch {
-        self?.macroSaving = false
-        self?.present(error)
+        guard let self, self.recordingSaveStillCurrent(stopped) else { return }
+        self.recordingSaveAttempt = nil
+        self.macroSaving = false
+        self.withMacroCallbackBarrier { self.present(error) }
       }
     }
   }
 
   func recordingSnapshot(named name: String) -> EditorMacro? {
-    guard !recordedCommands.isEmpty else { return nil }
+    guard !recordedCommands.isEmpty, let value = recordingIntegrity,
+      value.firstReason == nil, !recordingStateSerialExhausted
+    else { return nil }
     return EditorMacro(name: name, commands: recordedCommands)
   }
 
@@ -3861,7 +5283,86 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     updateStatus()
   }
 
+  private func renderMacroRecordingIncompleteStatus() {
+    withMacroCallbackBarrier {
+      macroNoticeRenderPending = true
+      guard !macroNoticeRendering else { return }
+      macroNoticeRendering = true
+      defer { macroNoticeRendering = false }
+      // Bound only our synchronous attempts; no scheduled drain or recorder ack.
+      for _ in 0..<2 {
+        guard macroNoticeRenderPending else { return }
+        macroNoticeRenderPending = false
+        guard let currentWindow = window else {
+          macroNoticeRenderPending = true
+          return
+        }
+        let closed = windowClosed
+        let quitting = preparingToQuit
+        let epoch = recordingIntegrity?.epoch
+        let documentID = recordingIntegrity?.documentID
+        let active = recordingIntegrity?.active
+        let reason = recordingIntegrity?.firstReason
+        let recordingID = recordingDocumentID
+        let serial = recordingStateSerial
+        let serialExhausted = recordingStateSerialExhausted
+        let saving = macroSaving
+        let saveAttemptID = recordingSaveAttempt?.id
+        // Every native read precedes the final pure scalar/identity guards.
+        let beforeHidden = macroRecordingIncompleteStatus.isHidden
+        let beforeWindow = window
+        let beforeRowWindow = macroRecordingIncompleteStatus.window
+        guard !closed, !quitting, !windowClosed, !preparingToQuit,
+          beforeWindow === currentWindow, beforeRowWindow === currentWindow
+        else {
+          macroNoticeRenderPending = true
+          return
+        }
+        guard windowClosed == closed, preparingToQuit == quitting,
+          recordingIntegrity?.epoch == epoch, recordingIntegrity?.documentID == documentID,
+          recordingIntegrity?.active == active, recordingIntegrity?.firstReason == reason,
+          recordingDocumentID == recordingID, recordingStateSerial == serial,
+          recordingStateSerialExhausted == serialExhausted,
+          macroSaving == saving, recordingSaveAttempt?.id == saveAttemptID
+        else {
+          macroNoticeRenderPending = true
+          continue
+        }
+        let desiredHidden = reason == nil
+        if beforeHidden != desiredHidden {
+          macroRecordingIncompleteStatus.isHidden = desiredHidden
+        }
+        // Revalidate after setter return; callbacks may have created a successor.
+        let afterHidden = macroRecordingIncompleteStatus.isHidden
+        let afterWindow = window
+        let afterRowWindow = macroRecordingIncompleteStatus.window
+        guard !windowClosed, !preparingToQuit,
+          afterWindow === currentWindow, afterRowWindow === currentWindow
+        else {
+          macroNoticeRenderPending = true
+          return
+        }
+        guard windowClosed == closed, preparingToQuit == quitting,
+          recordingIntegrity?.epoch == epoch, recordingIntegrity?.documentID == documentID,
+          recordingIntegrity?.active == active, recordingIntegrity?.firstReason == reason,
+          recordingDocumentID == recordingID, recordingStateSerial == serial,
+          recordingStateSerialExhausted == serialExhausted,
+          macroSaving == saving, recordingSaveAttempt?.id == saveAttemptID,
+          afterHidden == desiredHidden
+        else {
+          macroNoticeRenderPending = true
+          continue
+        }
+        // This acknowledges current visibility only, never recording metadata.
+        macroNoticeRenderPending = false
+        return
+      }
+      // Two invalidations retain pending for a later real status boundary.
+    }
+  }
+
   private func updateStatus() {
+    defer { renderMacroRecordingIncompleteStatus() }
     notifySessionChange()
     guard let document = current, applicationAllows(.select, document: document) else { return }
     let text = document.storage.string as NSString
@@ -4101,6 +5602,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       document.panePresentation.invalidate(force: true)
     }
     preparingToQuit = true
+    for document in documents { retireControlledStringRouting(document) }
     for document in documents {
       for pane in document.panePool {
         if pane.selectableBeforeQuit == nil { pane.selectableBeforeQuit = pane.editor.isSelectable }
@@ -4134,6 +5636,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
     }
     reconcileFileMonitoring()
+    for document in documents { _ = refreshMacroBinding(document) }
   }
 
   private func reportRecoveryFailure(_ error: Error, always: Bool = false) {
@@ -4151,6 +5654,253 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private func present(_ error: Error) {
     guard !windowClosed, !preparingToQuit else { return }
     if let errorHandler { errorHandler(error) } else { NSAlert(error: error).runModal() }
+  }
+}
+
+// Explicit native source installation; no owner, consumer or panel is activated here.
+extension EditorWindowController {
+  private func makeDocumentSearchSource(document: EditorDocument, pane: EditorPane) throws
+    -> EditorDocumentSearchSource
+  {
+    guard let window = self.window, let routing = applicationRouting else {
+      throw ApplicationDocumentSearchFailure.sourceUnavailable
+    }
+    let binding = DocumentSearchNativeBinding(
+      windowID: sessionID, endpointID: routing.endpointID, documentID: document.id,
+      paneID: pane.id, ownershipGeneration: document.ownershipGeneration,
+      assignment: routing.assignment, registryIdentity: ObjectIdentifier(routing.registry),
+      windowIdentity: ObjectIdentifier(window))
+    _ = try inspectDocumentSearchSource(
+      document: document, pane: pane, window: window, binding: binding)
+    return EditorDocumentSearchSource(
+      inspect: { [weak self, weak document, weak pane, weak window] in
+        guard let self, let document, let pane, let window else {
+          throw ApplicationDocumentSearchFailure.sourceUnavailable
+        }
+        // Retain the document before any helper reads the pane's unowned document.
+        return try withExtendedLifetime((document, pane, window)) {
+          try self.inspectDocumentSearchSource(
+            document: document, pane: pane, window: window, binding: binding)
+        }
+      },
+      capture: { [weak self, weak document, weak pane, weak window] expected in
+        guard let self, let document, let pane, let window else {
+          throw ApplicationDocumentSearchFailure.sourceUnavailable
+        }
+        return try withExtendedLifetime((document, pane, window)) {
+          let inspected = try self.inspectDocumentSearchSource(
+            document: document, pane: pane, window: window, binding: binding)
+          guard inspected == expected else { throw ApplicationDocumentSearchFailure.staleSource }
+          let text = document.storage.string
+          guard text.utf16.count == expected.inputUTF16,
+            try self.inspectDocumentSearchSource(
+              document: document, pane: pane, window: window, binding: binding) == expected
+          else { throw ApplicationDocumentSearchFailure.staleSource }
+          return SearchAdmissionCapture(
+            text: text, inputUTF16: expected.inputUTF16, context: expected)
+        }
+      },
+      isCurrent: { [weak self, weak document, weak pane, weak window] expected in
+        guard let self, let document, let pane, let window else { return false }
+        return withExtendedLifetime((document, pane, window)) {
+          (try? self.inspectDocumentSearchSource(
+            document: document, pane: pane, window: window, binding: binding)) == expected
+        }
+      },
+      select: { [weak self, weak document, weak pane, weak window] expected, source, range in
+        guard let self, let document, let pane, let window else { return false }
+        return withExtendedLifetime((document, pane, window)) {
+          self.selectDocumentSearchSource(
+            document: document, pane: pane, window: window, binding: binding,
+            expected: expected, source: source, range: range)
+        }
+      },
+      replace: { [weak self, weak document, weak pane, weak window] expected, source, replacement in
+        guard let self, let document, let pane, let window else { return false }
+        return withExtendedLifetime((document, pane, window)) {
+          self.replaceDocumentSearchSource(
+            document: document, pane: pane, window: window, binding: binding,
+            expected: expected, source: source, replacement: replacement)
+        }
+      })
+  }
+
+  private func inspectDocumentSearchSource(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding
+  ) throws -> DocumentSearchCredential {
+    func primitiveAvailable() -> Bool {
+      guard sessionID == binding.windowID, self.window === window,
+        ObjectIdentifier(window) == binding.windowIdentity, !windowClosed, !preparingToQuit,
+        let routing = applicationRouting, routing.endpointID == binding.endpointID,
+        routing.assignment == binding.assignment, routing.assignment.windowID == sessionID,
+        ObjectIdentifier(routing.registry) == binding.registryIdentity,
+        document.id == binding.documentID, pane.id == binding.paneID,
+        document.ownershipGeneration == binding.ownershipGeneration,
+        documents.contains(where: { $0 === document }),
+        routing.registry.handle(id: binding.documentID) === document,
+        routing.registry.assignment(of: binding.documentID) == binding.assignment,
+        document.panePool.contains(where: { $0 === pane }), pane.isAttached,
+        pane.document === document, pane.editor.textStorage === document.storage,
+        pane.layoutManager.textStorage === document.storage,
+        !document.saving, document.operationID == nil, document.composingPaneID == nil,
+        document.nativeConfigurationToken == nil, document.panePresentation.installing == nil,
+        !document.storage.editedMask.contains(.editedCharacters),
+        !pane.editor.isComposingText, !pane.editor.hasMarkedText(),
+        !document.searchRevisionExhausted, transferProjection == nil,
+        projectionToken == nil, projectionValid,
+        routing.registry.allows(.select, documentID: binding.documentID)
+      else { return false }
+      return true
+    }
+    guard primitiveAvailable() else { throw ApplicationDocumentSearchFailure.sourceUnavailable }
+    let revision = document.editRevision
+    let length = document.storage.length
+    do {
+      let routing = try requireApplicationEndpoint()
+      guard routing.registry.allows(.select, documentID: binding.documentID) else {
+        throw ApplicationDocumentSearchFailure.sourceUnavailable
+      }
+      // User admission can invalidate its own endpoint; recheck that actual authority.
+      try routing.requireEndpointCurrent()
+      guard primitiveAvailable(), document.editRevision == revision,
+        document.storage.length == length
+      else { throw ApplicationDocumentSearchFailure.sourceUnavailable }
+      return try DocumentSearchCredential(
+        windowID: binding.windowID, endpointID: binding.endpointID,
+        documentID: binding.documentID, paneID: binding.paneID,
+        ownershipGeneration: binding.ownershipGeneration,
+        editRevision: document.editRevision, inputUTF16: document.storage.length)
+    } catch {
+      throw ApplicationDocumentSearchFailure.sourceUnavailable
+    }
+  }
+
+  private func displayDocumentSearchSource(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding, expected: DocumentSearchCredential, source: String
+  ) -> Bool {
+    func valid() -> Bool {
+      (try? inspectDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding)) == expected
+        && source.utf16.count == expected.inputUTF16
+        && document.storage.string.utf16.elementsEqual(source.utf16)
+    }
+    guard valid(), !pendingEndpointAttachments.contains(document.id),
+      current?.composingPaneID == nil || current === document,
+      let routing = applicationRouting
+    else { return false }
+    do {
+      try routing.registry.selectDocument(
+        document.id, in: routing.assignment, expectedRevision: routing.registry.workspaceRevision)
+      guard valid() else { return false }
+      try projectCurrentRegistry()
+      return valid() && current === document
+    } catch {
+      return false
+    }
+  }
+
+  private func focusDocumentSearchSource(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding, expected: DocumentSearchCredential, source: String
+  ) -> Bool {
+    func valid() -> Bool {
+      (try? inspectDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding)) == expected
+        && current === document && source.utf16.count == expected.inputUTF16
+        && document.storage.string.utf16.elementsEqual(source.utf16)
+    }
+    guard valid() else { return false }
+    let previous = focusedPane
+    if previous !== pane {
+      guard valid() else { return false }
+      previous?.editor.breakUndoCoalescing()
+      guard valid() else { return false }
+      pane.editor.breakUndoCoalescing()
+      guard valid() else { return false }
+    }
+    guard valid(), window.makeFirstResponder(pane.editor), valid(),
+      window.firstResponder === pane.editor
+    else { return false }
+    guard valid() else { return false }
+    document.preferredPaneID = pane.id
+    guard valid() else { return false }
+    presentationInteraction(document)
+    guard valid() else { return false }
+    updateStatus()
+    return valid() && window.firstResponder === pane.editor
+  }
+
+  private func selectDocumentSearchSource(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding, expected: DocumentSearchCredential,
+    source: String, range: NSRange
+  ) -> Bool {
+    func valid() -> Bool {
+      (try? inspectDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding)) == expected
+        && source.utf16.count == expected.inputUTF16
+        && document.storage.string.utf16.elementsEqual(source.utf16)
+    }
+    guard valid(), range.location >= 0, range.length >= 0,
+      range.location <= expected.inputUTF16,
+      range.length <= expected.inputUTF16 - range.location
+    else { return false }
+    let native = source as NSString
+    func scalarBoundary(_ offset: Int) -> Bool {
+      offset == 0 || offset == expected.inputUTF16
+        || !(0xDC00...0xDFFF).contains(native.character(at: offset))
+    }
+    guard scalarBoundary(range.location), scalarBoundary(range.location + range.length),
+      displayDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding,
+        expected: expected, source: source),
+      focusDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding,
+        expected: expected, source: source)
+    else { return false }
+    func selectedAndCurrent() -> Bool {
+      valid() && current === document && window.firstResponder === pane.editor
+        && pane.editor.selectedRange() == range
+    }
+    do {
+      try pane.editor.withSelectionInstallation(
+        authorizedBy: {
+          valid() && self.current === document && window.firstResponder === pane.editor
+        },
+        { pane.editor.setSelectedRange(range) })
+    } catch {
+      return false
+    }
+    guard selectedAndCurrent() else { return false }
+    pane.editor.scrollRangeToVisible(range)
+    return selectedAndCurrent()
+  }
+
+  private func replaceDocumentSearchSource(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding, expected: DocumentSearchCredential,
+    source: String, replacement: String
+  ) -> Bool {
+    guard
+      (try? inspectDocumentSearchSource(
+        document: document, pane: pane, window: window, binding: binding)) == expected,
+      source.utf16.count == expected.inputUTF16,
+      document.storage.string.utf16.elementsEqual(source.utf16)
+    else { return false }
+    let context = PaneCommandContext(
+      documentID: expected.documentID, paneID: expected.paneID,
+      editRevision: expected.editRevision, selection: pane.editor.selectedRange())
+    return withExtendedLifetime((document, pane, window)) {
+      applyNativeTextEdit(
+        document, source: pane, expected: source,
+        edit: TextEdit(
+          range: NSRange(location: 0, length: expected.inputUTF16), replacement: replacement),
+        action: "Replace All", context: context, requireFocus: false,
+        operationID: nil, cancellation: nil,
+        mode: .searchBorrow(binding: binding, credential: expected))
+    }
   }
 }
 
@@ -4510,6 +6260,75 @@ extension EditorWindowController {
     try applyRegistryProjection(
       expected, revision: routing.registry.workspaceRevision, endpointID: routing.endpointID)
   }
+  // An already-current unrelated projection has no native work to apply.
+  // Keep exact live bindings; a real changed/stale projection takes the original path.
+  private func preserveUnchangedMacroProjection(
+    _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
+  ) throws -> Bool {
+    guard projectionValid, projectionToken == nil, !windowClosed, !preparingToQuit,
+      transferProjection == nil, settledTransferProjection == nil,
+      pendingEndpointAttachments.isEmpty, transferAttachmentOwner == nil,
+      !approvedRouteSerialExhausted, !approvedRouteRetirementExhausted,
+      nativeMacroTerminalProjectionMatches(expected, revision: revision, endpointID: endpointID),
+      documents.allSatisfy({ nativeMacroStartBindingAvailable($0) })
+    else { return false }
+    let models = documents
+    let ownership = models.map(\.ownershipGeneration)
+    let mutations = models.map(\.closeMutationGeneration)
+    let revisions = models.map(\.editRevision)
+    let bindings = macroBindings
+    let routeSerial = approvedRouteSerial
+    let retirementSerial = approvedRouteRetirementSerial
+    let recorder = nativeMacroApprovedRouteRecorderFence()
+    let selected = current
+    let panes = selected?.panePool.filter(\.isAttached) ?? []
+    var associations: [ApprovedRouteAssociation] = []
+    for pane in panes {
+      guard let association = approvedRoutes[ObjectIdentifier(pane.editor)],
+        association.pane === pane, approvedStoredRoute(association),
+        pane.editor.controlledStringOwner === self
+      else { return false }
+      associations.append(association)
+    }
+    @MainActor func storedProofStillCurrent() -> Bool {
+      projectionValid && projectionToken == nil && !windowClosed && !preparingToQuit
+        && transferProjection == nil && settledTransferProjection == nil
+        && pendingEndpointAttachments.isEmpty && transferAttachmentOwner == nil
+        && !approvedRouteSerialExhausted && !approvedRouteRetirementExhausted
+        && approvedRouteSerial == routeSerial
+        && approvedRouteRetirementSerial == retirementSerial
+        && macroBindings == bindings
+        && documents.count == models.count
+        && zip(documents, models).allSatisfy({ $0 === $1 })
+        && models.map(\.ownershipGeneration) == ownership
+        && models.map(\.closeMutationGeneration) == mutations
+        && models.map(\.editRevision) == revisions
+        && current === selected
+        && (current?.panePool.filter(\.isAttached).map(\.id) ?? []) == panes.map(\.id)
+        && nativeMacroApprovedRouteRecorderFence() == recorder
+        && nativeMacroTerminalProjectionMatches(
+          expected, revision: revision, endpointID: endpointID)
+        && documents.allSatisfy({ nativeMacroStartBindingAvailable($0) })
+        && associations.allSatisfy({ approvedStoredRoute($0) })
+        && panes.allSatisfy({ $0.editor.controlledStringOwner === self })
+    }
+    return try withMacroCallbackBarrier {
+      try validateRegistryProjection(expected, revision: revision, endpointID: endpointID)
+      guard storedProofStillCurrent() else {
+        throw EditorApplicationRoutingError.invalidProjection
+      }
+      for association in associations {
+        guard approvedNativeRoute(association), storedProofStillCurrent() else {
+          throw EditorApplicationRoutingError.invalidProjection
+        }
+      }
+      guard storedProofStillCurrent() else {
+        throw EditorApplicationRoutingError.invalidProjection
+      }
+      return true
+    }
+  }
+
   func applyRegistryProjection(
     _ expected: DocumentWindowSnapshot, revision: UUID, endpointID: UUID
   ) throws {
@@ -4517,9 +6336,17 @@ extension EditorWindowController {
       throw EditorApplicationRoutingError.invalidProjection
     }
     if transferProjection == nil { _ = try applicationRouting?.registry.captureWindows() }
+    if try preserveUnchangedMacroProjection(expected, revision: revision, endpointID: endpointID) {
+      return
+    }
     let token = UUID()
     projectionToken = token
-    defer { if projectionToken == token { projectionToken = nil } }
+    for document in documents { retireMacroBinding(document) }
+    projectionValid = false
+    defer {
+      if projectionToken == token { projectionToken = nil }
+      if projectionValid { for document in documents { _ = refreshMacroBinding(document) } }
+    }
     let next = try registryModels(expected, revision: revision, endpointID: endpointID)
     let oldCurrent = current
     let selection = expected.groups[0].selectedDocumentID
@@ -4678,7 +6505,8 @@ extension EditorWindowController {
       routing.registry.allows(.close, documentID: model.id),
       try model.captureCloseState() == request.state,
       !model.undoManager.isUndoing, !model.undoManager.isRedoing,
-      !macroSaving, !isRecordingMacro, recordedCommands.isEmpty, replayCancellation == nil,
+      !macroSaving, !isRecordingMacro, recordedCommands.isEmpty, !unresolvedRecording,
+      replayCancellation == nil,
       loadingCount == 0, applicationPreparation == nil
     else { throw NativeManagedCloseError.busy }
     if model.pendingPublication != nil { throw NativeManagedCloseError.pendingPublication }
@@ -4717,6 +6545,7 @@ extension EditorWindowController {
       routing.registry.assignment(of: document.id) == routing.assignment,
       documents.contains(where: { $0 === document })
     else { throw NativeManagedCloseError.stale }
+    retireMacroBinding(document)
     let before = try document.captureCloseState()
     let geometry = document.captureCloseGeometry()
     refreshInteractivity(document)
@@ -4856,7 +6685,7 @@ extension EditorWindowController {
     return .init(
       loading: loadingCount > 0,
       macroWork: recordingDocumentID != nil || macroSaving || replayCancellation != nil
-        || !recordedCommands.isEmpty,
+        || !recordedCommands.isEmpty || unresolvedRecording,
       applicationPreparation: applicationPreparation != nil
         || !pendingEndpointAttachments.subtracting(owned).isEmpty
         || (projectionToken != nil && transferProjection == nil), preparingQuit: preparingToQuit)

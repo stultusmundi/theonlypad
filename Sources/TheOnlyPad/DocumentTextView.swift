@@ -5,6 +5,73 @@ enum SelectionInstallationError: Error { case nested, unauthorized }
 @MainActor
 final class DocumentTextView: NSTextView {
   let documentUndo: UndoManager
+  // Weak native route only; exact C/D/pane/storage/lease checks grant authority later.
+  private(set) weak var controlledStringOwner: EditorWindowController?
+  func installControlledStringOwner(_ owner: EditorWindowController) {
+    controlledStringOwner = owner
+  }
+  func retireControlledStringOwner(_ owner: EditorWindowController) {
+    if controlledStringOwner === owner { controlledStringOwner = nil }
+  }
+  // APPROVED-VIEW-DECISION-BEGIN
+  private(set) weak var approvedViewOwner: EditorWindowController?
+  private(set) weak var approvedViewStorage: DocumentCommitTextStorage?
+  private(set) weak var approvedViewWindow: NSWindow?
+  private(set) var approvedViewRoute: ApprovedViewRoute?
+  func installApprovedViewOwner(
+    _ owner: EditorWindowController,
+    storage: DocumentCommitTextStorage, window: NSWindow, route: ApprovedViewRoute
+  ) {
+    approvedViewOwner = owner
+    approvedViewStorage = storage
+    approvedViewWindow = window
+    approvedViewRoute = route
+  }
+  func retireApprovedViewOwner(_ owner: EditorWindowController) {
+    if approvedViewOwner === owner {
+      approvedViewOwner = nil
+      approvedViewStorage = nil
+      approvedViewWindow = nil
+      approvedViewRoute = nil
+    }
+  }
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    approvedViewOwner?.nativeApprovedViewRetire(self)
+    EditorWindowController.withNativeMacroProcessingBarrier {
+      super.viewWillMove(toWindow: newWindow)
+    }
+  }
+  override func shouldChangeText(
+    in affectedCharRange: NSRange,
+    replacementString: String?
+  ) -> Bool {
+    let owner = approvedViewOwner
+    let decision = owner?.nativeApprovedDecisionBegin(
+      self, range: affectedCharRange,
+      replacement: replacementString, singular: true)
+    defer { EditorWindowController.nativeApprovedDecisionCancel(decision) }
+    let result = EditorWindowController.withApprovedViewDecisionBarrier(decision) {
+      super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+    owner?.nativeApprovedDecisionFinish(self, decision: decision, result: result)
+    return result
+  }
+  override func shouldChangeText(
+    inRanges affectedRanges: [NSValue],
+    replacementStrings: [String]?
+  ) -> Bool {
+    let owner = approvedViewOwner
+    let decision = owner?.nativeApprovedDecisionBegin(
+      self, range: nil,
+      replacement: nil, singular: false)
+    defer { EditorWindowController.nativeApprovedDecisionCancel(decision) }
+    let result = EditorWindowController.withApprovedViewDecisionBarrier(decision) {
+      super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings)
+    }
+    owner?.nativeApprovedDecisionFinish(self, decision: decision, result: result)
+    return result
+  }
+  // APPROVED-VIEW-DECISION-END
   init(
     frame: NSRect, textContainer: NSTextContainer, undoManager: UndoManager,
     configurationAllowsInteraction: (() -> Bool)? = nil
@@ -73,10 +140,21 @@ final class DocumentTextView: NSTextView {
     let previousInsertion = isOrdinaryTextInsertion
     isOrdinaryTextInsertion = !isComposingText && replacementRange.location == NSNotFound
     compositionOperationDepth += 1
+    defer {
+      compositionOperationDepth -= 1
+      isOrdinaryTextInsertion = previousInsertion
+      if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
+    }
+    if isOrdinaryTextInsertion, Swift.type(of: insertString) == String.self,
+      let replacement = insertString as? String, let owner = controlledStringOwner
+    {
+      switch owner.controlledStringInsertion(self, replacement: replacement) {
+      case .handledRefused, .handledCommitted: return
+      case .unhandled: break
+      }
+    }
+    // Inactive/unsupported input retains exactly one actual inherited native attempt.
     super.insertText(insertString, replacementRange: replacementRange)
-    compositionOperationDepth -= 1
-    isOrdinaryTextInsertion = previousInsertion
-    if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
   }
   override func unmarkText() {
     guard configurationAllowsInteraction?() ?? true else { return }

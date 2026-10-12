@@ -143,7 +143,7 @@ final class SessionPresentationTests: XCTestCase {
     }
   }
   func testUnsupportedZeroAndFutureVersionsHaveTypedRefusalAndPreserveBytes() throws {
-    for version in [0, 3, 99] {
+    for version in [0, 4, 99] {
       try fixture { store, directory in
         let bytes = Data("{\"version\":\(version)}".utf8)
         let file = try install(bytes, store: store, directory: directory)

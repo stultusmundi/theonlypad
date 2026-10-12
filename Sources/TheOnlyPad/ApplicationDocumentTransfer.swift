@@ -7,6 +7,9 @@ import Foundation
     let id = ApplicationDocumentTransferID(rawValue: UUID())
     let request: DocumentTransferRequest
     var lease: DocumentTransferLease?
+    var originalReservedLease: DocumentTransferLease?
+    var macroSuspension: MacroTransferSuspension?
+    var macroBindingFinished = false
     var pause: CheckpointPauseToken?
     var receipt: (any ApplicationDocumentTransferReceipt)?
     var task: Task<ApplicationDocumentTransferResult, Never>?
@@ -112,6 +115,14 @@ import Foundation
   private func move(_ value: Transaction) async throws {
     let lease = try registry.reserveTransfer(value.request)
     value.lease = lease
+    value.originalReservedLease = lease
+    let reserved = try registry.validateTransferSnapshot(lease)
+    value.macroSuspension = try native.suspendMacroBinding(reserved)
+    guard value.macroSuspension?.lease == lease,
+      value.macroSuspension?.documentID == value.request.documentID
+    else {
+      throw ApplicationDocumentTransferError.pendingLayout
+    }
     let pause = try publication.acquirePause()
     value.pause = pause
     try await publication.drainPause(pause)
@@ -235,6 +246,27 @@ import Foundation
       value.pause = nil
     }
     if let receipt = value.receipt { try native.refreshAdmission(receipt) }
+    if let token = value.macroSuspension, !value.macroBindingFinished {
+      guard value.originalReservedLease == token.lease, terminal.request == value.request,
+        token.documentID == value.request.documentID, value.lease == nil, value.pause == nil
+      else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+      try native.finishMacroBinding(token, terminal, value.receipt)
+      // Process owns this flag. Successful service cannot callback/throw after commit.
+      value.macroBindingFinished = true
+    }
+    if let token = value.macroSuspension {
+      guard value.macroBindingFinished, value.originalReservedLease == token.lease,
+        terminal.request == value.request, token.documentID == value.request.documentID,
+        value.lease == nil, value.pause == nil
+      else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+      // Separate callback-bearing phase. A refusal retains cleanup and the
+      // consumed flag; retry must never call the atomic suspension finish again.
+      try native.completeApprovedViewRouting(token, terminal, value.receipt)
+    }
     value.result = result
     last = (value.id, result, terminal)
     active = nil

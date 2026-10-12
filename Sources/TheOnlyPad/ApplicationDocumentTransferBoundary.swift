@@ -18,6 +18,16 @@ enum ApplicationDocumentTransferError: Error, LocalizedError {
     }
   }
 }
+
+/// Exact process-owned macro quarantine. Object identifiers compare current live
+/// objects; this trusted internal value is not registry authority by itself.
+struct MacroTransferSuspension: Equatable {
+  let lease: DocumentTransferLease
+  let documentID: UUID
+  let documentObjectID: ObjectIdentifier
+  let storageID: ObjectIdentifier
+}
+
 /// Strong transaction-owned native receipt; concrete adapters keep endpoint and monitor phases here.
 @MainActor protocol ApplicationDocumentTransferReceipt: AnyObject {}
 @MainActor struct ApplicationDocumentTransferPublication {
@@ -28,6 +38,20 @@ enum ApplicationDocumentTransferError: Error, LocalizedError {
   let requestCheckpoint: () -> Void
 }
 @MainActor struct ApplicationDocumentTransferNative {
+  /// Required pure quarantine service; no permissive default implementation.
+  let suspendMacroBinding: (DocumentTransferSnapshot) throws -> MacroTransferSuspension
+  let finishMacroBinding:
+    (
+      MacroTransferSuspension, ApplicationDocumentTransferTerminalReceipt,
+      (any ApplicationDocumentTransferReceipt)?
+    ) throws -> Void
+  /// Required post-atomic route completion. May callback/throw; the process has
+  /// already marked suspension release consumed and retains that fact on retry.
+  let completeApprovedViewRouting:
+    (
+      MacroTransferSuspension, ApplicationDocumentTransferTerminalReceipt,
+      (any ApplicationDocumentTransferReceipt)?
+    ) throws -> Void
   /// Bounded capture only. No endpoint effects before the receipt is returned to its owner.
   let capture: (DocumentTransferSnapshot) throws -> any ApplicationDocumentTransferReceipt
   let validate: (DocumentTransferSnapshot, any ApplicationDocumentTransferReceipt) throws -> Void

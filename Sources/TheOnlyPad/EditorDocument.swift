@@ -3,6 +3,29 @@ import PadCore
 
 @MainActor final class GuardedDocumentUndoManager: UndoManager {
   var admission: (() -> Bool)?
+  // The association is installed only with an authenticated existing native route.
+  private weak var approvedHistoryOwner: EditorWindowController?
+  private var approvedHistoryAssociation: ApprovedViewRoute?
+  func installApprovedHistoryOwner(_ owner: EditorWindowController, association: ApprovedViewRoute)
+  {
+    approvedHistoryOwner = owner
+    approvedHistoryAssociation = association
+  }
+  func retireApprovedHistoryOwner(_ owner: EditorWindowController, storageID: ObjectIdentifier) {
+    guard approvedHistoryOwner === owner, approvedHistoryAssociation?.lease.storageID == storageID
+    else { return }
+    approvedHistoryOwner = nil
+    approvedHistoryAssociation = nil
+  }
+  private func beginApprovedHistory(_ action: ApprovedHistoryAction)
+    -> (EditorWindowController?, ApprovedHistoryInvocation?)
+  {
+    let owner = approvedHistoryOwner
+    let invocation = approvedHistoryAssociation.flatMap {
+      owner?.nativeApprovedHistoryBegin(self, association: $0, action: action)
+    }
+    return (owner, invocation)
+  }
   private var checkingAdmission = false
   private func admitted() -> Bool {
     guard !checkingAdmission else { return false }
@@ -12,14 +35,20 @@ import PadCore
   }
   override func undo() {
     guard admitted() else { return }
+    let attempt = beginApprovedHistory(.undo)
+    defer { attempt.0?.nativeApprovedHistoryFinish(attempt.1) }
     super.undo()
   }
   override func redo() {
     guard admitted() else { return }
+    let attempt = beginApprovedHistory(.redo)
+    defer { attempt.0?.nativeApprovedHistoryFinish(attempt.1) }
     super.redo()
   }
   override func undoNestedGroup() {
     guard admitted() else { return }
+    let attempt = beginApprovedHistory(.nestedUndo)
+    defer { attempt.0?.nativeApprovedHistoryFinish(attempt.1) }
     super.undoNestedGroup()
   }
 }
@@ -71,11 +100,13 @@ final class EditorDocument {
   /// Trusted transfer rotation: assignments and returned receipt have no callback boundary.
   func rotateTransferOwnership() -> (ownershipGeneration: UUID, mutationGeneration: UUID) {
     let pair = (ownershipGeneration: UUID(), mutationGeneration: UUID())
+    (storage as? DocumentCommitTextStorage)?.retireMacroBinding()
     ownershipGeneration = pair.ownershipGeneration
     closeMutationGeneration = pair.mutationGeneration
     return pair
   }
   func advanceOwnershipGeneration() {
+    (storage as? DocumentCommitTextStorage)?.retireMacroBinding()
     ownershipGeneration = UUID()
     noteCloseMutation()
   }
@@ -141,11 +172,12 @@ final class EditorDocument {
     noteCloseMutation()
     return true
   }
-  let storage = NSTextStorage()
+  let storage: NSTextStorage = DocumentCommitTextStorage()
   var canUndoRedo: (() -> Bool)?
   let undoManager = GuardedDocumentUndoManager()
   private(set) var panePool: [EditorPane] = []
   private(set) var editRevision: UInt64 = 0
+  private(set) var searchRevisionExhausted: Bool = false
   var composingPaneID: UUID? { didSet { if composingPaneID != oldValue { noteCloseMutation() } } }
   var preferredPaneID: UUID? { didSet { if preferredPaneID != oldValue { noteCloseMutation() } } }
   var splitAxis: PaneAxis = .sideBySide {
@@ -410,13 +442,14 @@ final class EditorDocument {
     ) { [weak self] notification in
       MainActor.assumeIsolated {
         if let storage = notification.object as? NSTextStorage,
-          storage.editedMask.contains(.editedCharacters)
+          storage.editedMask.contains(.editedCharacters), let self
         {
-          self?.noteCloseMutation()
-          self?.editRevision &+= 1
-          self?.processDirtyEdit(storage)
-          self?.highlighter.invalidateForCharacterEdit()
-          self?.onCharactersChanged?()
+          self.noteCloseMutation()
+          if self.editRevision == UInt64.max { self.searchRevisionExhausted = true }
+          self.editRevision &+= 1
+          self.processDirtyEdit(storage)
+          self.highlighter.invalidateForCharacterEdit()
+          self.onCharactersChanged?()
         }
       }
     }

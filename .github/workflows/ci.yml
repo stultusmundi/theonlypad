@@ -50,6 +50,8 @@ jobs:
           build_path=$(scripts/swift.sh build --show-bin-path)
           scripts/test-file-state-bridge.sh "$build_path"
           scripts/test-native-endpoint-bindings.sh "$build_path"
+      - name: Native macro recording regressions
+        run: scripts/test-native-macro.sh
       - name: Shortcut ownership and native recording
         run: |
           scripts/test-application-shortcuts.sh

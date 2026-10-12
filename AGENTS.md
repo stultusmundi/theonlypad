@@ -354,3 +354,27 @@ Checkpoint preparation deferral (2026-10-12): `scripts/test-application-session-
 Custom-language store/lexer component checkpoint (2026-10-12): matched store/compatibility104/0, lexer/language35/0 and separate real post-publication readback faults2/0 pass. The reviewed formatted public package passes 1,122 tests and builds app/helper without warnings with 435 unchanged input hashes. Use the fresh-directory direct-watchdog commands in `docs/verification/custom-languages-components.md`; do not nest another process-group watchdog. Strict parser, stable revisions, loaded-read receipts and bounded cancellable literal spans are implemented as core components. Native editing policy, catalog owner/manager/picker, persistence/transfer/highlighter integration and desktop acceptance remain outstanding. A readback receipt does not prove written-inode ownership; logical lexer limits do not establish RSS or input latency. No new package/release is claimed.
 
 Custom-language editing core checkpoint (2026-10-12): the authentic45-test baseline reaches99 ordinary failures; the reviewed implementation passes54 focused tests. After formatting, the current application passes1,143 tests and builds app/helper warning-free under the checked-in direct owned-process watchdog with474 unchanged input hashes. Reproduce using fresh output/scratch paths and the commands in `docs/verification/custom-language-editing.md`; do not nest another watchdog. Profile comment rules and bounded selection-aware indentation are implemented as core APIs. Native Tab/admission/undo, session selection, manager/highlighter and desktop acceptance remain outstanding. Logical4,096-unit cancellation polling is not allocation/RSS or latency evidence. No new package or release is claimed.
+
+
+Native macro and custom-language session working-tree checkpoint (2026-10-12):
+`scripts/test-native-macro.sh` passes 19 unique hidden native cases; the shared
+runner's `python3 -B -m unittest discover -s Tests/NativeIntegration -p test_native_regressions.py`
+passes 50 pure controls. The coordinator freezes the actual graph, appends five
+declared test-only access payloads and directly owns its watchdog; never wrap it
+in another session-owning watchdog. No windows are shown or input posted. The
+reviewed ten-file native implementation, two Foundation fixture updates and
+seven public harness files are adopted locally.
+
+Core session version 3 preserves authoritative custom-language IDs, while
+automatic/built-in choices retain canonical version 2. The reviewed component
+passes 35 tests after an authentic 35-test/51 ordinary-failure baseline. The
+current formatted working-tree snapshot passes 1,159 default SwiftPM tests and
+builds app/helper warning-free with warnings as errors and 484 unchanged frozen
+inputs. The following build is incremental; native19 is a separate result, not
+part of the default SwiftPM count. This record describes the verified local source.
+Use fresh, isolated-state direct-watchdog commands in
+`docs/verification/custom-language-session-codec.md` and see
+`docs/verification/native-macro-recording.md` for the supported native scope.
+Native custom-language propagation/manager/missing-profile UI, visible macro
+workflows, broader lifecycle, physical IME/VoiceOver and current packaged desktop
+acceptance remain outstanding. No package or release is claimed.

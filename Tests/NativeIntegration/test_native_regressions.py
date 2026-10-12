@@ -687,4 +687,94 @@ suffix
                 with self.assertRaises(ValueError, msg='Package identity ambiguity must refuse before native compile'):
                     RUNNER.freeze_core(binary, run)
 
+    def macro_fixture(self):
+        root,run=self.fixture()
+        names=('MacroChronologyReplayTests','NativeMacroChronologyTests','NativeMacroStorageTask1ATests')
+        targets=('ApprovedViewCommitBroker','DocumentCommitTextStorage','EditorDocument',
+                 'EditorWindowController','NativeMacroCommitContext')
+        blocks=[]
+        for name in names:
+            (root/'Tests/NativeIntegration'/(name+'.swift')).write_text('// synthetic fixture '+name+'\n')
+        for name in targets:
+            path=root/'Sources/TheOnlyPad'/(name+'.swift')
+            if not path.exists(): path.write_text('// synthetic original '+name+'\n')
+            blocks.append('// MACRO-'+name+'-ACCESS-BEGIN\n\n// synthetic access '+name+'\n// MACRO-'+name+'-ACCESS-END\n')
+        (root/'Tests/NativeIntegration/NativeMacroChronologyAccess.swift').write_text(''.join(blocks))
+        (root/'scripts/test-native-macro.sh').write_text('# fixed macro wrapper\n')
+        return root,run
+
+    def macro_result(self):
+        counts={'NativeMacroApprovedViewCapacityTests':2,'NativeMacroApprovedViewPayloadTests':2,
+                'NativeMacroApprovedViewReceiptTests':6,'NativeMacroChronologyTests':7,
+                'NativeMacroControlledExplicitCapacityTests':1,'NativeMacroStrictExplicitCapacityTests':1}
+        text=''
+        for name,count in counts.items():
+            for index in range(count):
+                text+="Test Case '-[NativeRoutingTests."+name+" testSynthetic"+str(index)+"]' passed\n"
+            text+="Test Suite '"+name+"' passed\nExecuted "+str(count)+" tests, with 0 failures\n"
+        return text+'Executed 19 tests, with 0 failures\n'
+
+    def test_macro_freezes_three_original_clients_and_exact_access_without_dirty_probe(self):
+        self.assertIn('macro',RUNNER.SUITES)
+        if 'macro' not in RUNNER.SUITES: return
+        root,run=self.macro_fixture()
+        manifest=RUNNER.freeze(root,run,'macro')
+        for name in ('MacroChronologyReplayTests','NativeMacroChronologyTests','NativeMacroStorageTask1ATests'):
+            original=root/'Tests/NativeIntegration'/(name+'.swift')
+            self.assertEqual((run/'Package/Tests/NativeRoutingTests'/(name+'.swift')).read_bytes(),original.read_bytes())
+        for name in ('ApprovedViewCommitBroker','DocumentCommitTextStorage','EditorDocument',
+                     'EditorWindowController','NativeMacroCommitContext'):
+            original=(root/'Sources/TheOnlyPad'/(name+'.swift')).read_text()
+            self.assertEqual((run/'Package/Sources/NativeRouting'/(name+'.swift')).read_text(),
+                             original+'\n// synthetic access '+name+'\n')
+        self.assertNotIn('transferHarnessDirtyReads',(run/'Package/Sources/NativeRouting/EditorDocument.swift').read_text())
+        self.assertFalse((run/'Package/Tests/NativeRoutingTests/NativeMacroChronologyAccess.swift').exists())
+        self.assertIn('macroAccess',manifest)
+        self.assertEqual(len(manifest['macroAccess']),5)
+        RUNNER.verify(run,manifest)
+        (run/'Original/Tests/NativeIntegration/NativeMacroChronologyAccess.swift').write_text('changed access')
+        with self.assertRaises(ValueError): RUNNER.verify(run,manifest)
+
+    def test_macro_access_requires_exact_single_marker_pair(self):
+        self.assertTrue(hasattr(RUNNER,'macro_access'))
+        if not hasattr(RUNNER,'macro_access'): return
+        text='// MACRO-EditorDocument-ACCESS-BEGIN\n\nexact original tail\n// MACRO-EditorDocument-ACCESS-END\n'
+        self.assertEqual(RUNNER.macro_access(text,'EditorDocument.swift'),b'\nexact original tail\n')
+        self.assertEqual(RUNNER.macro_access(text.replace('tail\n','tail\r\n'),'EditorDocument.swift'),
+                         b'\nexact original tail\r\n')
+        for changed in [text.replace('ACCESS-BEGIN','OTHER-BEGIN'),
+                        text+text,text.replace('ACCESS-END','OTHER-END')]:
+            with self.subTest(changed=changed),self.assertRaises(ValueError):
+                RUNNER.macro_access(changed,'EditorDocument.swift')
+
+    def test_macro_result_requires_all_six_classes_nineteen_distinct_actual_cases(self):
+        self.assertIn('macro',RUNNER.SUITES)
+        if 'macro' not in RUNNER.SUITES: return
+        text=self.macro_result()
+        self.assertEqual(RUNNER.parse_success('macro',text),{'tests':19,'failures':0})
+        case="Test Case '-[NativeRoutingTests.NativeMacroApprovedViewCapacityTests testSynthetic0]' passed\n"
+        for changed in ["Test Suite 'NativeMacroChronologyTests' passed\nExecuted 19 tests, with 0 failures\n",
+                        text.replace(case,''),text+case,
+                        text.replace("Test Suite 'NativeMacroApprovedViewReceiptTests' passed\n",''),
+                        text.replace('Executed 19 tests','Executed 18 tests'),
+                        text+"Test Suite 'NativeMacroApprovedViewCapacityTests' passed at synthetic.\n",
+                        text.replace('0 failures','1 failures',1)]:
+            with self.subTest(changed=changed),self.assertRaises(ValueError):
+                RUNNER.parse_success('macro',changed)
+
+    def test_macro_stage_uses_only_named_filter_werror_and_existing_direct_receipt_owner(self):
+        self.assertIn('macro',RUNNER.SUITES)
+        if 'macro' not in RUNNER.SUITES: return
+        root,run=self.macro_fixture()
+        RUNNER.freeze(root,run,'macro')
+        code=RUNNER.execute(run,RUNNER.parse_args(['macro']),self.watchdog(self.macro_result()))
+        self.assertEqual(code,0)
+        self.assertEqual(len(self.calls),2)
+        command=self.calls[-1][self.calls[-1].index('--')+1:]
+        self.assertEqual(command[:2],['/usr/bin/env','THEONLYPAD_STATE_DIRECTORY='+str(run/'State/test')])
+        self.assertIn('-warnings-as-errors',command)
+        self.assertEqual(command[command.index('--filter')+1],
+                         'NativeMacroApprovedViewCapacityTests|NativeMacroApprovedViewPayloadTests|NativeMacroApprovedViewReceiptTests|NativeMacroChronologyTests|NativeMacroControlledExplicitCapacityTests|NativeMacroStrictExplicitCapacityTests')
+        with self.assertRaises(SystemExit): RUNNER.parse_args(['macro','/synthetic/debug'])
+
 if __name__=='__main__': unittest.main()

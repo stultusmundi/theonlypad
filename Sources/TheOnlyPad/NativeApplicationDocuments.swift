@@ -627,6 +627,32 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
   }
   private func makeTransferNative() -> ApplicationDocumentTransferNative {
     .init(
+      suspendMacroBinding: { snapshot in
+        let current = try self.registry.validateTransferSnapshot(snapshot.lease)
+        guard current.phase == .reserved, !current.effectsStarted,
+          !current.requiresReconciliation, current.request == snapshot.request,
+          current.handle === snapshot.handle,
+          let model = current.handle as? EditorDocument,
+          self.registry.handle(id: model.id) === model,
+          self.registry.assignment(of: model.id) == current.request.source,
+          model.id == current.request.documentID,
+          let storage = model.storage as? DocumentCommitTextStorage
+        else { throw DocumentTransferError.stale }
+        let token = MacroTransferSuspension(
+          lease: current.lease, documentID: model.id,
+          documentObjectID: ObjectIdentifier(model), storageID: ObjectIdentifier(storage))
+        guard storage.suspendMacroBinding(token) else {
+          throw DocumentTransferError.stale
+        }
+        // No throwing work or callback after installation before returning custody.
+        return token
+      },
+      finishMacroBinding: { token, terminal, receipt in
+        try self.finishTransferMacroBinding(token, terminal: terminal, receipt: receipt)
+      },
+      completeApprovedViewRouting: { token, terminal, receipt in
+        try self.completeTransferApprovedViewRouting(token, terminal: terminal, receipt: receipt)
+      },
       capture: { snapshot in
         guard let model = snapshot.handle as? EditorDocument else {
           throw DocumentTransferError.invalidRequest
@@ -734,6 +760,212 @@ enum NativeWorkspaceError: Error { case notReady, staleEndpoint, retainedImport,
         }
       })
   }
+
+  // TASK2B-TERMINAL-MACRO-REPAIR-BEGIN
+  private func finishTransferMacroBinding(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    guard transferring.allowsNativeAdmission, terminal.request.documentID == token.documentID,
+      let model = registry.handle(id: token.documentID) as? EditorDocument,
+      ObjectIdentifier(model) == token.documentObjectID,
+      ObjectIdentifier(model.storage) == token.storageID,
+      let storage = model.storage as? DocumentCommitTextStorage,
+      storage.canFinishMacroBinding(token),
+      registry.assignment(of: model.id)
+        == (terminal.moved ? terminal.request.target : terminal.request.source),
+      registry.closeStatus(documentID: model.id) == .open,
+      registry.adoptionStatus(documentID: model.id) == .active
+    else { throw ApplicationDocumentTransferError.pendingLayout }
+    if let receipt {
+      let value = try transferValue(receipt)
+      guard value.model === model, value.request == terminal.request else {
+        throw NativeDocumentTransferError.changed
+      }
+      try reconcileTransferEndpoints(value, lease: nil)
+    } else {
+      // Successful capture always retains its real receipt. Nil is only the
+      // genuine unstaged cancellation route, never a fabricated presentation.
+      guard !terminal.moved, registry.assignment(of: model.id) == terminal.request.source else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+    }
+    let windowIDs = [terminal.request.source.windowID, terminal.request.target.windowID]
+    var failure: Error?
+    for windowID in windowIDs where endpoints[windowID] == nil {
+      do { _ = try createEndpoint(windowID: windowID, forTransfer: true) } catch {
+        if failure == nil { failure = error }
+      }
+    }
+    if let failure { throw failure }
+    for windowID in windowIDs {
+      do {
+        let endpoint = try endpoint(windowID: windowID)
+        _ = try validateTransferEndpoint(endpoint)
+        try project(windowID: windowID)
+      } catch { if failure == nil { failure = error } }
+    }
+    if let failure { throw failure }
+    // Admission callbacks can retire even unchanged members. Repair bindings
+    // only after all participating admission/presentation callbacks complete.
+    for windowID in windowIDs {
+      do {
+        let endpoint = try endpoint(windowID: windowID)
+        let controller = try validateTransferEndpoint(endpoint)
+        guard let expected = registry.window(id: windowID) else {
+          throw NativeWorkspaceError.staleEndpoint
+        }
+        for id in expected.groups.flatMap(\.documentIDs) {
+          guard let document = registry.handle(id: id) as? EditorDocument else {
+            throw DocumentIntakeError.staleModel
+          }
+          try controller.applyManagedAdmission(to: document, endpointID: endpoint.id)
+        }
+      } catch { if failure == nil { failure = error } }
+    }
+    if let failure { throw failure }
+    for windowID in windowIDs {
+      let endpoint = try endpoint(windowID: windowID)
+      if !endpoint.announced && preparingNewWindow?.endpoint !== endpoint {
+        let controller = try validateTransferEndpoint(endpoint)
+        endpoint.announced = true
+        onWindowCreated(controller)
+        _ = try validateTransferEndpoint(endpoint)
+      }
+    }
+    let source = try endpoint(windowID: terminal.request.source.windowID)
+    let target = try endpoint(windowID: terminal.request.target.windowID)
+    let sourceController = try validateTransferEndpoint(source)
+    let targetController = try validateTransferEndpoint(target)
+    guard let sourceWindow = registry.window(id: source.assignment.windowID),
+      let targetWindow = registry.window(id: target.assignment.windowID)
+    else {
+      throw NativeWorkspaceError.staleEndpoint
+    }
+    let revision = registry.workspaceRevision
+    try sourceController.validateRegistryProjection(
+      sourceWindow, revision: revision, endpointID: source.id)
+    try targetController.validateRegistryProjection(
+      targetWindow, revision: revision, endpointID: target.id)
+    // Repair of other models is permitted partial progress; it can mint serials.
+    // Moved-token release remains untouched until the final callback-free guards.
+    guard sourceController.nativeMacroRepairTerminalBindings(excluding: token),
+      targetController.nativeMacroRepairTerminalBindings(excluding: token)
+    else {
+      throw ApplicationDocumentTransferError.pendingLayout
+    }
+    guard endpoints[source.assignment.windowID] === source,
+      endpoints[target.assignment.windowID] === target,
+      source.controller === sourceController, target.controller === targetController,
+      registry.workspaceRevision == revision,
+      registry.handle(id: token.documentID) === model,
+      ObjectIdentifier(model) == token.documentObjectID,
+      ObjectIdentifier(model.storage) == token.storageID,
+      registry.assignment(of: model.id)
+        == (terminal.moved ? terminal.request.target : terminal.request.source),
+      sourceController.nativeMacroTerminalProjectionMatches(
+        sourceWindow, revision: revision, endpointID: source.id),
+      targetController.nativeMacroTerminalProjectionMatches(
+        targetWindow, revision: revision, endpointID: target.id),
+      storage.canFinishMacroBinding(token)
+    else { throw ApplicationDocumentTransferError.pendingLayout }
+    let owner = terminal.moved ? targetController : sourceController
+    let expected = terminal.moved ? targetWindow : sourceWindow
+    let endpointID = terminal.moved ? target.id : source.id
+    // This call is the last operation: a successful commit returns directly to
+    // the process, which marks its private finished flag before any callback.
+    try owner.nativeMacroFinishTransferBinding(
+      token, document: model,
+      expected: expected, revision: revision, endpointID: endpointID)
+  }
+  // Post-atomic native presentation phase; never called by the storage release.
+  private func completeTransferApprovedViewRouting(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    let placement = terminal.moved ? terminal.request.target : terminal.request.source
+    guard transferring.allowsNativeAdmission, terminal.request.documentID == token.documentID,
+      !registry.hasActiveTransferLease(token.lease),
+      let model = registry.handle(id: token.documentID) as? EditorDocument,
+      ObjectIdentifier(model) == token.documentObjectID,
+      ObjectIdentifier(model.storage) == token.storageID,
+      let storage = model.storage as? DocumentCommitTextStorage,
+      !storage.nativeMacroBindingIsSuspended,
+      registry.assignment(of: model.id) == placement,
+      registry.closeStatus(documentID: model.id) == .open,
+      registry.adoptionStatus(documentID: model.id) == .active
+    else {
+      throw ApplicationDocumentTransferError.pendingLayout
+    }
+    if let receipt {
+      let value = try transferValue(receipt)
+      guard value.model === model, value.request == terminal.request else {
+        throw NativeDocumentTransferError.changed
+      }
+      try reconcileTransferEndpoints(value, lease: nil)
+    } else {
+      guard !terminal.moved, placement == terminal.request.source else {
+        throw ApplicationDocumentTransferError.pendingLayout
+      }
+    }
+    let windowIDs = [terminal.request.source.windowID, terminal.request.target.windowID]
+    for windowID in windowIDs where endpoints[windowID] == nil {
+      _ = try createEndpoint(windowID: windowID, forTransfer: true)
+      try project(windowID: windowID)
+    }
+    for windowID in windowIDs {
+      let current = try endpoint(windowID: windowID)
+      if !current.announced && preparingNewWindow?.endpoint !== current {
+        let controller = try validateTransferEndpoint(current)
+        current.announced = true
+        onWindowCreated(controller)
+        _ = try validateTransferEndpoint(current)
+      }
+    }
+    // All endpoint/admission/announcement callbacks precede these fresh captures.
+    let source = try endpoint(windowID: terminal.request.source.windowID)
+    let target = try endpoint(windowID: terminal.request.target.windowID)
+    let sourceController = try validateTransferEndpoint(source)
+    let targetController = try validateTransferEndpoint(target)
+    guard let sourceWindow = registry.window(id: source.assignment.windowID),
+      let targetWindow = registry.window(id: target.assignment.windowID)
+    else {
+      throw NativeWorkspaceError.staleEndpoint
+    }
+    let revision = registry.workspaceRevision
+    let ownership = model.ownershipGeneration
+    let sourceFence = sourceController.nativeMacroApprovedRouteRecorderFence()
+    let targetFence = targetController.nativeMacroApprovedRouteRecorderFence()
+    func current() -> Bool {
+      transferring.allowsNativeAdmission && endpoints[source.assignment.windowID] === source
+        && endpoints[target.assignment.windowID] === target
+        && source.controller === sourceController && target.controller === targetController
+        && registry.workspaceRevision == revision && registry.handle(id: token.documentID) === model
+        && ObjectIdentifier(model) == token.documentObjectID
+        && model.storage === storage && ObjectIdentifier(storage) == token.storageID
+        && model.ownershipGeneration == ownership && registry.assignment(of: model.id) == placement
+        && !storage.nativeMacroBindingIsSuspended
+        && registry.closeStatus(documentID: model.id) == .open
+        && registry.adoptionStatus(documentID: model.id) == .active
+        && sourceController.nativeMacroTerminalProjectionMatches(
+          sourceWindow, revision: revision, endpointID: source.id)
+        && targetController.nativeMacroTerminalProjectionMatches(
+          targetWindow, revision: revision, endpointID: target.id)
+        && sourceController.nativeMacroApprovedRouteRecorderFence() == sourceFence
+        && targetController.nativeMacroApprovedRouteRecorderFence() == targetFence
+    }
+    guard current() else { throw ApplicationDocumentTransferError.pendingLayout }
+    try sourceController.nativeMacroCompleteTerminalApprovedRoutes(
+      sourceWindow, revision: revision, endpointID: source.id)
+    guard current() else { throw ApplicationDocumentTransferError.pendingLayout }
+    try targetController.nativeMacroCompleteTerminalApprovedRoutes(
+      targetWindow, revision: revision, endpointID: target.id)
+    guard current() else { throw ApplicationDocumentTransferError.pendingLayout }
+    // No old cleanup follows a callback-created successor: process still owns
+    // this transaction, and publishes its terminal outcome only after return.
+  }
+
+  // TASK2B-TERMINAL-MACRO-REPAIR-END
 
   private lazy var checkpoints: ApplicationSessionCheckpoints = ApplicationSessionCheckpoints(
     session: session, recovery: recovery,

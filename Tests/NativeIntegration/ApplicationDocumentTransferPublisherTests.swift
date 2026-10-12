@@ -37,6 +37,8 @@ import XCTest
   }
 }
 @MainActor private final class PublicationTransferReceipt: ApplicationDocumentTransferReceipt {}
+// Fixture-owned synthetic identity only; this is not native storage or a recording grant.
+@MainActor private final class PublicationTransferStorageMarker {}
 @MainActor private final class TransferPublicationFixture {
   let directory: URL
   let store: SessionStore
@@ -45,6 +47,16 @@ import XCTest
   let handle = PublicationTransferHandle()
   let source = DocumentAssignment(windowID: UUID(), groupID: UUID())
   let target = DocumentAssignment(windowID: UUID(), groupID: UUID())
+  let macroStorage = PublicationTransferStorageMarker()
+  var macroBindingAssignment: DocumentAssignment?
+  var macroBindingOwnership: UUID?
+  var macroSuspension: MacroTransferSuspension?
+  var macroRequest: DocumentTransferRequest?
+  var macroFinishedToken: MacroTransferSuspension?
+  var macroEvents: [String] = []
+  var approvedRouteEvents: [String] = []
+  var macroTerminalRepairs = 0
+  var macroNilReceiptRepairs = 0
   let gate = TransferPublicationGate()
   let beforeCapture: Bool
   var gateUsed = false
@@ -93,7 +105,86 @@ import XCTest
     handle.authority = receipt.authority
     handle.highest = receipt.nextRevision - 1
     try registry.activateAdoption(lease, receipt: receipt)
+    macroBindingAssignment = source
+    macroBindingOwnership = handle.ownershipGeneration
   }
+  // These Foundation collaborators enforce process custody of the actual reserved
+  // lease. They do not model a native macro grant or an AppKit binding.
+  private func suspendFixtureMacroBinding(_ snapshot: DocumentTransferSnapshot) throws
+    -> MacroTransferSuspension
+  {
+    let current = try registry.validateTransferSnapshot(snapshot.lease)
+    guard current.phase == .reserved, !current.effectsStarted,
+      !current.requiresReconciliation, current.request == snapshot.request,
+      current.handle === snapshot.handle, current.handle === handle,
+      current.request.documentID == handle.id,
+      registry.handle(id: handle.id) === handle,
+      registry.assignment(of: handle.id) == current.request.source,
+      current.expectedState == handle.state
+    else { throw DocumentTransferError.stale }
+    let token = MacroTransferSuspension(
+      lease: current.lease, documentID: handle.id,
+      documentObjectID: ObjectIdentifier(handle), storageID: ObjectIdentifier(macroStorage))
+    if let held = macroSuspension {
+      guard held == token, macroRequest == current.request,
+        macroBindingAssignment == nil, macroBindingOwnership == nil
+      else { throw DocumentTransferError.stale }
+      return held
+    }
+    guard macroBindingAssignment == current.request.source,
+      macroBindingOwnership == current.expectedState.ownershipGeneration
+    else { throw DocumentTransferError.stale }
+    macroEvents.append("suspend")
+    macroRequest = current.request
+    macroSuspension = token
+    macroBindingAssignment = nil
+    macroBindingOwnership = nil
+    return token
+  }
+
+  private func finishFixtureMacroBinding(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    guard macroRequest == terminal.request, token.documentID == handle.id,
+      terminal.request.documentID == handle.id,
+      token.documentObjectID == ObjectIdentifier(handle),
+      token.storageID == ObjectIdentifier(macroStorage),
+      registry.handle(id: handle.id) === handle,
+      !registry.hasActiveTransferLease(token.lease),
+      registry.closeStatus(documentID: handle.id) == .open,
+      registry.adoptionStatus(documentID: handle.id) == .active,
+      receipt == nil || receipt is PublicationTransferReceipt,
+      receipt != nil || !terminal.moved
+    else { throw DocumentTransferError.stale }
+    let placement = terminal.moved ? terminal.request.target : terminal.request.source
+    let windows = try registry.captureWindows()
+    guard registry.assignment(of: handle.id) == placement,
+      windows.first(where: { $0.id == placement.windowID })?.groups
+        .first(where: { $0.id == placement.groupID })?.documentIDs.contains(handle.id) == true
+    else { throw DocumentTransferError.stale }
+    // Unrelated settlement callbacks may change workspaceRevision. Read actual
+    // placement afresh rather than reusing the consumed reservation or old revision.
+    let ownership = handle.ownershipGeneration
+    if macroSuspension == nil, macroFinishedToken == token {
+      guard macroBindingAssignment == placement, macroBindingOwnership == ownership else {
+        throw DocumentTransferError.stale
+      }
+      return
+    }
+    guard macroSuspension == token, macroBindingAssignment == nil,
+      macroBindingOwnership == nil
+    else { throw DocumentTransferError.stale }
+    // No callbacks or throwing operations after the fixture's atomic repair begins.
+    macroEvents.append("finish")
+    macroTerminalRepairs += 1
+    if receipt == nil { macroNilReceiptRepairs += 1 }
+    macroBindingAssignment = placement
+    macroBindingOwnership = ownership
+    macroFinishedToken = token
+    macroSuspension = nil
+  }
+
   lazy var scheduler = SessionCheckpointCoordinator(
     capture: { [unowned self] generation in
       let windows = try self.registry.captureReadyWindows()
@@ -138,11 +229,41 @@ import XCTest
         }
       }
     }, delay: { _ in await Task.yield() })
+  private func completeFixtureApprovedRouting(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    let placement = terminal.moved ? terminal.request.target : terminal.request.source
+    guard macroFinishedToken == token, macroSuspension == nil, macroRequest == terminal.request,
+      token.documentID == handle.id, token.documentObjectID == ObjectIdentifier(handle),
+      token.storageID == ObjectIdentifier(macroStorage), registry.handle(id: handle.id) === handle,
+      !registry.hasActiveTransferLease(token.lease),
+      registry.assignment(of: handle.id) == placement, macroBindingAssignment == placement,
+      macroBindingOwnership == handle.ownershipGeneration,
+      registry.closeStatus(documentID: handle.id) == .open,
+      registry.adoptionStatus(documentID: handle.id) == .active,
+      receipt == nil || receipt is PublicationTransferReceipt, receipt != nil || !terminal.moved
+    else {
+      throw DocumentTransferError.stale
+    }
+    let windows = try registry.captureWindows()
+    guard
+      windows.first(where: { $0.id == placement.windowID })?.groups
+        .first(where: { $0.id == placement.groupID })?.documentIDs.contains(handle.id) == true
+    else {
+      throw DocumentTransferError.stale
+    }
+    approvedRouteEvents.append("completeApprovedRouting")
+  }
+
   lazy var transfer = ApplicationDocumentTransfer(
     registry: registry,
     publication: .init(
       requireAdmission: {},
       acquirePause: { [unowned self] in
+        XCTAssertNotNil(self.macroSuspension, "Actual reserved quarantine must precede pause")
+        XCTAssertNil(self.macroBindingAssignment)
+        XCTAssertNil(self.macroBindingOwnership)
         let token = try self.scheduler.acquirePause()
         self.paused = true
         return token
@@ -152,6 +273,15 @@ import XCTest
         self.paused = false
       }, requestCheckpoint: { [unowned self] in self.scheduler.requestCheckpoint() }),
     native: .init(
+      suspendMacroBinding: { [unowned self] snapshot in
+        try self.suspendFixtureMacroBinding(snapshot)
+      },
+      finishMacroBinding: { [unowned self] token, terminal, receipt in
+        try self.finishFixtureMacroBinding(token, terminal: terminal, receipt: receipt)
+      },
+      completeApprovedViewRouting: { [unowned self] token, terminal, receipt in
+        try self.completeFixtureApprovedRouting(token, terminal: terminal, receipt: receipt)
+      },
       capture: { [unowned self] _ in
         self.nativeCaptures += 1
         return PublicationTransferReceipt()
@@ -210,6 +340,15 @@ import XCTest
     let paused = await f.eventually { f.paused }
     XCTAssertTrue(paused)
     guard paused else { return }
+    let macroToken = try XCTUnwrap(f.macroSuspension)
+    XCTAssertTrue(f.registry.hasActiveTransferLease(macroToken.lease))
+    XCTAssertEqual(macroToken.documentID, f.handle.id)
+    XCTAssertEqual(macroToken.documentObjectID, ObjectIdentifier(f.handle))
+    XCTAssertEqual(macroToken.storageID, ObjectIdentifier(f.macroStorage))
+    XCTAssertNil(f.macroBindingAssignment)
+    XCTAssertNil(f.macroBindingOwnership)
+    XCTAssertEqual(f.macroEvents, ["suspend"])
+    XCTAssertEqual(f.macroTerminalRepairs, 0)
     XCTAssertEqual(
       f.nativeCaptures, 0, "Native transfer capture waits for existing publication drain")
     XCTAssertEqual(f.registry.assignment(of: f.handle.id), f.source)
@@ -219,6 +358,14 @@ import XCTest
       return XCTFail("Transfer must finish after held publisher is released")
     }
     try f.transfer.requireSettled()
+    XCTAssertNil(f.macroSuspension)
+    XCTAssertEqual(f.macroFinishedToken, macroToken)
+    XCTAssertFalse(f.registry.hasActiveTransferLease(macroToken.lease))
+    XCTAssertEqual(f.macroBindingAssignment, f.target)
+    XCTAssertEqual(f.macroBindingOwnership, f.handle.ownershipGeneration)
+    XCTAssertEqual(f.macroEvents, ["suspend", "finish"])
+    XCTAssertEqual(f.macroTerminalRepairs, 1)
+    XCTAssertEqual(f.macroNilReceiptRepairs, 0)
     XCTAssertEqual(f.nativeCaptures, 1)
     XCTAssertFalse(f.paused)
     XCTAssertEqual(f.handle.authority, authority)

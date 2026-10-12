@@ -40,6 +40,8 @@ private enum TransferProcessFailure: Error { case injected }
   }
 }
 @MainActor private final class ProcessTransferReceipt: ApplicationDocumentTransferReceipt {}
+// Fixture-owned synthetic identity only; this is not native storage or a recording grant.
+@MainActor private final class ProcessTransferStorageMarker {}
 @MainActor private final class ProcessTransferFixture {
   let registry: ApplicationDocuments
   let handle = ProcessTransferHandle()
@@ -48,6 +50,21 @@ private enum TransferProcessFailure: Error { case injected }
   let scheduler = SessionCheckpointCoordinator(
     capture: { _ in throw TransferProcessFailure.injected },
     commit: { _ in throw TransferProcessFailure.injected })
+  let macroStorage = ProcessTransferStorageMarker()
+  var macroBindingAssignment: DocumentAssignment?
+  var macroBindingOwnership: UUID?
+  var macroSuspension: MacroTransferSuspension?
+  var macroRequest: DocumentTransferRequest?
+  var macroFinishedToken: MacroTransferSuspension?
+  var macroEvents: [String] = []
+  var approvedRouteEvents: [String] = []
+  var rejectApprovedRoutingOnce = false
+  var atomicFinishAttempts = 0
+  var approvedRoutingAttempts = 0
+  var approvedRoutingRetryEvents: [String] = []
+  var macroTerminalRepairs = 0
+  var macroNilReceiptRepairs = 0
+  var rejectMacroFinishOnce = false
   var events: [String] = []
   var sourceProjection: DocumentWindowSnapshot?
   var targetProjection: DocumentWindowSnapshot?
@@ -107,6 +124,8 @@ private enum TransferProcessFailure: Error { case injected }
     handle.authority = receipt.authority
     handle.highest = receipt.nextRevision - 1
     try registry.activateAdoption(token, receipt: receipt)
+    macroBindingAssignment = source
+    macroBindingOwnership = handle.ownershipGeneration
   }
   var request: DocumentTransferRequest {
     .init(
@@ -114,12 +133,134 @@ private enum TransferProcessFailure: Error { case injected }
       workspaceRevision: registry.workspaceRevision, ownershipGeneration: handle.ownershipGeneration
     )
   }
+  // These Foundation collaborators enforce process custody of the actual reserved
+  // lease. They do not model a native macro grant or an AppKit binding.
+  private func suspendFixtureMacroBinding(_ snapshot: DocumentTransferSnapshot) throws
+    -> MacroTransferSuspension
+  {
+    let current = try registry.validateTransferSnapshot(snapshot.lease)
+    guard current.phase == .reserved, !current.effectsStarted,
+      !current.requiresReconciliation, current.request == snapshot.request,
+      current.handle === snapshot.handle, current.handle === handle,
+      current.request.documentID == handle.id,
+      registry.handle(id: handle.id) === handle,
+      registry.assignment(of: handle.id) == current.request.source,
+      current.expectedState == handle.state
+    else { throw DocumentTransferError.stale }
+    let token = MacroTransferSuspension(
+      lease: current.lease, documentID: handle.id,
+      documentObjectID: ObjectIdentifier(handle), storageID: ObjectIdentifier(macroStorage))
+    if let held = macroSuspension {
+      guard held == token, macroRequest == current.request,
+        macroBindingAssignment == nil, macroBindingOwnership == nil
+      else { throw DocumentTransferError.stale }
+      return held
+    }
+    guard macroBindingAssignment == current.request.source,
+      macroBindingOwnership == current.expectedState.ownershipGeneration
+    else { throw DocumentTransferError.stale }
+    macroEvents.append("suspend")
+    macroRequest = current.request
+    macroSuspension = token
+    macroBindingAssignment = nil
+    macroBindingOwnership = nil
+    return token
+  }
+
+  private func finishFixtureMacroBinding(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    guard macroRequest == terminal.request, token.documentID == handle.id,
+      terminal.request.documentID == handle.id,
+      token.documentObjectID == ObjectIdentifier(handle),
+      token.storageID == ObjectIdentifier(macroStorage),
+      registry.handle(id: handle.id) === handle,
+      !registry.hasActiveTransferLease(token.lease),
+      registry.closeStatus(documentID: handle.id) == .open,
+      registry.adoptionStatus(documentID: handle.id) == .active,
+      receipt == nil || receipt is ProcessTransferReceipt,
+      receipt != nil || !terminal.moved
+    else { throw DocumentTransferError.stale }
+    let placement = terminal.moved ? terminal.request.target : terminal.request.source
+    let windows = try registry.captureWindows()
+    guard registry.assignment(of: handle.id) == placement,
+      windows.first(where: { $0.id == placement.windowID })?.groups
+        .first(where: { $0.id == placement.groupID })?.documentIDs.contains(handle.id) == true
+    else { throw DocumentTransferError.stale }
+    // Unrelated settlement callbacks may change workspaceRevision. Read actual
+    // placement afresh rather than reusing the consumed reservation or old revision.
+    let ownership = handle.ownershipGeneration
+    atomicFinishAttempts += 1
+    approvedRoutingRetryEvents.append("atomicFinishValidated")
+    if macroSuspension == nil, macroFinishedToken == token {
+      guard macroBindingAssignment == placement, macroBindingOwnership == ownership else {
+        throw DocumentTransferError.stale
+      }
+      return
+    }
+    guard macroSuspension == token, macroBindingAssignment == nil,
+      macroBindingOwnership == nil
+    else { throw DocumentTransferError.stale }
+    if rejectMacroFinishOnce {
+      rejectMacroFinishOnce = false
+      macroEvents.append("finishRefused")
+      throw TransferProcessFailure.injected
+    }
+    // No callbacks or throwing operations after the fixture's atomic repair begins.
+    macroEvents.append("finish")
+    macroTerminalRepairs += 1
+    if receipt == nil { macroNilReceiptRepairs += 1 }
+    macroBindingAssignment = placement
+    macroBindingOwnership = ownership
+    macroFinishedToken = token
+    macroSuspension = nil
+  }
+
+  private func completeFixtureApprovedRouting(
+    _ token: MacroTransferSuspension, terminal: ApplicationDocumentTransferTerminalReceipt,
+    receipt: (any ApplicationDocumentTransferReceipt)?
+  ) throws {
+    let placement = terminal.moved ? terminal.request.target : terminal.request.source
+    guard macroFinishedToken == token, macroSuspension == nil, macroRequest == terminal.request,
+      token.documentID == handle.id, token.documentObjectID == ObjectIdentifier(handle),
+      token.storageID == ObjectIdentifier(macroStorage), registry.handle(id: handle.id) === handle,
+      !registry.hasActiveTransferLease(token.lease),
+      registry.assignment(of: handle.id) == placement, macroBindingAssignment == placement,
+      macroBindingOwnership == handle.ownershipGeneration,
+      registry.closeStatus(documentID: handle.id) == .open,
+      registry.adoptionStatus(documentID: handle.id) == .active,
+      receipt == nil || receipt is ProcessTransferReceipt, receipt != nil || !terminal.moved
+    else {
+      throw DocumentTransferError.stale
+    }
+    let windows = try registry.captureWindows()
+    guard
+      windows.first(where: { $0.id == placement.windowID })?.groups
+        .first(where: { $0.id == placement.groupID })?.documentIDs.contains(handle.id) == true
+    else {
+      throw DocumentTransferError.stale
+    }
+    approvedRoutingAttempts += 1
+    approvedRoutingRetryEvents.append("routingValidated")
+    if rejectApprovedRoutingOnce {
+      rejectApprovedRoutingOnce = false
+      approvedRoutingRetryEvents.append("routingRefused")
+      throw TransferProcessFailure.injected
+    }
+    approvedRoutingRetryEvents.append("routingCompleted")
+    approvedRouteEvents.append("completeApprovedRouting")
+  }
+
   func owner() -> ApplicationDocumentTransfer {
     .init(
       registry: registry,
       publication: .init(
         requireAdmission: {},
         acquirePause: {
+          XCTAssertNotNil(self.macroSuspension, "Actual reserved quarantine must precede pause")
+          XCTAssertNil(self.macroBindingAssignment)
+          XCTAssertNil(self.macroBindingOwnership)
           self.events.append("pause")
           return try self.scheduler.acquirePause()
         },
@@ -141,6 +282,15 @@ private enum TransferProcessFailure: Error { case injected }
           self.onCheckpoint?()
         }),
       native: .init(
+        suspendMacroBinding: { snapshot in
+          try self.suspendFixtureMacroBinding(snapshot)
+        },
+        finishMacroBinding: { token, terminal, receipt in
+          try self.finishFixtureMacroBinding(token, terminal: terminal, receipt: receipt)
+        },
+        completeApprovedViewRouting: { token, terminal, receipt in
+          try self.completeFixtureApprovedRouting(token, terminal: terminal, receipt: receipt)
+        },
         capture: { _ in
           self.events.append("capture")
           self.duringCapture?()
@@ -620,4 +770,269 @@ private enum TransferProcessFailure: Error { case injected }
     }
   }
 
+}
+
+// Additive real process/registry port-compatibility controls. Original event
+// arrays and test bodies above are unchanged; macroEvents is a separate ledger.
+@MainActor extension ApplicationDocumentTransferProcessTests {
+  func testMacroQuarantineNilReceiptRefusalRetriesOneTerminalRepair() async throws {
+    try await withFixture { fixture in
+      fixture.rejectCapture = true
+      fixture.rejectMacroFinishOnce = true
+      let owner = fixture.owner()
+      let request = fixture.request
+      let originalOwnership = fixture.handle.ownershipGeneration
+      let id = try owner.start(request)
+      guard case .retained = try await owner.wait(for: id) else {
+        return XCTFail("A refused macro finish must retain the actual cleanup transaction")
+      }
+      let held = try XCTUnwrap(fixture.macroSuspension)
+      XCTAssertEqual(held.documentID, fixture.handle.id)
+      XCTAssertEqual(held.documentObjectID, ObjectIdentifier(fixture.handle))
+      XCTAssertEqual(held.storageID, ObjectIdentifier(fixture.macroStorage))
+      XCTAssertFalse(fixture.registry.hasActiveTransferLease(held.lease))
+      XCTAssertNil(fixture.macroBindingAssignment)
+      XCTAssertNil(fixture.macroBindingOwnership)
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finishRefused"])
+      XCTAssertEqual(fixture.macroTerminalRepairs, 0)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 0)
+      XCTAssertThrowsError(try owner.requireSettled())
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.source)
+      XCTAssertEqual(try owner.terminalReceipt(for: id).request, request)
+      XCTAssertNil(try owner.retryLease(for: id), "Unstaged reservation was really cancelled")
+      try owner.retryLayout(id)
+      guard case .restored = try await owner.wait(for: id) else {
+        return XCTFail("The same real nil-receipt cleanup must restore")
+      }
+      try owner.requireSettled()
+      XCTAssertNil(fixture.macroSuspension)
+      XCTAssertEqual(fixture.macroFinishedToken, held)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.source)
+      XCTAssertEqual(fixture.macroBindingOwnership, originalOwnership)
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finishRefused", "finish"])
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 1)
+      XCTAssertEqual(fixture.events.filter { $0 == "pause" }.count, 1)
+      XCTAssertEqual(fixture.events.filter { $0 == "capture" }.count, 1)
+      XCTAssertEqual(fixture.events.filter { $0 == "release" }.count, 1)
+      XCTAssertFalse(fixture.events.contains("suspend"), "No native monitor receipt was created")
+    }
+  }
+
+  func testMacroQuarantineMovedTerminalRetriesFreshAssignmentWithoutRepeatingNativeMove()
+    async throws
+  {
+    try await withFixture { fixture in
+      fixture.rejectMacroFinishOnce = true
+      let owner = fixture.owner()
+      let oldOwnership = fixture.handle.ownershipGeneration
+      fixture.duringCapture = {
+        guard let token = fixture.macroSuspension else {
+          return XCTFail("Real reserved quarantine must precede native capture")
+        }
+        XCTAssertTrue(fixture.registry.hasActiveTransferLease(token.lease))
+        XCTAssertNil(fixture.macroBindingAssignment)
+        do {
+          let current = try fixture.registry.validateTransferSnapshot(token.lease)
+          XCTAssertTrue(current.handle === fixture.handle)
+          XCTAssertEqual(current.request.documentID, fixture.handle.id)
+          XCTAssertEqual(current.phase, .reserved)
+        } catch { XCTFail("Real reserved token was not valid: \(error)") }
+      }
+      let id = try owner.start(fixture.request)
+      guard case .retained = try await owner.wait(for: id) else {
+        return XCTFail("Committed move must retain only refused macro cleanup")
+      }
+      let token = try XCTUnwrap(fixture.macroSuspension)
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.target)
+      XCTAssertNotEqual(fixture.handle.ownershipGeneration, oldOwnership)
+      XCTAssertNil(fixture.macroBindingAssignment)
+      XCTAssertEqual(fixture.macroTerminalRepairs, 0)
+      XCTAssertNil(try owner.retryLease(for: id))
+      try owner.retryLayout(id)
+      guard case .moved = try await owner.wait(for: id) else {
+        return XCTFail("Current target placement must finish the same committed move")
+      }
+      try owner.requireSettled()
+      XCTAssertNil(fixture.macroSuspension)
+      XCTAssertEqual(fixture.macroFinishedToken, token)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.target)
+      XCTAssertEqual(fixture.macroBindingOwnership, fixture.handle.ownershipGeneration)
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finishRefused", "finish"])
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 0)
+      XCTAssertEqual(fixture.events.filter { $0 == "capture" }.count, 1)
+      XCTAssertEqual(fixture.events.filter { $0 == "finish" }.count, 1)
+      XCTAssertEqual(fixture.events.filter { $0 == "release" }.count, 1)
+    }
+  }
+}
+
+// SPDX-License-Identifier: MIT
+// Same-file additive Foundation controls. Synthetic storage identity, no native route proof.
+@MainActor extension ApplicationDocumentTransferProcessTests {
+  func testApprovedRoutingMovedRefusalRetriesWithoutCallingConsumedAtomicFinishAgain()
+    async throws
+  {
+    try await withFixture { fixture in
+      fixture.rejectApprovedRoutingOnce = true
+      let owner = fixture.owner()
+      let request = fixture.request
+      let authority = fixture.handle.authority
+      let originalOwnership = fixture.handle.ownershipGeneration
+      let id = try owner.start(request)
+      guard case .retained(let error) = try await owner.wait(for: id) else {
+        return XCTFail("Post-atomic routing refusal must retain this real cleanup transaction")
+      }
+      XCTAssertTrue(error is TransferProcessFailure)
+      let consumed = try XCTUnwrap(fixture.macroFinishedToken)
+      let terminal = try owner.terminalReceipt(for: id)
+      XCTAssertTrue(terminal.moved)
+      XCTAssertEqual(terminal.request, request)
+      XCTAssertEqual(fixture.macroRequest, request)
+      XCTAssertNil(fixture.macroSuspension, "Actual fixture atomic finish consumed quarantine")
+      XCTAssertEqual(consumed.documentID, fixture.handle.id)
+      XCTAssertEqual(consumed.documentObjectID, ObjectIdentifier(fixture.handle))
+      XCTAssertEqual(consumed.storageID, ObjectIdentifier(fixture.macroStorage))
+      XCTAssertFalse(fixture.registry.hasActiveTransferLease(consumed.lease))
+      XCTAssertTrue(fixture.registry.handle(id: fixture.handle.id) === fixture.handle)
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.target)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.target)
+      XCTAssertEqual(fixture.macroBindingOwnership, fixture.handle.ownershipGeneration)
+      XCTAssertNotEqual(fixture.handle.ownershipGeneration, originalOwnership)
+      XCTAssertEqual(fixture.handle.authority, authority)
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 0)
+      XCTAssertEqual(fixture.atomicFinishAttempts, 1)
+      XCTAssertEqual(fixture.approvedRoutingAttempts, 1)
+      XCTAssertEqual(
+        fixture.approvedRoutingRetryEvents,
+        ["atomicFinishValidated", "routingValidated", "routingRefused"])
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finish"])
+      XCTAssertEqual(fixture.approvedRouteEvents, [])
+      XCTAssertTrue(owner.hasUnsettledTransactions)
+      XCTAssertThrowsError(try owner.requireSettled())
+      XCTAssertNil(try owner.retryLease(for: id), "Only cleanup is retained, not a reservation")
+      XCTAssertThrowsError(try owner.start(request))
+      let currentOwnership = fixture.handle.ownershipGeneration
+      let currentRevision = fixture.registry.workspaceRevision
+      try owner.retryLayout(id)
+      guard case .moved = try await owner.wait(for: id) else {
+        return XCTFail("Same committed placement must complete routing on the retry")
+      }
+      try owner.requireSettled()
+      XCTAssertFalse(owner.hasUnsettledTransactions)
+      XCTAssertEqual(try owner.terminalReceipt(for: id).request, request)
+      XCTAssertEqual(
+        try owner.terminalReceipt(for: id).workspaceRevision, terminal.workspaceRevision)
+      XCTAssertEqual(fixture.registry.workspaceRevision, currentRevision)
+      XCTAssertEqual(fixture.handle.ownershipGeneration, currentOwnership)
+      XCTAssertEqual(fixture.handle.authority, authority)
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.target)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.target)
+      XCTAssertEqual(fixture.macroBindingOwnership, currentOwnership)
+      XCTAssertEqual(fixture.macroFinishedToken, consumed)
+      XCTAssertNil(fixture.macroSuspension)
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(
+        fixture.atomicFinishAttempts, 1, "Consumed process flag must skip even idempotent service")
+      XCTAssertEqual(fixture.approvedRoutingAttempts, 2)
+      XCTAssertEqual(
+        fixture.approvedRoutingRetryEvents,
+        [
+          "atomicFinishValidated", "routingValidated", "routingRefused",
+          "routingValidated", "routingCompleted",
+        ])
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finish"])
+      XCTAssertEqual(fixture.approvedRouteEvents, ["completeApprovedRouting"])
+      XCTAssertEqual(
+        fixture.events,
+        [
+          "pause", "drain", "capture", "suspend", "attach", "finish", "release",
+          "refresh", "refresh", "checkpoint",
+        ])
+      XCTAssertEqual(fixture.handle.rotationCount, 1)
+      XCTAssertEqual(fixture.sourceProjection?.groups[0].documentIDs, [])
+      XCTAssertEqual(fixture.targetProjection?.groups[0].documentIDs, [fixture.handle.id])
+    }
+  }
+
+  func testApprovedRoutingNilReceiptRestoredRefusalRetriesWithoutRepeatingAtomicFinish()
+    async throws
+  {
+    try await withFixture { fixture in
+      fixture.rejectCapture = true
+      fixture.rejectApprovedRoutingOnce = true
+      let owner = fixture.owner()
+      let request = fixture.request
+      let ownership = fixture.handle.ownershipGeneration
+      let authority = fixture.handle.authority
+      let id = try owner.start(request)
+      guard case .retained(let error) = try await owner.wait(for: id) else {
+        return XCTFail("Nil-receipt restored outcome must retain refused post-atomic cleanup")
+      }
+      XCTAssertTrue(error is TransferProcessFailure)
+      let consumed = try XCTUnwrap(fixture.macroFinishedToken)
+      let terminal = try owner.terminalReceipt(for: id)
+      XCTAssertFalse(terminal.moved)
+      XCTAssertEqual(terminal.request, request)
+      XCTAssertEqual(fixture.macroRequest, request)
+      XCTAssertNil(fixture.macroSuspension)
+      XCTAssertFalse(fixture.registry.hasActiveTransferLease(consumed.lease))
+      XCTAssertEqual(consumed.documentID, fixture.handle.id)
+      XCTAssertEqual(consumed.documentObjectID, ObjectIdentifier(fixture.handle))
+      XCTAssertEqual(consumed.storageID, ObjectIdentifier(fixture.macroStorage))
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.source)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.source)
+      XCTAssertEqual(fixture.macroBindingOwnership, ownership)
+      XCTAssertEqual(fixture.handle.ownershipGeneration, ownership)
+      XCTAssertEqual(fixture.handle.authority, authority)
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 1)
+      XCTAssertEqual(fixture.atomicFinishAttempts, 1)
+      XCTAssertEqual(fixture.approvedRoutingAttempts, 1)
+      XCTAssertEqual(
+        fixture.approvedRoutingRetryEvents,
+        ["atomicFinishValidated", "routingValidated", "routingRefused"])
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finish"])
+      XCTAssertEqual(fixture.approvedRouteEvents, [])
+      XCTAssertTrue(owner.hasUnsettledTransactions)
+      XCTAssertThrowsError(try owner.requireSettled())
+      XCTAssertNil(try owner.retryLease(for: id))
+      let currentRevision = fixture.registry.workspaceRevision
+      try owner.retryLayout(id)
+      guard case .restored = try await owner.wait(for: id) else {
+        return XCTFail("Same actual nil-receipt source placement must complete on retry")
+      }
+      try owner.requireSettled()
+      XCTAssertFalse(owner.hasUnsettledTransactions)
+      XCTAssertEqual(try owner.terminalReceipt(for: id).request, request)
+      XCTAssertEqual(
+        try owner.terminalReceipt(for: id).workspaceRevision, terminal.workspaceRevision)
+      XCTAssertEqual(fixture.registry.workspaceRevision, currentRevision)
+      XCTAssertEqual(fixture.registry.assignment(of: fixture.handle.id), fixture.source)
+      XCTAssertEqual(fixture.macroBindingAssignment, fixture.source)
+      XCTAssertEqual(fixture.macroBindingOwnership, ownership)
+      XCTAssertEqual(fixture.handle.ownershipGeneration, ownership)
+      XCTAssertEqual(fixture.handle.authority, authority)
+      XCTAssertEqual(fixture.macroFinishedToken, consumed)
+      XCTAssertNil(fixture.macroSuspension)
+      XCTAssertEqual(fixture.macroTerminalRepairs, 1)
+      XCTAssertEqual(fixture.macroNilReceiptRepairs, 1)
+      XCTAssertEqual(fixture.atomicFinishAttempts, 1)
+      XCTAssertEqual(fixture.approvedRoutingAttempts, 2)
+      XCTAssertEqual(
+        fixture.approvedRoutingRetryEvents,
+        [
+          "atomicFinishValidated", "routingValidated", "routingRefused",
+          "routingValidated", "routingCompleted",
+        ])
+      XCTAssertEqual(fixture.macroEvents, ["suspend", "finish"])
+      XCTAssertEqual(fixture.approvedRouteEvents, ["completeApprovedRouting"])
+      XCTAssertEqual(fixture.events, ["pause", "drain", "capture", "release", "checkpoint"])
+      XCTAssertEqual(fixture.handle.rotationCount, 0)
+      XCTAssertNil(fixture.sourceProjection)
+      XCTAssertNil(fixture.targetProjection)
+    }
+  }
 }

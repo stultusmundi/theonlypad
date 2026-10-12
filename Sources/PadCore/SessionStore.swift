@@ -6,7 +6,13 @@ public struct SessionTab: Equatable, Sendable {
   public let originalPath: String?
   public let pinned: Bool
   public let encoding: DocumentEncoding
-  public let manualLanguage: DocumentLanguage?
+  /// Authoritative selection; a missing custom ID remains a manual request.
+  public let languageSelection: DocumentLanguageSelection
+  /// Built-in compatibility view. Automatic/custom selections have no built-in override.
+  public var manualLanguage: DocumentLanguage? {
+    if case .manual(.builtIn(let language)) = languageSelection { return language }
+    return nil
+  }
   public let presentation: SessionPresentation
   /// Safe compatibility view; structural validation still rejects an invalid focused index.
   public var selection: NSRange {
@@ -20,13 +26,17 @@ public struct SessionTab: Equatable, Sendable {
     id: UUID = UUID(), originalPath: String? = nil, pinned: Bool = false,
     encoding: DocumentEncoding = .utf8, manualLanguage: DocumentLanguage? = nil,
     selection: NSRange = NSRange(location: 0, length: 0), bookmarks: [Int] = [],
-    presentation: SessionPresentation? = nil
+    presentation: SessionPresentation? = nil,
+    languageSelection: DocumentLanguageSelection? = nil
   ) {
     self.id = id
     self.originalPath = originalPath
     self.pinned = pinned
     self.encoding = encoding
-    self.manualLanguage = manualLanguage
+    self.languageSelection =
+      languageSelection ?? manualLanguage.map {
+        DocumentLanguageSelection.manual(.builtIn($0))
+      } ?? .automatic
     self.presentation = presentation ?? .single(selection: selection)
     self.bookmarks = bookmarks
   }
@@ -206,6 +216,102 @@ public struct SessionStore: Sendable {
         }, recentPaths: recentPaths ?? [])
     }
   }
+  // V3 has one selection field; canonical wire comparison rejects unknown,
+  // duplicate, explicit-null and legacy fields instead of silently discarding them.
+  private struct WireV3: Codable {
+    let version: Int
+    let windows: [Window]
+    let recentPaths: [String]?
+    struct Window: Codable {
+      let id: UUID
+      let tabs: [Tab]
+      let selectedTabID: UUID?
+    }
+    struct Tab: Codable {
+      let id: UUID
+      let originalPath: String?
+      let pinned: Bool
+      let encoding: DocumentEncoding
+      let languageSelection: Selection
+      let bookmarks: [Int]
+      let presentation: WireV2.Presentation
+    }
+    struct Selection: Codable {
+      enum Mode: String, Codable { case automatic, manual }
+      let mode: Mode
+      let builtin: DocumentLanguage?
+      let customID: UUID?
+      init(_ selection: DocumentLanguageSelection) {
+        switch selection {
+        case .automatic:
+          mode = .automatic
+          builtin = nil
+          customID = nil
+        case .manual(.builtIn(let language)):
+          mode = .manual
+          builtin = language
+          customID = nil
+        case .manual(.custom(let id)):
+          mode = .manual
+          builtin = nil
+          customID = id
+        }
+      }
+      var value: DocumentLanguageSelection {
+        get throws {
+          switch mode {
+          case .automatic:
+            guard builtin == nil, customID == nil else { throw SessionStoreError.corrupt }
+            return .automatic
+          case .manual:
+            switch (builtin, customID) {
+            case (let language?, nil): return .manual(.builtIn(language))
+            case (nil, let id?): return .manual(.custom(id))
+            default: throw SessionStoreError.corrupt
+            }
+          }
+        }
+      }
+    }
+    init(_ session: EditorSession) {
+      version = 3
+      recentPaths = session.recentPaths.isEmpty ? nil : session.recentPaths
+      windows = session.windows.map { window in
+        Window(
+          id: window.id,
+          tabs: window.tabs.map {
+            Tab(
+              id: $0.id, originalPath: $0.originalPath, pinned: $0.pinned,
+              encoding: $0.encoding, languageSelection: Selection($0.languageSelection),
+              bookmarks: $0.bookmarks, presentation: WireV2.Presentation($0.presentation))
+          }, selectedTabID: window.selectedTabID)
+      }
+    }
+    var session: EditorSession {
+      get throws {
+        EditorSession(
+          windows: try windows.map { window in
+            SessionWindow(
+              id: window.id,
+              tabs: try window.tabs.map {
+                SessionTab(
+                  id: $0.id, originalPath: $0.originalPath, pinned: $0.pinned,
+                  encoding: $0.encoding, bookmarks: $0.bookmarks,
+                  presentation: $0.presentation.value,
+                  languageSelection: try $0.languageSelection.value)
+              }, selectedTabID: window.selectedTabID)
+          }, recentPaths: recentPaths ?? [])
+      }
+    }
+  }
+  private func requiresVersionThree(_ session: EditorSession) -> Bool {
+    session.windows.contains { window in
+      window.tabs.contains { tab in
+        if case .manual(.custom(_)) = tab.languageSelection { return true }
+        return false
+      }
+    }
+  }
   private func validate(_ session: EditorSession) throws {
     guard session.windows.count <= 32 else { throw SessionStoreError.limit }
     guard session.recentPaths.count <= 50 else { throw SessionStoreError.limit }
@@ -266,6 +372,10 @@ public struct SessionStore: Sendable {
         let wire = try decoder.decode(WireV2.self, from: data)
         guard try encoded(wire) == data else { throw SessionStoreError.corrupt }
         session = wire.session
+      case 3:
+        let wire = try decoder.decode(WireV3.self, from: data)
+        guard try encoded(wire) == data else { throw SessionStoreError.corrupt }
+        session = try wire.session
       default:
         throw SessionStoreError.unsupportedVersion(header.version)
       }
@@ -353,7 +463,9 @@ public struct SessionStore: Sendable {
   }
   public func save(_ session: EditorSession, fault: SaveFault? = nil) throws {
     try validate(session)
-    let data = try encoded(WireV2(session))
+    let data =
+      requiresVersionThree(session)
+      ? try encoded(WireV3(session)) : try encoded(WireV2(session))
     guard data.count <= Self.maximumBytes else { throw SessionStoreError.limit }
     try withDirectory(create: true) { directoryFD in
       guard let directoryFD else { throw SessionStoreError.ioFailure }

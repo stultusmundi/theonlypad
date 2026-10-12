@@ -109,7 +109,7 @@ final class SessionStoreTests: XCTestCase {
     }
   }
   func testCorruptAndFutureVersionArePreservedWithoutInventedMigration() throws {
-    for bytes in [Data("{broken".utf8), Data("{\"version\":3,\"windows\":[]}".utf8)] {
+    for bytes in [Data("{broken".utf8), Data("{\"version\":4,\"windows\":[]}".utf8)] {
       try fixture { directory in
         let store = SessionStore(directory: directory)
         try store.save(EditorSession(windows: []))

@@ -17,7 +17,8 @@ SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
         'settings':('DocumentAppliedSettingsTests','document-applied-settings-tests'),
         'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
-        'close':(None,'native-close-model')}
+        'close':(None,'native-close-model'),
+        'macro':('NativeMacroChronologyTests','native-macro-chronology-tests')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
     'NativeDocumentSeed','EditorDocumentWorkspaceAdapter','WorkspaceDocumentRegistryTypes',
     'EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost',
@@ -33,6 +34,15 @@ import PackageDescription
 let package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])
 '''
 
+
+MACRO_TESTS=('MacroChronologyReplayTests','NativeMacroChronologyTests','NativeMacroStorageTask1ATests')
+MACRO_ACCESS=('ApprovedViewCommitBroker.swift','DocumentCommitTextStorage.swift',
+              'EditorDocument.swift','EditorWindowController.swift','NativeMacroCommitContext.swift')
+MACRO_CLASSES={'NativeMacroApprovedViewCapacityTests':2,'NativeMacroApprovedViewPayloadTests':2,
+               'NativeMacroApprovedViewReceiptTests':6,'NativeMacroChronologyTests':7,
+               'NativeMacroControlledExplicitCapacityTests':1,'NativeMacroStrictExplicitCapacityTests':1}
+MACRO_SELECTOR='|'.join(MACRO_CLASSES)
+MACRO_ACCESS_FILE='Tests/NativeIntegration/NativeMacroChronologyAccess.swift'
 
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -64,6 +74,9 @@ def discover(root,suite,prebuilt):
     if suite=='folder-navigation': paths.add(root/'scripts/test-folder-navigation.sh')
     if suite=='help': paths.add(root/'scripts/test-help-reference.sh')
     if suite=='settings': paths.add(root/'scripts/test-document-applied-settings.sh')
+    if suite=='macro':
+        paths.add(root/'scripts/test-native-macro.sh')
+        paths.add(root/MACRO_ACCESS_FILE)
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
@@ -77,12 +90,22 @@ def discover(root,suite,prebuilt):
         paths.update((root/'Sources/SearchExecution').glob('*.swift'))
     optional=root/'Sources/TheOnlyPad/DocumentAppliedSettings.swift'
     if optional.exists() or optional.is_symlink(): paths.add(optional)
-    names=CLOSE_HARNESSES if suite=='close' else (SUITES[suite][0],)
+    names=CLOSE_HARNESSES if suite=='close' else (MACRO_TESTS if suite=='macro' else (SUITES[suite][0],))
     paths.update(root/'Tests/NativeIntegration'/(name+'.swift') for name in names)
     result=sorted(paths)
     if not any(p.parent==root/'Sources/PadCore' for p in result): raise ValueError('missing PadCore sources')
     for path in result: read_real(root,path)
     return result
+
+def macro_access(text, filename):
+    label=Path(filename).stem
+    begin='// MACRO-'+label+'-ACCESS-BEGIN\n'
+    end='// MACRO-'+label+'-ACCESS-END'
+    if filename not in MACRO_ACCESS or text.count(begin)!=1 or text.count(end)!=1:
+        raise ValueError('macro access markers changed')
+    first=text.index(begin)+len(begin);last=text.index(end)
+    if last<first: raise ValueError('macro access marker order changed')
+    return text[first:last].encode()
 
 def projection_probe(text,access):
     marker='  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {\n'
@@ -225,7 +248,10 @@ def freeze(root,run,suite,prebuilt=False):
                         if data.decode().count(marker)!=1: raise ValueError('font probe marker changed')
                         probe='  override var defaultParagraphStyle: NSParagraphStyle? {\n    get { super.defaultParagraphStyle }\n    set { AppliedSettingsProbe.paragraphWrites += 1; super.defaultParagraphStyle = newValue }\n  }\n  override var typingAttributes: [NSAttributedString.Key: Any] {\n    get { super.typingAttributes }\n    set { AppliedSettingsProbe.typingWrites += 1; super.typingAttributes = newValue }\n  }\n  override var isHorizontallyResizable: Bool {\n    get { super.isHorizontallyResizable }\n    set { AppliedSettingsProbe.beforeWrap?(self); super.isHorizontallyResizable = newValue }\n  }\n  override var font: NSFont? {\n    get { super.font }\n    set { AppliedSettingsProbe.fontWrites += 1; AppliedSettingsProbe.beforeFont?(self); super.font = newValue }\n  }\n'
                         data=data.decode().replace(marker,probe+marker).encode()
-                if path.name=='EditorDocument.swift':
+                if suite=='macro' and path.name in MACRO_ACCESS:
+                    access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
+                    data+=macro_access(access,path.name)
+                if path.name=='EditorDocument.swift' and suite!='macro':
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
@@ -251,6 +277,12 @@ def freeze(root,run,suite,prebuilt=False):
             test_data=text.encode()
         generate('Package/Tests/NativeRoutingTests/'+name,test_data,
                  'Tests/NativeIntegration/'+name)
+        if suite=='macro':
+            for extra in MACRO_TESTS:
+                if extra!=SUITES[suite][0]:
+                    origin='Tests/NativeIntegration/'+extra+'.swift'
+                    generate('Package/Tests/NativeRoutingTests/'+extra+'.swift',
+                             (run/'Original'/origin).read_bytes(),origin)
         generate('Package/Package.swift',PACKAGE.encode())
     else:
         # Custom storage has an authentic controller owner. Compile the captured
@@ -268,7 +300,12 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+    if suite=='macro':
+        access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
+        manifest['macroAccess']=[dict(target=name,source=MACRO_ACCESS_FILE,
+            bytes=len(macro_access(access,name)),
+            sha256=hashlib.sha256(macro_access(access,name)).hexdigest()) for name in MACRO_ACCESS]
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -438,6 +475,20 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
+    if kind=='macro':
+        counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+        if not counts or counts[-1]!=(19,0) or any(n<=0 or failures!=0 for n,failures in counts):
+            raise ValueError('missing exact positive macro result')
+        cases=re.findall(r"Test Case '-\[NativeRoutingTests\.(\w+) (test\w+)\]' passed",text)
+        if len(cases)!=19 or len(set(cases))!=19:
+            raise ValueError('macro actual case count changed')
+        if {name:sum(case[0]==name for case in cases) for name in MACRO_CLASSES}!=MACRO_CLASSES:
+            raise ValueError('macro class selection changed')
+        for name in MACRO_CLASSES:
+            # Require one passed class header, including native XCTest's time suffix.
+            if len(re.findall(r"^Test Suite '"+re.escape(name)+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+                raise ValueError('macro class did not pass')
+        return dict(tests=19,failures=0)
     if kind in SUITES and kind!='close':
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or any(n<=0 or failures!=0 for n,failures in counts): raise ValueError('missing positive XCTest result')
@@ -482,7 +533,9 @@ def execute(run,args,watchdog_main):
         stage('toolchain',['/usr/bin/xcrun','swift','--version'],30)
         swift=run/'Original/scripts/swift.sh'
         if args.suite!='close':
-            stage('test',[swift,'test','--package-path',run/'Package','--scratch-path',run/'Build'],180,args.suite)
+            command=[swift,'test','--package-path',run/'Package','--scratch-path',run/'Build']
+            if args.suite=='macro': command+=['-Xswiftc','-warnings-as-errors','--filter',MACRO_SELECTOR]
+            stage('test',command,180,args.suite)
         else:
             if args.build_path:
                 binary=Path(args.build_path).resolve()
