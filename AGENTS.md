@@ -391,3 +391,11 @@ custom-language state/catalog/highlighter candidates, physical macro workflows,
 IME/VoiceOver/AXPress and other platforms remain unaccepted. No remote release
 was published. This supersedes earlier current-packaged-desktop outstanding
 notes only for these five workflows.
+
+Catalog inspection component checkpoint (2026-10-12): five actual temporary-file inspection tests and the matching 35-test store/codec/revision/readback conjunction pass. The formatted current application candidate passes 1,164 tests with zero failures, unexpected errors or skips, and a cold test dependency build of the app/helper with warnings treated as errors; the following build is incremental confirmation. Independent full-run audit accepted this Core-only scope. The scope is the Core inspection addition and its five tests; original load/save source is unchanged. Inspection never writes. Future/unknown schemas and parser-invalid or duplicate-key input cannot gain a repair token. Repair/retry, native owner/policy/manager activation and new packaged desktop acceptance remain outstanding. See `docs/verification/custom-language-catalog-inspection.md`; raw evidence is ignored.
+
+Adopted-tree focused inspection confirmation also passes five tests. Exact inner invocation, executed under the owned watchdog:
+
+```sh
+env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/catalog-inspection-public --filter CustomLanguageCatalogInspectionTests -Xswiftc -warnings-as-errors
+```
