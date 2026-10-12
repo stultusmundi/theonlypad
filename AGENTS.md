@@ -378,3 +378,16 @@ Use fresh, isolated-state direct-watchdog commands in
 Native custom-language propagation/manager/missing-profile UI, visible macro
 workflows, broader lifecycle, physical IME/VoiceOver and current packaged desktop
 acceptance remain outstanding. No package or release is claimed.
+
+Packaged desktop checkpoint (2026-10-12): source `f45f1e9` passes local ad-hoc
+package/archive/SBOM validation and five selected actual XCUITests, with zero
+failures or skips after the user confirmed the desktop was unlocked. The prior
+zero-case automation timeout remains recorded. The matching public 1,159-test
+suite and hidden native19 selection are separate evidence. See
+`docs/verification/packaged-desktop-2026-10-12.md` for exact selected identifiers,
+artifact hashes and scope. `scripts/test-desktop-ui.sh` defaults to the broader
+suite; this result does not certify all eighteen desktop methods. Private native
+custom-language state/catalog/highlighter candidates, physical macro workflows,
+IME/VoiceOver/AXPress and other platforms remain unaccepted. No remote release
+was published. This supersedes earlier current-packaged-desktop outstanding
+notes only for these five workflows.
