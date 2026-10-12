@@ -29,3 +29,6 @@ Public contributor commands will be recorded after the corresponding code and
 runner are adopted and executed. The current baseline runs in an isolated private
 Swift 5 package using the checked-in owned-process watchdog, synthetic data and
 warnings as errors. The adopted store and lexer are component evidence only; native language UI and desktop acceptance remain outstanding. See [component verification](../../verification/custom-languages-components.md).
+
+
+Standalone Core URL transfer checkpoint: implemented `LanguageProfileTransfer` with matching metadata/identity reads, strict definition codec and create-only atomic export. Tested fourteen real-file cases plus current full application/helper 1,190/0 and actual contributor filter; reviewed Source and actual evidence independently. Manager integration, recovery dialogs, application owner activation and native/desktop acceptance remain planned. See `docs/verification/custom-language-profile-transfer.md`; do not mark D-04 complete from this Core checkpoint.
