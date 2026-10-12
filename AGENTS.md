@@ -409,3 +409,6 @@ Adopted-tree repair/evidence confirmation passes twelve tests. Exact inner invoc
 ```sh
 env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/catalog-repair-public --filter 'CustomLanguageCatalogRepairTests|CustomLanguageCatalogEvidenceTests' -Xswiftc -warnings-as-errors
 ```
+
+
+Pane runner repair checkpoint (2026-10-12): `scripts/benchmark-panes.sh` now derives the matching SwiftPM package identity and links SearchExecution for its full native source set. The actual restored command passed three visible 1 MB multiline cases with 20 samples each under the direct owned-process watchdog. The edit/display p95 proxy was 78.147/80.013/127.807 ms; this is not application typing-latency acceptance. Full matrix, long-line and larger-file acceptance remain outstanding. Run only with exclusive build/GUI ownership; see `docs/verification/shared-pane-performance.md` for source, failure chronology and limits.
