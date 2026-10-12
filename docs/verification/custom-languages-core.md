@@ -9,8 +9,9 @@ UTF-16 spelling, including canonically equivalent but distinct delimiters.
 
 This is original MIT-licensed code with no new dependencies or assets. The shared
 JSON parser preserves the existing shortcut decoder's limits and error behavior.
-The catalog currently represents drafts; installed definition revisions belong to
-the next durable-store step.
+At this first checkpoint the catalog represents drafts. The subsequent
+[store and lexer checkpoint](custom-languages-components.md) implements installed
+definition revisions and supersedes the store/lexer outstanding states below.
 
 The original isolated component baseline completed 21 tests with 109 ordinary
 assertion failures. A subsequent implementation run completed 76 tests with one

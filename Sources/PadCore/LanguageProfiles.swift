@@ -270,10 +270,32 @@ public struct LanguageCatalogSnapshot: Sendable {
   public let definitions: [LiteralLanguageDefinition]
   public let overrides: [BuiltInLanguageOverride]
   public let generation: UInt64
+  private let installedDefinitionRevisions: [UUID: UInt64]?
 
   public init(
     definitions: [LiteralLanguageDefinition], overrides: [BuiltInLanguageOverride],
     generation: UInt64
+  ) throws {
+    try self.init(
+      definitions: definitions, overrides: overrides, generation: generation,
+      installedRevisions: nil)
+  }
+
+  /// Validated installed revisions; this immutable value is not a file read receipt.
+  public init(
+    definitions: [LiteralLanguageDefinition], overrides: [BuiltInLanguageOverride],
+    generation: UInt64,
+    definitionRevisions: [UUID: UInt64]
+  ) throws {
+    try self.init(
+      definitions: definitions, overrides: overrides, generation: generation,
+      installedRevisions: definitionRevisions)
+  }
+
+  private init(
+    definitions: [LiteralLanguageDefinition], overrides: [BuiltInLanguageOverride],
+    generation: UInt64,
+    installedRevisions: [UUID: UInt64]?
   ) throws {
     guard definitions.count <= 64, overrides.count <= DocumentLanguage.allCases.count else {
       throw LanguageProfileError.limit
@@ -290,9 +312,16 @@ public struct LanguageCatalogSnapshot: Sendable {
     for override in overrides {
       guard builtins.insert(override.language).inserted else { throw LanguageProfileError.invalid }
     }
+    if let installedRevisions {
+      guard installedRevisions.count == ids.count,
+        Set(installedRevisions.keys) == ids,
+        installedRevisions.values.allSatisfy({ $0 > 0 })
+      else { throw LanguageProfileError.invalid }
+    }
     self.definitions = definitions
     self.overrides = overrides
     self.generation = generation
+    self.installedDefinitionRevisions = installedRevisions
   }
 
   public func resolve(
@@ -326,7 +355,7 @@ public struct LanguageCatalogSnapshot: Sendable {
       }
       return ResolvedLanguageProfile(
         requestedID: requested, catalogGeneration: generation,
-        definitionRevision: nil, displayLabel: definition.name,
+        definitionRevision: installedDefinitionRevisions?[id], displayLabel: definition.name,
         builtinLanguage: nil, definition: definition,
         editing: .init(
           lineComment: definition.lineComment, blockComment: definition.blockComment,
@@ -362,6 +391,13 @@ public enum LanguageProfileCodec {
   public static func decodeDefinition(_ data: Data) throws -> LiteralLanguageDefinition {
     let value = try BoundedProfileJSON.parse(
       data, limits: .init(maximumBytes: 65536, maximumDepth: 16, maximumValues: 8192))
+    return try decodeDefinitionValue(value)
+  }
+
+  /// Reuses the original definition schema with exact numeric tokens in a bounded catalog tree.
+  static func decodeDefinitionValue(_ value: BoundedProfileJSON.Value) throws
+    -> LiteralLanguageDefinition
+  {
     guard case .object(let object) = value,
       Set(object.keys) == [
         "version", "id", "name", "fileExtensions", "keywords", "lineComment",

@@ -7,10 +7,10 @@ candidates are not public implementation. Root owns serial compiler and GUI runs
 
 | Step | Deliverable and acceptance | State |
 | --- | --- | --- |
-| 1 | Validated profile values, exact literal equality, bounded strict JSON, definition codec and catalog resolver; preserve existing shortcut/language fixtures | In progress: private baseline compiles; 21 component cases expose 109 ordinary failed assertions. Fresh implementation pending verification |
-| 2 | Owned durable catalog store; stable revisions; import/export, corruption and interrupted replacement controls | Planned |
-| 3 | Bounded cancellable literal lexer; Unicode, delimiter priority and span-limit fixtures | Planned |
-| 4 | Per-language indentation and comments; exact edits and reversible grouped undo | Planned |
+| 1 | Validated profile values, exact literal equality, bounded strict JSON, definition codec and catalog resolver; preserve existing shortcut/language fixtures | Adopted at `4d22211`: corrected frozen76/0 and current application/helper build with focused77/0; strict lint and independent review pass. See ../../verification/custom-languages-core.md |
+| 2 | Owned durable catalog store; stable revisions; import/export, corruption and interrupted replacement controls | Implemented/tested core component: baseline28/115 ordinary failures; matched104/0 plus separate real readback faults2/0 and wrapping control2/4. Formatted public package1122/0 and app/helper build pass; native use remains planned |
+| 3 | Bounded cancellable literal lexer; Unicode, delimiter priority and span-limit fixtures | Implemented/tested core component: baseline26/90 ordinary failures; matched35/0, reviewed formatted adoption and public1122/0. Native highlighter remains planned |
+| 4 | Per-language indentation and comments; exact edits and reversible grouped undo | In progress: expanded bounded selection-aware core test packet under independent source review; no implementation or native undo acceptance yet |
 | 5 | Authoritative document selection and compatible persistence; missing-ID restoration, duplication, history and transfer | Planned |
 | 6 | Native catalog owner/highlighter/policy integration; current-generation admission and applied-setting receipts | Planned |
 | 7 | Working native manager/picker and command routing; real create/edit/delete/import/export and missing-profile presentation | Planned |
@@ -28,4 +28,4 @@ comparison does reach its normalization-distinct literal failure.
 Public contributor commands will be recorded after the corresponding code and
 runner are adopted and executed. The current baseline runs in an isolated private
 Swift 5 package using the checked-in owned-process watchdog, synthetic data and
-warnings as errors. No store, native language UI or desktop result is claimed.
+warnings as errors. The adopted store and lexer are component evidence only; native language UI and desktop acceptance remain outstanding. See [component verification](../../verification/custom-languages-components.md).
