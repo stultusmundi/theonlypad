@@ -6538,21 +6538,109 @@ extension EditorWindowController {
     _ = try closeModel(request, endpointID: endpointID)
     return response == .alertSecondButtonReturn ? .discardWithoutHistory : nil
   }
+  // Existing installed routing is retained only for current eligible membership.
+  // This predicate is callback-free; it is revocation cleanup, not admission.
+  private func managedAdmissionRoutingIsCurrent(_ document: EditorDocument) -> Bool {
+    guard let routing = applicationRouting,
+      !windowClosed, !preparingToQuit, projectionValid, projectionToken == nil,
+      transferProjection == nil, settledTransferProjection == nil,
+      documents.contains(where: { $0 === document }),
+      routing.registry.handle(id: document.id) === document,
+      routing.registry.assignment(of: document.id) == routing.assignment,
+      routing.registry.closeStatus(documentID: document.id) == .open,
+      routing.registry.adoptionStatus(documentID: document.id) == .active,
+      let storage = document.storage as? DocumentCommitTextStorage,
+      !storage.nativeMacroBindingIsSuspended,
+      let lease = macroBindings[ObjectIdentifier(storage)],
+      lease.controllerID == ObjectIdentifier(self),
+      lease.documentObjectID == ObjectIdentifier(document), lease.documentID == document.id,
+      lease.storageID == ObjectIdentifier(storage),
+      lease.ownershipGeneration == document.ownershipGeneration,
+      lease.endpointID == routing.endpointID, lease.assignment == routing.assignment,
+      storage.nativeMacroHasBinding(self, lease: lease)
+    else { return false }
+    let panes = document.panePool.filter(\.isAttached)
+    guard !panes.isEmpty, lease.paneIDs == panes.map(\.id) else { return false }
+    return panes.allSatisfy { pane in
+      guard let association = approvedRoutes[ObjectIdentifier(pane.editor)],
+        association.pane === pane, association.value.lease == lease
+      else { return false }
+      return approvedStoredRoute(association)
+        && approvedInstallMemberCurrent(document, pane: pane, storage: storage, lease: lease)
+    }
+  }
   func applyManagedAdmission(to document: EditorDocument, endpointID: UUID) throws {
     guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }
+    let models = documents
+    let selected = selectedID
+    let storage = document.storage
+    let manager = document.undoManager
+    let ownership = document.ownershipGeneration
+    let revision = document.editRevision
+    let mutation = document.closeMutationGeneration
+    let panes = document.panePool
+    let attachments = panes.map(\.isAttached)
+    let workspaceRevision = routing.registry.workspaceRevision
+    let expectedWindow = routing.registry.window(id: sessionID)
+    let close = routing.registry.closeStatus(documentID: document.id)
+    let adoption = routing.registry.adoptionStatus(documentID: document.id)
+    let validProjection = projectionValid
+    let projection = projectionToken
+    let transfer = transferProjection?.receipt
+    let settled = settledTransferProjection
+    let quitting = preparingToQuit
+    let configuration = document.nativeConfigurationToken
+    @MainActor func originalStoredProof() -> Bool {
+      !windowClosed && applicationRouting?.endpointID == routing.endpointID
+        && applicationRouting?.assignment == routing.assignment
+        && applicationRouting?.registry === routing.registry
+        && documents.count == models.count
+        && zip(documents, models).allSatisfy({ $0 === $1 })
+        && selectedID == selected && documents.contains(where: { $0 === document })
+        && document.storage === storage && document.undoManager === manager
+        && document.ownershipGeneration == ownership && document.editRevision == revision
+        && document.closeMutationGeneration == mutation
+        && document.panePool.count == panes.count
+        && zip(document.panePool, panes).allSatisfy({ $0 === $1 })
+        && document.panePool.map(\.isAttached) == attachments
+        && projectionValid == validProjection && projectionToken == projection
+        && transferProjection?.receipt === transfer && settledTransferProjection === settled
+        && preparingToQuit == quitting && document.nativeConfigurationToken == configuration
+        && routing.registry.workspaceRevision == workspaceRevision
+        && routing.registry.window(id: sessionID) == expectedWindow
+        && routing.registry.handle(id: document.id) === document
+        && routing.registry.assignment(of: document.id) == routing.assignment
+        && routing.registry.closeStatus(documentID: document.id) == close
+        && routing.registry.adoptionStatus(documentID: document.id) == adoption
+    }
     try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
-    guard routing.registry.handle(id: document.id) === document,
-      routing.registry.assignment(of: document.id) == routing.assignment,
-      documents.contains(where: { $0 === document })
-    else { throw NativeManagedCloseError.stale }
-    retireMacroBinding(document)
+    guard originalStoredProof() else { throw NativeManagedCloseError.stale }
+    // No cleanup on the preexisting earliest endpoint-validation failure.
+    // After established membership, classify CURRENT state on every exit.
+    defer {
+      let key = ObjectIdentifier(storage)
+      let hasRouting =
+        macroBindings[key] != nil
+        || approvedRoutes.values.contains(where: { $0.value.lease.storageID == key })
+        || document.panePool.contains(where: { $0.editor.controlledStringOwner === self })
+      if hasRouting, !managedAdmissionRoutingIsCurrent(document) { retireMacroBinding(document) }
+    }
+    let originalWindow = window
+    guard originalStoredProof() else { throw NativeManagedCloseError.stale }
     let before = try document.captureCloseState()
+    guard originalStoredProof() else { throw NativeManagedCloseError.stale }
     let geometry = document.captureCloseGeometry()
+    guard originalStoredProof() else { throw NativeManagedCloseError.stale }
+    if !managedAdmissionRoutingIsCurrent(document) { retireMacroBinding(document) }
     refreshInteractivity(document)
     renderPanePresentationStatus()
-    guard try document.captureCloseState() == before, document.captureCloseGeometry() == geometry
+    guard try document.captureCloseState() == before, document.captureCloseGeometry() == geometry,
+      window === originalWindow, originalStoredProof()
     else { throw NativeManagedCloseError.stale }
     try requireEndpointIdentity(endpointID: endpointID, assignment: routing.assignment)
+    guard try document.captureCloseState() == before, document.captureCloseGeometry() == geometry,
+      window === originalWindow, originalStoredProof()
+    else { throw NativeManagedCloseError.stale }
   }
   func drainLegacyRecoveryWrites(endpointID: UUID) async throws {
     guard let routing = applicationRouting else { throw NativeManagedCloseError.stale }

@@ -37,9 +37,11 @@ jobs:
         run: scripts/test-help-reference.sh
       - name: Managed document lifecycle integration
         run: scripts/test-managed-documents.sh
+      - name: Managed startup editor routing
+        run: scripts/test-managed-admission.sh
       - name: Document transfer foundations
         run: |
-          python3 -m unittest discover -s Tests/NativeIntegration -p test_native_regressions.py
+          python3 -m unittest discover -s Tests/NativeIntegration -p 'test_*.py'
           scripts/test-document-transfer-registry.sh
           bash scripts/test-application-document-transfer-process.sh
           scripts/test-application-document-transfer-publisher.sh

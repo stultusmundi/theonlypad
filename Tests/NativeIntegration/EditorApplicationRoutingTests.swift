@@ -1302,3 +1302,399 @@ private enum RoutingFixtureFailure: Error { case unsupportedDependency, stale }
   }
 
 }
+
+// SPDX-License-Identifier: MIT
+// Additive controls using the original public file-private RoutingFixture unchanged.
+private enum ManagedAdmissionControlFailure: Error { case noReach, cleanupUnsettled }
+
+@MainActor private final class ManagedAdmissionControlFixture {
+  let base: RoutingFixture
+  var ticket: DocumentCloseTicket?
+  init() throws { base = try RoutingFixture() }
+
+  func cleanup() async throws {
+    let f = base
+    var firstError: Error?
+    func report(_ error: Error) {
+      XCTFail("Actual owned cleanup failed: \(error)")
+      if firstError == nil { firstError = error }
+    }
+    f.endpointCheck = nil
+    f.gate?.release()
+    f.gate = nil
+    if let ticket {
+      do {
+        _ = try f.registry.completeClose(
+          ticket, result: .notRemoved(ManagedAdmissionControlFailure.cleanupUnsettled))
+        self.ticket = nil
+      } catch { report(error) }
+    }
+    if let controller = f.controller {
+      controller.execute("macro.discard")
+      if controller.isRecordingMacro { report(ManagedAdmissionControlFailure.cleanupUnsettled) }
+    }
+    if let id = f.lastIntake, let intake = f.intake {
+      do { _ = try await intake.wait(for: id) } catch { report(error) }
+      do { try intake.requireSettled() } catch { report(error) }
+    }
+    if let publisher = f.publisher {
+      do {
+        // Keep the actual owned pause through native close, as in existing fixture cleanup.
+        let pause = try publisher.acquirePause()
+        do { try await publisher.drainPause(pause) } catch { report(error) }
+      } catch { report(error) }
+    }
+    if let controller = f.controller {
+      // Drain the real publisher before freezing native interactivity/recovery.
+      let prepared = await controller.prepareToQuit(persistRecovery: false)
+      if !prepared { report(ManagedAdmissionControlFailure.cleanupUnsettled) }
+    }
+    let previousErrors = f.errors.count
+    f.endpointLive = false
+    f.controller?.close()
+    if let controller = f.controller, !controller.nativeManagedAdmissionWindowIsClosed {
+      report(ManagedAdmissionControlFailure.cleanupUnsettled)
+    }
+    do { try await EditorWindowController.drainPendingCloses() } catch { report(error) }
+    for error in f.errors.dropFirst(previousErrors) { report(error) }
+    do { try FileManager.default.removeItem(at: f.directory) } catch { report(error) }
+    if let firstError { throw firstError }
+  }
+}
+
+@MainActor private func withManagedAdmissionControlFixture(
+  _ body: (ManagedAdmissionControlFixture) async throws -> Void
+) async throws {
+  let f = try ManagedAdmissionControlFixture()
+  var primary: Error?
+  do {
+    try await f.base.connect()
+    try await body(f)
+  } catch { primary = error }
+  var cleanupError: Error?
+  do { try await f.cleanup() } catch { cleanupError = error }
+  if let primary { throw primary }
+  if let cleanupError { throw cleanupError }
+}
+
+@MainActor private func managedAdmissionControlSource(_ f: RoutingFixture) async throws
+  -> EditorDocument
+{
+  f.controller.newDocument()
+  let id = try XCTUnwrap(f.lastIntake, "NO_REACH: actual intake must be submitted")
+  let result = try await f.intake.wait(for: id)
+  guard case .imported(let documentID) = result else {
+    XCTFail("NO_REACH: actual scratch intake must finish imported")
+    throw ManagedAdmissionControlFailure.noReach
+  }
+  try f.intake.requireSettled()
+  let document = try XCTUnwrap(f.controller.focusedPane?.document)
+  XCTAssertEqual(document.id, documentID)
+  XCTAssertTrue(f.registry.handle(id: documentID) === document)
+  XCTAssertEqual(f.registry.assignment(of: documentID), f.assignment)
+  XCTAssertEqual(f.registry.adoptionStatus(documentID: documentID), .active)
+  XCTAssertEqual(f.registry.closeStatus(documentID: documentID), .open)
+  XCTAssertNotNil(document.recoveryAuthority)
+  XCTAssertNil(document.operationID)
+  XCTAssertFalse(document.saving)
+  XCTAssertNil(document.nativeConfigurationToken)
+  XCTAssertNil(document.composingPaneID)
+  XCTAssertEqual(document.storage.string, "")
+  XCTAssertEqual(document.savedText, "")
+  XCTAssertFalse(document.dirty)
+  XCTAssertTrue(f.errors.isEmpty)
+  guard document.id == documentID, f.registry.handle(id: documentID) === document,
+    f.registry.assignment(of: documentID) == f.assignment,
+    f.registry.adoptionStatus(documentID: documentID) == .active,
+    f.registry.closeStatus(documentID: documentID) == .open,
+    document.recoveryAuthority != nil, document.operationID == nil, !document.saving,
+    document.nativeConfigurationToken == nil, document.composingPaneID == nil,
+    document.storage.string.isEmpty, document.savedText.isEmpty, !document.dirty, f.errors.isEmpty
+  else { throw ManagedAdmissionControlFailure.noReach }
+  return document
+}
+
+@MainActor private func managedAdmissionControlRoutes(
+  _ f: RoutingFixture, document: EditorDocument
+) throws -> [ApprovedViewRoute] {
+  let panes = document.panePool.filter(\.isAttached)
+  let window = try XCTUnwrap(f.controller.window)
+  var routes: [ApprovedViewRoute] = []
+  for pane in panes {
+    let route = try XCTUnwrap(
+      f.controller.nativeManagedAdmissionRawRoute(pane), "NO_REACH: actual stored route")
+    XCTAssertTrue(pane.document === document)
+    XCTAssertTrue(pane.editor.window === window)
+    XCTAssertTrue(pane.editor.textStorage === document.storage)
+    XCTAssertTrue(pane.editor.documentUndo === document.undoManager)
+    XCTAssertTrue(pane.editor.delegate === f.controller)
+    XCTAssertTrue(pane.editor.isEditable)
+    XCTAssertTrue(pane.editor.isSelectable)
+    XCTAssertTrue(pane.editor.approvedViewOwner === f.controller)
+    XCTAssertTrue(pane.editor.approvedViewStorage === document.storage)
+    XCTAssertTrue(pane.editor.approvedViewWindow === window)
+    XCTAssertEqual(pane.editor.approvedViewRoute, route)
+    guard pane.document === document, pane.editor.window === window,
+      pane.editor.textStorage === document.storage,
+      pane.editor.documentUndo === document.undoManager, pane.editor.delegate === f.controller,
+      pane.editor.isEditable, pane.editor.isSelectable,
+      pane.editor.approvedViewOwner === f.controller,
+      pane.editor.approvedViewStorage === document.storage,
+      pane.editor.approvedViewWindow === window, pane.editor.approvedViewRoute == route
+    else { throw ManagedAdmissionControlFailure.noReach }
+    let concrete = try XCTUnwrap(document.storage as? DocumentCommitTextStorage)
+    XCTAssertEqual(route.lease.controllerID, ObjectIdentifier(f.controller))
+    XCTAssertEqual(route.lease.documentObjectID, ObjectIdentifier(document))
+    XCTAssertEqual(route.lease.documentID, document.id)
+    XCTAssertEqual(route.lease.storageID, ObjectIdentifier(concrete))
+    XCTAssertEqual(route.lease.ownershipGeneration, document.ownershipGeneration)
+    XCTAssertEqual(route.lease.endpointID, f.endpointID)
+    XCTAssertEqual(route.lease.assignment, f.assignment)
+    XCTAssertEqual(route.viewID, ObjectIdentifier(pane.editor))
+    XCTAssertEqual(route.paneID, pane.id)
+    XCTAssertEqual(route.windowID, ObjectIdentifier(window))
+    XCTAssertEqual(route.managerID, ObjectIdentifier(document.undoManager))
+    XCTAssertTrue(concrete.nativeMacroHasBinding(f.controller, lease: route.lease))
+    guard route.lease.controllerID == ObjectIdentifier(f.controller),
+      route.lease.documentObjectID == ObjectIdentifier(document),
+      route.lease.documentID == document.id, route.lease.storageID == ObjectIdentifier(concrete),
+      route.lease.ownershipGeneration == document.ownershipGeneration,
+      route.lease.endpointID == f.endpointID, route.lease.assignment == f.assignment,
+      route.viewID == ObjectIdentifier(pane.editor), route.paneID == pane.id,
+      route.windowID == ObjectIdentifier(window),
+      route.managerID == ObjectIdentifier(document.undoManager),
+      concrete.nativeMacroHasBinding(f.controller, lease: route.lease)
+    else { throw ManagedAdmissionControlFailure.noReach }
+    routes.append(route)
+  }
+  let history = try XCTUnwrap(
+    document.undoManager.nativeManagedAdmissionHistoryRoute,
+    "NO_REACH: actual installed history association")
+  XCTAssertFalse(routes.isEmpty)
+  XCTAssertTrue(document.undoManager.nativeManagedAdmissionHistoryOwner === f.controller)
+  XCTAssertTrue(routes.contains(history))
+  guard !routes.isEmpty,
+    document.undoManager.nativeManagedAdmissionHistoryOwner === f.controller,
+    routes.contains(history)
+  else { throw ManagedAdmissionControlFailure.noReach }
+  return routes
+}
+
+@MainActor final class NativeManagedAdmissionCallbackTests: XCTestCase {
+  func testActualEndpointCallbackSuccessorSurvivesOuterAdmissionRefusal() async throws {
+    try await withManagedAdmissionControlFixture { fixture in
+      let f = fixture.base
+      let document = try await managedAdmissionControlSource(f)
+      let initialPane = try XCTUnwrap(f.controller.focusedPane)
+      let initialRoutes = try managedAdmissionControlRoutes(f, document: document)
+      XCTAssertEqual(initialRoutes.count, 1)
+      XCTAssertEqual(initialPane.editor.selectedRange(), NSRange(location: 0, length: 0))
+      guard initialRoutes.count == 1,
+        initialPane.editor.selectedRange() == NSRange(location: 0, length: 0)
+      else { throw ManagedAdmissionControlFailure.noReach }
+      let initialRevision = document.editRevision
+      let initialMutation = document.closeMutationGeneration
+      let ownership = document.ownershipGeneration
+      let storage = document.storage
+      let manager = document.undoManager
+      var checks = 0
+      var entered = 0
+      var overflow = false
+      var callbackError: Error?
+      var callbackRecorder: EditorWindowController.ApprovedRouteRecorderFence?
+      var callbackRoutes: [ApprovedViewRoute] = []
+      var callbackHistory: ApprovedViewRoute?
+      var callbackGeometry: NativeCloseGeometry?
+      f.endpointCheck = {
+        guard checks < 8 else {
+          overflow = true
+          throw ManagedAdmissionControlFailure.noReach
+        }
+        checks += 1
+        if checks == 2 {
+          // #1 entry endpoint proof; #2 refreshInteractivity's first actual edit admission.
+          // Burn before nested real operations; the fixture's incarnation checks still run.
+          f.endpointCheck = nil
+          entered += 1
+          do {
+            XCTAssertEqual(
+              f.controller.nativeManagedAdmissionRawRoute(initialPane), initialRoutes[0])
+            guard f.controller.nativeManagedAdmissionRawRoute(initialPane) == initialRoutes[0]
+            else { throw ManagedAdmissionControlFailure.noReach }
+            try f.controller.splitCurrent(.sideBySide)
+            XCTAssertEqual(document.panePool.filter(\.isAttached).count, 2)
+            guard document.panePool.filter(\.isAttached).count == 2 else {
+              throw ManagedAdmissionControlFailure.noReach
+            }
+            f.controller.execute("macro.start")
+            let started = f.controller.nativeMacroApprovedRouteRecorderFence()
+            XCTAssertTrue(f.controller.isRecordingMacro)
+            XCTAssertNotNil(started.epoch)
+            XCTAssertEqual(started.documentID, document.id)
+            XCTAssertEqual(started.active, true)
+            XCTAssertNil(started.reason)
+            guard f.controller.isRecordingMacro, started.epoch != nil,
+              started.documentID == document.id, started.active == true, started.reason == nil
+            else { throw ManagedAdmissionControlFailure.noReach }
+            let editor = try XCTUnwrap(f.controller.focusedPane?.editor)
+            editor.insertText("Q", replacementRange: NSRange(location: NSNotFound, length: 0))
+            let recorder = f.controller.nativeMacroApprovedRouteRecorderFence()
+            XCTAssertEqual(document.storage.string, "Q")
+            XCTAssertEqual(document.editRevision, initialRevision + 1)
+            XCTAssertNotEqual(document.closeMutationGeneration, initialMutation)
+            XCTAssertEqual(recorder.commands, [.replace(location: 0, length: 0, text: "Q")])
+            XCTAssertEqual(recorder.epoch, started.epoch)
+            XCTAssertEqual(recorder.active, true)
+            XCTAssertNil(recorder.reason)
+            guard document.storage.string == "Q", document.editRevision == initialRevision + 1,
+              document.closeMutationGeneration != initialMutation,
+              recorder.commands == [.replace(location: 0, length: 0, text: "Q")],
+              recorder.epoch == started.epoch, recorder.active == true, recorder.reason == nil
+            else { throw ManagedAdmissionControlFailure.noReach }
+            callbackRoutes = try managedAdmissionControlRoutes(f, document: document)
+            callbackHistory = try XCTUnwrap(manager.nativeManagedAdmissionHistoryRoute)
+            callbackGeometry = document.captureCloseGeometry()
+            callbackRecorder = recorder
+          } catch {
+            callbackError = error
+            throw error
+          }
+        }
+      }
+      var outcome: Error?
+      do {
+        try f.controller.applyManagedAdmission(to: document, endpointID: f.endpointID)
+      } catch { outcome = error }
+      f.endpointCheck = nil
+      if let callbackError { throw callbackError }
+      XCTAssertEqual(checks, 2)
+      XCTAssertEqual(entered, 1)
+      XCTAssertFalse(overflow)
+      guard checks == 2, entered == 1, !overflow, callbackRoutes.count == 2,
+        let recorder = callbackRecorder, let geometry = callbackGeometry,
+        let history = callbackHistory
+      else { throw ManagedAdmissionControlFailure.noReach }
+
+      // Nonthrowing successor/data oracles first: later route helpers cannot mask recording loss.
+      XCTAssertEqual(f.controller.nativeMacroApprovedRouteRecorderFence(), recorder)
+      XCTAssertTrue(f.controller.isRecordingMacro)
+      XCTAssertEqual(document.storage.string, "Q")
+      XCTAssertEqual(document.savedText, "")
+      XCTAssertEqual(document.editRevision, initialRevision + 1)
+      XCTAssertEqual(document.ownershipGeneration, ownership)
+      XCTAssertTrue(document.storage === storage)
+      XCTAssertTrue(document.undoManager === manager)
+      XCTAssertEqual(document.captureCloseGeometry(), geometry)
+      XCTAssertEqual(manager.nativeManagedAdmissionHistoryRoute, history)
+      XCTAssertTrue(manager.nativeManagedAdmissionHistoryOwner === f.controller)
+      XCTAssertEqual(
+        document.panePool.filter(\.isAttached).map {
+          f.controller.nativeManagedAdmissionRawRoute($0)
+        }, callbackRoutes.map(Optional.some))
+      for (pane, route) in zip(document.panePool.filter(\.isAttached), callbackRoutes) {
+        XCTAssertEqual(pane.editor.approvedViewRoute, route)
+        XCTAssertTrue(pane.editor.approvedViewOwner === f.controller)
+      }
+      switch outcome as? NativeManagedCloseError {
+      case .some(.stale): break
+      default: XCTFail("Original admission must refuse the callback-changed capture")
+      }
+      XCTAssertTrue(f.errors.isEmpty)
+      XCTAssertEqual(f.registry.closeStatus(documentID: document.id), .open)
+      XCTAssertEqual(f.registry.adoptionStatus(documentID: document.id), .active)
+      XCTAssertTrue(f.registry.handle(id: document.id) === document)
+      try f.intake.requireSettled()
+    }
+  }
+
+  func testActualPostPreservationCloseTicketRevokesRoutingOnOuterRefusal() async throws {
+    try await withManagedAdmissionControlFixture { fixture in
+      let f = fixture.base
+      let document = try await managedAdmissionControlSource(f)
+      let pane = try XCTUnwrap(f.controller.focusedPane)
+      let routes = try managedAdmissionControlRoutes(f, document: document)
+      XCTAssertEqual(routes.count, 1)
+      guard routes.count == 1 else { throw ManagedAdmissionControlFailure.noReach }
+      let state = try document.captureCloseState()
+      let geometry = document.captureCloseGeometry()
+      let text = document.storage.string
+      let mutation = document.closeMutationGeneration
+      let revision = document.editRevision
+      var checks = 0
+      var entered = 0
+      var overflow = false
+      var callbackError: Error?
+      f.endpointCheck = {
+        guard checks < 8 else {
+          overflow = true
+          throw ManagedAdmissionControlFailure.noReach
+        }
+        checks += 1
+        if checks == 2 {
+          f.endpointCheck = nil
+          entered += 1
+          do {
+            XCTAssertEqual(f.controller.nativeManagedAdmissionRawRoute(pane), routes[0])
+            guard f.controller.nativeManagedAdmissionRawRoute(pane) == routes[0] else {
+              throw ManagedAdmissionControlFailure.noReach
+            }
+            let request = try f.registry.requestClose(documentID: document.id)
+            let ticket = try f.registry.beginClose(request, disposition: .retainCleanHistory)
+            fixture.ticket = ticket
+            XCTAssertEqual(
+              f.registry.closeStatus(documentID: document.id), .closing(ticketID: ticket.id))
+            XCTAssertFalse(f.registry.allows(.edit, documentID: document.id))
+            XCTAssertFalse(f.registry.allows(.undoRedo, documentID: document.id))
+            guard f.registry.closeStatus(documentID: document.id) == .closing(ticketID: ticket.id),
+              !f.registry.allows(.edit, documentID: document.id),
+              !f.registry.allows(.undoRedo, documentID: document.id)
+            else { throw ManagedAdmissionControlFailure.noReach }
+          } catch {
+            callbackError = error
+            throw error
+          }
+        }
+      }
+      var outcome: Error?
+      do {
+        try f.controller.applyManagedAdmission(to: document, endpointID: f.endpointID)
+      } catch { outcome = error }
+      f.endpointCheck = nil
+      if let callbackError { throw callbackError }
+      XCTAssertEqual(checks, 2)
+      XCTAssertEqual(entered, 1)
+      XCTAssertFalse(overflow)
+      guard checks == 2, entered == 1, !overflow, let ticket = fixture.ticket else {
+        throw ManagedAdmissionControlFailure.noReach
+      }
+
+      switch outcome as? NativeManagedCloseError {
+      case .some(.stale): break
+      default: XCTFail("Outer admission must refuse the original now-revoked registry capture")
+      }
+      XCTAssertEqual(f.registry.closeStatus(documentID: document.id), .closing(ticketID: ticket.id))
+      XCTAssertNil(f.controller.nativeManagedAdmissionRawRoute(pane))
+      XCTAssertNil(pane.editor.approvedViewOwner)
+      XCTAssertNil(pane.editor.approvedViewRoute)
+      XCTAssertNil(pane.editor.controlledStringOwner)
+      let concrete = try XCTUnwrap(document.storage as? DocumentCommitTextStorage)
+      XCTAssertFalse(concrete.nativeMacroHasBinding(f.controller, lease: routes[0].lease))
+      XCTAssertNil(document.undoManager.nativeManagedAdmissionHistoryOwner)
+      XCTAssertNil(document.undoManager.nativeManagedAdmissionHistoryRoute)
+      XCTAssertFalse(pane.editor.isEditable)
+      XCTAssertFalse(pane.editor.isSelectable)
+      XCTAssertFalse(f.registry.allows(.edit, documentID: document.id))
+      XCTAssertThrowsError(try f.controller.splitCurrent(.sideBySide))
+      pane.editor.insertText("X", replacementRange: NSRange(location: NSNotFound, length: 0))
+      XCTAssertEqual(document.storage.string, text)
+      XCTAssertEqual(document.editRevision, revision)
+      XCTAssertEqual(document.closeMutationGeneration, mutation)
+      XCTAssertEqual(try document.captureCloseState(), state)
+      XCTAssertEqual(document.captureCloseGeometry(), geometry)
+      XCTAssertTrue(f.registry.handle(id: document.id) === document)
+      XCTAssertEqual(f.registry.assignment(of: document.id), f.assignment)
+      XCTAssertTrue(f.errors.isEmpty)
+      // The exact captured real ticket is settled by owned cleanup, even after an earlier throw.
+    }
+  }
+}

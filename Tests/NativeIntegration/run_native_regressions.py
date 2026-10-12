@@ -18,7 +18,8 @@ SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
         'transfer':('EditorDocumentTransferTests','native-document-transfer-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
         'close':(None,'native-close-model'),
-        'macro':('NativeMacroChronologyTests','native-macro-chronology-tests')}
+        'macro':('NativeMacroChronologyTests','native-macro-chronology-tests'),
+        'managed-admission':('NativeManagedAdmissionStartupTests','managed-admission-tests')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
     'NativeDocumentSeed','EditorDocumentWorkspaceAdapter','WorkspaceDocumentRegistryTypes',
     'EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost',
@@ -43,6 +44,16 @@ MACRO_CLASSES={'NativeMacroApprovedViewCapacityTests':2,'NativeMacroApprovedView
                'NativeMacroControlledExplicitCapacityTests':1,'NativeMacroStrictExplicitCapacityTests':1}
 MACRO_SELECTOR='|'.join(MACRO_CLASSES)
 MACRO_ACCESS_FILE='Tests/NativeIntegration/NativeMacroChronologyAccess.swift'
+ADMISSION_TESTS=('NativeManagedAdmissionStartupTests','EditorApplicationRoutingTests')
+ADMISSION_ACCESS={'EditorWindowController.swift':'ManagedAdmissionControllerAccess.swift',
+                  'EditorDocument.swift':'ManagedAdmissionHistoryAccess.swift'}
+ADMISSION_METHODS={
+    ('NativeManagedAdmissionStartupTests','testActualEmptyOwnerStartupRetainsViewAndHistoryRouting'),
+    ('NativeManagedAdmissionStartupTests','testActualPlainFileOwnerStartupRetainsViewAndHistoryRouting'),
+    ('NativeManagedAdmissionCallbackTests','testActualEndpointCallbackSuccessorSurvivesOuterAdmissionRefusal'),
+    ('NativeManagedAdmissionCallbackTests','testActualPostPreservationCloseTicketRevokesRoutingOnOuterRefusal')}
+ADMISSION_CLASSES={'NativeManagedAdmissionStartupTests':2,'NativeManagedAdmissionCallbackTests':2}
+ADMISSION_SELECTOR='|'.join(ADMISSION_CLASSES)
 
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -77,6 +88,9 @@ def discover(root,suite,prebuilt):
     if suite=='macro':
         paths.add(root/'scripts/test-native-macro.sh')
         paths.add(root/MACRO_ACCESS_FILE)
+    if suite=='managed-admission':
+        paths.add(root/'scripts/test-managed-admission.sh')
+        paths.update(root/'Tests/NativeIntegration'/name for name in ADMISSION_ACCESS.values())
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
@@ -90,7 +104,7 @@ def discover(root,suite,prebuilt):
         paths.update((root/'Sources/SearchExecution').glob('*.swift'))
     optional=root/'Sources/TheOnlyPad/DocumentAppliedSettings.swift'
     if optional.exists() or optional.is_symlink(): paths.add(optional)
-    names=CLOSE_HARNESSES if suite=='close' else (MACRO_TESTS if suite=='macro' else (SUITES[suite][0],))
+    names=CLOSE_HARNESSES if suite=='close' else (MACRO_TESTS if suite=='macro' else (ADMISSION_TESTS if suite=='managed-admission' else (SUITES[suite][0],)))
     paths.update(root/'Tests/NativeIntegration'/(name+'.swift') for name in names)
     result=sorted(paths)
     if not any(p.parent==root/'Sources/PadCore' for p in result): raise ValueError('missing PadCore sources')
@@ -251,7 +265,12 @@ def freeze(root,run,suite,prebuilt=False):
                 if suite=='macro' and path.name in MACRO_ACCESS:
                     access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
                     data+=macro_access(access,path.name)
-                if path.name=='EditorDocument.swift' and suite!='macro':
+                if suite=='managed-admission' and path.name in ADMISSION_ACCESS:
+                    # Exact declaring access: stored observations plus only the
+                    # original public32 makeDiskConflict construction forwarder.
+                    access=run/'Original/Tests/NativeIntegration'/ADMISSION_ACCESS[path.name]
+                    data+=b'\n'+access.read_bytes()
+                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission'):
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
@@ -283,6 +302,12 @@ def freeze(root,run,suite,prebuilt=False):
                     origin='Tests/NativeIntegration/'+extra+'.swift'
                     generate('Package/Tests/NativeRoutingTests/'+extra+'.swift',
                              (run/'Original'/origin).read_bytes(),origin)
+        if suite=='managed-admission':
+            for extra in ADMISSION_TESTS:
+                if extra!=SUITES[suite][0]:
+                    origin='Tests/NativeIntegration/'+extra+'.swift'
+                    generate('Package/Tests/NativeRoutingTests/'+extra+'.swift',
+                             (run/'Original'/origin).read_bytes(),origin)
         generate('Package/Package.swift',PACKAGE.encode())
     else:
         # Custom storage has an authentic controller owner. Compile the captured
@@ -300,12 +325,20 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     if suite=='macro':
         access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
         manifest['macroAccess']=[dict(target=name,source=MACRO_ACCESS_FILE,
             bytes=len(macro_access(access,name)),
             sha256=hashlib.sha256(macro_access(access,name)).hexdigest()) for name in MACRO_ACCESS]
+    if suite=='managed-admission':
+        manifest['managedAdmissionAccess']=[dict(
+            target=target,source='Tests/NativeIntegration/'+access,
+            bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
+            sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
+            originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
+            generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
+            for target,access in ADMISSION_ACCESS.items()]
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -475,6 +508,26 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
+    if kind=='managed-admission':
+        counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+        if not counts or counts[-1]!=(4,0) or any(n<=0 or failures!=0 for n,failures in counts):
+            raise ValueError('missing exact positive managed admission result')
+        terminal=re.findall(r"^Test Case '([^']+)' (passed|failed|skipped)(?: \(.*\)\.)?$",text,re.M)
+        if len(terminal)!=4 or any(result!='passed' for _,result in terminal):
+            raise ValueError('managed admission incomplete or nonpassing cases')
+        cases=[]
+        for identity,_ in terminal:
+            match=re.fullmatch(r'\-\[NativeRoutingTests\.(\w+) (test\w+)\]',identity)
+            if match is None: raise ValueError('foreign managed admission case')
+            cases.append(match.groups())
+        if len(set(cases))!=4 or set(cases)!=ADMISSION_METHODS:
+            raise ValueError('managed admission exact case selection changed')
+        if {name:sum(case[0]==name for case in cases) for name in ADMISSION_CLASSES}!=ADMISSION_CLASSES:
+            raise ValueError('managed admission class count changed')
+        for name in ADMISSION_CLASSES:
+            if len(re.findall(r"^Test Suite '"+re.escape(name)+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+                raise ValueError('managed admission class did not pass')
+        return dict(tests=4,failures=0)
     if kind=='macro':
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or counts[-1]!=(19,0) or any(n<=0 or failures!=0 for n,failures in counts):
@@ -535,6 +588,7 @@ def execute(run,args,watchdog_main):
         if args.suite!='close':
             command=[swift,'test','--package-path',run/'Package','--scratch-path',run/'Build']
             if args.suite=='macro': command+=['-Xswiftc','-warnings-as-errors','--filter',MACRO_SELECTOR]
+            if args.suite=='managed-admission': command+=['-Xswiftc','-warnings-as-errors','--filter',ADMISSION_SELECTOR]
             stage('test',command,180,args.suite)
         else:
             if args.build_path:
