@@ -3,6 +3,15 @@ import Foundation
 public struct BlockCommentDelimiters: Equatable, Sendable {
   public let opening: String
   public let closing: String
+
+  public init(opening: String, closing: String) {
+    self.opening = opening
+    self.closing = closing
+  }
+  public static func == (left: Self, right: Self) -> Bool {
+    left.opening.utf16.elementsEqual(right.opening.utf16)
+      && left.closing.utf16.elementsEqual(right.closing.utf16)
+  }
 }
 public struct LanguageConfiguration: Sendable {
   public let lineComment: String?

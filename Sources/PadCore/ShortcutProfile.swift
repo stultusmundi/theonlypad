@@ -179,90 +179,20 @@ public enum ShortcutComposer {
   }
 }
 
-/// Small bounded parser solely for this strict schema. Strings use Foundation's JSON decoding,
-/// but object keys are checked before a dictionary can discard duplicates (including escapes).
+/// Retains the shortcut schema's limits and error mapping while sharing strict JSON mechanics.
 private struct StrictShortcutJSON {
-  indirect enum Value {
-    case object([String: Value])
-    case array([Value])
-    case string(String)
-    case number(String)
-    case literal
-  }
+  typealias Value = BoundedProfileJSON.Value
   let bytes: [UInt8]
-  var index = 0
   mutating func parse() throws -> Value {
-    let result = try value(depth: 0)
-    whitespace()
-    guard index == bytes.count else { throw ShortcutError.invalidProfile }
-    return result
-  }
-  mutating func whitespace() {
-    while index < bytes.count && [9, 10, 13, 32].contains(bytes[index]) { index += 1 }
-  }
-  mutating func consume(_ byte: UInt8) -> Bool {
-    whitespace()
-    if index < bytes.count && bytes[index] == byte {
-      index += 1
-      return true
-    }
-    return false
-  }
-  mutating func string() throws -> String {
-    whitespace()
-    let start = index
-    guard index < bytes.count && bytes[index] == 34 else { throw ShortcutError.invalidProfile }
-    index += 1
-    while index < bytes.count {
-      let byte = bytes[index]
-      index += 1
-      if byte == 34 {
-        do { return try JSONDecoder().decode(String.self, from: Data(bytes[start..<index])) } catch
-        { throw ShortcutError.invalidProfile }
-      }
-      if byte == 92 {
-        guard index < bytes.count else { throw ShortcutError.invalidProfile }
-        index += 1
-      }
-    }
-    throw ShortcutError.invalidProfile
-  }
-  mutating func value(depth: Int) throws -> Value {
-    guard depth <= 8 else { throw ShortcutError.invalidProfile }
-    whitespace()
-    guard index < bytes.count else { throw ShortcutError.invalidProfile }
-    if consume(123) {
-      var object: [String: Value] = [:]
-      if consume(125) { return .object(object) }
-      repeat {
-        let key = try string()
-        guard object[key] == nil else { throw ShortcutError.duplicateKey }
-        guard consume(58) else { throw ShortcutError.invalidProfile }
-        object[key] = try value(depth: depth + 1)
-        if consume(125) { return .object(object) }
-      } while consume(44)
+    do {
+      return try BoundedProfileJSON.parse(
+        Data(bytes),
+        limits: .init(
+          maximumBytes: ShortcutProfile.maximumBytes, maximumDepth: 8, maximumValues: Int.max))
+    } catch BoundedProfileJSON.Failure.duplicateKey {
+      throw ShortcutError.duplicateKey
+    } catch {
       throw ShortcutError.invalidProfile
     }
-    if consume(91) {
-      var array: [Value] = []
-      if consume(93) { return .array(array) }
-      repeat {
-        array.append(try value(depth: depth + 1))
-        if consume(93) { return .array(array) }
-      } while consume(44)
-      throw ShortcutError.invalidProfile
-    }
-    if bytes[index] == 34 { return .string(try string()) }
-    let start = index
-    while index < bytes.count && ![9, 10, 13, 32, 44, 93, 125].contains(bytes[index]) { index += 1 }
-    guard index > start else { throw ShortcutError.invalidProfile }
-    let token = String(decoding: bytes[start..<index], as: UTF8.self)
-    if ["true", "false", "null"].contains(token) { return .literal }
-    // Numeric tokens are used only for version; reject non-JSON spellings before schema checking.
-    guard
-      token.range(
-        of: "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?$", options: .regularExpression) != nil
-    else { throw ShortcutError.invalidProfile }
-    return .number(token)
   }
 }
