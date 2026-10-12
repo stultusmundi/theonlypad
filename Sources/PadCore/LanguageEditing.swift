@@ -221,3 +221,142 @@ public enum LanguageEditing {
     return String(decoding: result, as: UTF16.self)
   }
 }
+
+// Profile-taking entry points are separately bounded and raw-UTF16 literal.
+// Existing language-taking methods above remain byte-exact for compatibility.
+extension LanguageEditing {
+  public static func toggleLineComment(
+    text: String, selection: NSRange, profile: ResolvedLanguageProfile,
+    isCancelled: () -> Bool = { false }
+  ) throws -> LineCommandResult {
+    var work = BoundedLanguageEditing()
+    do {
+      let units = try work.read(text, isCancelled: isCancelled)
+      try work.validate(selection, in: units)
+      let lines = try work.lines(in: units, isCancelled: isCancelled)
+      guard let delimiter = profile.editing.lineComment else {
+        throw LanguageEditingError.unsupported
+      }
+      // A validated profile bounds this literal to <=32 units.
+      let marker = Array(delimiter.utf16)
+      let touched = try work.touched(lines, selection: selection, isCancelled: isCancelled)
+      var prefixes: [(offset: Int, commented: Bool)] = []
+      var remove = true
+      for index in touched.first...touched.last {
+        try work.step(isCancelled)
+        let line = lines[index]
+        var offset = line.start
+        while offset < line.bodyEnd, units[offset] == 32 || units[offset] == 9 {
+          try work.step(isCancelled)
+          offset += 1
+        }
+        let commented = try work.matches(
+          marker, in: units, at: offset,
+          end: line.bodyEnd, isCancelled: isCancelled)
+        prefixes.append((offset, commented))
+        if !commented { remove = false }
+      }
+      var edits: [BoundedLanguageEditing.Edit] = []
+      for index in prefixes.indices {
+        try work.step(isCancelled)
+        let prefix = prefixes[index]
+        if remove {
+          var count = marker.count
+          if prefix.offset + count < lines[touched.first + index].bodyEnd,
+            units[prefix.offset + count] == 32
+          {
+            count += 1
+          }
+          edits.append(.init(start: prefix.offset, removed: count, inserted: []))
+        } else {
+          edits.append(.init(start: prefix.offset, removed: 0, inserted: marker + [32]))
+        }
+      }
+      let changed = try work.applying(edits, to: units, isCancelled: isCancelled)
+      let mapped = try work.selection(
+        selection, lines: lines, first: touched.first,
+        last: touched.last, edits: edits, isCancelled: isCancelled)
+      try work.check(isCancelled)
+      return LineCommandResult(text: changed, selection: mapped)
+    } catch let error as BoundedLanguageEditing.Failure {
+      switch error {
+      case .invalidSelection: throw LanguageEditingError.invalidSelection
+      case .textLimit, .lineLimit: throw LanguageEditingError.limit
+      }
+    }
+  }
+
+  public static func toggleBlockComment(
+    text: String, selection: NSRange, profile: ResolvedLanguageProfile,
+    isCancelled: () -> Bool = { false }
+  ) throws -> LineCommandResult {
+    var work = BoundedLanguageEditing()
+    do {
+      let units = try work.read(text, isCancelled: isCancelled)
+      try work.validate(selection, in: units)
+      _ = try work.lines(in: units, isCancelled: isCancelled)
+      guard let delimiter = profile.editing.blockComment else {
+        throw LanguageEditingError.unsupported
+      }
+      // Both literals are authenticated by the immutable resolved profile.
+      let opening = Array(delimiter.opening.utf16)
+      let closing = Array(delimiter.closing.utf16)
+      let start = selection.location
+      let end = start + selection.length
+      var isWrapped = false
+      if selection.length >= opening.count + closing.count {
+        let hasOpening = try work.matches(
+          opening, in: units, at: start,
+          end: end, isCancelled: isCancelled)
+        if hasOpening {
+          isWrapped = try work.matches(
+            closing, in: units, at: end - closing.count,
+            end: end, isCancelled: isCancelled)
+        }
+      }
+      var replacement: [UInt16] = []
+      if isWrapped {
+        try work.copy(
+          (start + opening.count)..<(end - closing.count), from: units,
+          into: &replacement, isCancelled: isCancelled)
+      } else {
+        if try work.contains(opening, in: units, range: start..<end, isCancelled: isCancelled) {
+          throw LanguageEditingError.unsafeBlockContent
+        }
+        if try work.contains(closing, in: units, range: start..<end, isCancelled: isCancelled) {
+          throw LanguageEditingError.unsafeBlockContent
+        }
+        if opening == [60, 33, 45, 45] {
+          if try work.contains([45, 45], in: units, range: start..<end, isCancelled: isCancelled) {
+            throw LanguageEditingError.unsafeBlockContent
+          }
+          if start < end, units[end - 1] == 45 {
+            throw LanguageEditingError.unsafeBlockContent
+          }
+        }
+        guard opening.count + closing.count <= BoundedLanguageEditing.maximumUnits - units.count
+        else {
+          throw LanguageEditingError.limit
+        }
+        try work.copy(
+          0..<opening.count, from: opening, into: &replacement, isCancelled: isCancelled)
+        try work.copy(start..<end, from: units, into: &replacement, isCancelled: isCancelled)
+        try work.copy(
+          0..<closing.count, from: closing, into: &replacement, isCancelled: isCancelled)
+      }
+      let edit = BoundedLanguageEditing.Edit(
+        start: start, removed: selection.length,
+        inserted: replacement)
+      let result = try work.applying([edit], to: units, isCancelled: isCancelled)
+      try work.check(isCancelled)
+      return LineCommandResult(
+        text: result,
+        selection: NSRange(location: start, length: replacement.count))
+    } catch let error as BoundedLanguageEditing.Failure {
+      switch error {
+      case .invalidSelection: throw LanguageEditingError.invalidSelection
+      case .textLimit, .lineLimit: throw LanguageEditingError.limit
+      }
+    }
+  }
+}
