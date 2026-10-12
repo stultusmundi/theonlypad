@@ -217,7 +217,17 @@ import PadCore
   {
     guard let managed, phase == expected else { throw ApplicationCheckpointError.invalidPhase }
     try managed.requireIntakeSettled()
-    try managed.requireCloseSettled()
+    do {
+      try managed.requireCloseSettled()
+    } catch {
+      if expected == .managed,
+        let closeError = error as? DocumentClosingError,
+        closeError == .pendingRecovery
+      {
+        throw CheckpointSchedulerError.closeInProgress
+      }
+      throw error
+    }
     guard phase == expected else { throw ApplicationCheckpointError.invalidPhase }
     let registry = managed.registry
     let revision = registry.workspaceRevision

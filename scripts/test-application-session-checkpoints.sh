@@ -12,13 +12,16 @@ from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]);package=run/'Package'
 items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
-items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/ManagedPublisher'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','WorkspaceDocumentRegistryTypes.swift','NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','ApplicationSessionCheckpointBoundary.swift','ApplicationSessionCheckpoints.swift']]
+items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/ManagedPublisher'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','DocumentClosingBoundary.swift','WorkspaceDocumentRegistryTypes.swift','NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','ApplicationSessionCheckpointBoundary.swift','ApplicationSessionCheckpoints.swift']]
 items += [(Path('Tests/NativeIntegration/ApplicationSessionCheckpointsTests.swift'),package/'Tests/ManagedPublisherTests/ApplicationSessionCheckpointsTests.swift')]
+close_sources = ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','DocumentClosingBoundary.swift','WorkspaceDocumentRegistryTypes.swift','NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','ApplicationSessionCheckpointBoundary.swift','ApplicationSessionCheckpoints.swift','ApplicationDocumentClosing.swift']
+items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/CheckpointCloseDeferral'/n) for n in close_sources]
+items += [(Path('Tests/NativeIntegration')/n,package/'Tests/CheckpointCloseDeferralTests'/n) for n in ['CheckpointCloseDeferralTests.swift','ManagedCheckpointCloseDeferralTests.swift']]
 manifest=[]
 for source,target in items:
  target.parent.mkdir(parents=True,exist_ok=True);data=source.read_bytes();target.write_bytes(data);manifest.append({'source':str(source),'sha256':hashlib.sha256(data).hexdigest()})
 (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
-(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"ManagedPublisher", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"ManagedPublisher",dependencies:["PadCore"]),.testTarget(name:"ManagedPublisherTests",dependencies:["ManagedPublisher","PadCore"])],swiftLanguageModes:[.v5])\n')
+(package/'Package.swift').write_text('// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"ManagedPublisher", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"ManagedPublisher",dependencies:["PadCore"]),.testTarget(name:"ManagedPublisherTests",dependencies:["ManagedPublisher","PadCore"]),.target(name:"CheckpointCloseDeferral",dependencies:["PadCore"]),.testTarget(name:"CheckpointCloseDeferralTests",dependencies:["CheckpointCloseDeferral","PadCore"])],swiftLanguageModes:[.v5])\n')
 PY
 python3 - "$run" <<'PY'
 from pathlib import Path

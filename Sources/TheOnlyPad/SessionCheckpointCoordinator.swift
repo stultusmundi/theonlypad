@@ -204,6 +204,12 @@ struct CheckpointPauseToken: Hashable, Sendable {
           // Preparation failed before a capture existed. Consume the current request so an
           // idle error cannot spin; a later request still takes the normal retry delay.
           attemptedGeneration = requestedGeneration
+          // Ordinary close preparation is a deferral, not a new persistent error.
+          if let schedulerError = error as? CheckpointSchedulerError,
+            case .closeInProgress = schedulerError
+          {
+            return
+          }
           throw error
         }
         guard !paused, !Task.isCancelled else { return }

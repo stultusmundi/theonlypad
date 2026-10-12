@@ -12,7 +12,7 @@ from pathlib import Path
 import hashlib,json,sys
 run=Path(sys.argv[1]);package=run/'Package'
 items=[(p,package/'Sources/PadCore'/p.name) for p in Path('Sources/PadCore').glob('*.swift')]
-items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/IntakeOwner'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','WorkspaceDocumentRegistryTypes.swift','DocumentIntakeBoundary.swift','ApplicationDocumentIntake.swift','NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','ApplicationSessionCheckpoints.swift','ApplicationSessionCheckpointBoundary.swift']]
+items += [(Path('Sources/TheOnlyPad')/n,package/'Sources/IntakeOwner'/n) for n in ['RecoveryCoordinator.swift','SessionCheckpointCoordinator.swift','ApplicationDocuments.swift','DocumentTransferBoundary.swift','DocumentClosingBoundary.swift','WorkspaceDocumentRegistryTypes.swift','DocumentIntakeBoundary.swift','ApplicationDocumentIntake.swift','NativeDocumentSeed.swift','SessionCoordinator.swift','SessionRestorationController.swift','ApplicationSessionCheckpoints.swift','ApplicationSessionCheckpointBoundary.swift']]
 items += [(Path('Tests/NativeIntegration/ApplicationDocumentIntakeTests.swift'),package/'Tests/IntakeOwnerTests/ApplicationDocumentIntakeTests.swift')]
 manifest=[]
 for source,target in items:
