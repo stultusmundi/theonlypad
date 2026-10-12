@@ -650,3 +650,161 @@ private struct LanguageInspectionShape {
     }
   }
 }
+
+// Explicit replacement and evidence-bound retry are separate from normal save() counters.
+extension CustomLanguageStore {
+  public func repair(
+    definitions: [LiteralLanguageDefinition], overrides: [BuiltInLanguageOverride],
+    matching inspection: CustomLanguageRepairInspection
+  ) throws -> LoadedLanguageCatalog {
+    // Validate duplicate IDs/extensions and every definition before constructing the revision map.
+    let draft = try LanguageCatalogSnapshot(
+      definitions: definitions, overrides: overrides, generation: 1)
+    var revisions: [UUID: UInt64] = [:]
+    for definition in draft.definitions { revisions[definition.id] = 1 }
+    let replacement = try LanguageCatalogSnapshot(
+      definitions: draft.definitions, overrides: draft.overrides, generation: 1,
+      definitionRevisions: revisions)
+    let bytes = try LanguageCatalogCodec.encode(replacement)
+    guard bytes.count <= Self.maximumBytes else { throw CustomLanguageStoreError.tooLarge }
+    guard inspection.destination == destination else {
+      throw CustomLanguageStoreError.receiptMismatch
+    }
+    let original = LanguageInspectionRead(
+      bytes: inspection.rawBytes, parent: inspection.parent, leaf: inspection.leaf)
+    return try publishExactCatalog(bytes, replacing: original, pendingEvidence: nil)
+  }
+
+  /// Identity/byte validation only: no save, durability acknowledgement or writable receipt.
+  public func validatePendingPublication(_ pending: CustomLanguagePublicationUncertain) throws {
+    _ = try validatedPendingRead(pending)
+  }
+
+  /// A fresh Atomic save of the original attempted wire, without another logical edit.
+  public func retryPendingPublication(_ pending: CustomLanguagePublicationUncertain) throws
+    -> LoadedLanguageCatalog
+  {
+    let original = try validatedPendingRead(pending)
+    return try publishExactCatalog(
+      pending.attemptedBytes, replacing: original, pendingEvidence: pending.evidence)
+  }
+
+  private func validatedPendingRead(_ pending: CustomLanguagePublicationUncertain) throws
+    -> LanguageInspectionRead
+  {
+    guard pending.evidence.destination.standardizedFileURL == destination else {
+      throw CustomLanguageStoreError.receiptMismatch
+    }
+    guard pending.attemptedBytes.count <= Self.maximumBytes else {
+      throw CustomLanguageStoreError.tooLarge
+    }
+    // Validate the entire retained wire before reading any endpoint through its evidence.
+    _ = try LanguageCatalogCodec.decode(pending.attemptedBytes)
+    let descriptor = try openDirectory(create: false)
+    guard descriptor >= 0 else { throw CustomLanguageStoreError.changed }
+    defer { close(descriptor) }
+    let identity = try validateDirectory(descriptor)
+    var parentInfo = stat()
+    guard fstat(descriptor, &parentInfo) == 0 else {
+      throw CustomLanguageStoreError.unreadable
+    }
+    let leaf = try currentInspectionLeaf(descriptor)
+    let original = LanguageInspectionRead(
+      bytes: pending.attemptedBytes, parent: LanguageInspectionParent(parentInfo), leaf: leaf)
+    guard original.parent?.identity == identity else { throw CustomLanguageStoreError.changed }
+    // The genuine original evidence must match before and after the callback-bearing stable read.
+    try requirePublicationSource(descriptor, matching: original, evidence: pending.evidence)
+    return original
+  }
+
+  private func currentInspectionLeaf(_ descriptor: Int32) throws -> LanguageInspectionLeaf {
+    var info = stat()
+    guard fstatat(descriptor, "Profiles.json", &info, AT_SYMLINK_NOFOLLOW) == 0 else {
+      throw CustomLanguageStoreError.changed
+    }
+    try validateLeaf(info)
+    return LanguageInspectionLeaf(info)
+  }
+
+  private func requirePublicationMetadata(
+    _ descriptor: Int32, matching original: LanguageInspectionRead
+  ) throws {
+    guard let parent = original.parent, let leaf = original.leaf,
+      parent.owner == geteuid(), parent.mode == 0o700
+    else { throw CustomLanguageStoreError.changed }
+    _ = try validateDirectory(descriptor, matching: parent.identity)
+    guard try currentInspectionLeaf(descriptor) == leaf else {
+      throw CustomLanguageStoreError.changed
+    }
+  }
+
+  private func requirePublicationSource(
+    _ descriptor: Int32, matching original: LanguageInspectionRead,
+    evidence: FilePublicationEvidence?
+  ) throws {
+    try requirePublicationMetadata(descriptor, matching: original)
+    if let evidence {
+      guard let bytes = original.bytes else { throw CustomLanguageStoreError.changed }
+      try AtomicFileStore().validatePublication(evidence, expected: bytes)
+    }
+    let current = try readForInspection()
+    guard current.parent?.identity == original.parent?.identity,
+      current.parent?.owner == original.parent?.owner,
+      current.parent?.mode == original.parent?.mode,
+      current.leaf == original.leaf
+    else { throw CustomLanguageStoreError.changed }
+    guard current.bytes == original.bytes else { throw FileStoreError.externalChange }
+    if let evidence {
+      guard let bytes = original.bytes else { throw CustomLanguageStoreError.changed }
+      try AtomicFileStore().validatePublication(evidence, expected: bytes)
+    }
+    // No callback follows this final stored proof before the caller's next I/O boundary.
+    try requirePublicationMetadata(descriptor, matching: original)
+  }
+
+  private func publishExactCatalog(
+    _ bytes: Data, replacing original: LanguageInspectionRead,
+    pendingEvidence: FilePublicationEvidence?
+  ) throws -> LoadedLanguageCatalog {
+    guard bytes.count <= Self.maximumBytes, let parent = original.parent,
+      let leaf = original.leaf, let expected = original.bytes
+    else { throw CustomLanguageStoreError.changed }
+    let descriptor = try openDirectory(create: false)
+    guard descriptor >= 0 else { throw CustomLanguageStoreError.changed }
+    defer { close(descriptor) }
+    try requirePublicationMetadata(descriptor, matching: original)
+    // A genuine read-only inspection permits export/validation, never a write attempt.
+    guard leaf.mode & 0o222 != 0 else { throw FileStoreError.readOnly }
+    try requirePublicationSource(descriptor, matching: original, evidence: pendingEvidence)
+    try hooks.beforeWrite()
+    try requirePublicationSource(descriptor, matching: original, evidence: pendingEvidence)
+    do {
+      try AtomicFileStore().save(
+        bytes, to: file, expected: expected, fault: hooks.fault,
+        boundaryHook: { boundary in
+          switch boundary {
+          case .afterInitialCheck, .beforeReplace, .afterFinalCheck:
+            try requirePublicationSource(
+              descriptor, matching: original, evidence: pendingEvidence)
+          case .afterReplace:
+            // This is the newly published leaf; the deliberately replaced old inode is stale.
+            _ = try validateDirectory(descriptor, matching: parent.identity)
+            _ = try currentInspectionLeaf(descriptor)
+          }
+        })
+    } catch FileStoreError.publicationUncertain(let evidence) {
+      throw CustomLanguagePublicationUncertain(evidence: evidence, attemptedBytes: bytes)
+    }
+    do {
+      let readback = try readForInspection()
+      guard readback.parent?.identity == parent.identity, readback.bytes == bytes,
+        let newLeaf = readback.leaf
+      else { throw CustomLanguageStoreError.changed }
+      try requirePublicationMetadata(descriptor, matching: readback)
+      return try loaded(
+        bytes, directoryIdentity: parent.identity, leafIdentity: newLeaf.identity)
+    } catch {
+      throw CustomLanguageReadbackUnconfirmed(attemptedBytes: bytes, underlyingError: error)
+    }
+  }
+}

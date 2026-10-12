@@ -399,3 +399,13 @@ Adopted-tree focused inspection confirmation also passes five tests. Exact inner
 ```sh
 env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/catalog-inspection-public --filter CustomLanguageCatalogInspectionTests -Xswiftc -warnings-as-errors
 ```
+
+
+Catalog repair/evidence component (2026-10-12): actual synthetic-file repair, original pending-evidence validation and exact-byte republication pass 47 focused tests, including all original 30 store/codec/revision/readback tests. The formatted full current app/helper candidate passes 1,176 unique tests with zero failures, unexpected errors or skips and warnings treated as errors. The test dependency build was cold; the following same-scratch build was incremental confirmation. Original load/save and inspection source remain unchanged. Repair requires a genuine known-format token and unchanged owned endpoint; validation returns no publication acknowledgment; retry writes the original attempted bytes without advancing generation/revision. Readback-unconfirmed outcomes lack pending evidence. See `docs/verification/custom-language-catalog-repair.md` for retained RED results, source review, read-only/fault coverage and limits. Owner recovery, native policy/manager activation and new packaged desktop acceptance remain outstanding.
+
+
+Adopted-tree repair/evidence confirmation passes twelve tests. Exact inner invocation, executed under the owned watchdog:
+
+```sh
+env NSUnbufferedIO=YES scripts/swift.sh test --scratch-path .build/catalog-repair-public --filter 'CustomLanguageCatalogRepairTests|CustomLanguageCatalogEvidenceTests' -Xswiftc -warnings-as-errors
+```
