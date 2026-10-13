@@ -51,14 +51,31 @@ command is claimed here.
 
 ## Planned and outstanding
 
-Next are genuine close/reopen, retained pending-draft presentation and completed
-application-task retirement tests. Additional callback/lifecycle, repair and
-complete profile-control workflows remain required before application activation.
+The expanded matching candidate now passes thirteen tests with zero failures or
+skips, including the original ten. Three new cases first reproduced six ordinary
+failures and two following guard errors; the corrected same cases pass for
+explicit controller close/reopen, authentic retained pending-draft presentation
+and autonomous completed-Save task retirement. The recovery case reaches real
+uncertainty, evidence validation and quit veto before reopening, then real Verify
+and a genuine Retry receipt. Counts overlap and are not added.
+
+A separate four-test baseline reaches seven ordinary failures and two following
+guard errors. Direct native window close sends its genuine close notification,
+but reopening still returns the old controller/window. Real import and exclusive
+export also reproduce completed-task retention, including an export created by
+the import completion callback and a genuine invalid-import failure. These are
+separate tested failures; they do not establish their repair. Additional native
+entry/callback, repair and complete profile-control workflows remain required
+before application activation.
 Native comment selection is a separate unresolved task: text/undo prerequisites
-pass, but result/undo/redo ranges differ from the required values. Its new owned
-commit diagnostic hit a compiler prerequisite failure before any runtime case;
-verified SDK type and callback annotations are being corrected. No ownership witness or
-selection repair is claimed from that diagnostic.
+pass, but result/undo/redo ranges differ from the required values. After correcting the SDK type and callback annotation prerequisites, its owned
+commit diagnostic executes one case but fails a strict character-only mask guard
+before all desired receipt assertions. The unchanged strict test with a passive
+probe observes an actual attribute primitive during inherited processing before
+the model notification. This localizes the mixed mask; it does not identify the
+SDK caller, grant ownership or prove a missing-receipt regression. Earlier
+compiler failures remain recorded. No ownership witness or selection repair is
+claimed from these diagnostics.
 
 D-04 native propagation, command/picker integration, safety policy and visible
 acceptance remain outstanding alongside the broader BUILD_PROMPT requirements.
