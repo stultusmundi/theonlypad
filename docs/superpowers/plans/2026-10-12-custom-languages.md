@@ -82,3 +82,21 @@ retention, real sheets/menu/keyboard workflows, quit and packaged application
 acceptance still need completion. Close-retention design is being reviewed before
 its next test cycle. No new public runner, production activation, full Core test
 run or distribution artifact follows from this private checkpoint.
+
+
+## Private parent closing follow-up — 2026-10-13
+
+Step 7 now has reviewed private component evidence for parent user-close
+confirmation and scoped raw-input retention through real owner reloads. The
+unchanged test family passes four focused methods/eight fixtures and all
+thirty-eight unique manager methods on the same frozen bundle. The focused four
+overlap the total; no full Core or packaged desktop acceptance is claimed. See
+[the private manager checkpoint](../../verification/custom-language-manager-private.md)
+for the reached failures, repair and source/actual bindings.
+
+Implementation and tests remain private. General raw preservation and stale-form
+reconciliation, child user-close policy, actual field editors, pending/quit
+behavior, default sheets/menu/keyboard routing and public application integration
+still require completion. A bounded advanced-child three-method design has been
+reviewed; its tests and implementation are next, not accepted behavior. Steps 6–9
+and full D-04 retain their original outstanding acceptance scope.

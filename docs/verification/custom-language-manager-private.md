@@ -212,3 +212,39 @@ keyboard/IME/VoiceOver acceptance remain outstanding. Close/quit retention is
 currently a design work item, not an implemented or passing feature.
 D-04 and the full build remain incomplete. Public application code and existing
 packaged artifacts remain the earlier versions recorded above.
+
+
+## Parent close-retention follow-up — 2026-10-13
+
+The private native manager now passes thirty-eight unique methods on one frozen
+bundle; the focused four overlap this count. This adds parent user-close
+confirmation, native delegate veto and final-boundary validation, one-shot Keep
+Editing/Discard behavior, exact old-window retirement and successor protection.
+Tests use real synthetic stores and native windows without showing them.
+
+The original baseline reached missing confirmation and unsafe native-close
+behavior. Its first repair passed three cases but genuinely failed six raw UTF-16
+preservation assertions in both real owner-reload variants. The second repair
+retains the actual close-owned form before later native/presenter calls, invalidates
+only its stale confirmation and prevents owner-render callbacks from overwriting
+the form. The unchanged four-test family now passes all eight fresh fixtures,
+including the six formerly failing raw snapshots and inert old responses.
+
+Independent Source and executed-evidence reviews verify the unchanged test prefix,
+sixty-four input payloads, compiler/link/bundle bindings, all ninety-four cold
+artifact hashes and complete owned-process receipts for both runs. Short bindings:
+Task1 actual `47073/c9847a83`, reached-failure review `12122/bc23bc53`;
+Task2 pure Source `147782/d5c016d2`, assembled Source `148011/a4586fdf`,
+Test `194364/cbfae73f`; focused-four actual `42531/23efc4e9`, same-built
+thirty-eight actual `47675/8df2083a`, independent actual review
+`20136/0dbc048c`. Earlier failed evidence is retained. Counts are not added.
+
+This is close-owned retention only. General unsubmitted-text preservation after
+Keep Editing, stale-catalog reconciliation and safe selection/Save/reload recovery
+remain required. The first fixtures have no active field editor and use injected
+choices; actual default sheets, menu/Command-W/titlebar routing, active editors,
+child-window user close, uncertain publication, quit, accessibility and packaged
+application acceptance remain outstanding. The next reviewed test design covers
+advanced-child closing; it is planned, not tested. No manager production adoption,
+new public runner, full Core run or new distribution artifact follows from this
+checkpoint. Public application code remains `70db8b1`, artifacts `f45f1e9`.
