@@ -164,3 +164,51 @@ The public production code remains `70db8b1`; the existing package remains
 application build. The five previously passing packaged desktop tests cover their
 older artifact and do not test this private manager. No release publication,
 remote push or merge follows from this update.
+
+
+## Private presentation checkpoint — 2026-10-13
+
+The newer reviewed candidate implements retained labeled forms, scrolling and
+fixed action footers, accessibility title relations, declared next-key-view
+loops, and built-in validation guidance. The exact primary test source completed
+three focused cases and all thirty-four methods on the same built bundle, with
+zero failures or skips. There are thirty-four unique methods; the focused three
+overlap the full run and are not added to it.
+
+The layout checks measure all three native windows at their initial sizes,
+560×360 content minimum and 900×760 content size. They check actual control and
+caption bounds, nonambiguous layout, footer separation and native scrolling to
+reveal each form element on both axes. Accessibility relations and key-view
+metadata are checked without posted keyboard input. Genuine invalid built-in
+Apply preserves four raw UTF-16 values and the child before displaying guidance;
+correction clears guidance, stages the local change, and explicit Save is checked
+with a fresh store reader.
+
+Historical failures remain evidence: the declaration baseline had six ordinary
+missing-presentation failures and three following guard errors. The first layout
+candidate passed the other two cases but had sixteen ordinary ambiguity failures.
+An observation-only diagnostic localized the ambiguous roles; source review
+supported a fitting-priority correction. Lowering
+one optional document-fitting priority then passed the unchanged primary tests
+and all original manager compatibility methods. No test was weakened.
+
+| Private evidence | Binding | Scope |
+| --- | --- | --- |
+| Presentation source manifest | `2672ceed` | One priority correction; full inverse and protected behavior checked |
+| Pure manager / readonly assembly | `f2f3c670` / `5f00dd02` | 130,590 / 130,819 bytes; separate readonly projection unchanged |
+| Primary test source | `fe9e0eb8` | 166,617 bytes; original thirty-one-method prefix unchanged |
+| Focused three / same-build all thirty-four | `ed1324b4` / `a2a2ad9a` | Matching frozen sources, compiler/link/bundle and complete receipts/captures |
+| Independent actual review | `4f70da1c` | Finite private component acceptance |
+
+Core dependencies were compiled, not run as a full Core suite. The full run used
+fresh synthetic state and unchanged cold artifact bytes. Raw diagnostics and
+harnesses remain ignored; these evidence bindings are not contributor commands.
+
+This supersedes the private layout and built-in-guidance implementation entries
+in the earlier outstanding list. Public adoption and application activation,
+availability, safe retention of invalid/unsubmitted edits on close, default
+sheets and menus, quit integration, visible packaged workflows and physical
+keyboard/IME/VoiceOver acceptance remain outstanding. Close/quit retention is
+currently a design work item, not an implemented or passing feature.
+D-04 and the full build remain incomplete. Public application code and existing
+packaged artifacts remain the earlier versions recorded above.

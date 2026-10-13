@@ -64,3 +64,21 @@ Public application code remains `70db8b1`; existing distribution artifacts remai
 `f45f1e9`. No new public manager runner or contributor command is claimed before
 its code and harness are adopted and executed. D-04 and the full BUILD_PROMPT
 remain incomplete; no remote publication is authorized by this local checkpoint.
+
+
+## Private presentation follow-up — 2026-10-13
+
+Step 7 has further private component evidence: labeled scrollable forms and fixed
+footers, accessibility/key-view metadata and built-in validation/correction/Save
+now pass thirty-four unique methods on one frozen native bundle. The focused
+three overlap this count. Actual geometry covers three windows at three content
+sizes; the original tests remain unchanged after diagnosing and correcting one
+optional fitting-priority tie. See the newest [private manager checkpoint](../../verification/custom-language-manager-private.md)
+for bindings, historical failures and exact acceptance limits.
+
+The full step remains outstanding. Layout and built-in guidance are implemented
+and tested privately; public adoption, availability, unsubmitted/invalid edit
+retention, real sheets/menu/keyboard workflows, quit and packaged application
+acceptance still need completion. Close-retention design is being reviewed before
+its next test cycle. No new public runner, production activation, full Core test
+run or distribution artifact follows from this private checkpoint.
