@@ -807,3 +807,20 @@ Owner recovery tests reached genuine corruption/unsupported reads and exposed mi
 Standalone Core profile URL import/export is now implemented and verified: fourteen real-file tests, the current 1,190-test application/helper candidate, warning-free builds, independent Source/actual review and an actual public-source focused run. Imports refuse oversized metadata before reading; exports use exclusive atomic creation and preserve genuine joined success/uncertainty after late cancellation. See [transfer evidence](verification/custom-language-profile-transfer.md). The native manager remains unimplemented; its first bounded hidden test/API slice is reviewed for a genuine table-population baseline. This component does not establish application catalog activation or desktop acceptance. Distribution artifacts are unchanged.
 
 Separate public startup regressions have reached two real-owner startup paths and exposed lost view/history associations, with sixteen ordinary failures and zero unexpected failures; genuine checkpoint/readback and data-preservation prerequisites passed. A scoped controller correction is reviewed and under matching hidden verification. It is not yet adopted. Native custom-comment selection/group/callback safety, manager workflows, supervised editor search and every other outstanding BUILD requirement remain active work.
+
+## Active implementation checkpoint — 2026-10-14
+
+The private manager/startup/recovery composition now has a fresh fifty-five-test
+run: fifty-four pass; the viewer test fails genuine key-window prerequisites and
+does not reach its routing assertions. No skips or expected failures were added.
+See [manager evidence](verification/custom-language-manager-private.md) for the
+source and independently reviewed execution bindings and precise limits.
+
+Next coding work is the native custom-comment selection fix, guided by the
+corrected baseline's six ordinary failures across all three reached fixtures.
+Original undo/redo selection failures remain required subsequent work. In parallel,
+implement one-owner document catalog delivery and reversible quit preparation
+that preserves manager raw input after cancellation or a document veto. The
+private candidates still require integration, public adoption, current application
+regressions and packaged desktop testing. Full BUILD_PROMPT scope remains active;
+no remote push, merge or release is authorized.

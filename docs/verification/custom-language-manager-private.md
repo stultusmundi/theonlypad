@@ -288,3 +288,43 @@ and packaged desktop acceptance remain required. General raw retention after
 Keep Editing and stale-form reconciliation are also outstanding. No public
 manager adoption, contributor runner, full Core run or new package follows.
 Public application code remains `70db8b1`, distribution artifacts `f45f1e9`.
+
+## Application startup and recovery integration — 2026-10-14
+
+A fresh private composition runs fifty-five unique manager tests: fifty-four
+pass, and one fails its genuine key-window prerequisites before entering its
+viewer-routing checks. No tests are skipped or marked as expected failures.
+The suite builds the actual AppDelegate, joined shortcut startup, language owner
+and native manager against 180 frozen source files. Independent review verifies
+the source copies, 182 compiler/link objects, 218 artifacts and complete process
+receipts. This is not an all-passing suite or packaged application acceptance.
+
+The passing cases include retained initial catalog loading and its actual shortcut
+recomposition join, native menu dispatch and Save, failed-load presentation with
+Save disabled and actionable Inspect guidance, and explicit restoration after an
+early interrupted catalog refresh. That restoration preserves the complete local
+profile dictionary, overrides and raw input without loading or saving. Later
+partial interruptions and interrupted restoration remain outside this verified
+lane. The two component suites previously passed fifty and fifty-two methods;
+their overlapping counts are not added to the composed result.
+
+Short evidence bindings: pure composed manager `240927/13cb101b`, unchanged
+composed Test `421703/7173fa41`, composition review `5939/6f0419ee`, actual run
+`167937/5dec42b9`, independent actual review `9909/46012785`. Harnesses and raw
+synthetic diagnostics remain ignored; these are evidence references, not new
+contributor commands.
+
+Native custom-comment result selection remains under implementation. Its corrected
+baseline reaches all three intended fixtures and reports six ordinary selection
+failures, with no guard failures or skips. Genuine foreign-character effects,
+binding replacement and later ordinary selection prerequisites are reached.
+Undo/redo selection failures remain separate required work; no editing repair is
+claimed from this baseline.
+
+Document catalog delivery, aggregate quit protection for manager drafts, remaining
+close and default-sheet workflows, active field editors/IME, physical input,
+accessibility, reviewed public adoption and a fresh packaged desktop run remain
+required. A real running AppKit probe also remained inactive and nonkey; this
+does not prove the viewer route. The public source checkpoint is `a5aefdf`; the manager
+and startup changes described here are private candidates. Distribution artifacts
+remain unchanged.
