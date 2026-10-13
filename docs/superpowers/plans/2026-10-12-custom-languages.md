@@ -100,3 +100,21 @@ behavior, default sheets/menu/keyboard routing and public application integratio
 still require completion. A bounded advanced-child three-method design has been
 reviewed; its tests and implementation are next, not accepted behavior. Steps 6–9
 and full D-04 retain their original outstanding acceptance scope.
+
+
+## Private advanced-child user closing follow-up — 2026-10-13
+
+Step 7 now includes reviewed private advanced-child user-close handling. Three
+focused methods cover six fresh standalone/no-field-editor fixtures; the same
+built bundle passes forty-one unique manager methods. Focused counts overlap
+the total. The corrected baseline first exposed premature close and missing
+confirmation; the implementation preserves unapplied/invalid raw fields, checks
+current approval at native close and protects successors. See the latest
+[private manager checkpoint](../../verification/custom-language-manager-private.md)
+for compiler-failure history, reached paths and exact evidence limits.
+
+Attached-sheet/default confirmation behavior, field editors/marked text, other
+child families, pending/quit behavior, general raw retention and reconciliation,
+menu/keyboard routing, public adoption and packaged desktop acceptance remain
+required. This private component does not complete steps 6–9, D-04 or the full
+BUILD_PROMPT, and does not change production code or distribution artifacts.

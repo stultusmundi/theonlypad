@@ -248,3 +248,43 @@ application acceptance remain outstanding. The next reviewed test design covers
 advanced-child closing; it is planned, not tested. No manager production adoption,
 new public runner, full Core run or new distribution artifact follows from this
 checkpoint. Public application code remains `70db8b1`, artifacts `f45f1e9`.
+
+
+## Advanced child user-close follow-up — 2026-10-13
+
+The private manager now passes forty-one unique methods on one frozen bundle.
+The three focused methods overlap that total and cover six fresh fixtures using
+real synthetic stores and hidden native windows. Advanced-child user closing
+honors native veto, confirms unapplied or invalid input, keeps the form until an
+explicit current Discard, refuses changed approval at the final native boundary,
+and preserves callback-created successors. Existing Apply, Cancel and forced
+close behavior remains separately covered.
+
+The first compilation did not reach tests because an escaping test callback
+needed explicit `self`. A separately reviewed five-byte correction preserved
+all assertions. The corrected declaration baseline genuinely reached one passing
+and two failing methods: premature native close and missing confirmation, with
+six ordinary failures and two following guard errors. Only three of six fixtures
+were entered. One line contained two unlabeled identity assertions, so its logged failure
+alone cannot identify which identity changed. No raw-buffer erasure or later
+successor behavior is credited to that baseline.
+
+The reviewed implementation now passes the unchanged focused tests and all
+forty-one methods, including all six deeper fixture paths. Independent review
+checks sixty-four exact inputs, compiler/link/bundle bindings, ninety-four cold
+artifact hashes and complete owned-process receipts. Short bindings: corrected
+Test `229236/5f3a56fd`; declaration-baseline actual `46455/3418c264`,
+review `44973/d2b4c8c9`; pure Source `168887/7905fcba`, assembled Source
+`169116/f17e0289`; focused actual `43115/2bcae916`, same-built forty-one
+actual `49081/a5da8e67`, independent actual review `34412/4ae9e621`.
+Earlier compiler and behavioral failures remain recorded; counts overlap.
+
+This scope uses standalone child windows, no active field editor and injected
+confirmation choices. The production attached-sheet host deliberately refuses
+this new user-close path until its lifecycle is implemented and tested. Actual
+default sheets, field editors/marked text, scalar-only and popup-specific closing,
+built-in child closing, pending publication, quit, menus/Command-W, physical input
+and packaged desktop acceptance remain required. General raw retention after
+Keep Editing and stale-form reconciliation are also outstanding. No public
+manager adoption, contributor runner, full Core run or new package follows.
+Public application code remains `70db8b1`, distribution artifacts `f45f1e9`.
