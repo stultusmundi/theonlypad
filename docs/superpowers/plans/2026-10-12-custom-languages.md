@@ -32,3 +32,35 @@ warnings as errors. The adopted store and lexer are component evidence only; nat
 
 
 Standalone Core URL transfer checkpoint: implemented `LanguageProfileTransfer` with matching metadata/identity reads, strict definition codec and create-only atomic export. Tested fourteen real-file cases plus current full application/helper 1,190/0 and actual contributor filter; reviewed Source and actual evidence independently. Manager integration, recovery dialogs, application owner activation and native/desktop acceptance remain planned. See `docs/verification/custom-language-profile-transfer.md`; do not mark D-04 complete from this Core checkpoint.
+
+## Private manager progress checkpoint — 2026-10-13
+
+Steps 6–9 retain their full integration and acceptance scope. A private candidate
+now implements and tests part of step 7: real local profile workflows, advanced
+rules and child closing, built-in overrides and two error-presentation fixes.
+Reviewed composition preserves both parent branches, all original twenty-four
+test bodies and the exact two-error/five-built-in suffixes. It does not adopt the
+manager, register a placeholder command or activate it in AppDelegate.
+
+Planned, implemented and tested states remain distinct. Native manager component
+implementation is private; its composed package passed thirty-one unique methods
+on one matching built bundle, after the focused seven-case run. Counts overlap
+and are not added. Actual synthetic file publication, independent fresh readers,
+raw Unicode preservation, inheritance/removal, invalid inputs, pending Retry and
+native-close successor behavior are tested within those methods. Source/compiler/
+link/bundle bindings and complete owned-process receipts were independently
+reviewed. See [the private manager checkpoint](../../verification/custom-language-manager-private.md)
+for exact limits and short evidence bindings.
+
+Next required work includes reviewed public adoption and process activation,
+picker/command/highlighter integration, availability and invalid-draft close
+policy, built-in actionable validation, layout/accessibility polish, default
+sheet and quit behavior, actual visible workflows and a new packaged test.
+Native comment result and undo/redo selection is separately unresolved. None of
+these outstanding acceptance gates is satisfied by hidden component tests or by
+the older five-test packaged desktop checkpoint.
+
+Public application code remains `70db8b1`; existing distribution artifacts remain
+`f45f1e9`. No new public manager runner or contributor command is claimed before
+its code and harness are adopted and executed. D-04 and the full BUILD_PROMPT
+remain incomplete; no remote publication is authorized by this local checkpoint.
