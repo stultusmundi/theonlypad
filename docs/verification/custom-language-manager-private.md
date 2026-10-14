@@ -718,3 +718,43 @@ independent actual audit `8365/df6ba395`. The warning-free build and execution
 verify two objects, twenty artifacts and complete owned-process receipts. No
 original application assertion, Source, package or platform claim changes.
 The foreign-input redo repair and full application quit integration remain active.
+
+
+## Actual application quit baseline — 2026-10-14
+
+Five new hidden clients now execute the real AppDelegate termination entry in
+separate synthetic test processes. All five fail: seven ordinary assertions and
+three following caught errors, with no failed cleanup assertions. The first
+client reaches a real document checkpoint and single reply but finds no language
+preparation. Three clients find no language confirmation; their later Cancel,
+Save, input-veto and new-command behavior is therefore unentered. Their literal
+caught-error anomaly remains recorded without an SDK-internals explanation.
+The final client proves the old error path thaws a genuinely preowned document
+preparation and wrongly permits another preparation.
+
+The initial run was compiler NO_REACH because a throwing cleanup call lacked
+`try`; zero native cases ran. Its immutable inputs and complete diagnostics are
+retained. The four-byte correction preserves every behavioral oracle. A prior
+Root runner setup error was also retained before toolchain execution. Neither
+setup nor compiler failure is counted as a feature failure.
+
+The baseline stores the real existing termination task and actual constructor
+collaborators; its old task body and outcomes are unchanged. This permits genuine
+joins without creating a fake completion task. Corrected execution performs one
+warning-free build and four explicit reuses of exactly verified compiled inputs;
+it does not perform five builds. Each run verifies 196 inputs, 194 objects, 230
+artifacts and complete process receipts. Immediate empty-reply checks in the
+first client do not independently prove prolonged suspension while load is held;
+actual captured startup joins remain an implementation requirement.
+
+Evidence bindings: corrected Test `561889/7a002a7d`, Test review
+`2989/6333ffb6`, matched baseline manifest `69785/6d194d5a`, Source composition
+review `4486/bef1a7e5`, first actual `159062/5724631a`, four reused actuals
+`159549/ab984bdf`, `159517/849282be`, `159529/6c5c5538`, `160069/8d8511c1`
+and combined independent audit `17141/2e76de57`. Earlier compiler-only audit
+`3877/29d59f81` remains separate.
+
+Productive language/document/external coordination is now under implementation.
+Default sheet teardown, external stale-token controls, unchanged legacy
+compatibility, public adoption and OS termination/relaunch acceptance remain
+mandatory. No full 173-method or complete application-quit result is claimed.
