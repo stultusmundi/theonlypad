@@ -441,3 +441,14 @@ and build the actual app/helper. The new session compiles but remains disconnect
 from the existing panel. Native credentials, panel/application wiring, helper
 routing, hard containment, memory/performance and current packaged acceptance
 remain outstanding. See `docs/verification/document-search-session.md`.
+
+Readonly preview native component checkpoint (2026-10-14):
+`scripts/test-folder-replacement-preview.sh` passes 27 actual worker/hidden panel
+contracts, including six chooser reentry and native table-selection regressions.
+The fixed public command is warning-free without requesting warnings as errors;
+private component verification and the fresh full app/helper build use warnings
+as errors. Default package tests pass 1,203 separately; do not add the component
+count to that suite. The runner owns its watchdog directly; never nest another.
+Parent entry, AppDelegate command routing, real picker/package workflows, RSS
+and physical input remain outstanding. Apply/backup recovery is unimplemented.
+See `docs/verification/folder-replacement-preview-native-component.md`.
