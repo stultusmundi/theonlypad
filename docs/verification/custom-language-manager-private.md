@@ -544,3 +544,24 @@ review `4998/02775237`, focused actual `159078/dcd91f8a`, full actual
 This tests cancellation before the actual write, not during directory sync or
 simultaneous publication failure. It has not yet been composed with catalogue
 and native-selection changes or adopted into public code and packages.
+
+## Cancellation in the combined native graph — 2026-10-14
+
+Both caller-cancellation cases now pass in the same private graph as catalogue
+delivery, quit-owner identity and native selection repairs. The full suite passes
+159/167. Independent review confirms all prior 165 outcomes and all 17 existing
+failure details remain unchanged; the two added cases pass. Incoming standalone
+manager outcomes also match. Seven native history/prototype failures and the
+viewer-key prerequisite remain outstanding.
+
+The composition changes only the manager and manager-test payloads, preserving
+194 of 196 inputs exactly. It keeps the real Save task and original attempt
+identity, and adds no observer, writer or API. Evidence bindings: composition
+manifest `70662/6364effd`, independent Source/Test review `6293/ac1fe822`,
+focused actual `167662/8d1dba19`, full actual `203995/c48c2154` and combined
+independent audit `5231/a6c0dae8`. Both executions verify 194 objects, 230
+artifacts, complete process receipts and no skips. Focused and full counts overlap.
+
+This is hidden native integration, not public adoption or packaged acceptance.
+Productive native history, complete application termination, default dialogs,
+physical input and other BUILD requirements remain active.

@@ -908,3 +908,12 @@ cancellation/catalogue/native composition, productive undo-history implementatio
 and actual application quit integration. See
 [manager evidence](verification/custom-language-manager-private.md) for exact
 limits. Public adoption and packaged acceptance remain required.
+
+Cancellation is now verified in the combined catalogue/quit/native-selection
+graph: focused2 passes, full167 passes 159 methods and retains the same eight
+failures. Independent review preserves every prior165 outcome and all failure
+details. See [manager evidence](verification/custom-language-manager-private.md).
+Continue productive native history, real Save-error/cancellation precedence,
+actual application termination, public adoption and packaged desktop verification.
+The reviewed private undo foundation compiles but its replay/recovery hookup
+remains under implementation; no native-history acceptance follows from that build.
