@@ -988,3 +988,20 @@ current audit dependencies, source candidates, synthetic verification records
 and distribution artifacts. Missing historical
 scratch builds require rebuilding before reuse; cache cleanup does not erase
 recorded failures or establish new acceptance. No remote action is authorized.
+
+
+The resumed native default-sheet candidate now passes all eight individual
+clients, including Save, Discard, Cancel, real Abort, task cancellation, host
+close and ordinary/critical replacement-sheet isolation. The five original
+actual-application quit clients also pass against that same verified build in
+separate fresh processes. The unchanged 168-case selection preserves exactly
+160 passes, eight historical failures and 17 failure lines; it is not a passing
+full suite. Independent batch review accepts these scoped results; public adoption remains
+pending.
+
+Continue the bounded foreign-history recovery-read repair with mandatory native
+clear revocation and the readonly folder-preview path correction. Actual
+kernel-canonical path diagnostics establish fixture provenance and URL admission
+issues only; no preview acceptance is claimed. Root retains exclusive serial
+compiler/native/GUI ownership while agents author separate private packets.
+All remaining BUILD scope stays active; this checkpoint is not a stop.

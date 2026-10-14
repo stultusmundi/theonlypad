@@ -806,3 +806,47 @@ isolation are the next bounded work. Native foreign-input redo and the retained
 history contracts still require repair. None of these private candidates is
 publicly adopted or included in the last tested package; every remaining BUILD
 requirement remains active.
+
+
+## Default native quit sheets and bounded path investigation — 2026-10-14
+
+Two actual default-sheet clients now pass separately against the reviewed private
+application candidate: Cancel preserves raw edits and rejoins editing; Discard
+receives genuine native completion and detachment before the final checkpoint
+writer enters. Both complete naturally with no skips or cleanup failures. The
+second run uses the exact verified build in a fresh process and synthetic state.
+Bindings cover 196 inputs, 194 objects, 230 artifacts and four test-bundle leaves.
+Independent audit `219833/1763a1e9` accepts these two clients only.
+
+A real AppKit characterization showed that beginning the sheet clears the first
+button's Return equivalent. The candidate restores Return only on the originally
+captured Cancel button, with context checks before and after the native call.
+The default cell and destructive buttons remain unchanged. These native button
+and property checks do not establish physical keyboard acceptance. Six additional
+quit families now pass individually in fresh processes: three-button Cancel and
+real Abort, task cancellation, host close with manager reopening, Discard, Save
+and ordinary/critical replacement-sheet isolation. Five original aggregate-quit
+clients also pass separately against the same build. The unchanged 168-case
+selection retains 160 passes, eight historical failures and 17 identical error
+lines. Independent audit `484733/68a8663d` accepts these scoped results, including
+genuine store/checkpoint ordering and replacement-sheet preservation. No passing
+181-method combined suite is claimed. Public adoption and packaged termination
+acceptance remain pending.
+
+The foreign-history candidate passes its two focused clients. Its 104-method
+compatibility selection passes 99 and preserves five historical failures. A new
+4096-plus-16 boundary reaches the genuine 4112-unit mutation but fails to expose
+the old record's recovery action. Cleanup refusal is retained honestly; later
+roundtrip and 4113 refusal checks are unentered. A bounded recovery-read repair
+and real native-history-clear regression are in progress.
+
+The folder-replacement preview's first eight-client execution fails. Actual
+diagnostics identify an unsafe temporary-directory alias in the test fixture
+and a URL admission bug involving encoded NUL. A separate kernel-canonical
+fixture counterproof passes with the unchanged reader; it is not preview
+acceptance. The implementation will preserve no-follow checks, reject ambiguous
+URL/filesystem representations before I/O and retain every original oracle.
+No folder write or Apply capability is established.
+
+All three candidates remain private. The tested distribution is unchanged, and
+the complete application brief remains active.
