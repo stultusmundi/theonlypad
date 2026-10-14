@@ -565,3 +565,28 @@ artifacts, complete process receipts and no skips. Focused and full counts overl
 This is hidden native integration, not public adoption or packaged acceptance.
 Productive native history, complete application termination, default dialogs,
 physical input and other BUILD requirements remain active.
+
+
+## Uncertain Save survives quit cancellation — 2026-10-14
+
+The new real-store regression passes. The full private manager suite passes
+65/66, including all eleven quit cases. Independent review confirms all prior
+65 outcomes and the three viewer prerequisite failure details are unchanged.
+The viewer path remains unverified; no tests were skipped.
+
+Only the quit caller is cancelled while the original Save is held before its
+write. After release, the existing directory-sync fault occurs after the actual
+atomic replacement. The original uncertain-publication error reaches the caller
+before cancellation, with its recovery evidence, pending draft and unsaved native
+input preserved. The Save task remains uncancelled and is joined before the
+caller returns. Four genuine evidence checks and a fresh store reader agree with
+the actual synthetic file. This proves error precedence and evidence retention;
+it does not acknowledge durability or test cancellation during directory sync.
+
+Evidence bindings: Test `500641/b54ecabd`, independent Test/API review
+`5356/a46e086c`, focused actual `161117/aa74854a`, full actual
+`173737/f6ecf67d` and combined independent audit `10085/590f45e8`.
+Both runs bind 180 sources, 182 objects and 218 artifacts with complete process
+receipts. Public adoption, full application termination, default dialogs and
+packaged acceptance remain outstanding. The larger catalogue/native graph has
+not yet received this additive test.

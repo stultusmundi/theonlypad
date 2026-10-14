@@ -917,3 +917,14 @@ Continue productive native history, real Save-error/cancellation precedence,
 actual application termination, public adoption and packaged desktop verification.
 The reviewed private undo foundation compiles but its replay/recovery hookup
 remains under implementation; no native-history acceptance follows from that build.
+
+
+Real uncertain-Save error precedence now passes alongside caller cancellation:
+focused1 passes and the full manager suite passes 65/66, including all eleven
+quit cases. The prior viewer prerequisite remains; independent review preserves
+all earlier outcomes and failure details. See
+[manager evidence](verification/custom-language-manager-private.md).
+Continue its reviewed additive composition into the larger catalogue/native
+graph, connected native undo recovery and actual application termination.
+Undo replay source has a warning-free compiler-only checkpoint; recovery controls
+and genuine native acceptance remain pending. Full BUILD scope stays active.
