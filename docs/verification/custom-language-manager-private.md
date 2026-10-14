@@ -440,3 +440,29 @@ This is direct real-owner transition evidence, not arbitrary notification
 reentry or complete application termination. Held-confirmation cancellation,
 child/default dialogs, actual AppDelegate integration and packaged desktop
 acceptance remain required. The correction is private and unadopted.
+
+## Catalogue delivery and retained reload errors — 2026-10-14
+
+The private catalogue candidate delivers the original owner publication to
+current and subsequently opened managed documents. Both new cases pass across
+three synthetic fixtures, including actual Save, transfer, profile deletion,
+missing-profile display and corrupt reload. Document text, requested language,
+selection, revision, bookmarks, dirty state, history availability and file bytes
+are checked through those transitions. A failed reload keeps the last usable
+catalogue while presenting the authentic current error.
+
+The full run passes 147 of 157 methods. Independent review confirms all original
+155 outcomes are preserved; the nine earlier native failures and viewer-key
+prerequisite remain. The two new methods pass. The corrected test samples native
+event grouping after its existing asynchronous join; all other state remains
+compared with the original pre-join snapshot. No manual group closure or Source
+grouping change was introduced.
+
+Evidence bindings: corrected-test unchanged-source failure `170289/94959aef`,
+retained-error manager Source `248382/e348aacc`, independent Source review
+`4891/e0049063`, focused actual `170290/e348c1b5`, full actual
+`201907/5af2b1a9` and combined independent audit `6595/47ce8b26`.
+Both executions bind 196 inputs, 194 objects and 230 artifacts with complete
+owned-process receipts. Focused and full counts overlap. Native history repairs
+and quit changes have not yet been composed with this candidate. Broad reentry,
+default dialogs, packaged desktop acceptance and public adoption remain required.

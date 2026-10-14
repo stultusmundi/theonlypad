@@ -871,3 +871,13 @@ now reaches all three real fixtures with preserved document state; its genuine
 retained-catalog reload error is the remaining focused presentation failure.
 That bounded repair is under implementation. Native history and all other
 BUILD requirements remain active; no public code or package adoption is implied.
+
+Catalogue delivery and retained reload-error presentation now pass their two
+focused methods across three real synthetic workflows. The full private suite
+passes 147/157; independent review confirms all original 155 outcomes are
+preserved, including the ten existing failures. See
+[manager evidence](verification/custom-language-manager-private.md) for scope.
+Continue reviewed composition of catalogue, exact quit-owner identity and native
+selection repairs, then actual integrated regressions and public adoption.
+Held-confirmation cancellation has a passing focused candidate and is undergoing
+its full manager run. Native history and the full BUILD scope remain active.
