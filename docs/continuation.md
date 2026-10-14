@@ -939,3 +939,14 @@ case, but interruption recovery exposed foreign redo and recovery-menu failures.
 Continue their bounded root-cause investigation with unchanged behavioral oracles,
 then full native compatibility, integrated quit, public adoption and packaging.
 Full BUILD scope remains active; the candidate is not accepted as complete.
+
+
+Independent full native-history review confirms 96/102 passes, including two
+repaired original history clients and the new normal replay/typing client. Five
+old strict observation/outcome failures and the interrupted-recovery client
+remain. The reviewed diagnostic has measured a shared stale recovery-menu item
+and a zero-length redo primitive; menu isolation and precise inverse registration
+investigation are next. Preserve all original assertions and custody cleanup.
+See [manager evidence](verification/custom-language-manager-private.md).
+All full BUILD requirements and actual integration/adoption/package work remain
+active; no completed-product claim or remote action is authorized.

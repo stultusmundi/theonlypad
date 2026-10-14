@@ -611,3 +611,41 @@ receipts without skips. Focused and full counts overlap.
 This is private hidden native integration. Productive history recovery is being
 tested separately; no public code adoption, full application quit, default dialog
 or packaged acceptance is implied. All BUILD requirements remain active.
+
+
+## Connected native history checkpoint — 2026-10-14
+
+A separate private candidate connects real language undo/redo and recovery
+presentation. The normal replay/ordinary-typing client passes. Full native
+verification passes 96/102: two formerly failing original history clients now
+pass, the other 98 original outcomes are unchanged, and the new normal client
+passes. Five original failures and the new interrupted-recovery client remain.
+Independent review preserves the eleven old failure details.
+
+A static review caught inaccurate removal bookkeeping: the original candidate
+could retain a registered flag after native target removal had returned. Its
+bounded correction records the completed removal before revalidating context;
+that fact alone grants no custody cleanup. The immutable rejected candidate and
+its review remain preserved.
+
+The recovery client reaches both synthetic interruptions. The foreign-input
+case reaches Keep and Forget, but its later redo does not remove the inserted
+character. The binding-change case retains custody but cannot reach its fresh
+recovery presentation. Cleanup correctly refuses to discard that unresolved
+custody. These are failures, with no skipped tests or forced successful cleanup.
+
+Evidence bindings: corrected Source manifest `101291/cc56407d`, independent
+Source review `5876/3d722820`, normal actual `161121/17b7cb84`, interrupted
+actual `166350/246aa86d`, combined focused audit `9343/937a83c9`, full actual
+`187643/6066530a` and full compatibility audit `5663/d6ffd4cf`.
+All runs bind 193 inputs, 191 objects and 227 artifacts with complete process
+receipts. Focused and full counts overlap. This candidate uses the prior native
+Core snapshot and is separate from the catalogue/quit 168-method composition.
+
+Bounded diagnostics are under execution to identify the foreign inverse and
+menu failures. The older strict observation/outcome declarations also still
+have missing producers, and a genuine mixed edit-notification mask remains
+incompatible with their pure-character prerequisite. Their checks remain intact.
+Default sheets, multiple retained records, capacity recovery, late partial quit
+usability, public adoption, integrated application termination and packaged
+acceptance are still required. This checkpoint is not component completion.
