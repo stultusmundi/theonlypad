@@ -1,3 +1,7 @@
+Managed runner update: the fixed coordinator now passes 73 unchanged native cases and 62 pure runner checks, with independent source/actual review. Continue actual preview desktop execution when unlocked, genuine native close/retention diagnostics, and the reviewed post-SDK-return/pre-clear transfer test.
+
+Current local package update: source `5672527` built and passed ad-hoc signature, archive and SBOM checks. Desktop acceptance remains unrun while macOS reports a locked screen. Preserve the 2026-10-12 desktop results as historical evidence; continue native runner repair and ownership diagnostics meanwhile.
+
 # Current coding checkpoint — 2026-10-14
 
 Continue the full BUILD scope until completion or an explicit user stop. Read-only folder preview now has a development-source Find in Folder entry and an application command policy. The fixed public command passes38 native tests, matching navigation passes10, and a fresh frozen app/helper/default suite passes1,203 separately. Formatting/public-source checks pass. Source and actual-result review records retain the declaration RED, same-object factory regression and repaired child-state handoff. See [entry evidence](verification/folder-replacement-preview-entry.md).

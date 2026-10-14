@@ -19,7 +19,8 @@ SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
         'projection':('EditorTransferProjectionTests','editor-transfer-projection-tests'),
         'close':(None,'native-close-model'),
         'macro':('NativeMacroChronologyTests','native-macro-chronology-tests'),
-        'managed-admission':('NativeManagedAdmissionStartupTests','managed-admission-tests')}
+        'managed-admission':('NativeManagedAdmissionStartupTests','managed-admission-tests'),
+        'managed-documents':('AppDelegateDocumentsTests','managed-documents-tests')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
     'NativeDocumentSeed','EditorDocumentWorkspaceAdapter','WorkspaceDocumentRegistryTypes',
     'EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost',
@@ -54,6 +55,194 @@ ADMISSION_METHODS={
     ('NativeManagedAdmissionCallbackTests','testActualPostPreservationCloseTicketRevokesRoutingOnOuterRefusal')}
 ADMISSION_CLASSES={'NativeManagedAdmissionStartupTests':2,'NativeManagedAdmissionCallbackTests':2}
 ADMISSION_SELECTOR='|'.join(ADMISSION_CLASSES)
+
+
+# Fixed complete six-file managed regression selection; no caller roster/filter.
+MANAGED_DOCUMENT_FILE_METHODS={'AppDelegateDocumentsTests.swift': (('AppDelegateDocumentsTests',
+                                      'testStartupUsesOneOwnerAndActualManagedScratch'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testLaunchRequestsQueuedBeforeStartupUseActualFIFOAndPositions'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testFinderAndLaunchRequestsShareBoundedPrestartupQueueAndQuitRefusal'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testSettingsAreAppliedAfterManagedStartupAndUnreadyToolsRefuse'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testActualTerminationDelegateUsesOwnerFinalReceipt'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testFinalWriteFailureVetoesAndRestoresMonitoringThenCanRetry'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testLargeViewerPositionRefusesBeforeAnyWindowPresentation'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testResolvedImportCannotNotifyOrEraseNewerPanelAttempt'),
+                                     ('AppDelegateDocumentsTests',
+                                      'testResolvedImportCannotNotifyNewerRequestInSamePanel')),
+ 'NativeApplicationDocumentsTests.swift': (('NativeApplicationDocumentsTests',
+                                            'testEmptyStartupCreatesOneActualManagedScratchWindow'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testRestoresFilesInOrderAndSelectedPinThroughFinalCheckpoint'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testRetryDuringHeldStartupCannotCreateCompetingScratch'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testNativeCloseAndReopenCommandsUseOneOwnerAndFreshRecoveryAuthority'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testUnresolvedFileRetryUsesManagedClaimAndNewWindowUsesSamePublisher'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testExternalFIFOQueuesBeforeStartupAndPositionsEachExactDocument'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testWindowCapacityIncludesUnresolvedReservationsBeforeCreatingEndpoint'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testFullUnresolvedDocumentBudgetDoesNotAllocateAnotherScratch'),
+                                           ('NativeApplicationDocumentsTests',
+                                            'testCheckpointRetryRecreatesLostEndpointWithoutReplacingDirtyModel')),
+ 'EditorApplicationRoutingTests.swift': (('EditorApplicationRoutingTests',
+                                          'testScratchUsesRealIntakeRegistryAndPublisher'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testOpenCompletionWaitsForActualIntakeProjection'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testDuplicateBackupAndExistingMissingURLUseOwnedModels'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testNoOpProjectionPreservesCaretUndoStorageAndProcessObserver'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testStaleEndpointBeforeIntakeRegistrationFailsOpenExactlyOnce'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testProjectionRefusesStaleWrongEndpointAndInactiveOwnership'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testPreparedSessionSeedUsesActualClaimAndExactPresentation'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testRealPreparedDiskCopyTransfersBeforeOperationFinishes'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testRegistryCloseLeaseRefusesPaneAndCommandMutation'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testUserGateDoesNotBlockProjectionOrFrozenCapture'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testCloseAdmissionPreservesSemanticStateAndCleanHistory'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testSaveChooserReentryCannotWriteAfterCloseLease'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testDirtyCloseCancelAndStaleConfirmationKeepBuffer'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testActualNativeSelectionAndUndoStayFrozenUnderLease'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testHistoryProjectionToSurvivingTabPreservesRetiredPresentation'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testEmptyWindowPermitClosesOnlyEmptyExactEndpoint'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testUnconfirmedPublicationCannotCloseEvenAtSavedText'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testNativeResourceValidationAndLegacyDrainDoNotCaptureOrWrite'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testProjectionCannotGrantUserEditAdmissionDuringCallback'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testEmptyClosePermitRejectsRevisionChangeDuringEndpointCheck'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testProjectionCallbackCannotFocusUnrelatedPaneWithUserGateClosed'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testRecreatedEndpointReattachesSameModelMonitorAndParentContinuity'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testUserCanCloseOnlyAnActuallyEmptyRegistryWindow'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testAsyncReopenWaitsForWorkerPreparationBeforeRealIntakeID'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testRetainedNativeIntakeNeedsExplicitNewEndpointReconciliation'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testSuccessfulReattachIsNotRepeatedAfterLaterProjectionValidationFails'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationCompletesExactUnicodePositionWithUserGateClosed'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationRejectsChangedSelectionDuringWorker'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationRejectsEditAndEndpointLossDuringWorker'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationRefusesRegistryCloseLeaseAfterWorker'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationNeverUsesDifferentCurrentDocument'),
+                                         ('EditorApplicationRoutingTests',
+                                          'testManagedNavigationRefusesPendingCharacterBatchBeforeRevisionAdvances'),
+                                         ('NativeManagedAdmissionCallbackTests',
+                                          'testActualEndpointCallbackSuccessorSurvivesOuterAdmissionRefusal'),
+                                         ('NativeManagedAdmissionCallbackTests',
+                                          'testActualPostPreservationCloseTicketRevokesRoutingOnOuterRefusal')),
+ 'NativeDocumentIntakeTests.swift': (('NativeDocumentIntakeTests',
+                                      'testNativeSeedCreatesManagedModelAndPairedRecovery'),
+                                     ('NativeDocumentIntakeTests',
+                                      'testLostEndpointReconcilesSameModelAndAuthority'),
+                                     ('NativeDocumentIntakeTests',
+                                      'testProjectionEndpointLossRetainsInsteadOfReportingImported'),
+                                     ('NativeDocumentIntakeTests',
+                                      'testReconciliationRejectsRecreatedOldEndpointAndChangedOwnership'),
+                                     ('NativeDocumentIntakeTests',
+                                      'testPreparedInsertionIndexPreservesRequestedTabOrder'),
+                                     ('NativeDocumentIntakeTests',
+                                      'testMissingEndpointRefusesBeforeNativeFactory')),
+ 'NativeApplicationOpenTests.swift': (('NativeApplicationOpenTests',
+                                       'testActualSeedIntakeAndAwaitedNavigationBeforeNextRequest'),
+                                      ('NativeApplicationOpenTests',
+                                       'testRetainedIntakeAndNavigationRetryDoNotReadOrSubmitAgain'),
+                                      ('NativeApplicationOpenTests',
+                                       'testExistingRequiredPortAvoidsReadAndUsesSameDocumentRetry'),
+                                      ('NativeApplicationOpenTests',
+                                       'testAggregateCapacityStartupAndQuitDrainPreserveCurrent'),
+                                      ('NativeApplicationOpenTests',
+                                       'testDescriptorRejectsDirectoryAndLargeFilePreservesNavigationRequest'),
+                                      ('NativeApplicationOpenTests',
+                                       'testDestinationChangedAfterWorkerReadRefusesBeforeSubmission'),
+                                      ('NativeApplicationOpenTests',
+                                       'testActualRetainedProjectionRetriesSameAdoptedModelAfterSourceRemoval'),
+                                      ('NativeApplicationOpenTests',
+                                       'testErrorCallbackObservesSettledFailureAndCanRetrySynchronously'),
+                                      ('NativeApplicationOpenTests',
+                                       'testClosedPositionTargetAdvancesButIntakeFailureNeverAbandons'),
+                                      ('NativeApplicationOpenTests',
+                                       'testInvalidNativeLinePreservesImportedModelAndAdvancesQueue')),
+ 'NativeApplicationCloseTests.swift': (('NativeApplicationCloseTests',
+                                        'testNativeCleanClosePreservesHistoryAndProjectsEmptyWindow'),
+                                       ('NativeApplicationCloseTests',
+                                        'testNativeDirtyCancelPreservesModelAndUndo'),
+                                       ('NativeApplicationCloseTests',
+                                        'testNativeDirtyDiscardDeletesWithoutHistory'),
+                                       ('NativeApplicationCloseTests',
+                                        'testEndpointLossAfterDeletionRetainsUntilExactReprojection'),
+                                       ('NativeApplicationCloseTests',
+                                        'testRealActorDeletionFailureRepairsNativeModelAndReopensAdmission'))}
+MANAGED_DOCUMENT_METHODS={method for methods in MANAGED_DOCUMENT_FILE_METHODS.values() for method in methods}
+MANAGED_DOCUMENT_ACCESS={
+    'AppDelegate.swift':'AppDelegateDocumentsAccess.swift',
+    'SessionRestorationController.swift':'AppDelegateSessionPanelAccess.swift',
+    'EditorWindowController.swift':'ManagedAdmissionControllerAccess.swift',
+    'EditorDocument.swift':'ManagedAdmissionHistoryAccess.swift'}
+
+def managed_document_methods(data, filename):
+    """Fixed fixture declaration census, not a general Swift parser."""
+    owner=None;methods=[]
+    for match in re.finditer(r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bfunc\s+(test\w+)\s*\(',data.decode()):
+        if match.group(1): owner=match.group(1)
+        elif owner: methods.append((owner,match.group(2)))
+        else: raise ValueError('managed test method lacks fixed XCTest class')
+    if tuple(methods)!=MANAGED_DOCUMENT_FILE_METHODS[filename]:
+        raise ValueError('fixed managed document method census changed')
+    return methods
+
+def managed_documents_success(text):
+    if re.search(r'(?m)^.*(?:error:|caught error:)|\b[1-9][0-9]* unexpected\b',text):
+        raise ValueError('managed document error record')
+    counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+    expected=len(MANAGED_DOCUMENT_METHODS)
+    if not counts or counts[-1]!=(expected,0) or any(n<=0 or failure for n,failure in counts):
+        raise ValueError('missing complete managed document result')
+    terminal=re.findall(r"^Test Case '([^']+)' (passed|failed|skipped)(?: \(.*\)\.)?$",text,re.M)
+    if len(terminal)!=expected or any(result!='passed' for _,result in terminal):
+        raise ValueError('incomplete managed document cases')
+    cases=[]
+    for identity,_ in terminal:
+        match=re.fullmatch(r'\-\[NativeRoutingTests\.(\w+) (test\w+)\]',identity)
+        if match is None: raise ValueError('foreign managed document case')
+        cases.append(match.groups())
+    if len(set(cases))!=expected or set(cases)!=MANAGED_DOCUMENT_METHODS:
+        raise ValueError('managed document case selection changed')
+    for name in {owner for owner,_ in MANAGED_DOCUMENT_METHODS}:
+        if len(re.findall(r"^Test Suite '"+re.escape(name)+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+            raise ValueError('managed document class did not pass exactly once')
+    return dict(tests=expected,failures=0)
 
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -91,6 +280,10 @@ def discover(root,suite,prebuilt):
     if suite=='managed-admission':
         paths.add(root/'scripts/test-managed-admission.sh')
         paths.update(root/'Tests/NativeIntegration'/name for name in ADMISSION_ACCESS.values())
+    if suite=='managed-documents':
+        paths.add(root/'scripts/test-managed-documents.sh')
+        paths.add(root/'Tests/NativeIntegration/test_managed_documents_runner.py')
+        paths.update(root/'Tests/NativeIntegration'/name for name in MANAGED_DOCUMENT_ACCESS.values())
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
     if suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
@@ -105,6 +298,7 @@ def discover(root,suite,prebuilt):
     optional=root/'Sources/TheOnlyPad/DocumentAppliedSettings.swift'
     if optional.exists() or optional.is_symlink(): paths.add(optional)
     names=CLOSE_HARNESSES if suite=='close' else (MACRO_TESTS if suite=='macro' else (ADMISSION_TESTS if suite=='managed-admission' else (SUITES[suite][0],)))
+    if suite=='managed-documents': names=tuple(Path(name).stem for name in MANAGED_DOCUMENT_FILE_METHODS)
     paths.update(root/'Tests/NativeIntegration'/(name+'.swift') for name in names)
     result=sorted(paths)
     if not any(p.parent==root/'Sources/PadCore' for p in result): raise ValueError('missing PadCore sources')
@@ -270,7 +464,10 @@ def freeze(root,run,suite,prebuilt=False):
                     # original public32 makeDiskConflict construction forwarder.
                     access=run/'Original/Tests/NativeIntegration'/ADMISSION_ACCESS[path.name]
                     data+=b'\n'+access.read_bytes()
-                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission'):
+                if suite=='managed-documents' and path.name in MANAGED_DOCUMENT_ACCESS:
+                    access=run/'Original/Tests/NativeIntegration'/MANAGED_DOCUMENT_ACCESS[path.name]
+                    data+=b'\n'+access.read_bytes()
+                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission','managed-documents'):
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
@@ -308,6 +505,13 @@ def freeze(root,run,suite,prebuilt=False):
                     origin='Tests/NativeIntegration/'+extra+'.swift'
                     generate('Package/Tests/NativeRoutingTests/'+extra+'.swift',
                              (run/'Original'/origin).read_bytes(),origin)
+        if suite=='managed-documents':
+            for filename in MANAGED_DOCUMENT_FILE_METHODS:
+                origin='Tests/NativeIntegration/'+filename
+                data=(run/'Original'/origin).read_bytes()
+                managed_document_methods(data,filename)
+                if filename!=name:
+                    generate('Package/Tests/NativeRoutingTests/'+filename,data,origin)
         generate('Package/Package.swift',PACKAGE.encode())
     else:
         # Custom storage has an authentic controller owner. Compile the captured
@@ -325,7 +529,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Exact six managed clients,73 methods/seven classes; four unchanged declaring access tails, no dirty getter or product-body hooks. Admission controller access replaces obsolete broad monitor access and includes its identical required disk-conflict forwarder.' if suite=='managed-documents' else 'Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     if suite=='macro':
         access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
         manifest['macroAccess']=[dict(target=name,source=MACRO_ACCESS_FILE,
@@ -339,6 +543,15 @@ def freeze(root,run,suite,prebuilt=False):
             originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
             generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
             for target,access in ADMISSION_ACCESS.items()]
+    if suite=='managed-documents':
+        manifest['managedDocumentsMethods']=[list(x) for x in sorted(MANAGED_DOCUMENT_METHODS)]
+        manifest['managedDocumentsAccess']=[dict(
+            target=target,source='Tests/NativeIntegration/'+access,
+            bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
+            sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
+            originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
+            generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
+            for target,access in MANAGED_DOCUMENT_ACCESS.items()]
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -508,6 +721,7 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
+    if kind=='managed-documents': return managed_documents_success(text)
     if kind=='managed-admission':
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
         if not counts or counts[-1]!=(4,0) or any(n<=0 or failures!=0 for n,failures in counts):
@@ -571,6 +785,8 @@ def execute(run,args,watchdog_main):
             if digest(run/'build-inputs.json')!=core_hash: raise ValueError('build manifest changed')
     def stage(name,command,timeout,kind=None):
         check();output=run/'Stages'/name;state=run/'State'/name;state.mkdir(parents=True)
+        if args.suite=='managed-documents':
+            state.parent.chmod(0o700);state.chmod(0o700)
         # env execs the fixed command in the same owned leader/session. Only synthetic
         # state is added after the accepted watchdog's environment sanitization.
         command=['/usr/bin/env','THEONLYPAD_STATE_DIRECTORY='+str(state),*map(str,command)]
@@ -589,6 +805,7 @@ def execute(run,args,watchdog_main):
             command=[swift,'test','--package-path',run/'Package','--scratch-path',run/'Build']
             if args.suite=='macro': command+=['-Xswiftc','-warnings-as-errors','--filter',MACRO_SELECTOR]
             if args.suite=='managed-admission': command+=['-Xswiftc','-warnings-as-errors','--filter',ADMISSION_SELECTOR]
+            if args.suite=='managed-documents': command+=['-Xswiftc','-warnings-as-errors']
             stage('test',command,180,args.suite)
         else:
             if args.build_path:

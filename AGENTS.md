@@ -467,3 +467,5 @@ suite passes1,203 separately with Werror. See
 `docs/verification/folder-replacement-preview-entry.md`. Real desktop/picker,
 responder/editor preservation, Apply/backups/RSS and broader acceptance remain
 outstanding; distribution artifacts still represent the previous package.
+
+Current managed-documents runner (2026-10-14): `python3 -B -m unittest discover -s Tests/NativeIntegration -p 'test_*.py'` passes62 pure checks; `scripts/test-managed-documents.sh` passes73 actual hidden native cases across the unchanged six test files, including two later admission callbacks. The old copier failed compilation with omitted approved access tails; that failure is retained. The command now uses the shared fixed coordinator/direct owned watchdog, exact roster and four declaring extensions; never nest another watchdog. Sources/object/link/bundle and both complete stage receipts were independently verified. No visible desktop or private custom-language/history acceptance follows. See `docs/verification/managed-documents-runner.md`.

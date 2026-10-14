@@ -88,6 +88,12 @@ its six test files now require two approved access extensions that its copier
 omits. No native cases ran in that attempt. A fixed coordinator migration is
 in progress; the earlier managed-documents result is historical evidence.
 
-The previous local package remains the 2026-10-12 source checkpoint until a new
-candidate is built and exercised. No remote push, merge or release is authorized
+A clean local release candidate from source `5672527` now builds, uses ad-hoc
+signatures and passes archive/SBOM validation. The main executable SHA-256 is
+`77ba5daaf91bef7c32c276d49b4561e093ba8206f27477f1d23cd64efc89d1dd`;
+the archive is 4,548,070 bytes with SHA-256
+`63cefff9494769d64dd0a801848214a97a839dca78a9c6cad98e8e56f1793fbb`.
+Launch it with `open dist/TheOnlyPad.app`. This candidate has not been exercised
+on the desktop: macOS reported a locked screen before UI execution.
+The 2026-10-12 package remains the last desktop-tested source checkpoint. No remote push, merge or release is authorized
 by this verification.
