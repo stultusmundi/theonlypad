@@ -1005,3 +1005,14 @@ kernel-canonical path diagnostics establish fixture provenance and URL admission
 issues only; no preview acceptance is claimed. Root retains exclusive serial
 compiler/native/GUI ownership while agents author separate private packets.
 All remaining BUILD scope stays active; this checkpoint is not a stop.
+
+
+The readonly folder-preview Core service is now locally adopted with its two
+test files. Exact formatted integration passes all 1,203 default tests and builds
+the current app/helper warning-free; live checkout passes its 13 focused tests,
+repository strict formatting and public-source checks. The initial frozen
+example-manifest omission/failure remains retained. See
+[preview evidence](verification/folder-replacement-preview.md). Preview UI,
+recoverable Apply and C-09 remain outstanding. Continue the native integration
+design, pre-publication/target-removal history controls and all remaining BUILD
+scope. No package or remote publication follows.

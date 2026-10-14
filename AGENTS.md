@@ -418,3 +418,14 @@ Standalone profile transfer: `scripts/swift.sh test --scratch-path .build/profil
 
 
 Managed startup routing repair (2026-10-13): `scripts/test-managed-admission.sh` selects four exact hidden actual-owner/startup/callback tests, freezes the full native graph and directly owns its watchdog. The same formatted candidate passed all36 including original32 routing regressions, complete app/helper1190/0, and separate projection20, macro19 and real close-owner5. `python3 -m unittest discover -s Tests/NativeIntegration -p 'test_*.py'` passes54 pure runner checks. Never nest another process-group watchdog. This preserves installed current routes and cleans revoked membership; it does not activate private custom-language manager/comment candidates or establish desktop acceptance. See `docs/verification/native-managed-admission.md`.
+
+
+Readonly folder preview Core checkpoint (2026-10-14): the locally adopted service
+and two test files pass 13 live-checkout tests; the byte-exact frozen full current
+package passes 1,203 tests and builds app/helper with warnings as errors.
+`FolderReplacement` is the verified focused filter, run directly under the owned
+watchdog as documented in `docs/verification/folder-replacement-preview.md`.
+Repository strict format/public checks pass. At most two selected UTF-8 files,
+literal replacement and cooperative cancellation are covered; application UI,
+Apply/backup recovery, RSS and packaged desktop acceptance remain outstanding.
+C-09 remains unimplemented. Original MIT code; no new dependency or asset.
