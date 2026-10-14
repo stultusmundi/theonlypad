@@ -370,3 +370,29 @@ are the next implementation step.
 All candidates above remain private and unadopted. Public application code and
 distribution artifacts are unchanged; no new packaged, physical-input,
 accessibility or performance acceptance follows.
+
+## Real Save during reversible quit — 2026-10-14
+
+The next private candidate implements the real Save branch through the existing
+manager submission and actual owner/store operation. Both new cases pass. A
+confirmed Save publishes the original raw Unicode input; subsequent exact
+language-preparation cancellation preserves that publication and permits further
+editing. A real directory-sync failure returns the original uncertain-publication
+error, retains the original input and pending state, and refuses quit preparation.
+Both the returned error evidence and the retained owner evidence are independently
+validated against the actual synthetic file.
+
+The full manager run passes 60 of 61 methods, including all six quit methods.
+Every original 59-method outcome is preserved. The remaining failure is the same
+genuine viewer-key prerequisite, with two assertions and one caught error.
+Independent review verified the frozen 180 sources, 182 objects, 218 artifacts
+and complete process receipts. Focused and full counts overlap.
+
+Evidence bindings: private manager Source `274083/c76cba91`, independent Source
+review `8158/63bb098f`, focused actual `152965/c7c1971c` and review
+`7110/1f6504a1`, full actual `167608/b9acd8ca` and review `5318/f1382d5f`.
+These checks simulate the later document veto by cancelling the genuine language
+receipt; they do not execute AppDelegate termination. Raw-only valid input, child
+dialogs, owner preparation ABA, pending confirmations, default modal interaction
+and the complete application/document quit transaction remain required. The
+candidate is private; application code and distribution artifacts remain unchanged.

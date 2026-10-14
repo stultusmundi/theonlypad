@@ -839,3 +839,17 @@ managed documents. Preserve the original tests and raw input. Then complete
 child/default-dialog and actual application quit integration, current regressions,
 public adoption and packaged desktop acceptance. All other BUILD requirements
 remain active; these component milestones are not completion.
+
+The next private quit candidate now passes genuine Save and uncertain-publication
+handling: both new cases and all six quit cases pass in a 60/61 full manager run,
+with the original viewer-key prerequisite failure unchanged. Independent review
+confirms the original 59 outcomes and validates real publication evidence.
+See [manager evidence](verification/custom-language-manager-private.md) for scope
+and exact bindings. Actual AppDelegate termination and the remaining quit families
+are still required; this private candidate has not changed the packaged app.
+
+Continue the corrected catalog-delivery baseline after joining the actual fresh
+scratch intake request. Then implement sole-owner delivery to current and later
+managed documents. Native history characterization now reaches complete bounded
+selection traces; the three desired undo/redo range failures still require an
+authenticated history-selection implementation. Keep the full BUILD scope active.
