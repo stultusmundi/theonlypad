@@ -396,3 +396,24 @@ receipt; they do not execute AppDelegate termination. Raw-only valid input, chil
 dialogs, owner preparation ABA, pending confirmations, default modal interaction
 and the complete application/document quit transaction remain required. The
 candidate is private; application code and distribution artifacts remain unchanged.
+
+## Valid unsubmitted input during quit — 2026-10-14
+
+A further real-file regression exposed a valid native field change while the
+stored manager draft was still clean. The original confirmation offered Save,
+but the Save path refused it. The private correction admits the original raw
+change while retaining the original clean-state comparison and all existing
+input, operation and publication checks; it does not manufacture a dirty flag.
+
+The new case passes through one actual generation-eight publication, fresh-reader
+Unicode verification, exact quit cancellation, retained confirmed Save and a
+later native field edit. The full suite passes 61 of 62 methods, including all
+seven quit cases. Independent review confirms every prior 61-method outcome is
+preserved, with the same genuine viewer-key prerequisite failure remaining.
+
+Evidence bindings: unchanged-source baseline `156032/3afdac37`, Source
+`274167/8395667a`, independent Source review `5443/190ab820`, focused actual
+`153598/cea5e4c5`, full actual `166238/96ec16c3` and combined independent audit
+`6831/6ba0a12e`. The candidate remains private. Actual application termination,
+owner phase provenance, child/default dialogs and packaged desktop acceptance
+remain subsequent required work.

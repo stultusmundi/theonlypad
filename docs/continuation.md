@@ -853,3 +853,12 @@ scratch intake request. Then implement sole-owner delivery to current and later
 managed documents. Native history characterization now reaches complete bounded
 selection traces; the three desired undo/redo range failures still require an
 authenticated history-selection implementation. Keep the full BUILD scope active.
+
+Valid unsubmitted native field input now passes the private quit Save regression
+even when the stored draft is clean. The full manager suite passes 61/62, with
+all prior outcomes preserved and the same viewer-key prerequisite failure.
+See [manager evidence](verification/custom-language-manager-private.md).
+Continue exact owner quit-acquisition identity, catalog delivery and retained-error
+presentation, then integrated application quit, native history, public adoption
+and packaged desktop acceptance. These are ongoing component checkpoints;
+the full application requirements remain active.
