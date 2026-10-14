@@ -429,3 +429,15 @@ Repository strict format/public checks pass. At most two selected UTF-8 files,
 literal replacement and cooperative cancellation are covered; application UI,
 Apply/backup recovery, RSS and packaged desktop acceptance remain outstanding.
 C-09 remains unimplemented. Original MIT code; no new dependency or asset.
+
+Document search session checkpoint (2026-10-14):
+`scripts/test-document-search-session.sh` passes 21 actual-owner component tests
+with scripted source/backend boundaries; the unchanged
+`scripts/test-application-search-owner.sh` separately passes 16. Both own their
+watchdog directly; never nest another process-group watchdog. Public commands
+are warning-free without requesting warnings as errors; private component GREEN
+and the fresh full package use warnings as errors. Full default tests pass 1,203
+and build the actual app/helper. The new session compiles but remains disconnected
+from the existing panel. Native credentials, panel/application wiring, helper
+routing, hard containment, memory/performance and current packaged acceptance
+remain outstanding. See `docs/verification/document-search-session.md`.

@@ -21,6 +21,10 @@ jobs:
         run: |
           python3 -m unittest discover -s Tests/SearchParentDriverIntegration -p 'test_*.py'
           scripts/test-search-parent-driver.sh
+      - name: Application search ownership and session integration
+        run: |
+          scripts/test-application-search-owner.sh
+          scripts/test-document-search-session.sh
       - name: Fixed search helper protocol integration
         run: |
           python3 -m unittest discover -s Tests/SearchWorkerIntegration -p 'test_*.py'

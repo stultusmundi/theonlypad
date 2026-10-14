@@ -1036,3 +1036,17 @@ search-session adapter. Both remain test/API packets. Review requires separate
 preview settlement and publication fences, plus search cancellation reentry and
 valid sibling isolation controls. Root owns serial execution and integration;
 the full BUILD remains active.
+
+The document-search session component is now adopted in working source. Its fixed
+public runner passes 21 tests; the unchanged owner runner separately passes 16.
+Fresh full default verification passes 1,203 and builds the app/helper, with
+independent source, compiler, link and cleanup-receipt review. The panel execution
+route is unchanged. See [session evidence](verification/document-search-session.md).
+Continue native source/panel routing after this component checkpoint.
+
+The private readonly-preview worker passes 11 focused tests, distinguishing
+actual Core byte/projection checks from controlled scheduling and settlement.
+The panel Test/API packet is undergoing setup review before its baseline run.
+Safe native-clear clients are being authored separately. Root retains exclusive
+serial execution; remaining BUILD scope, public native adoption and packaged
+acceptance remain active work.
