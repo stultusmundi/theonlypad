@@ -466,3 +466,27 @@ Both executions bind 196 inputs, 194 objects and 230 artifacts with complete
 owned-process receipts. Focused and full counts overlap. Native history repairs
 and quit changes have not yet been composed with this candidate. Broad reentry,
 default dialogs, packaged desktop acceptance and public adoption remain required.
+
+## Cancelling a held quit confirmation — 2026-10-14
+
+Cancelling the actual caller task previously left quit preparation suspended with
+its original confirmation still pending. The private correction uses the task
+cancellation handler to consume that exact one-shot response on the main actor.
+It checks caller cancellation before installing the continuation and invalidates
+the handler when preparation returns. Original Save work still joins normally;
+the handler does not cancel shared publication work or a successor attempt.
+
+The new real regression passes: cancellation settles the original task and
+consumes its confirmation before fallback cleanup, preserves raw input without
+Save, rejects the consumed late response and permits a fresh preparation.
+The full suite passes 63/64, including all nine quit methods. Independent review
+confirms every prior 63-method outcome is preserved; the same viewer-key
+prerequisite remains the sole failure.
+
+Evidence bindings: baseline `160764/7848c3a6`, manager Source
+`276171/d0aae831`, independent Source review `4779/36737d0b`, focused actual
+`158525/300d3a57`, full actual `171570/3598d438` and combined independent audit
+`4738/018658fb`. The polling loop has bounded suspension iterations, not a
+two-second wall-clock guarantee. Cancellation during actual Save, callback
+reentry, child/default dialogs, AppDelegate termination and packaged acceptance
+remain separate requirements. This correction is private and unadopted.

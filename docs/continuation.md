@@ -881,3 +881,11 @@ Continue reviewed composition of catalogue, exact quit-owner identity and native
 selection repairs, then actual integrated regressions and public adoption.
 Held-confirmation cancellation has a passing focused candidate and is undergoing
 its full manager run. Native history and the full BUILD scope remain active.
+
+Held-confirmation task cancellation now passes its genuine regression and all
+nine quit cases in a 63/64 private manager run. Independent review preserves all
+prior outcomes; the viewer-key prerequisite remains. Continue cancellation during
+actual Save, reviewed catalogue/quit/native composition, productive native
+undo-history behavior and integrated application termination. See
+[manager evidence](verification/custom-language-manager-private.md).
+The full application scope remains active; code and packages are not yet adopted.
