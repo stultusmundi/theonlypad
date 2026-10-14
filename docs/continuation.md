@@ -950,3 +950,15 @@ investigation are next. Preserve all original assertions and custody cleanup.
 See [manager evidence](verification/custom-language-manager-private.md).
 All full BUILD requirements and actual integration/adoption/package work remain
 active; no completed-product claim or remote action is authorized.
+
+
+Recovery menu isolation now restores both interrupted fixtures' genuine Keep,
+Forget and cleanup routes. Full native history remains 96/102 with unchanged
+case outcomes; the focused interruption now retains only its foreign-redo
+failure. Default-menu preservation checks pass without weakening that oracle.
+Public registration diagnostics identify the genuine native route while leaving
+its payload opaque. Continue the reviewed standalone AppKit characterization,
+then a measured repair, and integrate actual AppDelegate aggregate quit. See
+[manager evidence](verification/custom-language-manager-private.md).
+All remaining BUILD requirements stay active; no public code/package adoption
+or remote action follows from these private checks.

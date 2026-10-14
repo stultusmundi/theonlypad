@@ -649,3 +649,44 @@ incompatible with their pure-character prerequisite. Their checks remain intact.
 Default sheets, multiple retained records, capacity recovery, late partial quit
 usability, public adoption, integrated application termination and packaged
 acceptance are still required. This checkpoint is not component completion.
+
+
+## Recovery menu isolation and foreign registration — 2026-10-14
+
+The bounded menu repair now lets both interrupted-recovery fixtures reach Keep
+and Forget and complete their original cleanup. The unchanged focused client
+retains one failure: redo leaves its inserted character in place. Full native
+verification remains 96/102, with exactly the same case outcomes as the prior
+candidate; nine menu/cleanup failure details are removed. Five old strict
+observation/outcome failures and the interrupted client remain. No oracle was
+weakened.
+
+The controller copies the native menu before adding its own recovery item,
+preserving the original menu. An additive Test-only check passes for unchanged
+original metadata, a distinct installed menu and preserved default top-level
+items in both fixtures. It retains the original foreign-redo failure. This
+checks the observed default menu, not arbitrary foreign menus, recursive submenu
+contents, physical interaction or default recovery sheets.
+
+Evidence bindings: Source `494457/a28adc06`, independent Source review
+`5778/de33e294`, unchanged focused actual `161351/a5521e5e`, focused independent
+audit `6019/92fa010e`, full actual `183131/fcddaeee` and full independent audit
+`4946/a70b67e9`. The full run reused exactly verified built inputs and artifacts;
+it is not a new compiler result. Default-menu Test `248992/05a9fb2a`, actual
+`162232/2d626938` and independent audit `5584/418e2d7b` bind the added checks.
+
+Separate observation-only public registration hooks confirm the real stored undo
+manager and a forwarded selector registration during the foreign insertion and
+redo. The payload stays opaque. Redo still requests a zero-length empty edit;
+there are no new diagnostic failures or overflow. The diagnostic deliberately
+uses the older controller and preserves its ten failures. Evidence bindings:
+manifest `95869/a0fe6b77`, independent Source/Test review `5093/2a013f37`, actual
+`169391/77edb2b5` and independent audit `8819/d7b8cb06`.
+
+A separately reviewed RAM-only AppKit characterization will compare ordinary
+native editing with editing from a genuine Foundation undo handler. It has no
+application repair or acceptance result yet. The actual AppDelegate also still
+needs to invoke the language participant and join its activation before aggregate
+quit; the eleven passing standalone quit cases do not prove that wiring. Public
+adoption, application termination, packaged acceptance and all remaining BUILD
+requirements remain active.
