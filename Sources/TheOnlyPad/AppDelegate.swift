@@ -456,6 +456,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     dispatch(id)
   }
 
+  private static let nativeEditingActions: [String: Selector] = [
+    "edit.undo": Selector(("undo:")), "edit.redo": Selector(("redo:")),
+    "edit.cut": #selector(NSText.cut(_:)), "edit.copy": #selector(NSText.copy(_:)),
+    "edit.paste": #selector(NSText.paste(_:)), "edit.selectAll": #selector(NSText.selectAll(_:)),
+  ]
+
+  /// Claims the exact tool scope even when a command or native responder is unavailable.
+  private func dispatchCapturedPreviewCommand(
+    _ id: String, capturedWindow: NSWindow?,
+    sendNativeAction: @MainActor (Selector, Any?) -> Bool = { action, sender in
+      NSApp.sendAction(action, to: nil, from: sender)
+    }
+  ) -> Bool {
+    guard let capturedWindow,
+      let preview = capturedWindow.windowController as? FolderReplacementPreviewController,
+      preview.window === capturedWindow
+    else { return false }
+    if id == "file.close" {
+      preview.close()
+    } else if let action = Self.nativeEditingActions[id] {
+      _ = sendNativeAction(action, self)
+    }
+    return true
+  }
+
+  private func capturedPreviewCommandAvailability(
+    _ id: String, capturedWindow: NSWindow?
+  ) -> Bool? {
+    guard let capturedWindow,
+      let preview = capturedWindow.windowController as? FolderReplacementPreviewController,
+      preview.window === capturedWindow
+    else { return nil }
+    return id == "file.close" || Self.nativeEditingActions[id] != nil
+  }
+
   private func dispatch(_ id: String) {
     guard !preparingQuit else { return }
     if id == "app.shortcuts" {
@@ -463,6 +498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return
     }
     guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else { return }
+    let commandWindow = NSApp.keyWindow
+    if dispatchCapturedPreviewCommand(id, capturedWindow: commandWindow) { return }
     if let viewer = NSApp.keyWindow?.windowController as? LargeFileWindowController {
       if id == "file.close" {
         viewer.close()
@@ -470,12 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       }
       if !Self.largeViewerCommands.contains(id) { return }
     }
-    let nativeActions: [String: Selector] = [
-      "edit.undo": Selector(("undo:")), "edit.redo": Selector(("redo:")),
-      "edit.cut": #selector(NSText.cut(_:)), "edit.copy": #selector(NSText.copy(_:)),
-      "edit.paste": #selector(NSText.paste(_:)), "edit.selectAll": #selector(NSText.selectAll(_:)),
-    ]
-    if let action = nativeActions[id] {
+    if let action = Self.nativeEditingActions[id] {
       NSApp.sendAction(action, to: nil, from: self)
       return
     }
@@ -712,6 +744,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     if id == "app.shortcuts" { return shortcutController != nil }
     guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else {
       return false
+    }
+    let commandWindow = NSApp.keyWindow
+    if let available = capturedPreviewCommandAvailability(id, capturedWindow: commandWindow) {
+      return available
     }
     if id == "file.recent" { return true }
     if id == "file.retrySession" { return documentOwner?.canRetryRecovery == true }

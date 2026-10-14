@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Freeze actual bounded preview sources, preflight, then become one watchdog.
+"""Freeze actual native entry/preview sources, preflight, then become one watchdog.
 
 No caller-selected paths, filters or prebuilt artifacts. No compiler subprocess
 is started by this copier. Retained status/captures require independent review;
@@ -21,9 +21,13 @@ MEMBER_LIMIT = 4096
 SOURCE_TOTAL_LIMIT = 64 * SOURCE_LIMIT
 NAMESPACE = "folder-replacement-preview-integration"
 TEST_CLASS = "FolderReplacementPreview"
-ROSTERS = {'FolderReplacementPreviewWorkLaneTests.swift': {'class': 'FolderReplacementPreviewWorkLaneTests', 'methods': ['testActualCoreOffMainPreservesIndependentBytesAndWholeFileFacts', 'testLiteralReplacementAndDeletionUseReplacementAnchorNotOutputMatch', 'testNoMatchEqualReplacementAndWhitespaceHaveDistinctFacts', 'testTwoFileProjectionCapsFourExcerptsAndKeepsExactWholeFileFacts', 'testActualSecondFileFailureReturnsOnlyFailureAndPreservesSyntheticTree', 'testEnteredHeldOperationKeepsSingleAdmissionUntilActualSettlement', 'testCancelledLiveRecipientUnfreezesOnExactSettlementAndCanStartAgain', 'testClosedRecipientAndOldAcknowledgementsCannotAffectSuccessor', 'testInvalidatedSuccessAndErrorNeverPublishButOwnedSettlementStillRetires', 'testRejectedAdmissionRetiresOnlyPendingIntentWithoutFakeWorkerReceipt', 'testExecutorSubmissionFailurePropagatesOriginalErrorWithoutCallbacks']}, 'FolderReplacementPreviewControllerTests.swift': {'class': 'FolderReplacementPreviewControllerTests', 'methods': ['testNativeViewsDescribeReadonlyLimitsAndExposePlainLiteralInputs', 'testLiteralSeedOptionsPreservedAndRegexSeedNeverReinterpreted', 'testCancelledChooserPreservesInputsNewRootClearsAndThreeFilesRefusesWithoutTruncation', 'testInputAdmissionPreservesRawURLsWhitespaceLiteralAndCheckboxes', 'testActualCoreSavedBytesDisplayLiteralReplacementAndDeletionWithoutWrites', 'testSharedLaneBusyRefusesAndCancelUnfreezesOnlyAfterExactSettlement', 'testProgrammaticInputInvalidationFencesLateSuccessAndError', 'testParentAndDelegateCloseFenceChooserAndWorkWithoutReopening', 'testReadyRowsShowExactFactsBoundedExcerptsAndNoMatchEqualIsNotChanged', 'testActualUnsafeAliasErrorShowsNoPartialRowsAndDoesNotMutateFiles', 'testChooserCancellationReentryClosePreventsOuterBegin', 'testChooserCancellationSuccessorChooserWinsOverOuterBegin', 'testInputInvalidationCancellationReentryCannotCancelNewOwnedWork', 'testCompletedChooserThenThrowCannotOverwriteSuccessorWorkPresentation', 'testDirectValidResultSelectionUpdatesActualTableSelection', 'testDirectInvalidResultSelectionDeselectsTableAndClearsViews']}}
+ROSTERS = {'FolderReplacementPreviewWorkLaneTests.swift': {'class': 'FolderReplacementPreviewWorkLaneTests', 'methods': ['testActualCoreOffMainPreservesIndependentBytesAndWholeFileFacts', 'testLiteralReplacementAndDeletionUseReplacementAnchorNotOutputMatch', 'testNoMatchEqualReplacementAndWhitespaceHaveDistinctFacts', 'testTwoFileProjectionCapsFourExcerptsAndKeepsExactWholeFileFacts', 'testActualSecondFileFailureReturnsOnlyFailureAndPreservesSyntheticTree', 'testEnteredHeldOperationKeepsSingleAdmissionUntilActualSettlement', 'testCancelledLiveRecipientUnfreezesOnExactSettlementAndCanStartAgain', 'testClosedRecipientAndOldAcknowledgementsCannotAffectSuccessor', 'testInvalidatedSuccessAndErrorNeverPublishButOwnedSettlementStillRetires', 'testRejectedAdmissionRetiresOnlyPendingIntentWithoutFakeWorkerReceipt', 'testExecutorSubmissionFailurePropagatesOriginalErrorWithoutCallbacks']}, 'FolderReplacementPreviewControllerTests.swift': {'class': 'FolderReplacementPreviewControllerTests', 'methods': ['testNativeViewsDescribeReadonlyLimitsAndExposePlainLiteralInputs', 'testLiteralSeedOptionsPreservedAndRegexSeedNeverReinterpreted', 'testCancelledChooserPreservesInputsNewRootClearsAndThreeFilesRefusesWithoutTruncation', 'testInputAdmissionPreservesRawURLsWhitespaceLiteralAndCheckboxes', 'testActualCoreSavedBytesDisplayLiteralReplacementAndDeletionWithoutWrites', 'testSharedLaneBusyRefusesAndCancelUnfreezesOnlyAfterExactSettlement', 'testProgrammaticInputInvalidationFencesLateSuccessAndError', 'testParentAndDelegateCloseFenceChooserAndWorkWithoutReopening', 'testReadyRowsShowExactFactsBoundedExcerptsAndNoMatchEqualIsNotChanged', 'testActualUnsafeAliasErrorShowsNoPartialRowsAndDoesNotMutateFiles', 'testChooserCancellationReentryClosePreventsOuterBegin', 'testChooserCancellationSuccessorChooserWinsOverOuterBegin', 'testInputInvalidationCancellationReentryCannotCancelNewOwnedWork', 'testCompletedChooserThenThrowCannotOverwriteSuccessorWorkPresentation', 'testDirectValidResultSelectionUpdatesActualTableSelection', 'testDirectInvalidResultSelectionDeselectsTableAndClearsViews']}, 'FolderReplacementPreviewParentTests.swift': {'class': 'FolderReplacementPreviewParentTests', 'methods': ['testParentPreviewButtonCreatesActualChildAndSeedsLiteralOnly', 'testParentReplacementClosesOldAndOldCallbackCannotRetireSuccessor', 'testParentReplacementCancellationReentryPreservesNewestIntent', 'testParentRootChangeClosesChildBeforePublicationAndFencesReentry', 'testParentHiddenCloseAndDelegateCloseInvalidateExactlyOnce', 'testClosedParentHeldWorkKeepsSharedAdmissionUntilExactSettlement', 'testParentPreviewLeavesOriginalSearchAndNavigationIndependent', 'testParentFactoryReentryReturningSameSuccessorCannotCloseNewestChild']}, 'FolderReplacementPreviewAppCommandTests.swift': {'class': 'FolderReplacementPreviewAppCommandTests', 'methods': ['testPreviewFileCloseTargetsCapturedToolOnly', 'testPreviewRegisteredSaveAndEditorCommandRefusalMatchesAvailability', 'testPreviewNativeEditingUsesExistingSelectors']}}
 METHODS = tuple(name for row in ROSTERS.values() for name in row["methods"])
-MANIFEST = b'// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"FolderReplacementPreviewComponent",platforms:[.macOS(.v14)],targets:[.target(name:"PadCore"),.target(name:"FolderReplacementPreviewComponent",dependencies:["PadCore"]),.testTarget(name:"FolderReplacementPreviewIntegration",dependencies:["FolderReplacementPreviewComponent","PadCore"])],swiftLanguageModes:[.v5])\n'
+MANIFEST = b'// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name:"FolderReplacementPreviewComponent",platforms:[.macOS(.v14)],targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"FolderReplacementPreviewComponent",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"FolderReplacementPreviewIntegration",dependencies:["FolderReplacementPreviewComponent","PadCore","SearchExecution"])],swiftLanguageModes:[.v5])\n'
+# Frozen-only access, never written into production sources.
+ACCESS_TAILS = {'Sources/TheOnlyPad/AppDelegate.swift': {'separator': b'', 'tail': b'\n// Explicit frozen Test-only declaring-file access; not public production Source.\nextension AppDelegate {\n  func previewCommandTestDispatch(\n    _ id: String, window: NSWindow?,\n    sendNativeAction: @MainActor (Selector, Any?) -> Bool\n  ) -> Bool {\n    dispatchCapturedPreviewCommand(id, capturedWindow: window, sendNativeAction: sendNativeAction)\n  }\n\n  func previewCommandTestAvailability(_ id: String, window: NSWindow?) -> Bool? {\n    capturedPreviewCommandAvailability(id, capturedWindow: window)\n  }\n\n  var previewCommandTestGuardFacts: (\n    registryReady: Bool, preparingQuit: Bool, hasDocumentOwner: Bool,\n    editorCount: Int, hasStartupTask: Bool, registeredCount: Int\n  ) {\n    (shortcutRegistryReady, preparingQuit, documentOwner != nil, editors.count,\n      startupTask != nil, registry.commands.count)\n  }\n}\n'}, 'Sources/TheOnlyPad/FolderSearchController.swift': {'separator': b'\n', 'tail': b'\n// Frozen Test-only access: original controls/read-only state. No preview authority writes.\n@MainActor extension FolderSearchController {\n  var parentContractQuery: NSSearchField { query }\n  var parentContractMode: NSPopUpButton { mode }\n  var parentContractCase: NSButton { sensitive }\n  var parentContractWholeWord: NSButton { wholeWord }\n  var parentContractRun: NSButton { run }\n  var parentContractTable: NSTableView { table }\n  var parentContractRoot: URL? { root }\n  var parentContractClosed: Bool { closed }\n  var parentContractGeneration: UUID { generation }\n  var parentContractSearchBusy: Bool { token != nil }\n  var parentContractHitCount: Int { hits.count }\n}\n'}}
+INPUT_SCHEMA = "theonlypad.folder-preview-entry-fixed-inputs.v2"
+ENTRY_SOURCE = "Sources/TheOnlyPad/TheOnlyPadApplication.swift"
 WRAPPER_SHA = "0fa0d91e2c57c03a4f74b6cd605676e274c1a4d69cd55edd9da2589c0bad74c0"
 WATCHDOG_SHA = "d5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d"
 OVERRIDES = (
@@ -128,7 +132,8 @@ def json_bytes(record):
 def swift_inventory(repo):
     """Recursive actual Swift inputs; refuse symlinks and filename collisions."""
     rows, directories, total, visited = [], [], 0, 0
-    for module in ("PadCore",):
+    for module in ("PadCore", "SearchExecution", "TheOnlyPad"):
+        target = "FolderReplacementPreviewComponent" if module == "TheOnlyPad" else module
         top = repo / "Sources" / module
         pending, names = [top], set()
         while pending:
@@ -147,7 +152,7 @@ def swift_inventory(repo):
                         require(child.name.casefold() not in names, "Source-name collision")
                         names.add(child.name.casefold())
                         total += info.st_size
-                        rows.append((child, "Package/Sources/" + module + "/"
+                        rows.append((child, "Package/Sources/" + target + "/"
                                      + child.relative_to(top).as_posix(), 0o400))
                 require(len(rows) + len(directories) + len(pending) <= MEMBER_LIMIT
                         and total <= SOURCE_TOTAL_LIMIT, "Source inventory bound")
@@ -159,12 +164,9 @@ def swift_inventory(repo):
 
 def source_map(repo):
     rows, directories = swift_inventory(repo)
-    rows += [
-        (repo / "Sources/TheOnlyPad" / name,
-         "Package/Sources/FolderReplacementPreviewComponent/" + name, 0o400)
-        for name in ("FolderReplacementPreviewWorkLane.swift",
-                     "FolderReplacementPreviewController.swift")
-    ]
+    entry = repo / ENTRY_SOURCE
+    require(sum(origin == entry for origin, _, _ in rows) == 1, "Application entry missing")
+    rows = [row for row in rows if row[0] != entry]
     rows += [
         (repo / "Tests/FolderReplacementPreviewIntegration" / name,
          "Package/Tests/FolderReplacementPreviewIntegration/" + name, 0o400)
@@ -201,6 +203,7 @@ def environment():
 def stage_command(run, scratch):
     return ["/usr/bin/python3", "-B", str(run / "Runner/scripts/run-owned-search-tests.py"),
             "--timeout", "180", "--output", str(run / "owned"), "--",
+            "/usr/bin/env", "THEONLYPAD_STATE_DIRECTORY=" + str(run / "State"),
             str(run / "Runner/scripts/swift.sh"), "test", "--package-path", str(run / "Package"),
             "--scratch-path", str(scratch), "--filter", TEST_CLASS]
 
@@ -222,6 +225,10 @@ def membership(run):
 
 def prepare(repo, run, scratch):
     rows, source_directories = source_map(repo)
+    inventory, _ = swift_inventory(repo)
+    state_directory = make_directory(run / "State")
+    require("THEONLYPAD_STATE_DIRECTORY" not in os.environ, "Caller-selected state directory")
+    os.environ["THEONLYPAD_STATE_DIRECTORY"] = str(run / "State")
     directories = {"Package", "Package/Sources", "Package/Tests", "Runner", "Runner/scripts", "Evidence"}
     for _, name, _ in rows:
         parent = Path(name).parent
@@ -230,12 +237,27 @@ def prepare(repo, run, scratch):
             parent = parent.parent
     for name in sorted(directories, key=lambda item: (len(Path(item).parts), item)):
         make_directory(run / name)
-    record = {"scope": "Hidden native readonly panel16 and worker11, original27 only; no shownwindow/SDKpicker/AppDelegate/Apply/helper routing",
+    record = {"schema": INPUT_SCHEMA,
+              "scope": "Hidden worker11/panel16/parent8/App-helper3, fixed38 only. Actual current native/Core/SearchExecution sources; only application entry excluded. Two frozen-only declaring access tails. No actual admitted AppDelegate dispatch/key-window/responder/editor preservation, shown windows/SDK picker/Apply/helper routing acceptance.",
               "repo": str(repo), "run": str(run), "scratch": str(scratch),
               "roots": [directory(run.parent, True), directory(run, True), directory(scratch.parent, True)],
-              "sourceDirectories": source_directories, "adopted": [], "provenance": [],
+              "sourceDirectories": source_directories,
+              "publicSwiftInventory": [pin(origin) for origin, _, _ in inventory],
+              "excludedApplicationEntry": pin(repo / ENTRY_SOURCE),
+              "stateDirectory": state_directory,
+              "childStateEnvironment": {"THEONLYPAD_STATE_DIRECTORY": str(run / "State")},
+              "counts": {"publicSwiftSources": len(inventory),
+                         "compiledProductionSources": len(inventory) - 1,
+                         "testFiles": len(ROSTERS), "testMethods": len(METHODS),
+                         "adoptedInputs": len(rows), "compiledAndRunnerInputs": len(rows) + 1,
+                         "declaringAccessTransforms": len(ACCESS_TAILS)},
+              "adopted": [], "provenance": [], "testAccessTails": [],
               "generated": [], "environment": environment(),
               "command": stage_command(run, scratch), "testMethods": list(METHODS)}
+    for key, access in sorted(ACCESS_TAILS.items()):
+        tail_path = run / "Evidence" / (Path(key).stem + ".test-access.swift")
+        write_new(tail_path, access["tail"])
+        record["testAccessTails"].append(pin(tail_path))
     total = 0
     for origin, name, mode in rows:
         data, _ = read_file(origin)
@@ -244,9 +266,27 @@ def prepare(repo, run, scratch):
         original = pin(origin)
         require(original["sha256"] == hashlib.sha256(data).hexdigest(), "Source changed before copy")
         target = run / name
+        key = origin.relative_to(repo).as_posix()
+        access = ACCESS_TAILS.get(key)
+        transformation = None
+        if access is not None:
+            original_copy = run / "Evidence" / (origin.stem + ".original.swift")
+            write_new(original_copy, data)
+            record["provenance"].append({"original": original, "originalIdentity": identity(origin),
+                                         "frozen": pin(original_copy), "frozenIdentity": identity(original_copy)})
+            transformation = {"kind": "exact-source-plus-declaring-test-access",
+                              "sourceBytes": len(data), "separatorHex": access["separator"].hex(),
+                              "tail": pin(run / "Evidence" / (origin.stem + ".test-access.swift")),
+                              "originalCopy": pin(original_copy)}
+            data = data + access["separator"] + access["tail"]
+            total += len(access["separator"]) + len(access["tail"])
+            require(total <= SOURCE_TOTAL_LIMIT and len(data) <= SOURCE_LIMIT, "Transformed source bound")
         write_new(target, data, mode)
-        record["adopted"].append({"original": original, "originalIdentity": identity(origin),
-                                  "frozen": pin(target), "frozenIdentity": identity(target)})
+        row = {"original": original, "originalIdentity": identity(origin),
+               "frozen": pin(target), "frozenIdentity": identity(target)}
+        if transformation is not None:
+            row["testAccess"] = transformation
+        record["adopted"].append(row)
     write_new(run / "Package/Package.swift", MANIFEST)
     record["generated"].append(pin(run / "Package/Package.swift"))
     for index, name in enumerate(("scripts/test-folder-replacement-preview.sh",
@@ -276,6 +316,19 @@ def preflight(repo, run, scratch, record):
     for row in record["roots"]:
         require(directory(Path(row["path"]), True) == row, "Root identity changed")
     rows, source_directories = source_map(repo)
+    inventory, _ = swift_inventory(repo)
+    require(record["schema"] == INPUT_SCHEMA, "Input schema changed")
+    require([pin(origin) for origin, _, _ in inventory] == record["publicSwiftInventory"]
+            and pin(repo / ENTRY_SOURCE) == record["excludedApplicationEntry"], "Public inventory drift")
+    require(directory(run / "State", True) == record["stateDirectory"]
+            and not any((run / "State").iterdir()), "Synthetic state drift")
+    require(record["childStateEnvironment"] == {"THEONLYPAD_STATE_DIRECTORY": str(run / "State")}
+            and os.environ.get("THEONLYPAD_STATE_DIRECTORY") == str(run / "State"), "State environment drift")
+    require(record["counts"] == {"publicSwiftSources": len(inventory),
+                "compiledProductionSources": len(inventory) - 1,
+                "testFiles": len(ROSTERS), "testMethods": len(METHODS),
+                "adoptedInputs": len(rows), "compiledAndRunnerInputs": len(rows) + 1,
+                "declaringAccessTransforms": len(ACCESS_TAILS)}, "Input census drift")
     require(source_directories == record["sourceDirectories"], "Source directory drift")
     require([(str(a), str(run / b), c) for a, b, c in rows]
             == [(r["original"]["path"], r["frozen"]["path"], r["frozen"]["mode"])
@@ -285,12 +338,33 @@ def preflight(repo, run, scratch, record):
             path = Path(row[side]["path"])
             require(pin(path) == row[side] and identity(path) == row[side + "Identity"],
                     "Source/provenance drift")
-        require(row["original"]["sha256"] == row["frozen"]["sha256"]
-                and row["original"]["bytes"] == row["frozen"]["bytes"], "Copy differs")
+        key = Path(row["original"]["path"]).relative_to(repo).as_posix()
+        access = ACCESS_TAILS.get(key) if row in record["adopted"] else None
+        if access is None:
+            require("testAccess" not in row, "Unexpected source transformation")
+            require(row["original"]["sha256"] == row["frozen"]["sha256"]
+                    and row["original"]["bytes"] == row["frozen"]["bytes"], "Copy differs")
+        else:
+            origin = Path(row["original"]["path"])
+            raw = read_file(origin)[0]
+            original_copy = run / "Evidence" / (origin.stem + ".original.swift")
+            tail_path = run / "Evidence" / (origin.stem + ".test-access.swift")
+            require(row.get("testAccess") == {
+                "kind": "exact-source-plus-declaring-test-access", "sourceBytes": len(raw),
+                "separatorHex": access["separator"].hex(), "tail": pin(tail_path),
+                "originalCopy": pin(original_copy)}, "Access transformation drift")
+            require(read_file(original_copy)[0] == raw
+                    and read_file(tail_path)[0] == access["tail"]
+                    and read_file(Path(row["frozen"]["path"]))[0]
+                    == raw + access["separator"] + access["tail"], "Declaring source/tail differs")
         require((row["originalIdentity"]["device"], row["originalIdentity"]["inode"])
                 != (row["frozenIdentity"]["device"], row["frozenIdentity"]["inode"]),
                 "Copy aliases original")
         require(row["frozenIdentity"]["owner"] == os.geteuid(), "Frozen ownership changed")
+    require(sum("testAccess" in row for row in record["adopted"]) == len(ACCESS_TAILS),
+            "Required declaring access missing")
+    require(record["testAccessTails"] == [pin(run / "Evidence" / (Path(key).stem + ".test-access.swift"))
+            for key in sorted(ACCESS_TAILS)], "Access tail inventory drift")
     require(membership(run) == record["members"], "Frozen membership drift")
     require(record["generated"] == [pin(run / "Package/Package.swift")]
             and read_file(run / "Package/Package.swift")[0] == MANIFEST, "Manifest drift")
@@ -305,9 +379,11 @@ def preflight(repo, run, scratch, record):
     for name in record["absent"]:
         path = checked_path(Path(name))
         require(not os.path.lexists(path), "Fresh output/cache already exists")
-    require(set(child.name for child in run.iterdir()) == {"Package", "Runner", "Evidence", "inputs.json"},
+    require(set(child.name for child in run.iterdir()) == {"Package", "Runner", "Evidence", "State", "inputs.json"},
             "Unexpected run member")
-    write_new(run / "preflight.json", json_bytes({"scope": record["scope"],
+    write_new(run / "preflight.json", json_bytes({"schema": INPUT_SCHEMA, "scope": record["scope"],
+              "counts": record["counts"], "stateDirectory": record["stateDirectory"],
+              "childStateEnvironment": record["childStateEnvironment"],
               "inputs": pin(run / "inputs.json"), "command": record["command"],
               "testMethods": list(METHODS), "environment": record["environment"],
               "verifiedOriginalFrozenPairs": len(record["adopted"]),

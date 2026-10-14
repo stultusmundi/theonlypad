@@ -56,6 +56,48 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
       URL, SearchQuery, [String], [String]
     ) throws -> FolderSearchReport
 
+  // Own one preview independently of the original search/navigation generation.
+  typealias PreviewFactory = @MainActor (URL?, SearchQuery?) -> FolderReplacementPreviewController
+  typealias PreviewPresentation = @MainActor (FolderReplacementPreviewController) -> Void
+  let replacementPreviewButton = NSButton(
+    title: "Read-only Replacement Preview…", target: nil, action: nil)
+  private(set) var currentPreview: FolderReplacementPreviewController?
+  private let previewFactory: PreviewFactory
+  private let previewPresentation: PreviewPresentation
+  private var previewIntent = UUID()
+  @discardableResult func showPreview() -> FolderReplacementPreviewController? {
+    guard !closed else { return nil }
+    let intent = UUID()
+    previewIntent = intent
+    let old = currentPreview
+    currentPreview = nil
+    old?.close()
+    guard !closed, previewIntent == intent, currentPreview == nil else { return nil }
+    let seed: SearchQuery? =
+      mode.indexOfSelectedItem == 0
+      ? SearchQuery(
+        pattern: query.stringValue, mode: .literal,
+        caseSensitive: sensitive.state == .on, wholeWord: wholeWord.state == .on) : nil
+    let child = previewFactory(root, seed)
+    guard !closed, previewIntent == intent, currentPreview == nil, !child.isClosed else {
+      // A reentrant factory may return the child already owned by a newer intent.
+      if currentPreview !== child { child.close() }
+      return nil
+    }
+    currentPreview = child
+    child.onClose = { [weak self, weak child] in
+      guard let self, let child, self.currentPreview === child else { return }
+      self.currentPreview = nil
+      self.previewIntent = UUID()
+    }
+    previewPresentation(child)
+    guard !closed, previewIntent == intent, currentPreview === child, !child.isClosed else {
+      return nil
+    }
+    return child
+  }
+  @objc private func launchReplacementPreview() { _ = showPreview() }
+
   var onClose: (() -> Void)?
   private let onOpen: (FolderSearchNavigationRequest) -> Void
   private let search: SearchOperation?
@@ -79,9 +121,16 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   private let status = NSTextField(wrappingLabelWithString: "Ready")
 
   init(
-    root: URL? = nil, onOpen: @escaping (FolderSearchNavigationRequest) -> Void,
+    root: URL? = nil,
+    previewFactory: @escaping PreviewFactory = { root, seed in
+      FolderReplacementPreviewController(root: root, seedQuery: seed)
+    },
+    previewPresentation: @escaping PreviewPresentation = { $0.showWindow(nil) },
+    onOpen: @escaping (FolderSearchNavigationRequest) -> Void,
     search: SearchOperation? = nil
   ) {
+    self.previewFactory = previewFactory
+    self.previewPresentation = previewPresentation
     self.root = root
     self.onOpen = onOpen
     self.search = search
@@ -130,9 +179,14 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
     cancel.target = self
     cancel.action = #selector(stop)
     cancel.isEnabled = false
+    replacementPreviewButton.identifier = .init("folder.replacementPreview")
+    replacementPreviewButton.setAccessibilityLabel("Read-only replacement preview")
+    replacementPreviewButton.target = self
+    replacementPreviewButton.action = #selector(launchReplacementPreview)
     let folderRow = NSStackView(views: [choose, folder])
     folderRow.spacing = 10
     stack.addArrangedSubview(folderRow)
+    stack.addArrangedSubview(replacementPreviewButton)
     stack.addArrangedSubview(query)
     query.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     let options = NSStackView(views: [mode, sensitive, wholeWord, run, cancel])
@@ -176,10 +230,25 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   }
   required init?(coder: NSCoder) { nil }
   deinit { token?.cancel() }
-  func windowWillClose(_ notification: Notification) {
+  override func close() {
+    invalidateForClose()
+    super.close()
+  }
+  private func invalidateForClose() {
+    guard !closed else { return }
     closed = true
+    previewIntent = UUID()
+    let child = currentPreview
+    currentPreview = nil
+    let notify = onClose
+    onClose = nil
+    child?.close()
     stop()
-    onClose?()
+    notify?()
+  }
+  func windowWillClose(_ notification: Notification) {
+    guard let ownedWindow = window, notification.object as? NSWindow === ownedWindow else { return }
+    invalidateForClose()
   }
   func numberOfRows(in tableView: NSTableView) -> Int { hits.count }
   func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView?
@@ -203,7 +272,14 @@ final class FolderSearchController: NSWindowController, NSWindowDelegate, NSTabl
   }
   func setRoot(_ url: URL) {
     guard !closed else { return }
+    let intent = UUID()
+    previewIntent = intent
+    let child = currentPreview
+    currentPreview = nil
+    child?.close()
+    guard !closed, previewIntent == intent, currentPreview == nil else { return }
     stop()
+    guard !closed, previewIntent == intent, currentPreview == nil else { return }
     root = url
     folder.stringValue = url.path
     status.stringValue = "Folder changed. Run Search to find matches."

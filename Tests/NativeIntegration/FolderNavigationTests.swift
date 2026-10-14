@@ -33,7 +33,7 @@ extension EditorWindowController {
 extension FolderSearchController {
   func folderTestStop() { stop() }
   func folderTestCloseGeneration() {
-    windowWillClose(Notification(name: NSWindow.willCloseNotification))
+    windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
   }
   func folderTestOpen(_ url: URL, range: NSRange, snapshot: String) {
     onOpen(

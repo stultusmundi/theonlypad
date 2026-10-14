@@ -442,7 +442,7 @@ from the existing panel. Native credentials, panel/application wiring, helper
 routing, hard containment, memory/performance and current packaged acceptance
 remain outstanding. See `docs/verification/document-search-session.md`.
 
-Readonly preview native component checkpoint (2026-10-14):
+Earlier readonly preview native component checkpoint (2026-10-14, before entry integration):
 `scripts/test-folder-replacement-preview.sh` passes 27 actual worker/hidden panel
 contracts, including six chooser reentry and native table-selection regressions.
 The fixed public command is warning-free without requesting warnings as errors;
@@ -452,3 +452,18 @@ count to that suite. The runner owns its watchdog directly; never nest another.
 Parent entry, AppDelegate command routing, real picker/package workflows, RSS
 and physical input remain outstanding. Apply/backup recovery is unimplemented.
 See `docs/verification/folder-replacement-preview-native-component.md`.
+
+Read-only preview entry checkpoint (2026-10-14): the same fixed public
+`scripts/test-folder-replacement-preview.sh` now passes 38 native contracts
+(worker11/panel16/parent8/App-helper3) on one current source set. The command is
+warning-free without Werror, freezes189 inputs and verifies187 objects/223
+artifacts/four bundle leaves. It appends exactly two recorded Test-only declaring
+extensions; it does not show windows or fake application registry/key admission.
+The direct watchdog child receives its private0700 State through explicit
+`/usr/bin/env`; never weaken watchdog sanitization or nest another watchdog.
+Matching `scripts/test-folder-navigation.sh` passes10 with original oracles and
+an exact-owned-window synthetic notification. A fresh frozen app/helper/default
+suite passes1,203 separately with Werror. See
+`docs/verification/folder-replacement-preview-entry.md`. Real desktop/picker,
+responder/editor preservation, Apply/backups/RSS and broader acceptance remain
+outstanding; distribution artifacts still represent the previous package.
