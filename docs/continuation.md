@@ -962,3 +962,29 @@ then a measured repair, and integrate actual AppDelegate aggregate quit. See
 [manager evidence](verification/custom-language-manager-private.md).
 All remaining BUILD requirements stay active; no public code/package adoption
 or remote action follows from these private checks.
+
+## Resumed parallel work — 2026-10-14
+
+The user authorized continuation through the full brief with up to four active
+agents total, using cheaper models for bounded mechanical work. Root coordinates
+three independent subagent seats, owns integration and serial native/build/GUI
+execution, and assigns separate private directories and file ownership. The
+preceding report-batch pause has been explicitly revoked.
+
+Five productive actual-application quit clients now pass. The unchanged 168-case
+compatibility run preserves exactly 160 passes, eight historical failures and
+17 failure lines. Three new real external-command ownership clients pass in
+separate processes. Counts are separate selections and must not be added into a
+claimed passing integrated suite. See the latest
+[private manager evidence](verification/custom-language-manager-private.md).
+
+Next: review the reached truthful foreign-append declaration baseline, repair
+its measured native inverse with original custody and consent intact, and finish
+real default quit sheets. Then complete private integration, public adoption,
+current package/desktop verification and all remaining feature/acceptance work.
+The user also requested repository disk cleanup. The completed
+[cache cleanup](verification/repository-cache-cleanup-2026-10-14.md) retains
+current audit dependencies, source candidates, synthetic verification records
+and distribution artifacts. Missing historical
+scratch builds require rebuilding before reuse; cache cleanup does not erase
+recorded failures or establish new acceptance. No remote action is authorized.

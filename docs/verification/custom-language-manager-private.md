@@ -758,3 +758,51 @@ Productive language/document/external coordination is now under implementation.
 Default sheet teardown, external stale-token controls, unchanged legacy
 compatibility, public adoption and OS termination/relaunch acceptance remain
 mandatory. No full 173-method or complete application-quit result is claimed.
+
+## Productive application quit and external ownership — 2026-10-14
+
+The private productive application candidate now passes all five unchanged
+actual-AppDelegate clients in separate synthetic processes. The earlier five
+failures remain retained. Genuine catalog Save survives a subsequent document
+checkpoint failure and retry; invalid raw cancellation preserves editing; a late
+veto permits a genuinely new external command after owned drain; and failed
+preparation does not cancel another caller's existing document freeze. The
+startup/opening and single-reply client also passes, subject to its previously
+recorded held-suspension observation limit.
+
+This performs one warning-free build and four exact-build reuses, with 196 input
+bindings, 194 objects and 230 artifacts. Independent actual review accepts these
+five component clients only: audit `15311/bd7a4dba`. Real default sheets, physical
+input, OS termination/relaunch and adoption are separate gates.
+
+The unchanged 168-method compatibility selection was then run against that
+productive frozen build. All 168 case identities, ordering and outcomes match
+the earlier combined baseline: 160 pass, eight retain their historical failures,
+and all 17 failure lines match after package-path normalization. This is
+compatibility evidence, not a green full suite or execution of the additional
+five clients in the same process. Actual observation `196076/0018d999` retains
+the original complete receipt and compiler/artifact inventory.
+
+Three additive external-command component clients also pass, each in a fresh
+process. They prove actual marker-backed command cancellation/drain and native
+Run admission after exact release, refusal to reopen a successor closure with
+an old token, and inability to undo legacy permanent closure with a stale token.
+The graph preserves all 196 existing inputs and adds one test file: 197 inputs,
+176 included methods, one selected per run, 195 objects and 231 artifacts. It
+uses one warning-free build and two verified reuses. Actual observations are
+`157278/27c35063`, `157220/36c3bae1` and `157226/86bffd1f`. Independent review
+checks original records, source/object/bundle bindings and all five receipts
+across this selection and the compatibility comparison.
+
+Some Root-adapted runtime recipes retained an inaccurate descriptive scope
+string from the preceding application-quit runner. Their exact commands and
+input/test/artifact inventories establish the scopes stated here. The original
+records remain immutable; a separate correction records the metadata error.
+No command, source, test or result was changed to repair that description.
+
+Cancellation during an unsettled external drain remains untested. Default native
+sheet attachment, choice mapping, cancellation/host-close teardown and successor
+isolation are the next bounded work. Native foreign-input redo and the retained
+history contracts still require repair. None of these private candidates is
+publicly adopted or included in the last tested package; every remaining BUILD
+requirement remains active.
