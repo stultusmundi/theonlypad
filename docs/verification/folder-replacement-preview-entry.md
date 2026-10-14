@@ -85,8 +85,10 @@ Apply, durable backups/journal recovery, broader encodings/globs, allocation/RSS
 performance, search-helper routing and full C-06/C-09 acceptance remain outstanding.
 A neighboring rerun of the legacy managed-documents command stopped at compilation:
 its six test files now require two approved access extensions that its copier
-omits. No native cases ran in that attempt. A fixed coordinator migration is
-in progress; the earlier managed-documents result is historical evidence.
+omits. No native cases ran in that attempt. The fixed coordinator migration
+subsequently passed 73 unchanged native cases and 62 pure runner checks;
+see [managed runner evidence](managed-documents-runner.md). Those results remain
+separate from preview and desktop acceptance.
 
 A clean local release candidate from source `5672527` now builds, uses ad-hoc
 signatures and passes archive/SBOM validation. The main executable SHA-256 is

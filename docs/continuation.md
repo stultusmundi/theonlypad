@@ -1,4 +1,6 @@
-Managed runner update: the fixed coordinator now passes 73 unchanged native cases and 62 pure runner checks, with independent source/actual review. Continue actual preview desktop execution when unlocked, genuine native close/retention diagnostics, and the reviewed post-SDK-return/pre-clear transfer test.
+Managed search lifetime update: two separately selected supported-owner tests pass, including native object release while a real search source remains retained and all five stale-source refusals. Independent actual reviews verify both runs. Earlier unsupported-fixture failures remain preserved. Continue supported source selection/replacement/undo tests and production search integration; see [lifetime evidence](verification/native-search-managed-lifetime.md).
+
+Managed runner update: the fixed coordinator now passes 73 unchanged native cases and 62 pure runner checks, with independent source/actual review. Continue actual preview desktop execution when unlocked and the remaining native ownership/undo acceptance work.
 
 Current local package update: source `5672527` built and passed ad-hoc signature, archive and SBOM checks. Desktop acceptance remains unrun while macOS reports a locked screen. Preserve the 2026-10-12 desktop results as historical evidence; continue native runner repair and ownership diagnostics meanwhile.
 
