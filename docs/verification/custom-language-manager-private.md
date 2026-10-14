@@ -690,3 +690,31 @@ needs to invoke the language participant and join its activation before aggregat
 quit; the eleven passing standalone quit cases do not prove that wiring. Public
 adoption, application termination, packaged acceptance and all remaining BUILD
 requirements remain active.
+
+
+## Standalone native redo characterization — 2026-10-14
+
+Two small AppKit controls now run without any application modules. The genuine
+Foundation custom-handler control passes its descriptive checks: inserting the
+synthetic character during undo leaves that character present after native redo,
+with an observed zero-length storage edit and zero length change. The ordinary
+native content chain correctly inserts, removes and restores the character.
+Its method nevertheless fails two diagnostic assertions: the expected delegate
+hook does not run during native undo or redo. Root requested that expectation,
+and independent review initially accepted it; the actual run refutes it. The
+immutable failing fixture is retained. This is one passing and one failing
+method, not two passing controls or application acceptance.
+
+All bounded public records are complete, with no overflow. Registration payloads
+remain opaque; the observations grant no SDK issuer or application inverse
+permission. This reproduces the content shape outside the application's
+preflight path and supports a bounded repair proposal. No further preflight
+control is required for that observation; a different nested native callback
+would be a separate experiment.
+
+Evidence bindings: Test `14291/d76f16aa`, four-payload manifest `4388/f341bde9`,
+independent Source/Test review `6452/0571629b`, actual `13914/3aedb1ee` and
+independent actual audit `8365/df6ba395`. The warning-free build and execution
+verify two objects, twenty artifacts and complete owned-process receipts. No
+original application assertion, Source, package or platform claim changes.
+The foreign-input redo repair and full application quit integration remain active.
