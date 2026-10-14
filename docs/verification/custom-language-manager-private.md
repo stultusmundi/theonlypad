@@ -590,3 +590,24 @@ Both runs bind 180 sources, 182 objects and 218 artifacts with complete process
 receipts. Public adoption, full application termination, default dialogs and
 packaged acceptance remain outstanding. The larger catalogue/native graph has
 not yet received this additive test.
+
+
+## Uncertain Save in the combined graph — 2026-10-14
+
+The same real uncertain-Save cancellation case now passes in the private
+catalogue/quit/native-selection graph. Full verification passes 160/168.
+Independent review confirms all prior 167 outcomes and all 17 failure details
+are unchanged; the added method passes. All eleven quit cases pass. The eight
+existing failures remain outstanding.
+
+Only one Test payload changes; 195 of 196 inputs, including every production
+Source, remain exact. The original 167-test prefix and its behavioral oracles
+are preserved. Evidence bindings: Test `532491/d46330c3`, composition manifest
+`67921/2f3e1aa4`, independent Source/Test review `3027/b98cfce7`, focused actual
+`168257/1a7929ae`, full actual `205081/1b0d1177` and combined independent audit
+`6768/934711da`. Both runs verify 194 objects, 230 artifacts and complete process
+receipts without skips. Focused and full counts overlap.
+
+This is private hidden native integration. Productive history recovery is being
+tested separately; no public code adoption, full application quit, default dialog
+or packaged acceptance is implied. All BUILD requirements remain active.

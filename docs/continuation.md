@@ -928,3 +928,14 @@ Continue its reviewed additive composition into the larger catalogue/native
 graph, connected native undo recovery and actual application termination.
 Undo replay source has a warning-free compiler-only checkpoint; recovery controls
 and genuine native acceptance remain pending. Full BUILD scope stays active.
+
+
+The uncertain-Save cancellation client now passes in the larger private graph:
+full168 passes160, with all previous167 outcomes and17failure details unchanged.
+All eleven quit cases pass. See
+[manager evidence](verification/custom-language-manager-private.md).
+The connected native-history candidate passes its first real undo/redo/typing
+case, but interruption recovery exposed foreign redo and recovery-menu failures.
+Continue their bounded root-cause investigation with unchanged behavioral oracles,
+then full native compatibility, integrated quit, public adoption and packaging.
+Full BUILD scope remains active; the candidate is not accepted as complete.
