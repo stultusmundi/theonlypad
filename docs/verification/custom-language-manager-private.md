@@ -515,3 +515,32 @@ Both runs bind 196 inputs, 194 objects and 230 artifacts with complete process
 receipts and no skips. This is hidden native integration evidence; public code
 adoption, actual application termination, productive history, default dialogs
 and packaged desktop acceptance remain required.
+
+## Caller cancellation during actual Save — 2026-10-14
+
+A further private regression now cancels only the quit caller while the actual
+store Save is held at its existing before-write boundary. The shared Save task
+remains uncancelled. After release, the caller returns cancellation only after
+the real store, owner and manager consumer settle. The one confirmed generation
+eight publication and exact decomposed Unicode delimiter remain available;
+fresh-reader snapshots and actual file bytes agree. Consumed late responses do
+not repeat Save, and a later native field action confirms continued editing.
+
+The focused method passes, and the full manager suite passes 64/65, including all
+ten quit cases. Independent review confirms every prior 64-method outcome and
+the existing viewer-key failure details are unchanged. Both runs bind 180
+Sources, 182 objects and 218 artifacts with complete process receipts.
+
+The first test version failed compilation before any case executed because it
+accessed a fileprivate receipt field. Its corrected version observes real bytes
+from the synthetic file immediately after successful store return and compares
+public snapshots separately. Observation errors remain separate from Save's
+outcome; the production API was not changed.
+
+Evidence bindings: compiler-only observation `72908/f4ecb552` and independent
+audit `4093/f649fc89`, corrected Test `479952/a7e597c3`, independent Test/API
+review `4998/02775237`, focused actual `159078/dcd91f8a`, full actual
+`171483/be1a36f3` and combined independent audit `6243/74a2f780`.
+This tests cancellation before the actual write, not during directory sync or
+simultaneous publication failure. It has not yet been composed with catalogue
+and native-selection changes or adopted into public code and packages.

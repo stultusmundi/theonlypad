@@ -899,3 +899,12 @@ actual application quit integration, public adoption and packaged desktop checks
 The separate Save-cancellation test hit a fileprivate receipt access compile
 error before execution; its test-only byte observation is being corrected without
 changing the production API. See [manager evidence](verification/custom-language-manager-private.md).
+
+The corrected real-Save cancellation case now passes. Full manager verification
+passes 64/65, with all ten quit cases and every prior outcome preserved; the
+viewer prerequisite remains. Its truthful byte observation corrects the earlier
+compiler-only failure without widening Core access. Continue the reviewed
+cancellation/catalogue/native composition, productive undo-history implementation
+and actual application quit integration. See
+[manager evidence](verification/custom-language-manager-private.md) for exact
+limits. Public adoption and packaged acceptance remain required.
