@@ -328,3 +328,45 @@ required. A real running AppKit probe also remained inactive and nonkey; this
 does not prove the viewer route. The public source checkpoint is `a5aefdf`; the manager
 and startup changes described here are private candidates. Distribution artifacts
 remain unchanged.
+
+## Comment selection and reversible quit checkpoint — 2026-10-14
+
+The private comment candidate now passes its two focused methods and all three
+real fixtures: one original computed selection is installed, while foreign
+character insertion and controlled pane-binding replacement retain the safe
+caret and refuse the old result. Measured diagnostics identified an uncovered
+managed checkpoint callback; the repair authenticates that callback at its real
+installer and preserves its unconditional checkpoint call. The full native suite
+passes 93 of 100 methods. Only the two previously failing productive cases
+changed outcome; the other 98 outcomes match the original control. Seven
+undo/redo, older callback-observation and prerequisite failures remain required
+work. This is not complete editing or desktop acceptance.
+
+Evidence bindings: six-file Source manifest `5527/16e6362a`, independent Source
+review `9689/8ef5cc7f`, focused actual `166504/710919e2` and review
+`7067/2a456f46`; full actual `192680/3f67b412` and review `9126/19cafcde`.
+The full run retains eleven assertion/unwrap failures and three caught errors;
+no skips or expected failures were introduced.
+
+A distinct private language quit participant passes four new methods across six
+real fixtures. Clean preparation freezes the actual owner and cancels exactly;
+an old receipt cannot cancel its successor. Real busy I/O and uncertain
+publication veto preparation. Invalid unsubmitted native input supports Cancel
+or provisional Discard, preserving the original fields after exact cancellation.
+A genuine NFC/NFD raw change during confirmation refuses stale consent.
+The full manager suite passes 58 of 59 methods, preserving every original
+55-method outcome. The sole failure remains the viewer's real key-window
+prerequisite. Counts overlap and are not added together.
+
+Quit evidence bindings: private Source `254638/496f9f14`, independent Source
+review `6335/f934bf39`, focused actual `151317/af0aba83`, full actual
+`165175/b57d59b5`, combined independent audit `23379/07c0bc0a`.
+Real Save, child dialogs, owner preparation ABA, pending-confirmation settlement,
+default modal interaction and actual AppDelegate/document termination remain
+unimplemented or unverified. The private Save choice safely refuses and is not
+ready for adopted product controls. Genuine Save and publication-failure tests
+are the next implementation step.
+
+All candidates above remain private and unadopted. Public application code and
+distribution artifacts are unchanged; no new packaged, physical-input,
+accessibility or performance acceptance follows.

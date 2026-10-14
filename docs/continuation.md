@@ -824,3 +824,18 @@ that preserves manager raw input after cancellation or a document veto. The
 private candidates still require integration, public adoption, current application
 regressions and packaged desktop testing. Full BUILD_PROMPT scope remains active;
 no remote push, merge or release is authorized.
+
+The later private checkpoint improves native comment verification to 93/100:
+the computed-selection and foreign-effect cases now pass, with all other case
+outcomes preserved. Undo/redo selection and older callback/prerequisite failures
+remain. Reversible language quit preparation passes its four new cases and six
+fixtures; the full manager suite passes 58/59, with the same genuine viewer-key
+prerequisite failure. See the latest [manager evidence](verification/custom-language-manager-private.md)
+for independent verification and limits. These candidates are not publicly adopted.
+
+Continue real Save and uncertain-publication handling during quit, measured native
+history return/selection ownership, and one-owner catalog delivery to actual
+managed documents. Preserve the original tests and raw input. Then complete
+child/default-dialog and actual application quit integration, current regressions,
+public adoption and packaged desktop acceptance. All other BUILD requirements
+remain active; these component milestones are not completion.
