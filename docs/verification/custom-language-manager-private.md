@@ -850,3 +850,44 @@ No folder write or Apply capability is established.
 
 All three candidates remain private. The tested distribution is unchanged, and
 the complete application brief remains active.
+
+### Later boundary repair and active-clear diagnosis — 2026-10-14
+
+The reviewed private recovery-read repair now passes four separate native
+boundary clients: the exact 4096-plus-16 recovery/roundtrip path, refusal beyond
+that foreign-input bound, preservation of the original 4096 replay limit, and
+revocation after actual all-clear outside the original undo. The unchanged
+104-case selection remains 99 passes and five historical failures. These are
+scoped results, not a passing combined suite or public source adoption.
+
+A separately selected pre-publication all-clear client compiles but aborts
+with signal 6 and no completed test case. An exact diagnostic copy adds only
+stdout markers; removal reconstructs every original test byte. It establishes
+that actual clear, post-clear native getters and the original observer returned.
+The original undo did not return. Post-root review refusal, fixture cleanup and
+mutation discrimination remain unverified. Matching inputs, compiler objects,
+linked artifacts and complete owned-process cleanup receipts were checked.
+
+Eight tiny controls use one shared Foundation algorithm: a fresh genuine
+undo/redo baseline followed by reciprocal registration and clear during another
+original undo. Four synchronous XCTest selections report an actual
+`NSInternalInconsistencyException` for an unmatched undo-group end; four
+asynchronous selections abort after clear. Both plain and explicitly grouped
+variants were run with Foundation and the actual guarded manager. Two standalone
+Foundation variants, compiling no application or XCTest source, also terminate
+with the unmatched-group exception. This supports investigating the clear/group
+ordering; it does not prove an identical cause for the application abort.
+
+Apple documents [all-clear](https://developer.apple.com/documentation/foundation/undomanager/removeallactions())
+as clearing the stacks and reenabling registration, and
+[undo](https://developer.apple.com/documentation/foundation/undomanager/undo())
+as closing a group and invoking nested undo. Those API descriptions do not
+establish that the tested in-progress clear ordering is supported. Design a
+safe application-manager boundary from the measured evidence; preserve the
+failed client and avoid fabricated native groups or caught exceptions used to
+manufacture acceptance. No productive fix follows from these diagnostics alone.
+
+The readonly folder-preview Core service was subsequently adopted separately;
+its current evidence is in [the preview record](folder-replacement-preview.md).
+Native preview UI, recoverable multi-file Apply, private native-history
+integration and current packaged acceptance remain outstanding.

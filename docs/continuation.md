@@ -1016,3 +1016,23 @@ example-manifest omission/failure remains retained. See
 recoverable Apply and C-09 remain outstanding. Continue the native integration
 design, pre-publication/target-removal history controls and all remaining BUILD
 scope. No package or remote publication follows.
+
+The private recovery-read candidate passes four individually selected boundary
+clients, including actual all-clear after the original undo has returned. Its
+unchanged 104-case selection retains five historical failures. A new clear
+inside the original native undo aborts before that undo returns. Diagnostic
+markers establish that clear, subsequent native getters and the observer
+returned; they do not establish post-root refusal or fixture cleanup.
+
+Eight smaller controls distinguish four synchronous XCTest cases reporting an
+actual unmatched-group exception from four asynchronous cases aborting. Two
+standalone Foundation controls also throw the unmatched-group exception, with
+no application or XCTest code. Preserve these failures; design a safe manager
+clear boundary before changing productive source. Do not reconstruct native
+groups or claim this proves the application's exact abort cause.
+
+Parallel work now prepares the native readonly-preview worker and a document
+search-session adapter. Both remain test/API packets. Review requires separate
+preview settlement and publication fences, plus search cancellation reentry and
+valid sibling isolation controls. Root owns serial execution and integration;
+the full BUILD remains active.
