@@ -889,3 +889,13 @@ actual Save, reviewed catalogue/quit/native composition, productive native
 undo-history behavior and integrated application termination. See
 [manager evidence](verification/custom-language-manager-private.md).
 The full application scope remains active; code and packages are not yet adopted.
+
+The private catalogue/quit-owner/native-selection composition now passes all 12
+focused workflows and 157/165 in the full suite. Independent review confirms
+the eight failures are the existing seven native failures and viewer prerequisite;
+all original outcomes are preserved except the two expected selection repairs.
+Continue productive native history, pending-confirmation cancellation composition,
+actual application quit integration, public adoption and packaged desktop checks.
+The separate Save-cancellation test hit a fileprivate receipt access compile
+error before execution; its test-only byte observation is being corrected without
+changing the production API. See [manager evidence](verification/custom-language-manager-private.md).

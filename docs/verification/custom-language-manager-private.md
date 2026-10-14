@@ -490,3 +490,28 @@ Evidence bindings: baseline `160764/7848c3a6`, manager Source
 two-second wall-clock guarantee. Cancellation during actual Save, callback
 reentry, child/default dialogs, AppDelegate termination and packaged acceptance
 remain separate requirements. This correction is private and unadopted.
+
+## Combined catalogue, quit identity and native selection — 2026-10-14
+
+The reviewed private composition now runs the catalogue delivery, eight quit
+cases and two native selection cases together: all 12 focused methods pass.
+The full suite passes 157/165. Independent review confirms the complete native
+100-method and quit 63-method outcomes are preserved. Compared with the catalogue
+157-method run, its two earlier native selection failures now pass; the other
+155 outcomes are unchanged. Seven existing native failures and the viewer-key
+prerequisite remain, with exactly the previously recorded failure details.
+
+The composition keeps one catalogue owner and observer, the actual quit-owner
+identity and Save receipts, original managed callback installation, and native
+selection checks. All original tests remain; overlapping suites were combined
+as 165 unique methods. Production sources and read-only test assemblies are
+recorded separately. Pending-confirmation cancellation and productive history
+changes are separate candidates and are not part of this composition.
+
+Evidence bindings: composition manifest `77805/0ec39c26`, independent Source/Test
+review `10167/aff00f01`, focused actual `167291/5d55e3dc`, full actual
+`201334/10c1201a` and combined independent audit `7272/f5243e20`.
+Both runs bind 196 inputs, 194 objects and 230 artifacts with complete process
+receipts and no skips. This is hidden native integration evidence; public code
+adoption, actual application termination, productive history, default dialogs
+and packaged desktop acceptance remain required.
