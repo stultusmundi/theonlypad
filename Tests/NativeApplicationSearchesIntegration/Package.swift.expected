@@ -1,0 +1,13 @@
+// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(
+  name: "NativeApplicationSearchesAcceptance",
+  platforms: [.macOS(.v14)],
+  targets: [
+    .target(name: "PadCore"),
+    .target(name: "SearchExecution", dependencies: ["PadCore"]),
+    .target(name: "NativeApplicationSearchesComponent", dependencies: ["PadCore", "SearchExecution"]),
+    .testTarget(name: "NativeApplicationSearchesComponentTests", dependencies: ["NativeApplicationSearchesComponent", "PadCore", "SearchExecution"])
+  ],
+  swiftLanguageModes: [.v5]
+)

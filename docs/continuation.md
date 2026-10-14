@@ -1,3 +1,9 @@
+# Current coding checkpoint — 2026-10-15 (application search coordinator)
+
+Continue the full BUILD scope until completion or an explicit user stop. The application search coordinator and fixed public command are adopted locally: pure15 and Foundation10 pass against the final Source12296/Test37239. Current app/helper compilation and strict formatting/public checks pass. See [coordinator evidence](verification/native-application-searches.md). The separate accepted panel45 shares95 exact production originals; these counts do not describe one combined build. Native editor and AppDelegate search activation remain outstanding; the app still uses legacy Find.
+
+The first six native editor-binding tests now compile against the actual managed document graph and reproduce six missing-binding failures with22 ordinary assertions and0 unexpected errors. Eleven genuine fixtures completed normal cleanup, leaving their owned state directory empty. Later Source/navigation/transfer/re-entry horizons remain unentered. The unchanged tests now guide productive editor implementation in parallel with the app routing/quit contracts. Current desktop testing remains blocked by the locked session. Distribution artifacts are unchanged; no remote action occurred. This is a continuation checkpoint, not completion or a pause.
+
 # Current coding checkpoint — 2026-10-15
 
 Continue the full BUILD scope until completion or an explicit user stop. The native document-search panel component and public runner are now adopted locally: pure18 and fixed hidden45 (panel8/session21/owner16) pass, with independent source/actual review. The actual app/helper build and whole-source formatting/public checks pass. See [panel evidence](verification/document-search-native-panel.md). Editor binding, AppDelegate routing and default supervised-helper activation remain planned; this is a component checkpoint, not feature completeness.
