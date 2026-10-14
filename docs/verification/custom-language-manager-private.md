@@ -417,3 +417,26 @@ Evidence bindings: unchanged-source baseline `156032/3afdac37`, Source
 `6831/6ba0a12e`. The candidate remains private. Actual application termination,
 owner phase provenance, child/default dialogs and packaged desktop acceptance
 remain subsequent required work.
+
+## Exact quit-owner acquisition — 2026-10-14
+
+A real owner cancel/reprepare regression exposed an old application receipt
+becoming valid again and cancelling its successor. The private correction adds
+an owner-issued acquisition identity installed before notification and retired
+before cancellation notification. Matching compares the actual current owner
+slot; the phase Boolean remains presentation state. Legacy owner calls preserve
+their existing behavior. The application holds its original identity before the
+owner call and uses it for currentness and exact cancellation, including after
+a confirmed Save.
+
+The focused regression passes, and the full suite passes 62 of 63 methods.
+All prior 62 outcomes are preserved; all eight quit cases pass. The existing
+viewer-key prerequisite remains the sole failure. Evidence bindings: genuine
+baseline `157147/c287f89b`, manager `274803/49c8c3a4`, owner `21664/9edf3f5c`,
+independent Source review `7299/91c75e5c`, focused actual `156034/e3d8a7e1`,
+full actual `168870/a706ba1e` and independent audit `6943/7a2c8481`.
+
+This is direct real-owner transition evidence, not arbitrary notification
+reentry or complete application termination. Held-confirmation cancellation,
+child/default dialogs, actual AppDelegate integration and packaged desktop
+acceptance remain required. The correction is private and unadopted.

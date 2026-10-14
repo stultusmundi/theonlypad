@@ -862,3 +862,12 @@ Continue exact owner quit-acquisition identity, catalog delivery and retained-er
 presentation, then integrated application quit, native history, public adoption
 and packaged desktop acceptance. These are ongoing component checkpoints;
 the full application requirements remain active.
+
+Exact quit-owner acquisition now passes its real cancel/reprepare regression.
+The private full manager suite passes 62/63, preserving all prior outcomes;
+the viewer-key prerequisite remains outstanding. Continue held-confirmation
+cancellation and complete application quit integration. Catalog verification
+now reaches all three real fixtures with preserved document state; its genuine
+retained-catalog reload error is the remaining focused presentation failure.
+That bounded repair is under implementation. Native history and all other
+BUILD requirements remain active; no public code or package adoption is implied.
