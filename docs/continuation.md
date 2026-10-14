@@ -1,3 +1,9 @@
+# Current coding checkpoint — 2026-10-15
+
+Continue the full BUILD scope until completion or an explicit user stop. The native document-search panel component and public runner are now adopted locally: pure18 and fixed hidden45 (panel8/session21/owner16) pass, with independent source/actual review. The actual app/helper build and whole-source formatting/public checks pass. See [panel evidence](verification/document-search-native-panel.md). Editor binding, AppDelegate routing and default supervised-helper activation remain planned; this is a component checkpoint, not feature completeness.
+
+The corrected application search/quit baseline compiles and fails10 tests with74 ordinary assertions and0 unexpected errors. Its private producer is being implemented in parallel. The six native editor-binding contracts are being authored after reviewed qualification of historical access tails; old private writers/teardown are excluded. App command/quit API review remains separate. Current desktop execution is still blocked by the locked desktop; continue implementation and hidden tests while retaining the prepared package workflow. No remote push, merge, release or new packaged acceptance has occurred.
+
 Managed search lifetime update: two separately selected supported-owner tests pass, including native object release while a real search source remains retained and all five stale-source refusals. Independent actual reviews verify both runs. Earlier unsupported-fixture failures remain preserved. Continue supported source selection/replacement/undo tests and production search integration; see [lifetime evidence](verification/native-search-managed-lifetime.md).
 
 Managed runner update: the fixed coordinator now passes 73 unchanged native cases and 62 pure runner checks, with independent source/actual review. Continue actual preview desktop execution when unlocked and the remaining native ownership/undo acceptance work.
