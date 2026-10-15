@@ -18,7 +18,8 @@ jobs:
         run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/ci-core -- scripts/swift.sh test
       - name: Bounded core failure diagnostics
         if: ${{ failure() && steps.core.outcome == 'failure' }}
-        run: python3 scripts/ci_owned_failure_diagnostics.py
+        run: |
+          python3 scripts/ci_owned_failure_diagnostics.py || python3 scripts/ci_owned_failure_diagnostics.py --summary-only
       - name: CI failure diagnostic contract tests
         run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 30 --output .local/ci-diagnostics-test -- python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
       - name: Owned search test infrastructure

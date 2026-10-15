@@ -274,5 +274,64 @@ class CoreFailureDiagnosticsTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), 'ci-core diagnostics: usage\n')
 
 
+    def test_explicit_summary_mode_reports_numbers_when_git_roster_is_unavailable(self):
+        secret = 'SYNTHETIC_SUMMARY_PRIVATE_6e4a'
+        raw = (str(self.root / self.public[1]) + ':8:3: error: ' + secret + '\n'
+               + 'Executed 2 tests, with 3 failures (0 unexpected) in 0.1 seconds\n').encode()
+        self.receipt(stderr=raw)
+        before = {p.name: p.read_bytes() for p in self.capture.iterdir()}
+        from unittest import mock
+        with mock.patch.object(diagnostic, '__file__', str(self.root / 'scripts/ci_owned_failure_diagnostics.py')), \
+             mock.patch.object(diagnostic, 'tracked_public_roster', return_value=None) as roster:
+            strict_code, strict_lines = diagnostic.collect(self.root)
+            self.assertEqual((strict_code, strict_lines), (2,
+                ['ci-core diagnostics: unavailable', 'reason: invalid-roster']))
+            self.assertEqual(roster.call_count, 1, 'The strict control must reach roster refusal')
+            roster.reset_mock()
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = diagnostic.main(['--summary-only'])
+            self.assertEqual(code, 0, 'Explicit numerical summary must remain available without Git')
+            self.assertEqual(roster.call_count, 0, 'Summary mode must never query tracked files')
+        lines = output.getvalue().splitlines()
+        self.assertClosed(lines)
+        self.assertIn('xctest: tests=2 failures=3 unexpected=0', lines)
+        self.assertIn('signals: compiler=1 test=0 crash=0 dependency=0 permission=0 resource=0', lines)
+        self.assertEqual(len(lines), 6)
+        for forbidden in (secret, str(self.root), self.public[1], 'location:'):
+            self.assertNotIn(forbidden, output.getvalue())
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.capture.iterdir()})
+
+    def test_summary_mode_still_refuses_unsafe_and_inconsistent_fixed_evidence(self):
+        from unittest import mock
+        for failure in ('symlink', 'capture-count'):
+            with self.subTest(failure=failure):
+                # Retire the previous synthetic symlink even when its assertion failed.
+                if (self.capture / 'stderr.log').is_symlink():
+                    (self.capture / 'stderr.log').unlink()
+                self.receipt(stderr=b'error: SYNTHETIC_SUMMARY_SECRET\n')
+                expected = 'invalid-capture'
+                leaf = self.capture / 'stderr.log'
+                if failure == 'symlink':
+                    expected = 'unsafe-evidence'
+                    outside = self.root / 'outside-private.txt'
+                    outside.write_bytes(b'SYNTHETIC_OUTSIDE_SECRET')
+                    leaf.unlink(); leaf.symlink_to(outside)
+                else:
+                    status_path = self.capture / 'status.json'
+                    status = json.loads(status_path.read_text())
+                    status['captured']['stderr']['stored'] += 1
+                    status_path.write_text(json.dumps(status))
+                output = io.StringIO()
+                with mock.patch.object(diagnostic, '__file__', str(self.root / 'scripts/ci_owned_failure_diagnostics.py')), \
+                     mock.patch.object(diagnostic, 'tracked_public_roster', side_effect=AssertionError('No Git on refusal')), \
+                     contextlib.redirect_stdout(output):
+                    code = diagnostic.main(['--summary-only'])
+                self.assertEqual(code, 2)
+                self.assertEqual(output.getvalue(), 'ci-core diagnostics: unavailable\nreason: ' + expected + '\n')
+                self.assertClosed(output.getvalue().splitlines())
+                if leaf.is_symlink(): leaf.unlink()
+
+
 if __name__ == '__main__':
     unittest.main()

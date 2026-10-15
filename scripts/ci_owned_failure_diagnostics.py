@@ -625,11 +625,12 @@ def collect(root: Path, *, roster=None) -> tuple[int, list[str]]:
 
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
-    if args:
+    if args not in ([], ['--summary-only']):
         print('ci-core diagnostics: usage')
         return 2
     root = Path(__file__).resolve().parent.parent
-    code, lines = collect(root)
+    # This explicit fallback carries no file-location authority and never queries Git.
+    code, lines = collect(root, roster=lambda _root: ()) if args else collect(root)
     print('\n'.join(lines))
     return code
 

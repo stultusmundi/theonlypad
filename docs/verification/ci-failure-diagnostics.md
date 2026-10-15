@@ -70,3 +70,31 @@ Hosted Swift 6.1 verification of this patch remains pending. The observed
 locations explain a concrete compiler incompatibility; they do not establish
 that every reported compiler error or later CI step is resolved. Raw evidence
 remains ignored locally.
+
+
+## Explicit numeric fallback after roster refusal
+
+The compatibility checkpoint `b543cf3` was pushed and read back exactly. Hosted
+run [38763372775](https://github.com/stultusmundi/theonlypad/actions/runs/38763372775)
+then failed at the core step with natural exit1 and no watchdog timeout or
+truncation. Its diagnostic refused with `invalid-roster`. That reason does not
+identify the new core failure or establish a Git timeout; no hosted compiler or
+test pass is credited.
+
+The conditional diagnostic now tries the unchanged strict mode first, then the
+single explicit `--summary-only` option if strict diagnostics fail. This option
+uses the same fixed evidence reader and closed numeric report with an empty
+roster. It performs no Git query and emits no file locations. Unsafe or
+inconsistent evidence still refuses. No arbitrary file, command, source or
+filter argument is accepted. The original core command, failure outcome and
+workflow permissions are unchanged.
+
+The original thirteen tests remain intact. Two new methods first produced three
+ordinary failing assertions, with zero errors; the corrected source then passed
+all fifteen tests in the frozen layout and separately through public discovery.
+The new checks exercise a real strict roster refusal, zero Git calls in summary
+mode, numeric totals exceeding method counts, suppression of paths and synthetic
+secrets, and independent symlink/capture-count refusals. An unexecuted fixture
+cleanup defect was corrected before the recorded baseline; that candidate is
+retained privately. These finite checks establish diagnostic behavior only. The
+next hosted run must reveal the actual core outcome.
