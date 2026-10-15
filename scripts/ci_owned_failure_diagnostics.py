@@ -406,37 +406,43 @@ def _location_candidates(root, text):
     root_text = os.path.abspath(os.fspath(root)).rstrip(os.sep)
     absolute_prefix = root_text + os.sep
     result = []
-    for line in text.splitlines():
-        absolute_line = line.startswith(absolute_prefix)
-        relative_line = line.startswith(('Sources/', 'Tests/'))
-        if not absolute_line and not relative_line:
-            continue
-        for match in re.finditer(r':([0-9]{1,16})(?::([0-9]{1,16}))?:', line):
-            position = match.start()
-            if absolute_line:
-                if position < len(absolute_prefix):
+    lines = text.splitlines()
+    severity = re.compile(r'[ \t]*error:')
+    for error_first in (True, False):
+        for line in lines:
+            absolute_line = line.startswith(absolute_prefix)
+            relative_line = line.startswith(('Sources/', 'Tests/'))
+            if not absolute_line and not relative_line:
+                continue
+            for match in re.finditer(r':([0-9]{1,16})(?::([0-9]{1,16}))?:', line):
+                position = match.start()
+                if absolute_line:
+                    if position < len(absolute_prefix):
+                        continue
+                    prefix_length = position - len(absolute_prefix)
+                    if prefix_length > 4096:
+                        break
+                    relative = line[len(absolute_prefix):position]
+                else:
+                    if position > 4096:
+                        break
+                    relative = line[:position]
+                if not _safe_location_path(relative):
                     continue
-                prefix_length = position - len(absolute_prefix)
-                if prefix_length > 4096:
-                    break
-                relative = line[len(absolute_prefix):position]
-            else:
-                if position > 4096:
-                    break
-                relative = line[:position]
-            if not _safe_location_path(relative):
-                continue
-            line_number = int(match.group(1))
-            column = int(match.group(2)) if match.group(2) is not None else None
-            if not (1 <= line_number <= 1_000_000) or (column is not None and not 1 <= column <= 1_000_000):
-                continue
-            rendered = relative + ':' + str(line_number)
-            if column is not None:
-                rendered += ':' + str(column)
-            if rendered not in result:
-                result.append(rendered)
-                if len(result) >= 32:
-                    return result
+                line_number = int(match.group(1))
+                column = int(match.group(2)) if match.group(2) is not None else None
+                if not (1 <= line_number <= 1_000_000) or (column is not None and not 1 <= column <= 1_000_000):
+                    continue
+                # Match at the diagnostic boundary, without copying an unbounded suffix.
+                if (severity.match(line, match.end()) is not None) != error_first:
+                    continue
+                rendered = relative + ':' + str(line_number)
+                if column is not None:
+                    rendered += ':' + str(column)
+                if rendered not in result:
+                    result.append(rendered)
+                    if len(result) >= 32:
+                        return result
     return result
 
 

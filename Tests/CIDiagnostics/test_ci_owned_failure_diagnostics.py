@@ -332,6 +332,59 @@ class CoreFailureDiagnosticsTests(unittest.TestCase):
                 self.assertClosed(output.getvalue().splitlines())
                 if leaf.is_symlink(): leaf.unlink()
 
+    def test_error_location_after_warning_candidate_flood_is_prioritized(self):
+        # More than the existing 32-candidate cap: rank before that cap, not
+        # merely after the first four public locations have already been chosen.
+        warnings = ''.join(self.public[0] + ':' + str(number) + ':1: warning: '
+            + 'SYNTHETIC_WARNING_PRIVATE error: is only message text\n'
+            for number in range(1, 41)).encode('ascii')
+        failure = (str(self.root / self.public[1])
+            + ':77:4: error: SYNTHETIC_ERROR_PRIVATE\n').encode('utf-8')
+        self.receipt(stdout=warnings, stderr=failure)
+        before = {path.name: path.read_bytes() for path in self.capture.iterdir()}
+        code, lines = self.collect()
+        self.assertEqual(code, 0)
+        text = self.assertClosed(lines)
+        self.assertEqual([line for line in lines if line.startswith('location:')], [
+            'location: Tests/PadCoreTests/ObservedTests.swift:77:4',
+            'location: Sources/PadCore/Observed.swift:1:1',
+            'location: Sources/PadCore/Observed.swift:2:1',
+            'location: Sources/PadCore/Observed.swift:3:1',
+        ])
+        for forbidden in ('SYNTHETIC_WARNING_PRIVATE', 'SYNTHETIC_ERROR_PRIVATE', str(self.root)):
+            self.assertNotIn(forbidden, text)
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.capture.iterdir()})
+
+    def test_error_priority_is_stable_unique_exact_severity_and_public_only(self):
+        untracked = self.root / 'Tests/private-untracked-priority.swift'
+        untracked.write_text('// Synthetic untracked file, never location authority\n')
+        # An earlier warning for the same location must not prevent its later
+        # real error from being prioritized. Warning/note message text saying
+        # error: must not be mistaken for the location's diagnostic severity.
+        stdout = (self.public[0] + ':20:2: warning: duplicate location\n'
+            + self.public[1] + ':6:1: warning: SYNTHETIC_TRAP error: is message text\n'
+            + self.public[0] + ':7:1: note: SYNTHETIC_NOTE error: is message text\n').encode('ascii')
+        stderr = (str(untracked) + ':3:1: error: SYNTHETIC_UNTRACKED_PRIVATE\n'
+            + self.public[0] + ':20:2: error: SYNTHETIC_FIRST_PRIVATE\n'
+            + str(self.root / self.public[1]) + ':30:5: error: SYNTHETIC_SECOND_PRIVATE\n'
+            + self.public[0] + ':20:2: error: duplicate actual error\n').encode('utf-8')
+        self.receipt(stdout=stdout, stderr=stderr)
+        before = {path.name: path.read_bytes() for path in self.capture.iterdir()}
+        code, lines = self.collect()
+        self.assertEqual(code, 0)
+        text = self.assertClosed(lines)
+        self.assertEqual([line for line in lines if line.startswith('location:')], [
+            'location: Sources/PadCore/Observed.swift:20:2',
+            'location: Tests/PadCoreTests/ObservedTests.swift:30:5',
+            'location: Tests/PadCoreTests/ObservedTests.swift:6:1',
+            'location: Sources/PadCore/Observed.swift:7:1',
+        ])
+        self.assertEqual(sum(line == 'location: Sources/PadCore/Observed.swift:20:2'
+            for line in lines), 1)
+        for forbidden in ('SYNTHETIC_', 'private-untracked-priority', str(self.root)):
+            self.assertNotIn(forbidden, text)
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.capture.iterdir()})
+
 
 if __name__ == '__main__':
     unittest.main()

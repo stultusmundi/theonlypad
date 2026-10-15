@@ -98,3 +98,29 @@ secrets, and independent symlink/capture-count refusals. An unexecuted fixture
 cleanup defect was corrected before the recorded baseline; that candidate is
 retained privately. These finite checks establish diagnostic behavior only. The
 next hosted run must reveal the actual core outcome.
+
+
+## Error locations before warning locations
+
+Hosted run [38765750449](https://github.com/stultusmundi/theonlypad/actions/runs/38765750449)
+at `a7e08d4` still failed the core step. Strict diagnostics succeeded with complete
+captures; the summary-only fallback was unentered. Its last recognized XCTest
+summary was five tests and zero failures, and its coarse `error:` category count
+was one. Neither establishes a full-suite result or a compiler-specific cause.
+The first four reported locations were Undo callbacks; the projection omitted
+their severity and cannot identify the actual failing message.
+
+The candidate scanner now prioritizes exact immediate `error:` severity before
+its existing 32-candidate limit, preserving stable ordering and deduplication.
+Warning or note message text containing `error:` receives no priority. All
+tracked-file, descriptor, numeric and output-budget checks remain unchanged.
+The implementation matches severity at the existing string position without
+copying an unbounded suffix. It makes no general timing or memory claim.
+
+Two added regressions first failed ordinary location-order assertions while all
+fifteen prior tests passed. The reviewed correction passes all seventeen tests
+in the private layout and separately through public discovery. They cover a
+later error beyond forty warnings, repeated locations, exact severity, both
+capture streams and an untracked error file. No raw message is exposed. Error
+priority may reveal a later verified location; an error without an admissible
+file location can still leave the cause unknown. A new hosted run is required.
