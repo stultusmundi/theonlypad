@@ -109,52 +109,272 @@ final class GUIProbe: XCTestCase {
   }
 
   @MainActor
+  func testManagedDocumentSearchFromLaunchFileInlineReplacementUndoSaveQuitRelaunch() throws {
+    continueAfterFailure = false
+    let path = try XCTUnwrap(ProcessInfo.processInfo.environment["GUI_PROBE_APP_PATH"])
+    guard path.hasPrefix("/"), path.hasSuffix("/TheOnlyPad.app") else {
+      throw NSError(
+        domain: "DesktopUI.LaunchFile", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "An explicit test app copy is required"])
+    }
+    let state = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "TheOnlyPad-DesktopUI-LaunchFile-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: state, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    let original = "alpha 😀 e\u{301}\nalpha 😀 e\u{301}\nALPHA 😀 e\u{301}\n"
+    let changed = "alpha! 😀 e\u{301}\nalpha! 😀 e\u{301}\nALPHA 😀 e\u{301}\n"
+    let originalBytes = Data(original.utf8)
+    let changedBytes = Data(changed.utf8)
+    let input = state.appendingPathComponent("synthetic-managed-search.txt")
+    try originalBytes.write(to: input)
+    let app = XCUIApplication(url: URL(fileURLWithPath: path))
+    app.launchEnvironment["THEONLYPAD_STATE_DIRECTORY"] = state.path
+    app.launchArguments = [input.path]
+    XCTAssertEqual(app.launchArguments, [input.path])
+    addTeardownBlock {
+      await MainActor.run { self.closeFixture(app) }
+    }
+    app.launch()
+    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+    let initialEditor = app.textViews["Document text"].firstMatch
+    XCTAssertTrue(initialEditor.waitForExistence(timeout: 10))
+    let loaded = XCTNSPredicateExpectation(
+      predicate: NSPredicate { object, _ in
+        guard let actual = (object as? XCUIElement)?.value as? String else { return false }
+        return Data(actual.utf8) == originalBytes
+      }, object: initialEditor)
+    XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 15), .completed)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+    let selectedTab = app.windows.descendants(matching: .any).matching(
+      NSPredicate(
+        format: "identifier BEGINSWITH %@ AND label == %@",
+        "tab.select.", input.lastPathComponent + ", selected")
+    ).firstMatch
+    XCTAssertTrue(selectedTab.waitForExistence(timeout: 10))
+    let originalTabIdentifier = selectedTab.identifier
+    XCTAssertTrue(originalTabIdentifier.hasPrefix("tab.select."))
+    XCTAssertGreaterThan(originalTabIdentifier.count, "tab.select.".count)
+
+    // Observe ordinary command validation before the one physical Command-F.
+    let edit = app.menuBars.menuBarItems["Edit"]
+    XCTAssertTrue(edit.waitForExistence(timeout: 5))
+    edit.click()
+    let find = edit.menus.menuItems["Find and Replace…"]
+    XCTAssertTrue(find.waitForExistence(timeout: 5))
+    let findReady = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "enabled == true"), object: find)
+    XCTAssertEqual(XCTWaiter.wait(for: [findReady], timeout: 10), .completed)
+    app.typeKey(.escape, modifierFlags: [])
+    assertText(original, in: app)
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("f", modifierFlags: .command)
+    let panel = app.windows["Find and Replace"]
+    XCTAssertTrue(panel.waitForExistence(timeout: 10))
+    let query = panel.searchFields["Find text"]
+    let replacement = panel.textFields["Replacement text"]
+    let mode = panel.popUpButtons["Search mode"]
+    XCTAssertTrue(query.waitForExistence(timeout: 5))
+    XCTAssertTrue(replacement.waitForExistence(timeout: 5))
+    XCTAssertTrue(mode.waitForExistence(timeout: 5))
+    XCTAssertEqual(mode.value as? String, "Literal")
+    XCTAssertEqual(String(describing: try XCTUnwrap(panel.checkBoxes["Match case"].value)), "1")
+    XCTAssertEqual(String(describing: try XCTUnwrap(panel.checkBoxes["Whole word"].value)), "0")
+
+    func enter(_ value: String, into field: XCUIElement) {
+      XCTAssertTrue(field.isEnabled)
+      field.click()
+      app.typeKey("a", modifierFlags: .command)
+      field.typeText(value)
+      XCTAssertEqual(field.value as? String, value)
+    }
+    func expectStatus(_ value: String, timeout: TimeInterval = 10) {
+      XCTAssertTrue(panel.staticTexts[value].waitForExistence(timeout: timeout), value)
+    }
+    func expectInlineApproval() {
+      expectStatus("Replace 2 matches?")
+      let approve = panel.buttons["Replace"]
+      let reject = panel.buttons["Cancel Replacement"]
+      XCTAssertTrue(approve.waitForExistence(timeout: 5))
+      XCTAssertTrue(reject.waitForExistence(timeout: 5))
+      XCTAssertTrue(approve.isEnabled && approve.isHittable)
+      XCTAssertTrue(reject.isEnabled && reject.isHittable)
+      XCTAssertEqual(app.sheets.count, 0, "The managed replacement approval is inline")
+      XCTAssertFalse(panel.buttons["Next"].isEnabled)
+      XCTAssertFalse(panel.buttons["Previous"].isEnabled)
+    }
+
+    // Literal supplementary-Unicode search; navigation initially has no selected match.
+    enter("alpha 😀", into: query)
+    panel.buttons["Find All"].click()
+    expectStatus("2 matches")
+    XCTAssertTrue(panel.buttons["Next"].isEnabled)
+    XCTAssertTrue(panel.buttons["Previous"].isEnabled)
+    panel.buttons["Next"].click()
+    expectStatus("Match 1 of 2 (wrap enabled)", timeout: 5)
+    panel.buttons["Next"].click()
+    expectStatus("Match 2 of 2 (wrap enabled)", timeout: 5)
+    panel.buttons["Next"].click()
+    expectStatus("Match 1 of 2 (wrap enabled)", timeout: 5)
+    panel.buttons["Previous"].click()
+    expectStatus("Match 2 of 2 (wrap enabled)", timeout: 5)
+    assertText(original, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+
+    // ICU captures preserve the actual supplementary scalar and decomposed combining sequence.
+    mode.click()
+    let regex = app.menuItems["Regular expression (ICU)"]
+    XCTAssertTrue(regex.waitForExistence(timeout: 5))
+    regex.click()
+    XCTAssertEqual(mode.value as? String, "Regular expression (ICU)")
+    enter("(alpha) (😀) (e\\p{M})", into: query)
+    enter("$1! $2 $3", into: replacement)
+    panel.buttons["Find All"].click()
+    expectStatus("2 matches")
+    panel.buttons["Previous"].click()
+    expectStatus("Match 2 of 2 (wrap enabled)", timeout: 5)
+    panel.buttons["Next"].click()
+    expectStatus("Match 1 of 2 (wrap enabled)", timeout: 5)
+
+    panel.buttons["Replace All"].click()
+    expectInlineApproval()
+    assertText(original, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+    panel.buttons["Cancel Replacement"].click()
+    expectStatus("Idle", timeout: 5)
+    XCTAssertFalse(panel.buttons["Replace"].isHittable)
+    XCTAssertFalse(panel.buttons["Cancel Replacement"].isHittable)
+    assertText(original, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+
+    // Request a fresh replacement result after cancellation; approve only its actual inline UI.
+    panel.buttons["Replace All"].click()
+    expectInlineApproval()
+    panel.buttons["Replace"].click()
+    expectStatus("Replaced 2 matches.")
+    assertText(changed, in: app)
+    XCTAssertEqual(
+      try Data(contentsOf: input), originalBytes, "Replacement must not implicitly save")
+    panel.buttons[XCUIIdentifierCloseWindow].click()
+    let panelClosed = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: panel)
+    XCTAssertEqual(XCTWaiter.wait(for: [panelClosed], timeout: 5), .completed)
+    app.textViews["Document text"].firstMatch.click()
+    app.typeKey("z", modifierFlags: .command)
+    assertText(original, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+    app.typeKey("z", modifierFlags: [.command, .shift])
+    assertText(changed, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+    app.typeKey("s", modifierFlags: .command)
+    let saved = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in (try? Data(contentsOf: input)) == changedBytes }, object: nil
+    )
+    XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 10), .completed)
+    XCTAssertEqual(try Data(contentsOf: input), changedBytes)
+
+    // Quit with a newly attached, completed managed search still presented.
+    app.typeKey("f", modifierFlags: .command)
+    XCTAssertTrue(panel.waitForExistence(timeout: 10))
+    expectStatus("Idle", timeout: 5)
+    XCTAssertEqual(mode.value as? String, "Literal")
+    enter("alpha! 😀", into: query)
+    panel.buttons["Find All"].click()
+    expectStatus("2 matches")
+    assertText(changed, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), changedBytes)
+    // Public XCTest launch configuration affects only the next launch, not this running app.
+    app.launchArguments = []
+    XCTAssertTrue(app.launchArguments.isEmpty)
+    quitAndRelaunch(app)
+    XCTAssertFalse(app.windows["Find and Replace"].exists)
+    assertText(changed, in: app)
+    XCTAssertEqual(try Data(contentsOf: input), changedBytes)
+    let restoredTab = app.windows.descendants(matching: .any)
+      .matching(identifier: originalTabIdentifier).firstMatch
+    XCTAssertTrue(restoredTab.waitForExistence(timeout: 10))
+    XCTAssertEqual(restoredTab.label, input.lastPathComponent + ", selected")
+    let restoredValue = try XCTUnwrap(app.textViews["Document text"].firstMatch.value as? String)
+    XCTAssertEqual(Data(restoredValue.utf8), changedBytes)
+  }
+
+  @MainActor
   func testRegexReplaceConfirmationUndoAndSave() throws {
     let (app, state) = try fixture()
     let original = "alpha 😀\nalpha e\u{301}\nALPHA\n"
     let changed = "alpha! 😀\nalpha! e\u{301}\nALPHA\n"
     let input = state.appendingPathComponent("synthetic-search.txt")
-    try Data(original.utf8).write(to: input)
+    let originalBytes = Data(original.utf8)
+    let changedBytes = Data(changed.utf8)
+    try originalBytes.write(to: input)
     open(input, in: app)
     assertText(original, in: app)
     app.typeKey("f", modifierFlags: .command)
-    let panel = app.dialogs["Find and Replace"]
+    let panel = app.windows["Find and Replace"]
     XCTAssertTrue(panel.waitForExistence(timeout: 10))
     let query = panel.searchFields["Find text"]
     XCTAssertTrue(query.waitForExistence(timeout: 5))
     query.click()
     query.typeText("(alpha)")
     let mode = panel.popUpButtons["Search mode"]
+    XCTAssertTrue(mode.waitForExistence(timeout: 5))
     mode.click()
     let regexMode = app.menuItems["Regular expression (ICU)"]
     XCTAssertTrue(regexMode.waitForExistence(timeout: 5))
     regexMode.click()
     XCTAssertEqual(mode.value as? String, "Regular expression (ICU)")
     let matchCase = panel.checkBoxes["Match case"]
+    XCTAssertEqual(String(describing: try XCTUnwrap(matchCase.value)), "1")
+    matchCase.click()
     XCTAssertEqual(String(describing: try XCTUnwrap(matchCase.value)), "0")
     matchCase.click()
     XCTAssertEqual(String(describing: try XCTUnwrap(matchCase.value)), "1")
     let replacement = panel.textFields["Replacement text"]
+    XCTAssertTrue(replacement.waitForExistence(timeout: 5))
     replacement.click()
     replacement.typeText("$1!")
+
+    func expectStatus(_ value: String, timeout: TimeInterval = 10) {
+      XCTAssertTrue(panel.staticTexts[value].waitForExistence(timeout: timeout), value)
+    }
+    func expectInlineApproval() {
+      expectStatus("Replace 2 matches?")
+      let approve = panel.buttons["Replace"]
+      let reject = panel.buttons["Cancel Replacement"]
+      XCTAssertTrue(approve.waitForExistence(timeout: 5))
+      XCTAssertTrue(reject.waitForExistence(timeout: 5))
+      XCTAssertTrue(approve.isEnabled && approve.isHittable)
+      XCTAssertTrue(reject.isEnabled && reject.isHittable)
+      XCTAssertEqual(app.sheets.count, 0, "Managed approval is inline in the utility window")
+    }
+
     panel.buttons["Find All"].click()
-    XCTAssertTrue(panel.staticTexts["Match 1 of 2 (wrap enabled)"].waitForExistence(timeout: 10))
+    expectStatus("2 matches")
+    XCTAssertTrue(panel.buttons["Next"].isEnabled)
     panel.buttons["Next"].click()
-    XCTAssertTrue(panel.staticTexts["Match 2 of 2 (wrap enabled)"].waitForExistence(timeout: 5))
-    panel.buttons["Replace All…"].click()
-    let confirmation = app.dialogs.containing(
-      .staticText, identifier: "Replace 2 matches?"
-    ).firstMatch
-    XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
-    confirmation.buttons["Cancel"].click()
+    expectStatus("Match 1 of 2 (wrap enabled)", timeout: 5)
+    panel.buttons["Next"].click()
+    expectStatus("Match 2 of 2 (wrap enabled)", timeout: 5)
+
+    panel.buttons["Replace All"].click()
+    expectInlineApproval()
+    panel.buttons["Cancel Replacement"].click()
+    expectStatus("Idle")
+    XCTAssertFalse(panel.buttons["Replace"].isHittable)
+    XCTAssertFalse(panel.buttons["Cancel Replacement"].isHittable)
     assertText(original, in: app)
-    XCTAssertEqual(try Data(contentsOf: input), Data(original.utf8))
-    panel.buttons["Replace All…"].click()
-    XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
-    confirmation.buttons["Replace All"].click()
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+
+    panel.buttons["Replace All"].click()
+    expectInlineApproval()
+    panel.buttons["Replace"].click()
+    expectStatus("Replaced 2 matches.")
     assertText(changed, in: app)
-    XCTAssertEqual(try Data(contentsOf: input), Data(original.utf8))
+    XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+
     panel.buttons[XCUIIdentifierCloseWindow].click()
+    let closed = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: panel)
+    XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
     app.textViews["Document text"].firstMatch.click()
     app.typeKey("z", modifierFlags: .command)
     assertText(original, in: app)
@@ -162,10 +382,10 @@ final class GUIProbe: XCTestCase {
     assertText(changed, in: app)
     app.typeKey("s", modifierFlags: .command)
     let deadline = Date().addingTimeInterval(10)
-    while Date() < deadline && (try? Data(contentsOf: input)) != Data(changed.utf8) {
+    while Date() < deadline && (try? Data(contentsOf: input)) != changedBytes {
       RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     }
-    XCTAssertEqual(try Data(contentsOf: input), Data(changed.utf8))
+    XCTAssertEqual(try Data(contentsOf: input), changedBytes)
   }
 
   @MainActor

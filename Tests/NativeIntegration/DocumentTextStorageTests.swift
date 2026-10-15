@@ -99,6 +99,44 @@ final class DocumentTextStorageTests: XCTestCase {
     try exactNSString(oldBridge, expected)
     try exactNSString(oldObjC, expected)
     withExtendedLifetime((oldSwift, oldBridge, oldObjC)) {}
+    try retainedHeapSnapshotAcrossMutations()
+  }
+
+  @MainActor private static func retainedHeapSnapshotAcrossMutations() throws {
+    let ascii = String(repeating: "x", count: 65_524)
+    let original = "😀" + ascii + "e\u{301}🌍\n"
+    try require(Array(original.utf8).count == 65_536, "heap snapshot UTF8 size")
+    let value = try storage(original)
+    let oldSwift = value.string
+    let oldBridge = value.string as NSString
+    let selector = NSSelectorFromString("string")
+    try require(value.responds(to: selector), "actual fixed getter exists")
+    guard let borrowed = value.perform(selector),
+      let oldObjC = borrowed.takeUnretainedValue() as? NSString
+    else { throw ContractFailure(message: "actual fixed getter result type") }
+    let originalUTF8 = Array(original.utf8)
+    let originalUTF16 = Array(original.utf16)
+
+    func assertOldSnapshots(_ stage: String) throws {
+      try exact(oldSwift, original, "\(stage) retained Swift snapshot")
+      try require(Array(oldSwift.utf8) == originalUTF8, "\(stage) retained Swift UTF8 units")
+      try require(Array(oldSwift.utf16) == originalUTF16, "\(stage) retained Swift UTF16 units")
+      try exactNSString(oldBridge, originalUTF16)
+      try exactNSString(oldObjC, originalUTF16)
+    }
+
+    // This fixed same-length ASCII replacement occurs after the leading surrogate pair.
+    try replace(value, NSRange(location: 2, length: 1), "y")
+    let afterASCII = "😀y" + String(repeating: "x", count: 65_523) + "e\u{301}🌍\n"
+    try text(value, afterASCII)
+    try assertOldSnapshots("after ASCII mutation")
+
+    // Replace the original leading scalar by a one-unit scalar to test shifted UTF16 contents.
+    try replace(value, NSRange(location: 0, length: 2), "Q")
+    let afterLeadingScalar = "Qy" + String(repeating: "x", count: 65_523) + "e\u{301}🌍\n"
+    try text(value, afterLeadingScalar)
+    try assertOldSnapshots("after UTF16-length mutation")
+    withExtendedLifetime((value, oldSwift, oldBridge, oldObjC)) {}
   }
 
   @MainActor private static func mutableStringAdapter() throws {
