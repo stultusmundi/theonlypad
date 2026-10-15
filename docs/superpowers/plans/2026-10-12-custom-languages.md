@@ -12,7 +12,7 @@ candidates are not public implementation. Root owns serial compiler and GUI runs
 | 3 | Bounded cancellable literal lexer; Unicode, delimiter priority and span-limit fixtures | Implemented/tested core component: baseline26/90 ordinary failures; matched35/0, reviewed formatted adoption and public1122/0. Native highlighter remains planned |
 | 4 | Per-language indentation and comments; exact edits and reversible grouped undo | Core implemented/tested: authentic baseline45/99 ordinary failures; reviewed frozen54/0 with unchanged compatibility tests. Formatted application1143/0 and app/helper build pass; native admission/Tab/undo remain planned. See ../../verification/custom-language-editing.md |
 | 5 | Authoritative document selection and compatible persistence; missing-ID restoration, duplication, history and transfer | Core persistence implemented/tested: genuine baseline35/51 ordinary failures, reviewed unchanged35/0; formatted current public1159/0 and app/helper Werror build. Native propagation through seeds/model/history/duplication/reload/transfer/capture and visible missing-profile UI remain planned. See ../../verification/custom-language-session-codec.md |
-| 6 | Native catalog owner/highlighter/policy integration; current-generation admission and applied-setting receipts | Startup/read owner subdesign reviewed; fourteen private tests authored and statically reviewed, execution and production implementation pending. Full native activation/highlighter/policy acceptance remains outstanding. See 2026-10-15-native-language-catalog-loading.md |
+| 6 | Native catalog owner/highlighter/policy integration; current-generation admission and applied-setting receipts | Standalone read owner and fixed native regression adopted locally: fourteen tests pass; matching application candidate passes1,203 and app/helper build. See ../../verification/native-language-catalog-loading.md. Full native activation/highlighter/policy acceptance remains outstanding. See 2026-10-15-native-language-catalog-loading.md |
 | 7 | Working native manager/picker and command routing; real create/edit/delete/import/export and missing-profile presentation | Planned |
 | 8 | Complete frozen application integration, source review and existing regression suites | Planned |
 | 9 | Actual desktop workflow, packaged runtime, documentation and final requirement review | Planned |
@@ -39,9 +39,7 @@ The [standalone loading-owner design](../specs/2026-10-15-native-language-catalo
 and [execution plan](2026-10-15-native-language-catalog-loading.md) are reviewed.
 One retained off-main read publishes immutable catalog state; busy admission,
 observer reentry, failed reload and joined invalidation have explicit contracts.
-Fourteen behavioral tests are authored privately and statically reviewed; a reached failing baseline remains required before production implementation. This
-design adopts no incomplete private owner, activates no manager command, and
-establishes no new executed feature or desktop acceptance.
+The subsequent inert baseline reached thirteen failing methods/eighteen ordinary assertions. The completed standalone owner and retained command now pass fourteen formatted tests, with a separate matching application build and1,203-test pass. See [read-owner verification](../../verification/native-language-catalog-loading.md). Manager activation and desktop acceptance remain outstanding.
 
 ## Private manager progress checkpoint — 2026-10-13
 

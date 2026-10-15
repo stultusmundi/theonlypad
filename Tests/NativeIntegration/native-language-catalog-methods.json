@@ -1,0 +1,16 @@
+[
+  "testConstructionIsLazyAndInitiallyUnconfirmed",
+  "testDefaultStoreMissingCatalogPublishesGenuineEmptyReadWithoutCreatingDirectory",
+  "testDefaultStoreReadsPopulatedCatalogAndReadClosureRunsOffMain",
+  "testInitialLoadFailurePublishesFailureWithoutCatalogOrDiskMutation",
+  "testFailedReloadKeepsLastConfirmedPublicationAndRetryClearsOnlyOnSuccess",
+  "testBusyRequestsDoNotLaunchQueueOrNotify",
+  "testLoadingObserverReentryIsBusy",
+  "testLoadingObserverInvalidationPreventsActualReadLaunch",
+  "testTerminalObserverSuccessorRetainsItsWorkerAndState",
+  "testTerminalObserverInvalidationCannotPublishAgain",
+  "testInvalidationSuppressesLateSuccessAndFailure",
+  "testInvalidateAndWaitYieldsMainActorUntilActualWorkerCompletion",
+  "testCancelledJoinStillWaitsForActualWorkerCompletion",
+  "testRepeatedInvalidationJoinsAndObserverReplacementCannotReviveOwner"
+]
