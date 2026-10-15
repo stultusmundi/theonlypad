@@ -35,6 +35,8 @@ jobs:
         run: scripts/test-document-search.sh
       - name: Managed document-search application routing
         run: scripts/test-document-search-app.sh
+      - name: Managed document search with same-source helper
+        run: scripts/test-document-search-real-helper.sh
       - name: Readonly folder preview native component
         run: scripts/test-folder-replacement-preview.sh
       - name: Fixed search helper protocol integration

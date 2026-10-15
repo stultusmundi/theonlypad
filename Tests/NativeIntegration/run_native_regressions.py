@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
+import stat
 import sys
 import tempfile
 
@@ -23,7 +25,8 @@ SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
         'managed-documents':('AppDelegateDocumentsTests','managed-documents-tests'),
         'document-search':('DocumentSearchEditorIntegrationTests','document-search-integration'),
         'document-search-app':('DocumentSearchAppRoutingTests','document-search-app-integration'),
-        'document-text-storage':('DocumentTextStorageTests','document-text-storage-integration')}
+        'document-text-storage':('DocumentTextStorageTests','document-text-storage-integration'),
+        'document-search-real-helper':('DocumentSearchRealHelperIntegrationTests','document-search-real-helper-integration')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
     'NativeDocumentSeed','EditorDocumentWorkspaceAdapter','WorkspaceDocumentRegistryTypes',
     'EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost',
@@ -269,6 +272,367 @@ DOCUMENT_TEXT_STORAGE_METHODS=(
 DOCUMENT_TEXT_STORAGE_CLASSES=('DocumentTextStorageTests',)
 DOCUMENT_TEXT_STORAGE_SELECTOR='DocumentTextStorageTests'
 
+REAL_HELPER_PACKAGE='// swift-tools-version: 6.0\nimport PackageDescription\n\nlet package = Package(\n  name: "NativeRouting", platforms: [.macOS(.v14)],\n  products: [.executable(name: "PadSearchWorker", targets: ["PadSearchWorker"])],\n  targets: [\n    .target(name: "PadCore"), .target(name: "SearchExecution", dependencies: ["PadCore"]),\n    .target(name: "PadSearchWorkerRuntime", dependencies: ["PadCore", "SearchExecution"]),\n    .executableTarget(\n      name: "PadSearchWorker", dependencies: ["PadSearchWorkerRuntime", "SearchExecution"]),\n    .target(name: "NativeRouting", dependencies: ["PadCore", "SearchExecution"]),\n    .testTarget(\n      name: "NativeRoutingTests", dependencies: ["NativeRouting", "PadCore", "SearchExecution"]),\n  ], swiftLanguageModes: [.v5])\n'
+
+REAL_HELPER_CLASS='DocumentSearchRealHelperIntegrationTests'
+REAL_HELPER_METHODS=(
+    'testRealBundledHelperFindReplaceUndoAndApplicationJoinedQuit',
+    'testRealHelperMalformedRegexRefusesAndSamePanelCanRetryThenJoinedQuit',
+    'testRealHelperReplacementApprovalRefusesAfterNativeEditUndoABAThenJoinedQuit')
+REAL_HELPER_STAGES=('test-happy','test-invalid-pattern','test-stale-approval')
+REAL_HELPER_MODULES=('PadCore','SearchExecution','PadSearchWorkerRuntime','PadSearchWorker',
+    'NativeRouting','NativeRoutingTests','NativeRoutingPackageTests')
+REAL_HELPER_WORKER_MODULES=REAL_HELPER_MODULES[:4]
+REAL_HELPER_TEST_MODULES=('PadCore','SearchExecution','NativeRouting','NativeRoutingTests','NativeRoutingPackageTests')
+
+def real_helper_methods(data):
+    """Fixed class plus same-file extension census, not a general Swift parser."""
+    owner=None;classes=[];methods=[]
+    pattern=r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bextension\s+(\w+)\s*\{|\bfunc\s+(test\w+)\s*\('
+    for match in re.finditer(pattern,data.decode()):
+        if match.group(1):
+            owner=match.group(1);classes.append(owner)
+        elif match.group(2): owner=match.group(2)
+        else:
+            if owner!=REAL_HELPER_CLASS: raise ValueError('real helper method outside exact class')
+            methods.append((owner,match.group(3)))
+    expected=[(REAL_HELPER_CLASS,name) for name in REAL_HELPER_METHODS]
+    if classes!=[REAL_HELPER_CLASS] or methods!=expected:
+        raise ValueError('fixed real helper method census changed')
+    return methods
+
+def real_helper_success(text,selected_method):
+    if selected_method not in REAL_HELPER_METHODS: raise ValueError('foreign helper selection')
+    if re.search(r'(?m)^.*(?:error:|caught error:|warning:)|\b[1-9][0-9]* unexpected\b',text):
+        raise ValueError('real helper error or warning record')
+    counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+    if not counts or any(pair!=(1,0) for pair in counts): raise ValueError('incomplete real helper summary')
+    terminal=re.findall(r"^Test Case '([^']+)' (passed|failed|skipped)(?: \(.*\)\.)?$",text,re.M)
+    expected='-[NativeRoutingTests.'+REAL_HELPER_CLASS+' '+selected_method+']'
+    if terminal!=[(expected,'passed')]: raise ValueError('real helper exact case did not pass once')
+    if len(re.findall(r"^Test Suite '"+REAL_HELPER_CLASS+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+        raise ValueError('real helper class did not pass once')
+    return dict(tests=1,failures=0)
+
+def real_helper_owned_path(run,path,directory=False):
+    """Owned canonical paths only; no symlink ancestors or special file reads."""
+    run,path=Path(run),Path(path)
+    if not run.is_absolute() or not path.is_absolute() or '..' in path.parts or not path.is_relative_to(run):
+        raise ValueError('real helper path escapes owned run')
+    cursor=run
+    for part in (None,*path.relative_to(run).parts):
+        if part is not None: cursor=cursor/part
+        try: value=cursor.lstat()
+        except FileNotFoundError as error:
+            raise ValueError('missing owned real helper path: '+str(cursor)) from error
+        if stat.S_ISLNK(value.st_mode) or value.st_uid!=os.getuid(): raise ValueError('unowned or symlink path')
+        if cursor!=path or directory:
+            if not stat.S_ISDIR(value.st_mode): raise ValueError('owned directory required')
+        elif not stat.S_ISREG(value.st_mode): raise ValueError('owned regular file required')
+    return path
+
+def real_helper_artifact(run,path):
+    path=real_helper_owned_path(run,path)
+    before=path.stat();data=read_real(run,path);after=path.stat()
+    signature=lambda s:(s.st_dev,s.st_ino,s.st_uid,s.st_mode,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+    if signature(before)!=signature(after): raise ValueError('artifact changed during read')
+    return dict(path=path.relative_to(run).as_posix(),bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),
+        device=after.st_dev,inode=after.st_ino,uid=after.st_uid,mode=after.st_mode&0o777)
+
+def real_helper_json(run,path):
+    real_helper_owned_path(run,path)
+    data=read_real(run,path)
+    if len(data)>8*1024*1024: raise ValueError('compiler metadata exceeds bound')
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result: raise ValueError('duplicate compiler JSON key')
+            result[key]=value
+        return result
+    return json.loads(data,object_pairs_hook=unique)
+
+def validate_real_helper_compiler_graph(run,binary,manifest):
+    """Actual compiler maps and exact two-product unions, before artifact authority."""
+    run,binary=Path(run),Path(binary)
+    real_helper_owned_path(run,binary,directory=True)
+    if not binary.is_relative_to(run/'Build'): raise ValueError('compiler products outside owned Build')
+    verify(run,manifest)
+    description=real_helper_json(run,binary/'description.json')
+    commands=description.get('swiftCommands')
+    if not isinstance(commands,dict) or len(commands)!=len(REAL_HELPER_MODULES):
+        raise ValueError('unexpected compiler module census')
+    groups={}
+    for command in commands.values():
+        if not isinstance(command,dict): raise ValueError('invalid compiler group')
+        module=command.get('moduleName')
+        if module not in REAL_HELPER_MODULES or module in groups: raise ValueError('foreign or duplicate module')
+        groups[module]=command
+    if set(groups)!=set(REAL_HELPER_MODULES): raise ValueError('missing compiler module')
+    paths={binary/'description.json'};module_rows=[];memberships=[];objects={};package_names=[]
+    for module in REAL_HELPER_MODULES:
+        command=groups[module]
+        if module=='NativeRoutingPackageTests':
+            expected=[binary/'NativeRoutingPackageTests.derived/runner.swift']
+        else:
+            prefix='Package/'+('Tests/' if module=='NativeRoutingTests' else 'Sources/')+module+'/'
+            expected=sorted(run/row['frozen'] for row in manifest['generated']
+                if row['frozen'].startswith(prefix) and row['frozen'].endswith('.swift'))
+        if not expected or len(set(expected))!=len(expected): raise ValueError('missing or repeated frozen module Source')
+        declared=command.get('sources')
+        if not isinstance(declared,list) or any(type(x) is not str for x in declared): raise ValueError('invalid compiler Sources')
+        if len(set(declared))!=len(declared) or sorted(declared)!=sorted(map(str,expected)):
+            raise ValueError('compiler Sources differ from frozen membership')
+        for source in expected: real_helper_owned_path(run,source)
+        object_paths=[binary/(module+'.build')/(source.name+'.o') for source in expected]
+        if len(set(object_paths))!=len(object_paths): raise ValueError('ambiguous Source basenames')
+        declared_objects=command.get('objects')
+        if not isinstance(declared_objects,list) or any(type(x) is not str for x in declared_objects):
+            raise ValueError('invalid compiler objects')
+        if len(set(declared_objects))!=len(declared_objects) or sorted(declared_objects)!=sorted(map(str,object_paths)):
+            raise ValueError('compiler object pairing differs')
+        actual_objects=sorted((binary/(module+'.build')).rglob('*.o'))
+        if actual_objects!=sorted(object_paths): raise ValueError('unknown or missing module object')
+        for path in object_paths: real_helper_owned_path(run,path)
+        filelist=binary/(module+'.build/sources');outputmap=binary/(module+'.build/output-file-map.json')
+        module_output=binary/'Modules'/(module+'.swiftmodule')
+        if (command.get('fileList')!=str(filelist) or command.get('outputFileMapPath')!=str(outputmap)
+            or command.get('moduleOutputPath')!=str(module_output)):
+            raise ValueError('compiler output path changed')
+        real_helper_owned_path(run,filelist)
+        listed=shlex.split(read_real(run,filelist).decode())
+        if len(listed)!=len(set(listed)) or sorted(listed)!=sorted(declared): raise ValueError('compiler filelist differs')
+        mapping=real_helper_json(run,outputmap)
+        if not isinstance(mapping,dict) or set(mapping)!={*declared,''}: raise ValueError('compiler outputmap Source census differs')
+        for source,obj in zip(expected,object_paths):
+            value=mapping[str(source)]
+            if not isinstance(value,dict) or value.get('object')!=str(obj): raise ValueError('compiler Source/object map differs')
+        arguments=command.get('otherArguments')
+        if not isinstance(arguments,list) or any(type(x) is not str for x in arguments): raise ValueError('invalid compiler flags')
+        def operand(flag):
+            if arguments.count(flag)!=1 or arguments.index(flag)+1>=len(arguments): raise ValueError('missing/duplicate compiler operand')
+            return arguments[arguments.index(flag)+1]
+        if operand('-target')!=platform.machine()+'-apple-macosx14.0' or arguments.count('-warnings-as-errors')!=1:
+            raise ValueError('compiler target or Werror changed')
+        if module!='NativeRoutingPackageTests' or '-swift-version' in arguments:
+            if operand('-swift-version')!='5': raise ValueError('authored compiler language changed')
+        package_name=operand('-package-name')
+        if not re.fullmatch(r'[A-Za-z0-9_]{1,128}',package_name): raise ValueError('invalid compiler package identity')
+        package_names.append(package_name)
+        companions=[binary/'Modules'/(module+suffix) for suffix in ('.swiftmodule','.swiftdoc','.swiftsourceinfo','.abi.json')]
+        if sorted((binary/'Modules').glob(module+'.*'))!=sorted(companions): raise ValueError('module companion membership differs')
+        for path in companions: real_helper_owned_path(run,path)
+        paths.update([*object_paths,filelist,outputmap,*companions])
+        if module=='NativeRoutingPackageTests':
+            derived=binary/'NativeRoutingPackageTests.derived'
+            if sorted(derived.rglob('*.swift'))!=expected: raise ValueError('generated entry Source membership differs')
+            paths.update(expected)
+            memberships.append(dict(root=derived.relative_to(run).as_posix(),pattern='*.swift',
+                paths=[x.relative_to(run).as_posix() for x in expected]))
+        objects[module]=object_paths
+        memberships.append(dict(root=(binary/(module+'.build')).relative_to(run).as_posix(),pattern='*.o',
+            paths=sorted(x.relative_to(run).as_posix() for x in object_paths)))
+        module_rows.append(dict(module=module,sources=list(map(str,expected)),objects=list(map(str,object_paths)),
+            generatedEntry=module=='NativeRoutingPackageTests',swiftVersionExplicit='-swift-version' in arguments))
+    if len(set(package_names))!=1: raise ValueError('compiler package identity disagreement')
+    all_objects=sorted(x for values in objects.values() for x in values)
+    if sorted(binary.rglob('*.o'))!=all_objects: raise ValueError('foreign compiled object outside fixed modules')
+    memberships.append(dict(root=binary.relative_to(run).as_posix(),pattern='*.o',
+        paths=[x.relative_to(run).as_posix() for x in all_objects]))
+    expected_modules={binary/'Modules'/(module+suffix) for module in REAL_HELPER_MODULES
+        for suffix in ('.swiftmodule','.swiftdoc','.swiftsourceinfo','.abi.json')}
+    if set((binary/'Modules').iterdir())!=expected_modules: raise ValueError('foreign module companion')
+    memberships.append(dict(root=(binary/'Modules').relative_to(run).as_posix(),pattern='*',
+        paths=sorted(x.relative_to(run).as_posix() for x in expected_modules)))
+    links=[]
+    for product,modules in (('PadSearchWorker',REAL_HELPER_WORKER_MODULES),('NativeRoutingPackageTests',REAL_HELPER_TEST_MODULES)):
+        path=binary/(product+'.product/Objects.LinkFileList');real_helper_owned_path(run,path)
+        members=shlex.split(read_real(run,path).decode())
+        expected=[str(obj) for module in modules for obj in objects[module]]
+        if len(set(members))!=len(members) or sorted(members)!=sorted(expected): raise ValueError('product link union differs')
+        paths.add(path);links.append(dict(product=product,objects=members))
+    helper=binary/'PadSearchWorker';bundle=binary/'NativeRoutingPackageTests.xctest'
+    test_binary=bundle/'Contents/MacOS/NativeRoutingPackageTests'
+    products=description.get('builtTestProducts')
+    if (not isinstance(products,list) or len(products)!=1 or not isinstance(products[0],dict)
+        or products[0].get('binaryPath')!=str(test_binary) or products[0].get('packagePath')!=str(run/'Package')
+        or products[0].get('productName')!='NativeRoutingPackageTests'):
+        raise ValueError('built Test product differs')
+    real_helper_owned_path(run,helper);real_helper_owned_path(run,bundle,directory=True);real_helper_owned_path(run,test_binary)
+    leaves=sorted(x for x in bundle.rglob('*') if not x.is_dir())
+    if len(leaves)!=4: raise ValueError('unexpected Test bundle leaf count')
+    symbol=bundle/'Contents/MacOS/NativeRoutingPackageTests.dSYM/Contents'
+    required={test_binary,symbol/'Info.plist',symbol/'Resources/DWARF/NativeRoutingPackageTests'}
+    remainder=set(leaves)-required
+    if not required.issubset(leaves) or len(remainder)!=1: raise ValueError('Test bundle layout differs')
+    relocation=next(iter(remainder))
+    if re.fullmatch(r'Resources/Relocations/(?:aarch64|x86_64)/NativeRoutingPackageTests.yml',relocation.relative_to(symbol).as_posix()) is None:
+        raise ValueError('Test bundle relocation differs')
+    for path in leaves: real_helper_owned_path(run,path)
+    paths.update([helper,*leaves])
+    memberships.append(dict(root=bundle.relative_to(run).as_posix(),pattern='files',
+        paths=sorted(x.relative_to(run).as_posix() for x in leaves)))
+    return dict(paths=sorted(x.relative_to(run).as_posix() for x in paths),modules=module_rows,links=links,
+        membership=memberships,helper=helper.relative_to(run).as_posix(),packageName=package_names[0],
+        generatedEntry='NativeRoutingPackageTests.derived/runner.swift',
+        sharedObjectCount=len(set(links[0]['objects'])&set(links[1]['objects'])))
+
+def capture_real_helper_build(run,binary_directory,source_manifest_hash):
+    run,binary=Path(run),Path(binary_directory)
+    if digest(run/'sources.json')!=source_manifest_hash: raise ValueError('source authority changed before capture')
+    manifest=real_helper_json(run,run/'sources.json')
+    proof=validate_real_helper_compiler_graph(run,binary,manifest)
+    artifacts=[real_helper_artifact(run,run/path) for path in proof['paths']]
+    if validate_real_helper_compiler_graph(run,binary,manifest)!=proof: raise ValueError('compiler graph changed during capture')
+    record=dict(sourceManifestSHA256=source_manifest_hash,helper=proof['helper'],artifacts=artifacts,
+        membership=proof['membership'],compiler=proof['modules'],links=proof['links'],
+        packageName=proof['packageName'],sharedObjectCount=proof['sharedObjectCount'],
+        generatedEntryQualification='generated runner has separately recorded explicit-language flag; authored modules Swift5')
+    helper_row=next(x for x in artifacts if x['path']==record['helper'])
+    if not helper_row['mode']&0o111: raise ValueError('built helper is not executable')
+    path=run/'build-inputs.json'
+    with path.open('x') as stream: stream.write(json.dumps(record,indent=2)+'\n')
+    path.chmod(0o600)
+    verify_real_helper_build(run,record,digest(path))
+    return record
+
+def verify_real_helper_build(run,record,expected_record_hash):
+    run=Path(run)
+    path=run/'build-inputs.json'
+    if digest(real_helper_owned_path(run,path))!=expected_record_hash or real_helper_json(run,path)!=record:
+        raise ValueError('original build authority changed')
+    if digest(real_helper_owned_path(run,run/'sources.json'))!=record['sourceManifestSHA256']:
+        raise ValueError('frozen source authority changed')
+    rows=record['artifacts']
+    if not isinstance(rows,list) or not rows or len({row['path'] for row in rows})!=len(rows):
+        raise ValueError('ambiguous artifact authority')
+    if sum(row['path']==record['helper'] for row in rows)!=1: raise ValueError('missing exact helper authority')
+    for row in rows:
+        path=run/row['path']
+        if not path.is_relative_to(run/'Build') or real_helper_artifact(run,path)!=row:
+            raise ValueError('build artifact changed')
+    for item in record.get('membership',[]):
+        root=real_helper_owned_path(run,run/item['root'],directory=True)
+        if item['pattern']=='files': actual=sorted(x for x in root.rglob('*') if not x.is_dir())
+        elif item['pattern'] in ('*.o','*.swift'): actual=sorted(root.rglob(item['pattern']))
+        elif item['pattern']=='*': actual=sorted(root.iterdir())
+        else: raise ValueError('invalid artifact membership shape')
+        if [x.relative_to(run).as_posix() for x in actual]!=item['paths']:
+            raise ValueError('artifact membership changed')
+        for path in actual: real_helper_owned_path(run,path)
+
+def real_helper_private_directory(run,path):
+    path=Path(path)
+    if not path.is_relative_to(run) or '..' in path.parts: raise ValueError('private path escape')
+    if not path.exists():
+        real_helper_private_directory(run,path.parent)
+        path.mkdir(mode=0o700)
+    real_helper_owned_path(run,path,directory=True)
+    if path.stat().st_mode&0o777!=0o700: raise ValueError('private directory must be0700')
+    return path
+
+def stage_real_helper(run,stage_name,build_record):
+    run=Path(run)
+    if stage_name not in REAL_HELPER_STAGES: raise ValueError('foreign helper stage')
+    # The caller retains the earlier digest; equality here never replaces that caller check.
+    if real_helper_json(run,run/'build-inputs.json')!=build_record: raise ValueError('staging authority differs')
+    source=run/build_record['helper']
+    rows=[row for row in build_record['artifacts'] if row['path']==build_record['helper']]
+    if len(rows)!=1 or real_helper_artifact(run,source)!=rows[0]: raise ValueError('staging original helper changed')
+    state=real_helper_private_directory(run,run/'State'/stage_name)
+    if list(state.iterdir()): raise ValueError('stage State not empty')
+    destination=state/'RealHelperFixture.app/Contents/Helpers/PadSearchWorker'
+    real_helper_private_directory(run,destination.parent)
+    data=read_real(run,source)
+    fd=os.open(destination,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o700)
+    with os.fdopen(fd,'wb') as stream: stream.write(data)
+    destination.chmod(0o755)
+    copied=real_helper_artifact(run,destination)
+    if copied['sha256']!=rows[0]['sha256'] or copied['bytes']!=rows[0]['bytes'] or real_helper_artifact(run,source)!=rows[0]:
+        raise ValueError('helper copy changed')
+    directories=[]
+    for path in (state,state/'RealHelperFixture.app',state/'RealHelperFixture.app/Contents',destination.parent):
+        s=path.stat();directories.append(dict(path=path.relative_to(run).as_posix(),device=s.st_dev,inode=s.st_ino,uid=s.st_uid,mode=s.st_mode&0o777))
+    record=dict(stage=stage_name,buildManifestSHA256=digest(run/'build-inputs.json'),original=rows[0],copied=copied,directories=directories)
+    folder=real_helper_private_directory(run,run/'HelperStages');path=folder/(stage_name+'.json')
+    with path.open('x') as stream: stream.write(json.dumps(record,indent=2)+'\n')
+    path.chmod(0o600)
+    result=dict(stage=stage_name,record=record,recordSHA256=digest(path))
+    verify_real_helper_fixture(run,result)
+    return result
+
+def verify_real_helper_fixture(run,stage_record):
+    run=Path(run);name=stage_record['stage']
+    if name not in REAL_HELPER_STAGES: raise ValueError('unknown staged helper')
+    path=run/'HelperStages'/(name+'.json')
+    if digest(real_helper_owned_path(run,path))!=stage_record['recordSHA256'] or real_helper_json(run,path)!=stage_record['record']:
+        raise ValueError('helper stage authority changed')
+    record=stage_record['record']
+    if digest(real_helper_owned_path(run,run/'build-inputs.json'))!=record['buildManifestSHA256']:
+        raise ValueError('helper build authority changed after staging')
+    for kind in ('original','copied'):
+        if real_helper_artifact(run,run/record[kind]['path'])!=record[kind]: raise ValueError('staged helper bytes or identity changed')
+    expected=set()
+    for row in record['directories']:
+        directory=real_helper_owned_path(run,run/row['path'],directory=True);s=directory.stat()
+        if dict(path=row['path'],device=s.st_dev,inode=s.st_ino,uid=s.st_uid,mode=s.st_mode&0o777)!=row or row['mode']!=0o700:
+            raise ValueError('staged directory identity changed')
+        expected.add(directory)
+    state=run/'State'/name
+    expected.remove(state);expected.add(run/record['copied']['path'])
+    if set(state.rglob('*'))!=expected: raise ValueError('unsettled fixture or foreign State content retained')
+
+
+def execute_real_helper_stages(run,args,watchdog_main):
+    run=Path(run);manifest=real_helper_json(run,run/'sources.json');manifest_hash=digest(run/'sources.json')
+    result=dict(exit=125,suite=args.suite,stages=[],results={},sourceManifestSHA256=manifest_hash,
+        buildProvenance='same frozen Package builds actual worker and XCTest; three separate fixed fresh-state processes')
+    authority=None;authority_hash=None
+    def check():
+        verify(run,manifest)
+        if digest(run/'sources.json')!=manifest_hash: raise ValueError('source manifest changed')
+        if authority is not None: verify_real_helper_build(run,authority,authority_hash)
+    def stage(name,command,timeout,method=None):
+        check();state=real_helper_private_directory(run,run/'State'/name)
+        temporary=real_helper_private_directory(run,run/'Temporary'/name)
+        staged=stage_real_helper(run,name,authority) if method is not None else None
+        command=['/usr/bin/env','THEONLYPAD_STATE_DIRECTORY='+str(state),'TMPDIR='+str(temporary)+'/',*map(str,command)]
+        output=run/'Stages'/name
+        code=watchdog_main(['--timeout',str(timeout),'--output',str(output),'--',*command])
+        result['stages'].append(dict(name=name,exit=code,receipt=str((output/'status.json').relative_to(run))))
+        check()
+        if type(code) is not int or not receipt_success(output,command,code): raise ValueError('incomplete direct stage receipt')
+        if code!=0: raise StageFailure(code)
+        stdout=(output/'stdout.log').read_text(errors='replace');stderr=(output/'stderr.log').read_text(errors='replace')
+        text=stdout+stderr
+        if re.search(r'(?im)^.*(?:warning:|error:)',text): raise ValueError('stage warning or error')
+        if method is not None:
+            result['results'][method]=real_helper_success(text,method)
+            verify_real_helper_fixture(run,staged)
+            result.setdefault('helperStages',[]).append(staged)
+        return stdout
+    try:
+        stage('toolchain',['/usr/bin/xcrun','swift','--version'],30)
+        swift=run/'Original/scripts/swift.sh';common=['--package-path',run/'Package','--scratch-path',run/'Build']
+        stage('build',[swift,'build',*common,'--build-tests','-Xswiftc','-warnings-as-errors'],180)
+        output=stage('bin-path',[swift,'build',*common,'--show-bin-path'],30)
+        lines=output.strip().splitlines()
+        if len(lines)!=1: raise ValueError('ambiguous product directory')
+        binary=Path(lines[0]);real_helper_owned_path(run,binary,directory=True)
+        if not binary.is_relative_to(run/'Build'): raise ValueError('product outside owned Build')
+        authority=capture_real_helper_build(run,binary,manifest_hash);authority_hash=digest(run/'build-inputs.json')
+        result['buildManifestSHA256']=authority_hash
+        for name,method in zip(REAL_HELPER_STAGES,REAL_HELPER_METHODS):
+            stage(name,['/usr/bin/xcrun','xctest','-XCTest','NativeRoutingTests.'+REAL_HELPER_CLASS+'/'+method,
+                binary/'NativeRoutingPackageTests.xctest'],180,method)
+        check();result['exit']=0
+    except StageFailure as error: result['exit']=error.code if 0<error.code<256 else 125
+    except (OSError,ValueError,TypeError,KeyError,AttributeError) as error:
+        result['failure']=type(error).__name__;result['exit']=125
+    finally: (run/'status.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps(result),flush=True)
+    return result['exit']
+
+
 def document_search_methods(data):
     """Exact fixed fixture census; not a general Swift parser."""
     owner=None;classes=[];methods=[]
@@ -452,11 +816,19 @@ def discover(root,suite,prebuilt):
         paths.add(root/'scripts/test-document-search-app.sh')
         paths.add(root/'Tests/NativeIntegration/test_document_search_app_runner.py')
         paths.update(root/'Tests/NativeIntegration'/name for name in DOCUMENT_SEARCH_APP_ACCESS.values())
+    if suite=='document-search-real-helper':
+        paths.add(root/'scripts/test-document-search-real-helper.sh')
+        paths.add(root/'Tests/NativeIntegration/test_document_search_real_helper_runner.py')
+        paths.add(root/'Tests/NativeIntegration/expected-Package.swift')
+        paths.update(root/'Tests/NativeIntegration'/name for name in DOCUMENT_SEARCH_APP_ACCESS.values())
     if suite=='document-text-storage':
         paths.add(root/'scripts/test-document-text-storage.sh')
         paths.add(root/'Tests/NativeIntegration/test_document_text_storage_runner.py')
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
-    if suite in ('document-search-app','document-text-storage'):
+    if suite=='document-search-real-helper':
+        for module in ('PadCore','SearchExecution','TheOnlyPad','PadSearchWorkerRuntime','PadSearchWorker'):
+            paths.update((root/'Sources'/module).glob('*.swift'))
+    elif suite in ('document-search-app','document-text-storage'):
         for module in ('PadCore','SearchExecution','TheOnlyPad'):
             paths.update((root/'Sources'/module).glob('*.swift'))
     elif suite!='close' or not prebuilt:
@@ -585,7 +957,7 @@ def freeze(root,run,suite,prebuilt=False):
     if suite!='close':
         for item in items:
             name=item['source'];path=Path(name)
-            if name.startswith(('Sources/PadCore/', 'Sources/SearchExecution/')):
+            if name.startswith(('Sources/PadCore/', 'Sources/SearchExecution/')) or (suite=='document-search-real-helper' and name.startswith(('Sources/PadSearchWorkerRuntime/','Sources/PadSearchWorker/'))):
                 generate('Package/'+name,(run/item['frozen']).read_bytes(),name)
             elif name.startswith('Sources/TheOnlyPad/') and path.name!='TheOnlyPadApplication.swift':
                 data=(run/item['frozen']).read_bytes()
@@ -644,10 +1016,10 @@ def freeze(root,run,suite,prebuilt=False):
                 if suite=='document-search' and path.name in DOCUMENT_SEARCH_ACCESS:
                     access=run/'Original/Tests/NativeIntegration'/DOCUMENT_SEARCH_ACCESS[path.name]
                     data+=b'\n'+access.read_bytes()
-                if suite=='document-search-app' and path.name in DOCUMENT_SEARCH_APP_ACCESS:
+                if suite in ('document-search-app','document-search-real-helper') and path.name in DOCUMENT_SEARCH_APP_ACCESS:
                     access=run/'Original/Tests/NativeIntegration'/DOCUMENT_SEARCH_APP_ACCESS[path.name]
                     data+=b'\n'+access.read_bytes()
-                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission','managed-documents','document-search','document-search-app','document-text-storage'):
+                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission','managed-documents','document-search','document-search-app','document-text-storage','document-search-real-helper'):
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
@@ -657,6 +1029,7 @@ def freeze(root,run,suite,prebuilt=False):
         if suite=='document-search': document_search_methods(test_data)
         if suite=='document-search-app': document_search_app_methods(test_data)
         if suite=='document-text-storage': document_text_storage_methods(test_data)
+        if suite=='document-search-real-helper': real_helper_methods(test_data)
         if suite=='folder-navigation':
             text=test_data.decode()
             for label in ('CONTROLLER','PANEL'):
@@ -695,7 +1068,7 @@ def freeze(root,run,suite,prebuilt=False):
                 managed_document_methods(data,filename)
                 if filename!=name:
                     generate('Package/Tests/NativeRoutingTests/'+filename,data,origin)
-        package=PACKAGE
+        package=REAL_HELPER_PACKAGE if suite=='document-search-real-helper' else PACKAGE
         if suite=='document-search':
             marker='dependencies:["NativeRouting","PadCore"]'
             if package.count(marker)!=1: raise ValueError('document search Test dependency marker changed')
@@ -721,7 +1094,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Exact current public storage contract,7 fixed methods/one class; all native production bytes unchanged, no access tails, dirty getter or product-body hooks.' if suite=='document-text-storage' else 'Exact current public App search routing,4 fixed methods/one class; four declaring access tails only, no dirty getter or product-body hooks. Existing native close wait and real action forwards remain qualified; no repair stage observers.' if suite=='document-search-app' else 'Exact public native editor integration,15 fixed methods/five classes; four declaring access tails only, no dirty getter or product-body hooks. Existing effectful close wait and chained stage observer remain qualified.' if suite=='document-search' else 'Exact six managed clients,73 methods/seven classes; four unchanged declaring access tails, no dirty getter or product-body hooks. Admission controller access replaces obsolete broad monitor access and includes its identical required disk-conflict forwarder.' if suite=='managed-documents' else 'Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Exact current real-helper three-case fixture; same frozen worker/runtime/native Sources, four unchanged declaring access tails; no historical helper or extra producer hook. Three separate fresh-state processes.' if suite=='document-search-real-helper' else 'Exact current public storage contract,7 fixed methods/one class; all native production bytes unchanged, no access tails, dirty getter or product-body hooks.' if suite=='document-text-storage' else 'Exact current public App search routing,4 fixed methods/one class; four declaring access tails only, no dirty getter or product-body hooks. Existing native close wait and real action forwards remain qualified; no repair stage observers.' if suite=='document-search-app' else 'Exact public native editor integration,15 fixed methods/five classes; four declaring access tails only, no dirty getter or product-body hooks. Existing effectful close wait and chained stage observer remain qualified.' if suite=='document-search' else 'Exact six managed clients,73 methods/seven classes; four unchanged declaring access tails, no dirty getter or product-body hooks. Admission controller access replaces obsolete broad monitor access and includes its identical required disk-conflict forwarder.' if suite=='managed-documents' else 'Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     if suite=='macro':
         access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
         manifest['macroAccess']=[dict(target=name,source=MACRO_ACCESS_FILE,
@@ -758,6 +1131,15 @@ def freeze(root,run,suite,prebuilt=False):
     if suite=='document-search-app':
         manifest['documentSearchAppMethods']=[list(x) for x in DOCUMENT_SEARCH_APP_METHODS]
         manifest['documentSearchAppAccess']=[dict(
+            target=target,source='Tests/NativeIntegration/'+access,
+            bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
+            sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
+            originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
+            generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
+            for target,access in DOCUMENT_SEARCH_APP_ACCESS.items()]
+    if suite=='document-search-real-helper':
+        manifest['documentSearchRealHelperMethods']=[[REAL_HELPER_CLASS,name] for name in REAL_HELPER_METHODS]
+        manifest['documentSearchRealHelperAccess']=[dict(
             target=target,source='Tests/NativeIntegration/'+access,
             bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
             sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
@@ -988,6 +1370,7 @@ class StageFailure(Exception):
     def __init__(self,code): self.code=code
 
 def execute(run,args,watchdog_main):
+    if args.suite=='document-search-real-helper': return execute_real_helper_stages(run,args,watchdog_main)
     run=Path(run);manifest=json.loads((run/'sources.json').read_text());manifest_hash=digest(run/'sources.json')
     result=dict(exit=125,suite=args.suite,stages=[],results={},sourceManifestSHA256=manifest_hash,
         buildProvenance='caller must supply a verified matching debug build; frozen artifact hashes alone do not prove source equivalence' if args.build_path else 'built from frozen sources')
