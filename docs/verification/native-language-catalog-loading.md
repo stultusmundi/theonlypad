@@ -2,6 +2,12 @@
 
 The production read owner loads the custom-language catalog off the main thread, publishes immutable confirmed state, and preserves the last good publication after a failed reload. It rejects concurrent requests without queuing, fences callback reentry, and withdraws authority before joining actual worker completion. Construction performs no I/O. This standalone component is adopted locally; application startup, manager/picker wiring, highlighter propagation and desktop acceptance remain outstanding.
 
+The subsequent [mutation/recovery checkpoint](native-language-catalog-mutation.md)
+extends this same owner and maintained command to fourteen read plus 31 mutation
+tests across five stages. The fourteen-test/four-stage results below are retained
+historical evidence for the original read component. Application activation is
+still outstanding.
+
 ## Reproduction
 
 ```sh

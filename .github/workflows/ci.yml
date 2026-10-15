@@ -38,7 +38,7 @@ jobs:
         run: |
           python3 -B -m unittest discover -s Tests/NativeApplicationSearchesIntegration -p test_native_application_searches_runner.py
           scripts/test-native-application-searches.sh
-      - name: Native language catalog read ownership
+      - name: Native language catalog ownership
         run: scripts/test-native-language-catalog.sh
       - name: Native document storage snapshots
         run: scripts/test-document-text-storage.sh

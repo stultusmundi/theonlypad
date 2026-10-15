@@ -13,10 +13,14 @@ import uuid
 
 HERE = Path(__file__).absolute().parent
 CLASS = 'NativeLanguageCatalogOwnerTests.NativeLanguageCatalogOwnerTests'
+MUTATION_CLASS = 'NativeLanguageCatalogOwnerTests.NativeLanguageCatalogMutationTests'
 GENERATED = 'NativeLanguageCatalogPackageTests'
 OWNER = 'Sources/TheOnlyPad/NativeLanguageCatalogOwner.swift'
+MUTATION = 'Sources/TheOnlyPad/NativeLanguageCatalogMutation.swift'
+WIRE = 'Tests/PadCoreTests/CatalogTestFixture.swift'
 TESTS = ('NativeLanguageCatalogOwnerTests.swift', 'NativeLanguageCatalogOwnerFixtures.swift')
-SUPPORT = ('native-language-catalog-methods.json', 'native-language-catalog-Package.swift')
+MUTATION_TESTS = ('NativeLanguageCatalogMutationTests.swift', 'NativeLanguageCatalogMutationFixtures.swift')
+SUPPORT = ('native-language-catalog-methods.json', 'native-language-catalog-mutation-methods.json', 'native-language-catalog-Package.swift')
 LOCATION = 'Tests/NativeIntegration/run_native_language_catalog.py'
 WATCH_SHA = 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d'
 FIELDS = set('command pid processGroup exitObserved registrationError groupSignalAttempted groupSignalError groupCleanup groupQuery waitCompleted returnCode waitError timedOut interruptedSignal truncated captureComplete failure exit captured seconds'.split())
@@ -86,27 +90,33 @@ def tree(root, path):
 
 
 def support():
-    methods = load(HERE, HERE / SUPPORT[0]); package = fact(HERE, HERE / SUPPORT[1])[1].decode()
-    require(isinstance(methods, list) and len(methods) == 14 and len(set(methods)) == 14 and all(isinstance(x, str) and re.fullmatch(r'test\w+', x) for x in methods), 'invalid fixed roster')
-    return methods, package
+    old = load(HERE, HERE / SUPPORT[0]); new = load(HERE, HERE / SUPPORT[1]); package = fact(HERE, HERE / SUPPORT[2])[1].decode()
+    for name, methods in (('old14', old), ('new31', new)):
+        expected = 14 if name == 'old14' else 31
+        require(isinstance(methods, list) and len(methods) == expected and len(set(methods)) == expected and all(type(x) is str and re.fullmatch(r'test\w+', x) for x in methods), 'invalid fixed ' + name + ' roster')
+    return old, new, package
 
 
 def build_plan(root, run):
-    methods, package = support()
+    old, new, package = support()
     core = sorted((root / 'Sources/PadCore').glob('*.swift'))
     require(bool(core) and core == sorted((root / 'Sources/PadCore').rglob('*.swift')), 'Core membership missing or nested')
     sources = {str(p.relative_to(root)): 'Package/Sources/PadCore/' + p.name for p in core}
     sources[OWNER] = 'Package/Sources/NativeLanguageCatalogComponent/NativeLanguageCatalogOwner.swift'
-    sources.update({'Tests/NativeIntegration/' + name: 'Package/Tests/NativeLanguageCatalogOwnerTests/' + name for name in TESTS})
+    sources[MUTATION] = 'Package/Sources/NativeLanguageCatalogComponent/NativeLanguageCatalogMutation.swift'
+    sources[WIRE] = 'Package/Tests/NativeLanguageCatalogOwnerTests/CatalogTestFixture.swift'
+    sources.update({'Tests/NativeIntegration/' + name: 'Package/Tests/NativeLanguageCatalogOwnerTests/' + name for name in (*TESTS, *MUTATION_TESTS)})
     for relative in sources: checked(root, root / relative)
-    common = ['--package-path', str(run / 'Package'), '--scratch-path', str(run / 'Build')]
-    swift = str(run / 'Toolchain/scripts/swift.sh')
+    common = ['--package-path', str(run / 'Package'), '--scratch-path', str(run / 'BuildProducts')]
+    swift = str(run / 'ToolSupport/scripts/swift.sh')
+    selections = {'old14': {'class': CLASS, 'methods': old}, 'new31': {'class': MUTATION_CLASS, 'methods': new}}
     commands = [('toolchain', 30, ['/usr/bin/xcrun', 'swift', '--version']),
                 ('build', 180, [swift, 'build', *common, '--build-tests', '-Xswiftc', '-warnings-as-errors']),
                 ('binpath', 30, [swift, 'build', *common, '--show-bin-path', '-Xswiftc', '-warnings-as-errors']),
-                ('test', 180, ['/usr/bin/xcrun', 'xctest', '-XCTest', CLASS, str(run / 'Build/arm64-apple-macosx/debug' / (GENERATED + '.xctest'))])]
-    return dict(selection=CLASS, methods=methods, package=package, swiftInputs=sources, tools={
-        'scripts/swift.sh': 'Toolchain/scripts/swift.sh', 'scripts/run-owned-search-tests.py': 'Runner/run-owned-search-tests.py',
+                ('old14', 180, ['/usr/bin/xcrun', 'xctest', '-XCTest', CLASS, str(run / 'BuildProducts/arm64-apple-macosx/debug' / (GENERATED + '.xctest'))]),
+                ('new31', 180, ['/usr/bin/xcrun', 'xctest', '-XCTest', MUTATION_CLASS, str(run / 'BuildProducts/arm64-apple-macosx/debug' / (GENERATED + '.xctest'))])]
+    return dict(selection=CLASS, methods=old, selections=selections, package=package, swiftInputs=sources, tools={
+        'scripts/swift.sh': 'ToolSupport/scripts/swift.sh', 'scripts/run-owned-search-tests.py': 'Runner/run-owned-search-tests.py',
         'Tests/NativeIntegration/run_native_regressions.py': 'Runner/receipt-verifier.py', LOCATION: 'Runner/run_native_language_catalog.py'},
         stages=[dict(name=n, timeout=t, command=['/usr/bin/env', 'THEONLYPAD_STATE_DIRECTORY=' + str(run / 'State' / n), 'TMPDIR=' + str(run / 'Temporary' / n), *c]) for n, t, c in commands], captureAfter='binpath')
 
@@ -115,26 +125,31 @@ def validate_cli(argv):
     require(argv == [], 'fixed command accepts no arguments')
 
 
-def parse_result(raw, exit_code):
-    methods, _ = support(); text = raw.decode('utf-8')
+def parse_result(raw, exit_code, selection='old14'):
+    old, new, _ = support()
+    require(selection in ('old14', 'new31'), 'unknown fixed selection')
+    class_name, methods = (CLASS, old) if selection == 'old14' else (MUTATION_CLASS, new)
+    text = raw.decode('utf-8') if isinstance(raw, bytes) else raw
+    expected = {'-[' + class_name + ' ' + name + ']' for name in methods}
     starts = re.findall(r"^Test Case '([^']+)' started\.$", text, re.M)
     ends = re.findall(r"^Test Case '([^']+)' (passed|failed|skipped) \([^\n]*\)\.$", text, re.M)
-    expected = {'-[' + CLASS + ' ' + name + ']' for name in methods}
-    require(len(starts) == 14 and set(starts) == expected, 'wrong/missing/repeated starts')
-    require(len(ends) == 14 and {n for n, _ in ends} == expected and all(v != 'skipped' for _, v in ends), 'incomplete/foreign/skipped finishes')
-    require(len(re.findall(r'^Test Case .*$', text, re.M)) == 28, 'unparsed case record')
+    require(len(starts) == len(methods) and set(starts) == expected, 'wrong/missing/repeated starts')
+    require(len(ends) == len(methods) and {n for n, _ in ends} == expected and all(v != 'skipped' for _, v in ends), 'incomplete/foreign/skipped finishes')
+    require(len(re.findall(r'^Test Case .*$', text, re.M)) == 2 * len(methods), 'unparsed case record')
     for identity, outcome in ends: require(text.index("Test Case '" + identity + "' started.") < text.index("Test Case '" + identity + "' " + outcome), 'finish before start')
     summary = re.findall(r'Executed (\d+) tests?, with (\d+) failures? \((\d+) unexpected\)', text)
     require(bool(summary), 'missing actual summary'); count, failures, unexpected = map(int, summary[-1])
     failed = sum(v == 'failed' for _, v in ends)
-    require(count == 14 and unexpected == 0 and failures >= failed and bool(failures) == bool(failed), 'inconsistent/unexpected failures')
+    require(count == len(methods) and unexpected == 0 and failures >= failed and bool(failures) == bool(failed), 'inconsistent/unexpected failures')
     require(type(exit_code) is int and exit_code == (1 if failures else 0), 'natural exit/result mismatch')
     require(not failures or 'XCTAssert' in text or ': failed - ' in text, 'ordinary failure evidence missing')
-    return dict(executed=count, failures=failures, exit=exit_code, methods=methods, observed=ends, unexpected=unexpected)
+    result = dict(executed=count, failures=failures, exit=exit_code, methods=methods, observed=ends, unexpected=unexpected)
+    if selection == 'new31': result['selection'] = selection
+    return result
 
 
 def validate_compiler_graph(run, binary):
-    require(binary == run / 'Build/arm64-apple-macosx/debug', 'foreign binary path')
+    require(binary == run / 'BuildProducts/arm64-apple-macosx/debug', 'foreign binary path')
     description = binary / 'description.json'; commands = load(run, description).get('swiftCommands')
     names = ('PadCore', 'NativeLanguageCatalogComponent', 'NativeLanguageCatalogOwnerTests', GENERATED)
     require(isinstance(commands, dict) and len(commands) == 4, 'wrong compiler census'); groups = {}
@@ -172,8 +187,20 @@ def validate_compiler_graph(run, binary):
     return paths, graph
 
 
+def validate_declarations(root, methods, class_name, filename):
+    path = root / ('Tests/NativeIntegration/' + filename)
+    text = fact(root, path)[1].decode('utf-8')
+    classes = re.findall(r'^\s*(?:@MainActor\s+)?final\s+class\s+(\w+)(?:\s*:\s*XCTestCase)?\s*\{', text, re.M)
+    require(classes == [class_name.rsplit('.', 1)[1]], 'wrong fixed test class declaration')
+    declarations = re.findall(r'^\s*func\s+(test\w+)\s*\(', text, re.M)
+    require(len(declarations) == len(methods) and len(set(declarations)) == len(methods) and declarations == methods, 'test declarations differ from fixed roster')
+
+
 def freeze(root, run, plan):
     require(Path(__file__).absolute() == root / LOCATION, 'run only the fixed public coordinator')
+    old, new, _ = support()
+    validate_declarations(root, old, CLASS, TESTS[0])
+    validate_declarations(root, new, MUTATION_CLASS, MUTATION_TESTS[0])
     inputs = dict(plan['swiftInputs']); inputs.update(plan['tools'])
     inputs.update({'Tests/NativeIntegration/' + name: 'Runner/' + name for name in SUPPORT})
     inputs['scripts/test-native-language-catalog.sh'] = 'Runner/test-native-language-catalog.sh'
@@ -185,15 +212,18 @@ def freeze(root, run, plan):
             with target.open('xb') as stream: stream.write(data)
             target.chmod(stat.S_IMODE(original['st_mode'])); copies.append(fact(run, target)[0])
         require(fact(root, root / source)[0] == original, 'source changed during freeze')
-    native = fact(run, run / plan['swiftInputs']['Tests/NativeIntegration/' + TESTS[0]])[1].decode()
-    require(sorted(re.findall(r'func\s+(test\w+)\s*\(', native)) == sorted(plan['methods']), 'native Test roster differs')
+    for source, methods, class_name in ((TESTS[0], old, CLASS), (MUTATION_TESTS[0], new, MUTATION_CLASS)):
+        frozen = fact(run, run / plan['swiftInputs']['Tests/NativeIntegration/' + source])[1].decode('utf-8')
+        require(re.findall(r'^\s*(?:@MainActor\s+)?final\s+class\s+(\w+)(?:\s*:\s*XCTestCase)?\s*\{', frozen, re.M) == [class_name.rsplit('.', 1)[1]], 'frozen Test class differs')
+        declarations = re.findall(r'^\s*func\s+(test\w+)\s*\(', frozen, re.M)
+        require(declarations == methods and len(set(declarations)) == len(methods), 'frozen Test roster differs')
     require(fact(run, run / 'Runner/run-owned-search-tests.py')[0]['sha256'] == WATCH_SHA, 'unreviewed watchdog')
     target = run / 'Package/Package.swift'
     with target.open('x') as stream: stream.write(plan['package'])
     copies.append(fact(run, target)[0])
     for row in plan['stages']:
         for parent in ('State', 'Temporary'): mkdir(run, run / parent / row['name'])
-    manifest = dict(originals=originals, copies=copies, plan=plan, ownedDirectories=[directory_fact(run, run / name) for name in ('.', 'Toolchain', 'State', 'Temporary', *[parent + '/' + row['name'] for row in plan['stages'] for parent in ('State', 'Temporary')])], trees={name: tree(run, run / name) for name in ('Original', 'Package', 'Runner', 'Toolchain/scripts')})
+    manifest = dict(originals=originals, copies=copies, plan=plan, ownedDirectories=[directory_fact(run, run / name) for name in ('.', 'ToolSupport', 'State', 'Temporary', *[parent + '/' + row['name'] for row in plan['stages'] for parent in ('State', 'Temporary')])], trees={name: tree(run, run / name) for name in ('Original', 'Package', 'Runner', 'ToolSupport/scripts')})
     save(run / 'inputs.json', manifest); return manifest
 
 
@@ -203,7 +233,7 @@ def verify_inputs(root, run, manifest):
     for row in manifest['copies']: require(fact(run, run / row['path'])[0] == row, 'frozen input changed')
     for name, rows in manifest['trees'].items(): require(tree(run, run / name) == rows, 'frozen membership/identity changed')
     require(load(run, run / 'inputs.json') == manifest, 'input manifest changed')
-    top = run / 'Toolchain'; require({p.name for p in top.iterdir()} <= {'scripts', '.cache'}, 'unexpected Toolchain member')
+    top = run / 'ToolSupport'; require({p.name for p in top.iterdir()} <= {'scripts', '.cache'}, 'unexpected ToolSupport member')
     for row in manifest['ownedDirectories']:
         require(directory_fact(run, run / row['path']) == row, 'owned root identity changed')
     if any(p.name == '.cache' for p in top.iterdir()):
@@ -217,10 +247,16 @@ def import_module(path, name):
     sys.modules[name] = module; spec.loader.exec_module(module); return module
 
 
-def stage(root, run, manifest, execute, verifier, row):
+def stage(root, run, manifest, execute, verifier, row, receipts):
     verify_inputs(root, run, manifest); output = run / row['name']
     require(not output.exists(), 'stage already exists')
+    command_dir = run / 'Commands'; mkdir(run, command_dir)
+    command_path = command_dir / (row['name'] + '.json')
+    save(command_path, dict(name=row['name'], timeout=row['timeout'], command=row['command']))
+    command_fact = fact(run, command_path)[0]
+    receipts.append(command_fact)
     code = execute(['--timeout', str(row['timeout']), '--output', str(output), '--', *row['command']])
+    require(fact(run, command_path)[0] == command_fact, 'current command changed during child')
     verify_inputs(root, run, manifest); receipt = load(run, output / 'status.json')
     require(isinstance(receipt, dict) and set(receipt) == FIELDS, 'receipt schema differs')
     require(type(receipt['seconds']) in (int, float) and math.isfinite(receipt['seconds']) and receipt['seconds'] >= 0, 'invalid elapsed seconds')
@@ -231,7 +267,7 @@ def stage(root, run, manifest, execute, verifier, row):
 
 def capture(run):
     lines = fact(run, run / 'binpath/stdout.log')[1].decode().splitlines()
-    require(lines == [str(run / 'Build/arm64-apple-macosx/debug')], 'ambiguous binpath')
+    require(lines == [str(run / 'BuildProducts/arm64-apple-macosx/debug')], 'ambiguous binpath')
     binary = Path(lines[0]); paths, graph = validate_compiler_graph(run, binary)
     bundle = binary / (GENERATED + '.xctest'); members = tree(run, bundle)
     executable = bundle / 'Contents/MacOS' / GENERATED
@@ -255,26 +291,34 @@ def main(argv):
         execute = import_module(run / 'Runner/run-owned-search-tests.py', 'catalog_watchdog').main
         verifier = import_module(run / 'Runner/receipt-verifier.py', 'catalog_receipts'); verify_inputs(root, run, manifest)
         for row in plan['stages']:
-            for prior in receipts: require(fact(run, run / prior['path'])[0] == prior, 'prior receipt/capture changed')
-            if binding is not None: require(capture(run) == binding, 'compiled artifact changed before test')
-            code = stage(root, run, manifest, execute, verifier, row); result['stages'].append(dict(name=row['name'], exit=code))
+            for prior in receipts: require(fact(run, run / prior['path'])[0] == prior, 'prior command/receipt/capture changed')
+            if binding is not None:
+                artifacts_file = run / 'artifacts.json'
+                require(load(run, artifacts_file) == binding and capture(run) == binding, 'compiled artifact changed before test')
+            code = stage(root, run, manifest, execute, verifier, row, receipts); result['stages'].append(dict(name=row['name'], exit=code))
             receipts.extend(fact(run, run / row['name'] / name)[0] for name in ('status.json', 'stdout.log', 'stderr.log'))
-            if row['name'] != 'test' and code != 0:
+            if row['name'] not in ('old14', 'new31') and code != 0:
                 result.update(state='NATURAL_STAGE_FAILURE', exit=code); break
             if row['name'] == 'build':
                 compiler_log = fact(run, run / 'build/stdout.log')[1] + fact(run, run / 'build/stderr.log')[1]
                 require(re.search(rb'(?m)(?:^|\s)warning:', compiler_log) is None, 'compiler/build warning retained')
             if row['name'] == 'binpath':
                 binding = capture(run); save(run / 'artifacts.json', binding)
-            if row['name'] == 'test':
-                raw = fact(run, run / 'test/stdout.log')[1] + b'\n' + fact(run, run / 'test/stderr.log')[1]
-                report = parse_result(raw, code); save(run / 'test-result.json', report)
-                result.update(state='COMPLETE_PASS' if code == 0 else 'COMPLETE_ORDINARY_FAILURE', exit=code)
+                receipts.append(fact(run, run / 'artifacts.json')[0])
+            if row['name'] in ('old14', 'new31'):
+                selection = row['name']; raw = fact(run, run / selection / 'stdout.log')[1] + b'\n' + fact(run, run / selection / 'stderr.log')[1]
+                report = parse_result(raw, code, selection=selection); save(run / (selection + '-result.json'), report)
+                receipts.append(fact(run, run / (selection + '-result.json'))[0])
+                result['stages'][-1]['result'] = selection + '-result.json'
+                if selection == 'old14' and code != 0:
+                    result.update(state='OLD14_FAILED_NEW31_UNENTERED', exit=1); break
+                if selection == 'new31':
+                    result.update(state='COMPLETE_PASS' if code == 0 else 'COMPLETE_ORDINARY_FAILURE', exit=code)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError) as error:
         result.update(state='INCOMPLETE', exit=125, errorType=type(error).__name__, error=str(error))
     finally:
         try:
-            for prior in receipts: require(fact(run, run / prior['path'])[0] == prior, 'receipt/capture changed after stage')
+            for prior in receipts: require(fact(run, run / prior['path'])[0] == prior, 'command/receipt/capture changed after stage')
             if manifest is not None: verify_inputs(root, run, manifest)
             if binding is not None:
                 require(load(run, run / 'artifacts.json') == binding and capture(run) == binding, 'postcapture artifact authority changed')
