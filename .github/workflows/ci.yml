@@ -11,8 +11,16 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Swift toolchain version
+        run: /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcrun swift --version
       - name: Unit and temporary-file tests
+        id: core
         run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/ci-core -- scripts/swift.sh test
+      - name: Bounded core failure diagnostics
+        if: ${{ failure() && steps.core.outcome == 'failure' }}
+        run: python3 scripts/ci_owned_failure_diagnostics.py
+      - name: CI failure diagnostic contract tests
+        run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 30 --output .local/ci-diagnostics-test -- python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
       - name: Owned search test infrastructure
         run: |
           python3 -m unittest discover -s Tests/SearchChildIntegration -p 'test_*.py'
