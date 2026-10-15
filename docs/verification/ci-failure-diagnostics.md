@@ -19,9 +19,9 @@ passed. Missing or unsafe evidence produces a fixed unavailable reason.
 Reads reject symlinks, FIFOs, unowned files, changed metadata, malformed JSON,
 invalid types, inconsistent capture counts and oversized evidence. Locations
 require exact tracked-file membership and owned nonsymlink files. The optional
-fixed read-only Git query has a three-second query deadline and bounded output;
+fixed read-only Git query has a ten-second query deadline and bounded output;
 its additional kill/wait cleanup is best effort, not a guaranteed reap or a hard
-three-second bound for the entire operation. No new dependency or action is
+ten-second bound for the entire operation. No new dependency or action is
 introduced, and workflow permissions remain `contents: read`.
 
 The inert baseline produced ten ordinary failing test methods. A separate benign
@@ -124,3 +124,27 @@ later error beyond forty warnings, repeated locations, exact severity, both
 capture streams and an untracked error file. No raw message is exposed. Error
 priority may reveal a later verified location; an error without an admissible
 file location can still leave the cause unknown. A new hosted run is required.
+
+
+## Bounded roster-query budget follow-up
+
+Hosted run [38769088912](https://github.com/stultusmundi/theonlypad/actions/runs/38769088912)
+at `6077fec` failed core again. Strict diagnostics refused `invalid-roster`;
+the explicit numeric fallback succeeded with complete captures. Its last
+recognized class summary was five tests and zero failures, with coarse
+error-category count one. Error-priority location reporting was not reached,
+and the actual core cause remains unknown.
+
+The fixed read-only Git query budget increases from three to ten seconds.
+Repeated roster refusals after roughly three to four seconds motivate this
+bounded robustness adjustment, but do not prove a Git timeout caused either
+roster refusal or core failure. The tradeoff is a longer possible wait before
+numeric fallback. Output caps, closed environment, tracked-file validation,
+unsafe-evidence refusals and the original failing core command are unchanged.
+Kill/wait cleanup remains best effort; no guaranteed reap or whole-operation
+ten-second limit is claimed.
+
+All seventeen existing diagnostic tests pass against the exact private
+candidate and separately through public discovery. Source review confirms
+that only the query-budget constant changed. This is finite local regression
+evidence, not a hosted pass or a fix for the unidentified core failure.
