@@ -29,6 +29,8 @@ jobs:
         run: |
           python3 -B -m unittest discover -s Tests/NativeApplicationSearchesIntegration -p test_native_application_searches_runner.py
           scripts/test-native-application-searches.sh
+      - name: Native document storage snapshots
+        run: scripts/test-document-text-storage.sh
       - name: Managed document-search editor binding
         run: scripts/test-document-search.sh
       - name: Managed document-search application routing

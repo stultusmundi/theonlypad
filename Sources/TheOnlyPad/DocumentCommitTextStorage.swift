@@ -19,6 +19,7 @@ struct PrimitiveCommitObservation: Equatable {
 
 final class DocumentCommitTextStorage: NSTextStorage {
   private let backing = NSMutableAttributedString(string: "")
+  private var cachedString: String?
   private var primitiveSequence: UInt64 = 0
   private var primitiveSequenceExhausted = false
   private var lastPrimitiveCommit: PrimitiveCommitObservation?
@@ -199,7 +200,14 @@ final class DocumentCommitTextStorage: NSTextStorage {
     }
   }
 
-  override var string: String { backing.string }
+  override var string: String {
+    // A backing mutation may reenter; never publish an intermediate cached value.
+    guard backingMutationDepth == 0 else { return backing.string }
+    if let cachedString { return cachedString }
+    let snapshot = backing.string
+    cachedString = snapshot
+    return snapshot
+  }
 
   override func attributes(at location: Int, effectiveRange range: NSRangePointer?)
     -> [NSAttributedString.Key: Any]
@@ -295,7 +303,9 @@ final class DocumentCommitTextStorage: NSTextStorage {
     let beforeSequence = primitiveSequence
     let beforeExhaustion = primitiveSequenceExhausted
     backingMutationDepth = incomingDepth < 64 ? incomingDepth + 1 : 64
+    cachedString = nil
     backing.replaceCharacters(in: range, with: replacement)
+    cachedString = nil
     backingMutationDepth = incomingDepth
     let afterLength = backing.length
     let reentry =
