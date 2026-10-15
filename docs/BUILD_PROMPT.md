@@ -18,7 +18,9 @@ Explicitly waive repeated human approval checkpoints in Superpowers brainstormin
 
 You may work in this project, create isolated branches/worktrees, install necessary development dependencies, run the application and local tests, create synthetic fixtures, and make local commits of your work. Preserve unrelated changes and do not modify other repositories.
 
-Do not publish releases, push or merge remotely, purchase services, register domains, change system security settings, use credentials, or delete unrelated data without authorization. Initial permission to create this public repository does not authorize future publication actions. Never interpret silence as permission.
+The user explicitly authorized pushing project changes to GitHub on 2026-10-15. Routine non-force pushes of reviewed commits to development branches in `stultusmundi/theonlypad` are authorized; keep the remote branch current after verified checkpoints. Use the existing Git authentication mechanism without exposing credentials. Publish only reviewed public files, preserving unrelated changes; ignored diagnostics, caches and local packages stay local.
+
+Remote merges, force pushes, release publishing, purchases, domain registration, system security changes, unrelated credential use and deletion of unrelated data still require separate authorization. Never interpret silence as permission.
 
 Ask only when a missing decision materially prevents safe progress. Batch unavoidable questions and continue independent work while waiting. Milestones are internal checkpoints, not reasons to ask “shall I continue?” Work continuously through the entire scope.
 
@@ -52,7 +54,7 @@ Read the actual installed skills and adapt them to the explicit autonomy authori
 7. **systematic-debugging:** reproduce failures, identify root causes, add regression coverage, and fix them. Do not patch symptoms repeatedly or weaken tests.
 8. **requesting-code-review / receiving-code-review:** review subsystems and the integrated app; resolve material findings.
 9. **verification-before-completion:** require fresh evidence before declaring completion.
-10. **finishing-a-development-branch:** prepare a clean local handoff, verified artifacts, documentation, and local commits. Remote pushes, merges, and releases require separate authorization.
+10. **finishing-a-development-branch:** prepare a clean local handoff, verified artifacts, documentation, and local commits. Routine development-branch pushes follow the authorization above; remote merges, force pushes and releases require separate authorization.
 
 Use Context7 for relevant dependency documentation and Serena for useful semantic navigation if available. Use installed dependency/security-review skills as appropriate. Do not apply unrelated repository-specific UI skills to TheOnlyPad.
 
