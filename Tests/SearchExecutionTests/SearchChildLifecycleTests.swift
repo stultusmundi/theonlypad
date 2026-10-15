@@ -214,7 +214,11 @@ final class SearchChildLifecycleTests: XCTestCase {
     let timers = ScriptedTimers()
     let connection = HeldCloseConnection()
     var lifecycle: SearchChildLifecycle? = try makeLifecycle(system, clock, timers)
-    weak let facade = lifecycle
+    #if compiler(>=6.3)
+      weak let facade = lifecycle
+    #else
+      weak var facade = lifecycle
+    #endif
     let ticket = try await lifecycle!.begin(requestID: UUID())
     lifecycle = nil
     XCTAssertNil(facade)
@@ -810,7 +814,11 @@ final class SearchChildLifecycleTests: XCTestCase {
     let timers = ScriptedTimers()
     let connection = HeldCloseConnection()
     var lifecycle: SearchChildLifecycle? = try makeLifecycle(system, clock, timers)
-    weak let facade = lifecycle
+    #if compiler(>=6.3)
+      weak let facade = lifecycle
+    #else
+      weak var facade = lifecycle
+    #endif
     let ticket = try await lifecycle!.begin(requestID: UUID())
     lifecycle = nil
     XCTAssertNil(facade)

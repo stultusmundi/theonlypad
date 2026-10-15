@@ -81,7 +81,11 @@ import XCTest
   func testCancelReleasesCapturedContextWhileCallerStillRetainsToken() async {
     let scheduler = SearchAdmissionDispatchRetryScheduler()
     var context: RetryLifetimeContext? = RetryLifetimeContext(marker: 7)
-    weak let witness = context
+    #if compiler(>=6.3)
+      weak let witness = context
+    #else
+      weak var witness = context
+    #endif
     var calls = 0
     let token = scheduler.schedule { [context] in
       XCTAssertEqual(context?.marker, 7)
@@ -100,7 +104,11 @@ import XCTest
   func testFiredActionReleasesContextWithoutRequiringTokenCancellation() async {
     let scheduler = SearchAdmissionDispatchRetryScheduler()
     var context: RetryLifetimeContext? = RetryLifetimeContext(marker: 11)
-    weak let witness = context
+    #if compiler(>=6.3)
+      weak let witness = context
+    #else
+      weak var witness = context
+    #endif
     let delivered = expectation(description: "context used by actual fire")
     var calls = 0
     let token = scheduler.schedule { [context] in
@@ -121,7 +129,11 @@ import XCTest
   func testDroppingTokenReleasesContextAndQueuedEntryCannotCallAction() async {
     let scheduler = SearchAdmissionDispatchRetryScheduler()
     var context: RetryLifetimeContext? = RetryLifetimeContext(marker: 19)
-    weak let witness = context
+    #if compiler(>=6.3)
+      weak let witness = context
+    #else
+      weak var witness = context
+    #endif
     var calls = 0
     var token: (any SearchAdmissionRetryToken)? = scheduler.schedule { [context] in
       XCTAssertEqual(context?.marker, 19)

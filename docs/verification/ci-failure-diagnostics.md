@@ -2,9 +2,11 @@
 
 The first hosted macOS core-test step failed in runs 38744925024 and
 38745131627. The owned watchdog retained its inner output, but that output was
-not exposed in the job log. The cause is still unknown. This change adds a Swift
-version step and a conditional diagnostic without changing the core test command
-or turning its failure into success.
+not exposed in the job log. The diagnostic added at `88d4917` subsequently
+identified compiler failures before XCTest in run
+[38758075131](https://github.com/stultusmundi/theonlypad/actions/runs/38758075131).
+The Swift version step reports Swift 6.1.2. The original core test command and
+failure outcome remain unchanged.
 
 `scripts/ci_owned_failure_diagnostics.py` reads only the fixed core watchdog
 receipt and two bounded captures. It prints closed numeric summaries, category
@@ -43,5 +45,28 @@ The workflow invokes the contract with its own direct watchdog:
 env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 30 --output .local/ci-diagnostics-test -- python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
 ```
 
-Raw evidence remains ignored locally. The next hosted run must establish the
-actual core failure before a corrective application change is made.
+## Swift compiler compatibility follow-up
+
+The hosted diagnostic identified four locations declaring `weak let`. That
+feature was [implemented in Swift 6.3](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0481-weak-let.md).
+A repository-wide source check found eight such declarations across five test
+files: six in default search tests and two in Foundation integration tests.
+There are no affected production declarations. Each now uses `weak let` with
+`#if compiler(>=6.3)` and `weak var` on earlier compilers, preserving the original
+initializer and all assertions, lifetime checks and cleanup. The modern branch
+reconstructs the original source apart from directive indentation.
+
+Local Swift 6.3.3 verification passed the actual app/helper build and all 1,203
+default tests. Separate frozen Foundation packages passed twenty closing tests
+and two transfer-publisher tests. Those packages use the existing wrappers'
+exact source mappings and Package definitions, run directly under the owned
+watchdog; the legacy wrappers themselves were not invoked. Full strict Swift
+formatting passed. These are separate invocations with synthetic state, complete
+captures and input checks, not visible-window tests or an older-toolchain result.
+The unchanged lifetime assertions provide regression coverage; no new test
+mirrors the conditional declarations.
+
+Hosted Swift 6.1 verification of this patch remains pending. The observed
+locations explain a concrete compiler incompatibility; they do not establish
+that every reported compiler error or later CI step is resolved. Raw evidence
+remains ignored locally.

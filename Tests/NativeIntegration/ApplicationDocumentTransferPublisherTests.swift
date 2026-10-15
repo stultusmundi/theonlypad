@@ -315,7 +315,11 @@ import XCTest
   private func exercise(beforeCapture: Bool) async throws {
     var fixture: TransferPublicationFixture? = try TransferPublicationFixture(
       beforeCapture: beforeCapture)
-    weak let released = fixture
+    #if compiler(>=6.3)
+      weak let released = fixture
+    #else
+      weak var released = fixture
+    #endif
     let directory = fixture!.directory
     defer { try? FileManager.default.removeItem(at: directory) }
     do {

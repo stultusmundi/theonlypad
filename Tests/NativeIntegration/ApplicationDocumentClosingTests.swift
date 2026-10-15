@@ -418,7 +418,11 @@ private final class ClosingFault: @unchecked Sendable {
     let fixture = try fixture()
     var handle: ClosingHandle? = try await fixture.add()
     let owner = fixture.owner()
-    weak let observed = handle
+    #if compiler(>=6.3)
+      weak let observed = handle
+    #else
+      weak var observed = handle
+    #endif
     let documentID = handle!.id
     fixture.rejectProjection = true
     let id = try owner.start(documentIDs: [documentID], sourceWindowID: fixture.assignment.windowID)

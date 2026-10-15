@@ -414,7 +414,11 @@ final class SearchParentResponseAccumulatorTests: XCTestCase {
     }
     var collector: SearchParentResponseAccumulator? = SearchParentResponseAccumulator(
       request: request)
-    weak let weakOwner = collector
+    #if compiler(>=6.3)
+      weak let weakOwner = collector
+    #else
+      weak var weakOwner = collector
+    #endif
     try collector!.begin(response(request, count: 0, replacement: 1))
     try collector!.appendReplacementUTF8(Data([0x41]))
     try collector!.complete(request.identity, terminal: .success)
