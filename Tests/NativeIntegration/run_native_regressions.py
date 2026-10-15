@@ -20,7 +20,9 @@ SUITES={'folder-navigation':('FolderNavigationTests','folder-navigation-tests'),
         'close':(None,'native-close-model'),
         'macro':('NativeMacroChronologyTests','native-macro-chronology-tests'),
         'managed-admission':('NativeManagedAdmissionStartupTests','managed-admission-tests'),
-        'managed-documents':('AppDelegateDocumentsTests','managed-documents-tests')}
+        'managed-documents':('AppDelegateDocumentsTests','managed-documents-tests'),
+        'document-search':('DocumentSearchEditorIntegrationTests','document-search-integration'),
+        'document-search-app':('DocumentSearchAppRoutingTests','document-search-app-integration')}
 CLOSE_SOURCES=('EditorDocument','EditorDocumentCloseAdapter','EditorDocumentFactory',
     'NativeDocumentSeed','EditorDocumentWorkspaceAdapter','WorkspaceDocumentRegistryTypes',
     'EditorPane','DocumentTextView','DocumentPanePresentation','EditorPaneHost',
@@ -211,6 +213,116 @@ MANAGED_DOCUMENT_ACCESS={
     'EditorWindowController.swift':'ManagedAdmissionControllerAccess.swift',
     'EditorDocument.swift':'ManagedAdmissionHistoryAccess.swift'}
 
+
+# Fixed native editor search integration: no caller roster/filter or body probes.
+DOCUMENT_SEARCH_METHODS=(
+    ('DocumentSearchEditorBindingTests', 'testManagedFindCapturesOriginalNativeSourceWithoutEarlyTextCapture'),
+    ('DocumentSearchEditorBindingTests', 'testTwoManagedEditorsShareOwnerWithDistinctWindowTickets'),
+    ('DocumentSearchEditorBindingTests', 'testTabAndFocusChangesPreserveOriginalResultBinding'),
+    ('DocumentSearchEditorBindingTests', 'testRealOriginRemovalAndTransferRequireFreshDestinationBinding'),
+    ('DocumentSearchEditorBindingTests', 'testOriginalWindowAndEndpointRetireExactlyTheirSearchTicket'),
+    ('DocumentSearchEditorBindingTests', 'testFactoryAndPresentationReentryPreserveNewerConcreteChild'),
+    ('DocumentSearchTransferCloseNoSearchTests', 'testRealTransferThenCloseWithoutAnySearchInvocation'),
+    ('FileStateDetachmentPhaseTests', 'testRealDetachPhasePreservesOuterScopeAcrossRecursiveRefusal'),
+    ('FileStateDetachmentPhaseTests', 'testRealIdentityGuardErrorClearsPhaseAndPreservesRetry'),
+    ('FileStateDetachmentPhaseTests', 'testRealCancellationInvalidationThrowsAndClearsAdmittedPhase'),
+    ('ManagedTransferCloseRetirementTests', 'testRealRetiringBoundarySuspensionPreservesExactMovedBridgeUntilDetach'),
+    ('DocumentSearchQuitPresentationTests', 'testQuitPresentationRetirementWithoutChildStaysLazy'),
+    ('DocumentSearchQuitPresentationTests', 'testQuitPresentationRetiresOnlyOriginalChildAndPreservesLiveWindowTickets'),
+    ('DocumentSearchQuitPresentationTests', 'testQuitPresentationCloseAndConstructorReentryCannotAdoptAChild'),
+    ('DocumentSearchQuitPresentationTests', 'testQuitPresentationRetiredEndpointCannotBeRevivedByLateCallbacks'),
+)
+DOCUMENT_SEARCH_CLASSES=('DocumentSearchEditorBindingTests', 'DocumentSearchTransferCloseNoSearchTests', 'FileStateDetachmentPhaseTests', 'ManagedTransferCloseRetirementTests', 'DocumentSearchQuitPresentationTests')
+DOCUMENT_SEARCH_SELECTOR='|'.join(DOCUMENT_SEARCH_CLASSES)
+DOCUMENT_SEARCH_ACCESS={
+    'EditorWindowController.swift':'DocumentSearchEditorBindingAccess.swift',
+    'NativeApplicationDocuments.swift':'DocumentSearchNativeOwnerAccess.swift',
+    'NativeApplicationCloseCoordinator.swift':'DocumentSearchNativeCloseAccess.swift',
+    'DocumentSearchPanelController.swift':'DocumentSearchPanelAccess.swift'}
+
+# Fixed App routing contract; no editor-repair observer access or caller selection.
+DOCUMENT_SEARCH_APP_METHODS=(
+    ('DocumentSearchAppRoutingTests', 'testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors'),
+    ('DocumentSearchAppRoutingTests', 'testCapturedSearchAvailabilityAndDispatchShareIdentityAndRefusalPolicy'),
+    ('DocumentSearchAppRoutingTests', 'testActualManagedConfigurationStaysSearchLazyAndAppGuardsPrecedeScope'),
+    ('DocumentSearchAppRoutingTests', 'testActualQuitPublishesNativeReceiptThenJoinsSearchAndExternalExactlyOnceAcrossVetoAndRetry'),
+)
+DOCUMENT_SEARCH_APP_CLASSES=('DocumentSearchAppRoutingTests',)
+DOCUMENT_SEARCH_APP_SELECTOR='|'.join(DOCUMENT_SEARCH_APP_CLASSES)
+DOCUMENT_SEARCH_APP_ACCESS={
+    'AppDelegate.swift':'DocumentSearchAppRoutingAccess.swift',
+    'EditorWindowController.swift':'DocumentSearchEditorBindingAccess.swift',
+    'NativeApplicationDocuments.swift':'DocumentSearchAppNativeOwnerAccess.swift',
+    'DocumentSearchPanelController.swift':'DocumentSearchPanelAccess.swift'}
+
+def document_search_methods(data):
+    """Exact fixed fixture census; not a general Swift parser."""
+    owner=None;classes=[];methods=[]
+    for match in re.finditer(r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bfunc\s+(test\w+)\s*\(',data.decode()):
+        if match.group(1):
+            owner=match.group(1);classes.append(owner)
+        elif owner: methods.append((owner,match.group(2)))
+        else: raise ValueError('document search method lacks fixed XCTest class')
+    if tuple(classes)!=DOCUMENT_SEARCH_CLASSES or tuple(methods)!=DOCUMENT_SEARCH_METHODS:
+        raise ValueError('fixed document search declaration census changed')
+    return methods
+
+def document_search_success(text):
+    if re.search(r'(?m)^.*(?:error:|caught error:)|\b[1-9][0-9]* unexpected\b',text):
+        raise ValueError('document search error record')
+    counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+    expected=len(DOCUMENT_SEARCH_METHODS)
+    if not counts or counts[-1]!=(expected,0) or any(n<=0 or failure for n,failure in counts):
+        raise ValueError('missing complete document search result')
+    terminal=re.findall(r"^Test Case '([^']+)' (passed|failed|skipped)(?: \(.*\)\.)?$",text,re.M)
+    if len(terminal)!=expected or any(result!='passed' for _,result in terminal):
+        raise ValueError('incomplete document search cases')
+    cases=[]
+    for identity,_ in terminal:
+        match=re.fullmatch(r'\-\[NativeRoutingTests\.(\w+) (test\w+)\]',identity)
+        if match is None: raise ValueError('foreign document search case')
+        cases.append(match.groups())
+    if len(set(cases))!=expected or set(cases)!=set(DOCUMENT_SEARCH_METHODS):
+        raise ValueError('document search exact case selection changed')
+    for owner in DOCUMENT_SEARCH_CLASSES:
+        if len(re.findall(r"^Test Suite '"+re.escape(owner)+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+            raise ValueError('document search class did not pass exactly once')
+    return dict(tests=expected,failures=0)
+
+def document_search_app_methods(data):
+    """Exact fixed fixture census; not a general Swift parser."""
+    owner=None;classes=[];methods=[]
+    for match in re.finditer(r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bfunc\s+(test\w+)\s*\(',data.decode()):
+        if match.group(1):
+            owner=match.group(1);classes.append(owner)
+        elif owner: methods.append((owner,match.group(2)))
+        else: raise ValueError('document search app method lacks fixed XCTest class')
+    if tuple(classes)!=DOCUMENT_SEARCH_APP_CLASSES or tuple(methods)!=DOCUMENT_SEARCH_APP_METHODS:
+        raise ValueError('fixed document search app declaration census changed')
+    return methods
+
+def document_search_app_success(text):
+    if re.search(r'(?m)^.*(?:error:|caught error:)|\b[1-9][0-9]* unexpected\b',text):
+        raise ValueError('document search app error record')
+    counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
+    expected=len(DOCUMENT_SEARCH_APP_METHODS)
+    if not counts or counts[-1]!=(expected,0) or any(n<=0 or failure for n,failure in counts):
+        raise ValueError('missing complete document search app result')
+    terminal=re.findall(r"^Test Case '([^']+)' (passed|failed|skipped)(?: \(.*\)\.)?$",text,re.M)
+    if len(terminal)!=expected or any(result!='passed' for _,result in terminal):
+        raise ValueError('incomplete document search app cases')
+    cases=[]
+    for identity,_ in terminal:
+        match=re.fullmatch(r'\-\[NativeRoutingTests\.(\w+) (test\w+)\]',identity)
+        if match is None: raise ValueError('foreign document search app case')
+        cases.append(match.groups())
+    if len(set(cases))!=expected or set(cases)!=set(DOCUMENT_SEARCH_APP_METHODS):
+        raise ValueError('document search app exact case selection changed')
+    for owner in DOCUMENT_SEARCH_APP_CLASSES:
+        if len(re.findall(r"^Test Suite '"+re.escape(owner)+r"' passed(?: at .*\.)?$",text,re.M))!=1:
+            raise ValueError('document search app class did not pass exactly once')
+    return dict(tests=expected,failures=0)
+
 def managed_document_methods(data, filename):
     """Fixed fixture declaration census, not a general Swift parser."""
     owner=None;methods=[]
@@ -284,8 +396,19 @@ def discover(root,suite,prebuilt):
         paths.add(root/'scripts/test-managed-documents.sh')
         paths.add(root/'Tests/NativeIntegration/test_managed_documents_runner.py')
         paths.update(root/'Tests/NativeIntegration'/name for name in MANAGED_DOCUMENT_ACCESS.values())
+    if suite=='document-search':
+        paths.add(root/'scripts/test-document-search.sh')
+        paths.add(root/'Tests/NativeIntegration/test_document_search_runner.py')
+        paths.update(root/'Tests/NativeIntegration'/name for name in DOCUMENT_SEARCH_ACCESS.values())
+    if suite=='document-search-app':
+        paths.add(root/'scripts/test-document-search-app.sh')
+        paths.add(root/'Tests/NativeIntegration/test_document_search_app_runner.py')
+        paths.update(root/'Tests/NativeIntegration'/name for name in DOCUMENT_SEARCH_APP_ACCESS.values())
     if suite=='search-replacement': paths.add(root/'scripts/test-search-replacement.sh')
-    if suite!='close' or not prebuilt:
+    if suite=='document-search-app':
+        for module in ('PadCore','SearchExecution','TheOnlyPad'):
+            paths.update((root/'Sources'/module).glob('*.swift'))
+    elif suite!='close' or not prebuilt:
         paths.update((root/'Sources').rglob('*.swift'))
         if suite=='close':
             paths.add(root/'Package.swift')
@@ -467,13 +590,21 @@ def freeze(root,run,suite,prebuilt=False):
                 if suite=='managed-documents' and path.name in MANAGED_DOCUMENT_ACCESS:
                     access=run/'Original/Tests/NativeIntegration'/MANAGED_DOCUMENT_ACCESS[path.name]
                     data+=b'\n'+access.read_bytes()
-                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission','managed-documents'):
+                if suite=='document-search' and path.name in DOCUMENT_SEARCH_ACCESS:
+                    access=run/'Original/Tests/NativeIntegration'/DOCUMENT_SEARCH_ACCESS[path.name]
+                    data+=b'\n'+access.read_bytes()
+                if suite=='document-search-app' and path.name in DOCUMENT_SEARCH_APP_ACCESS:
+                    access=run/'Original/Tests/NativeIntegration'/DOCUMENT_SEARCH_APP_ACCESS[path.name]
+                    data+=b'\n'+access.read_bytes()
+                if path.name=='EditorDocument.swift' and suite not in ('macro','managed-admission','managed-documents','document-search','document-search-app'):
                     text=data.decode();marker='  var dirty: Bool {'
                     if text.count(marker)!=1: raise ValueError('dirty getter transform marker changed')
                     data=text.replace(marker,'  var transferHarnessDirtyReads = 0\n'+marker+'\n    transferHarnessDirtyReads += 1').encode()
                 generate('Package/Sources/NativeRouting/'+path.name,data,name)
         name=SUITES[suite][0]+'.swift'
         test_data=(run/'Original/Tests/NativeIntegration'/name).read_bytes()
+        if suite=='document-search': document_search_methods(test_data)
+        if suite=='document-search-app': document_search_app_methods(test_data)
         if suite=='folder-navigation':
             text=test_data.decode()
             for label in ('CONTROLLER','PANEL'):
@@ -512,7 +643,16 @@ def freeze(root,run,suite,prebuilt=False):
                 managed_document_methods(data,filename)
                 if filename!=name:
                     generate('Package/Tests/NativeRoutingTests/'+filename,data,origin)
-        generate('Package/Package.swift',PACKAGE.encode())
+        package=PACKAGE
+        if suite=='document-search':
+            marker='dependencies:["NativeRouting","PadCore"]'
+            if package.count(marker)!=1: raise ValueError('document search Test dependency marker changed')
+            package=package.replace(marker,'dependencies:["NativeRouting","PadCore","SearchExecution"]')
+        if suite=='document-search-app':
+            marker='dependencies:["NativeRouting","PadCore"]'
+            if package.count(marker)!=1: raise ValueError('App document search Test dependency marker changed')
+            package=package.replace(marker,'dependencies:["NativeRouting","PadCore","SearchExecution"]')
+        generate('Package/Package.swift',package.encode())
     else:
         # Custom storage has an authentic controller owner. Compile the captured
         # native dependency graph, excluding only the application's entry point.
@@ -529,7 +669,7 @@ def freeze(root,run,suite,prebuilt=False):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,
-        transformation=('Exact six managed clients,73 methods/seven classes; four unchanged declaring access tails, no dirty getter or product-body hooks. Admission controller access replaces obsolete broad monitor access and includes its identical required disk-conflict forwarder.' if suite=='managed-documents' else 'Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
+        transformation=('Exact current public App search routing,4 fixed methods/one class; four declaring access tails only, no dirty getter or product-body hooks. Existing native close wait and real action forwards remain qualified; no repair stage observers.' if suite=='document-search-app' else 'Exact public native editor integration,15 fixed methods/five classes; four declaring access tails only, no dirty getter or product-body hooks. Existing effectful close wait and chained stage observer remain qualified.' if suite=='document-search' else 'Exact six managed clients,73 methods/seven classes; four unchanged declaring access tails, no dirty getter or product-body hooks. Admission controller access replaces obsolete broad monitor access and includes its identical required disk-conflict forwarder.' if suite=='managed-documents' else 'Exact public production bodies plus two declaring access tails only: C raw observations and original public32 disk-conflict construction forwarder (NOT readonly); D stored weak history observations. Exact startup and routing clients; original routing32 compiled unselected, four named cases selected. No dirty getter, installer, warmup or private native language substitution.' if suite=='managed-admission' else 'Exact three macro fixture clients; five explicit access tails only; no dirty getter or product body hooks; six-class19 selection.' if suite=='macro' else 'Dirty getter counter; folder controller/panel private access appended; only folder command showWindow suppressed; access regions omitted from XCTest source.' if suite=='folder-navigation' else 'Dirty getter counter; test access extracted into frozen controller, search panel and text utility panel; exact search and text utility showWindow calls suppressed; document command, line-ending conversion and macro replay defer completion observers appended with original cleanup retained; access regions omitted from XCTest source.' if suite=='search-replacement' else 'Dirty getter counter; test access extracted into frozen controller; native font/paragraph/typing/wrap setters wrapped for tests; test-access region omitted from XCTest source.' if suite=='settings' else 'Dirty getter counter; test access extracted into frozen controller; focus entry and post-origin callback probes retain original bodies; test-access region omitted from XCTest source.' if suite=='projection' else 'One counter before original dirty getter; implementation retained unchanged.' if suite!='close' else None))
     if suite=='macro':
         access=(run/'Original'/MACRO_ACCESS_FILE).read_bytes().decode()
         manifest['macroAccess']=[dict(target=name,source=MACRO_ACCESS_FILE,
@@ -552,6 +692,24 @@ def freeze(root,run,suite,prebuilt=False):
             originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
             generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
             for target,access in MANAGED_DOCUMENT_ACCESS.items()]
+    if suite=='document-search':
+        manifest['documentSearchMethods']=[list(x) for x in DOCUMENT_SEARCH_METHODS]
+        manifest['documentSearchAccess']=[dict(
+            target=target,source='Tests/NativeIntegration/'+access,
+            bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
+            sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
+            originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
+            generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
+            for target,access in DOCUMENT_SEARCH_ACCESS.items()]
+    if suite=='document-search-app':
+        manifest['documentSearchAppMethods']=[list(x) for x in DOCUMENT_SEARCH_APP_METHODS]
+        manifest['documentSearchAppAccess']=[dict(
+            target=target,source='Tests/NativeIntegration/'+access,
+            bytes=len((run/'Original/Tests/NativeIntegration'/access).read_bytes()),
+            sha256=digest(run/'Original/Tests/NativeIntegration'/access),join='LF',
+            originalSHA256=digest(run/'Original/Sources/TheOnlyPad'/target),
+            generatedSHA256=digest(run/'Package/Sources/NativeRouting'/target))
+            for target,access in DOCUMENT_SEARCH_APP_ACCESS.items()]
     (run/'sources.json').write_text(json.dumps(manifest,indent=2)+'\n')
     verify(run,manifest)
     return manifest
@@ -721,6 +879,8 @@ def receipt_success(output,command,expected_code=0):
 
 def parse_success(kind,text):
     if any(line.startswith('FAIL ') for line in text.splitlines()): raise ValueError('native assertion failed')
+    if kind=='document-search': return document_search_success(text)
+    if kind=='document-search-app': return document_search_app_success(text)
     if kind=='managed-documents': return managed_documents_success(text)
     if kind=='managed-admission':
         counts=[tuple(map(int,pair)) for pair in re.findall(r'Executed (\d+) tests?, with (\d+) failures',text)]
@@ -785,7 +945,7 @@ def execute(run,args,watchdog_main):
             if digest(run/'build-inputs.json')!=core_hash: raise ValueError('build manifest changed')
     def stage(name,command,timeout,kind=None):
         check();output=run/'Stages'/name;state=run/'State'/name;state.mkdir(parents=True)
-        if args.suite=='managed-documents':
+        if args.suite in ('managed-documents','document-search','document-search-app'):
             state.parent.chmod(0o700);state.chmod(0o700)
         # env execs the fixed command in the same owned leader/session. Only synthetic
         # state is added after the accepted watchdog's environment sanitization.
@@ -806,6 +966,8 @@ def execute(run,args,watchdog_main):
             if args.suite=='macro': command+=['-Xswiftc','-warnings-as-errors','--filter',MACRO_SELECTOR]
             if args.suite=='managed-admission': command+=['-Xswiftc','-warnings-as-errors','--filter',ADMISSION_SELECTOR]
             if args.suite=='managed-documents': command+=['-Xswiftc','-warnings-as-errors']
+            if args.suite=='document-search': command+=['-Xswiftc','-warnings-as-errors','--filter',DOCUMENT_SEARCH_SELECTOR]
+            if args.suite=='document-search-app': command+=['-Xswiftc','-warnings-as-errors','--filter',DOCUMENT_SEARCH_APP_SELECTOR]
             stage('test',command,180,args.suite)
         else:
             if args.build_path:

@@ -10,6 +10,9 @@ import PadCore
     setenv("THEONLYPAD_STATE_DIRECTORY", directory.path, 1)
     let windowID = UUID()
     let controller = EditorWindowController(id: windowID, restoreStartup: false)
+    guard let originalCloseWindow = controller.window else {
+      preconditionFailure("Missing original window for injected component close")
+    }
     precondition(controller.sessionMetadata.tabs.isEmpty)
     let saved = DecodedDocument(text: "a\r\n😀", encoding: .utf16BE, hasBOM: true)
     let url = directory.appendingPathComponent("synthetic.txt")
@@ -65,7 +68,8 @@ import PadCore
       preconditionFailure("invalid insertion position accepted")
     } catch {}
     precondition(controller.sessionMetadata.tabs.count == 3)
-    controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+    controller.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
     do {
       try controller.restoreSessionTab(
         SessionTab(), decoded: recovered, originalBytes: nil, url: nil, viewState: recoveredState)

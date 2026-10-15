@@ -39,6 +39,9 @@ private final class CaptureWriteGate: @unchecked Sendable {
     defer { try? FileManager.default.removeItem(at: directory) }
     setenv("THEONLYPAD_STATE_DIRECTORY", directory.path, 1)
     let editor = EditorWindowController(restoreStartup: false)
+    guard let editorCloseWindow = editor.window else {
+      preconditionFailure("Missing original window for injected component close")
+    }
     let exact = "😀\r\nsecond\rthird\n👩🏽‍💻"
     let snapshot = DecodedDocument(text: exact, encoding: .utf16BE, hasBOM: true)
     let tab = SessionTab(
@@ -84,6 +87,9 @@ private final class CaptureWriteGate: @unchecked Sendable {
       saveServices: EditorSaveServices(
         write: { try saveGate.write($0, to: $1, expected: $2) }, backup: { _, _, _ in }),
       onError: { _ in preconditionFailure("synthetic save failed") })
+    guard let savingCloseWindow = saving.window else {
+      preconditionFailure("Missing original window for injected component close")
+    }
     try saving.restoreSessionTab(
       cleanTab, decoded: clean, originalBytes: bytes, url: url,
       viewState: try RestoredViewState.resolve(
@@ -111,6 +117,9 @@ private final class CaptureWriteGate: @unchecked Sendable {
       saveServices: EditorSaveServices(
         write: { try uncertainGate.write($0, to: $1, expected: $2) }, backup: { _, _, _ in }),
       chooseSaveDestination: { _, _ in destinationURL }, onError: { saveAsErrors.append($0) })
+    guard let saveAsCloseWindow = saveAs.window else {
+      preconditionFailure("Missing original window for injected component close")
+    }
     let originalTab = SessionTab(originalPath: originalURL.path)
     try saveAs.restoreSessionTab(
       originalTab, decoded: clean, originalBytes: bytes, url: originalURL,
@@ -144,9 +153,12 @@ private final class CaptureWriteGate: @unchecked Sendable {
     precondition(uncertainBaseline.window.tabs[0].selection == saveAsText.selectedRange())
     precondition(try! Data(contentsOf: originalURL) == bytes)
     precondition(try! Data(contentsOf: destinationURL) == Data(changedSaveAs.utf8))
-    saveAs.windowWillClose(Notification(name: NSWindow.willCloseNotification))
-    saving.windowWillClose(Notification(name: NSWindow.willCloseNotification))
-    editor.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+    saveAs.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: saveAsCloseWindow))
+    saving.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: savingCloseWindow))
+    editor.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: editorCloseWindow))
     do {
       _ = try editor.captureSessionCheckpoint()
       preconditionFailure("closed window cannot be captured")

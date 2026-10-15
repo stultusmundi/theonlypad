@@ -33,6 +33,10 @@ import PadCore
     var errors: [Error] = []
     let controller = EditorWindowController(
       restoreStartup: false, onError: { errors.append($0) }, onSessionChange: {})
+    guard let originalCloseWindow = controller.window else {
+      check(false, "missing original window for injected component close")
+      exit(1)
+    }
     let metadata = SessionTab(originalPath: file.path, presentation: presentation)
     try controller.restoreSessionTab(
       metadata, decoded: .init(text: original, encoding: .utf8, hasBOM: false),
@@ -142,7 +146,8 @@ import PadCore
     check(
       try Data(contentsOf: file) == Data((replacement + "!").utf8),
       "undo never rewrites saved disk bytes")
-    controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+    controller.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
     print("PASS completed-save integration \(checks) assertions")
   }
 }

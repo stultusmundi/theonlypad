@@ -114,6 +114,42 @@ private enum EditorSaveFailure: Error {
 
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTextViewDelegate {
+  private struct ManagedDocumentSearchConfiguration {
+    let ownerForFind: @MainActor () throws -> ApplicationSearchOwner
+    let makePanel:
+      @MainActor (
+        ApplicationSearchOwner, ApplicationSearchWindowID,
+        any ApplicationDocumentSearchSource,
+        @escaping @MainActor (DocumentSearchPanelController) -> Void
+      ) throws -> DocumentSearchPanelController
+    let presentPanel: @MainActor (DocumentSearchPanelController) -> Void
+  }
+  @MainActor private final class ManagedDocumentSearchRecord {
+    let identity = UUID()
+    let owner: ApplicationSearchOwner
+    let ticket: ApplicationSearchWindowID
+    let endpointID: UUID
+    weak var window: NSWindow?
+    var panel: DocumentSearchPanelController?
+    weak var document: EditorDocument?
+    weak var pane: EditorPane?
+    var attempt: UUID?
+    var constructionClosed = false
+
+    init(
+      owner: ApplicationSearchOwner, ticket: ApplicationSearchWindowID,
+      endpointID: UUID, window: NSWindow
+    ) {
+      self.owner = owner
+      self.ticket = ticket
+      self.endpointID = endpointID
+      self.window = window
+    }
+  }
+  private var managedDocumentSearchConfiguration: ManagedDocumentSearchConfiguration?
+  private var managedDocumentSearchRecord: ManagedDocumentSearchRecord?
+  private var managedDocumentSearchIntent = UUID()
+  private var managedDocumentSearchRetirement: UUID?
   let sessionID: UUID
   private let applicationRouting: EditorApplicationRouting?
   private var settledTransferProjection: EditorTransferEndpointReceipt?
@@ -281,6 +317,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let selection = source.editor.selectedRange()
     let wrap = !source.editor.isHorizontallyResizable
     for pane in document.panePool where pane !== source && pane.isAttached {
+      let retirement = beginManagedDocumentSearchRetirement(document: document, pane: pane)
+      defer { endManagedDocumentSearchRetirement(retirement) }
       pane.editor.breakUndoCoalescing()
       pane.detach()
     }
@@ -2985,7 +3023,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       do { try focusOtherPane() } catch { present(error) }
     case "view.wrap": toggleWrap()
     case "edit.find":
-      showSearch()
+      if managedDocumentSearchConfiguration != nil {
+        do { _ = try showManagedDocumentSearch() } catch { present(error) }
+      } else {
+        showSearch()
+      }
     default:
       if id.hasPrefix("bookmark.") {
         performBookmarkCommand(id)
@@ -4823,7 +4865,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
 
   func windowWillClose(_ notification: Notification) {
+    guard let closing = notification.object as? NSWindow, closing === window, !windowClosed else {
+      return
+    }
     windowClosed = true
+    retireManagedDocumentSearchEndpoint()
     for document in documents { retireMacroBinding(document) }
     diskActions?.cancel()
     locateActions?.cancel()
@@ -5659,6 +5705,189 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
 
 // Explicit native source installation; no owner, consumer or panel is activated here.
 extension EditorWindowController {
+  @discardableResult func configureManagedDocumentSearch(
+    ownerForFind: @escaping @MainActor () throws -> ApplicationSearchOwner,
+    makePanel:
+      @escaping @MainActor (
+        ApplicationSearchOwner, ApplicationSearchWindowID,
+        any ApplicationDocumentSearchSource,
+        @escaping @MainActor (DocumentSearchPanelController) -> Void
+      ) throws -> DocumentSearchPanelController = { owner, ticket, source, onClose in
+        try DocumentSearchPanelController(
+          owner: owner, window: ticket, source: source, onClose: onClose)
+      },
+    presentPanel: @escaping @MainActor (DocumentSearchPanelController) -> Void = {
+      $0.showWindow(nil)
+    }
+  ) -> Bool {
+    guard managedDocumentSearchConfiguration == nil, !windowClosed else { return false }
+    managedDocumentSearchConfiguration = .init(
+      ownerForFind: ownerForFind,
+      makePanel: makePanel, presentPanel: presentPanel)
+    return true
+  }
+
+  private func showManagedDocumentSearch() throws -> DocumentSearchPanelController? {
+    guard let configuration = managedDocumentSearchConfiguration else { return nil }
+    guard !windowClosed, !preparingToQuit, managedDocumentSearchRetirement == nil,
+      let document = current, let window = self.window,
+      let pane = document.panePool.first(where: {
+        $0.id == document.preferredPaneID && $0.isAttached
+      })
+        ?? document.panePool.first(where: { $0.isAttached })
+    else { throw ApplicationDocumentSearchFailure.sourceUnavailable }
+    // Stack custody starts with the model, before reading a pane's unowned model.
+    // This earliest defer outlives every later stale-child/ticket cleanup defer.
+    defer { withExtendedLifetime((document, pane, window)) {} }
+    let intent = UUID()
+    managedDocumentSearchIntent = intent
+    let source = try makeDocumentSearchSource(document: document, pane: pane)
+    guard managedDocumentSearchIntent == intent else { return nil }
+    let credential = try source.inspect()
+    guard managedDocumentSearchIntent == intent else { return nil }
+    func currentContext() throws -> Bool {
+      guard managedDocumentSearchIntent == intent, managedDocumentSearchRetirement == nil,
+        !windowClosed, !preparingToQuit, self.window === window,
+        current === document, preferredPane(in: document) === pane
+      else { return false }
+      let fresh = try source.inspect()
+      return managedDocumentSearchIntent == intent && managedDocumentSearchRetirement == nil
+        && !windowClosed && !preparingToQuit && self.window === window
+        && current === document && preferredPane(in: document) === pane && fresh == credential
+    }
+    guard try currentContext() else { return nil }
+    let owner = try configuration.ownerForFind()
+    guard try currentContext() else { return nil }
+    let record: ManagedDocumentSearchRecord
+    let newlyIssued: Bool
+    if let existing = managedDocumentSearchRecord {
+      guard existing.owner === owner, existing.window === window,
+        existing.endpointID == credential.endpointID
+      else {
+        throw ApplicationDocumentSearchFailure.sourceUnavailable
+      }
+      record = existing
+      newlyIssued = false
+    } else {
+      let ticket = try owner.attachWindow(windowID: sessionID, endpointID: credential.endpointID)
+      record = ManagedDocumentSearchRecord(
+        owner: owner, ticket: ticket,
+        endpointID: credential.endpointID, window: window)
+      managedDocumentSearchRecord = record
+      newlyIssued = true
+    }
+    record.attempt = intent
+    record.constructionClosed = false
+    let old = record.panel
+    record.panel = nil
+    record.document = nil
+    record.pane = nil
+    var constructed: DocumentSearchPanelController?
+    var installed = false
+    defer {
+      if !installed {
+        // A stale return may be the SAME B that nested work already adopted.
+        if let constructed, managedDocumentSearchRecord?.panel !== constructed {
+          constructed.close()
+        }
+        if newlyIssued, managedDocumentSearchRecord === record,
+          record.attempt == intent, record.panel == nil
+        {
+          managedDocumentSearchRecord = nil
+          managedDocumentSearchIntent = UUID()
+          record.owner.detachWindow(record.ticket)
+        }
+      }
+    }
+    old?.close()
+    guard try currentContext(), managedDocumentSearchRecord === record,
+      record.attempt == intent
+    else { return nil }
+    let panel = try configuration.makePanel(
+      owner, record.ticket, source,
+      { [weak self, weak record] closed in
+        guard let self, let record, self.managedDocumentSearchRecord === record,
+          record.attempt == intent
+        else { return }
+        if record.panel == nil {
+          // An actual onClose during construction cannot grant a live child slot.
+          record.constructionClosed = true
+          return
+        }
+        guard record.panel === closed else { return }
+        record.panel = nil
+        record.document = nil
+        record.pane = nil
+        record.attempt = nil
+        self.managedDocumentSearchIntent = UUID()
+        // Normal child close preserves this endpoint's actual owner and ticket.
+      })
+    constructed = panel
+    guard try currentContext(), managedDocumentSearchRecord === record,
+      record.attempt == intent, !record.constructionClosed
+    else { return nil }
+    record.document = document
+    record.pane = pane
+    record.panel = panel
+    installed = true
+    configuration.presentPanel(panel)
+    guard try currentContext(), managedDocumentSearchRecord === record,
+      record.attempt == intent, record.panel === panel
+    else { return nil }
+    return panel
+  }
+
+  // Retire this child while preserving the live endpoint's owner and ticket.
+  func retireManagedDocumentSearchForQuit() {
+    guard managedDocumentSearchRetirement == nil else { return }
+    let token = UUID()
+    managedDocumentSearchRetirement = token
+    managedDocumentSearchIntent = UUID()
+    defer { endManagedDocumentSearchRetirement(token) }
+    let record = managedDocumentSearchRecord
+    let panel = record?.panel
+    record?.panel = nil
+    record?.document = nil
+    record?.pane = nil
+    record?.attempt = nil
+    panel?.close()
+  }
+
+  private func beginManagedDocumentSearchRetirement(
+    document: EditorDocument, pane: EditorPane? = nil
+  ) -> UUID? {
+    guard let record = managedDocumentSearchRecord, record.document === document,
+      pane == nil || record.pane === pane
+    else { return nil }
+    let token = UUID()
+    managedDocumentSearchRetirement = token
+    managedDocumentSearchIntent = UUID()
+    let panel = record.panel
+    record.panel = nil
+    record.document = nil
+    record.pane = nil
+    record.attempt = nil
+    panel?.close()
+    return token
+  }
+
+  private func endManagedDocumentSearchRetirement(_ token: UUID?) {
+    if let token, managedDocumentSearchRetirement == token { managedDocumentSearchRetirement = nil }
+  }
+
+  private func retireManagedDocumentSearchEndpoint() {
+    managedDocumentSearchIntent = UUID()
+    let record = managedDocumentSearchRecord
+    managedDocumentSearchRecord = nil
+    let panel = record?.panel
+    record?.panel = nil
+    record?.document = nil
+    record?.pane = nil
+    record?.attempt = nil
+    panel?.close()
+    if let record { record.owner.detachWindow(record.ticket) }
+  }
+
   private func makeDocumentSearchSource(document: EditorDocument, pane: EditorPane) throws
     -> EditorDocumentSearchSource
   {
@@ -6357,6 +6586,8 @@ extension EditorWindowController {
     let old = documents
     projectionValid = false
     for removed in old where !next.contains(where: { $0 === removed }) {
+      let retirement = beginManagedDocumentSearchRetirement(document: removed)
+      defer { endManagedDocumentSearchRetirement(retirement) }
       if transferProjection?.snapshot.request.documentID != removed.id {
         try applicationRouting!.detachDocumentEndpoint(removed)
       }
@@ -6739,12 +6970,34 @@ extension EditorWindowController {
   func ordinaryFileStateContext(_ document: EditorDocument) -> FileStateLiveContext? {
     guard let routing = applicationRouting,
       (try? routing.registry.captureWindows()) != nil,
-      routing.registry.handle(id: document.id) === document,
-      routing.registry.assignment(of: document.id) == routing.assignment,
-      documents.contains(where: { $0 === document }),
-      (try? routing.requireEndpointCurrent()) != nil
+      documents.contains(where: { $0 === document })
     else { return nil }
-    return fileStateContext(document)
+    let handle = routing.registry.handle(id: document.id)
+    let assignment = routing.registry.assignment(of: document.id)
+    let owned = handle === document && assignment == routing.assignment
+    let bridge = document.fileState
+    let phase = bridge?.isDetachingEndpoint
+    // Absent ownership can supply identity only inside this bridge's admitted real detach.
+    guard owned || (handle == nil && assignment == nil && phase == true),
+      (try? routing.requireEndpointCurrent()) != nil,
+      (try? routing.registry.captureWindows()) != nil,
+      documents.contains(where: { $0 === document }),
+      document.fileState === bridge, bridge?.isDetachingEndpoint == phase
+    else { return nil }
+    // Endpoint validation is a callout: preserve the original branch, never switch to absence.
+    if owned {
+      guard routing.registry.handle(id: document.id) === document,
+        routing.registry.assignment(of: document.id) == routing.assignment
+      else { return nil }
+    } else {
+      guard routing.registry.handle(id: document.id) == nil,
+        routing.registry.assignment(of: document.id) == nil,
+        let bridge, document.fileState === bridge, bridge.isDetachingEndpoint
+      else { return nil }
+    }
+    guard var value = fileStateContext(document) else { return nil }
+    if !owned { value.closed = true }
+    return value
   }
   private func withTransferNativeLayout<T>(_ body: () throws -> T) rethrows -> T {
     guard transferProjection != nil || settledTransferProjection != nil else { return try body() }

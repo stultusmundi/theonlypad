@@ -3,6 +3,47 @@ import PadCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+  // One lazy process search bridge and one owned application termination attempt.
+  typealias DocumentSearchPanelFactory =
+    @MainActor (
+      ApplicationSearchOwner, ApplicationSearchWindowID,
+      any ApplicationDocumentSearchSource,
+      @escaping @MainActor (DocumentSearchPanelController) -> Void
+    ) throws -> DocumentSearchPanelController
+  private let documentSearches: NativeApplicationSearches
+  private let cancelExternalCommands: @MainActor () async -> Void
+  private let makeDocumentSearchPanel: DocumentSearchPanelFactory
+  private let presentDocumentSearchPanel: @MainActor (DocumentSearchPanelController) -> Void
+  @MainActor private final class DocumentSearchTerminationAttempt {
+    let id = UUID()
+    var task: Task<Void, Never>?
+    var preparation: NativeApplicationSearchQuitPreparation?
+    var nativeReceipt: SessionCheckpointReceipt?
+    var searchDecision: NativeApplicationSearchQuitResult?
+    var replyConsumed = false
+    var setupError: Error?
+    private var setupReturned = false
+    private var setupContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForSetupReturn() async {
+      guard !setupReturned else { return }
+      await withCheckedContinuation { continuation in
+        if self.setupReturned {
+          continuation.resume()
+        } else {
+          self.setupContinuation = continuation
+        }
+      }
+    }
+    func setupDidReturn() {
+      guard !setupReturned else { return }
+      setupReturned = true
+      let continuation = setupContinuation
+      setupContinuation = nil
+      continuation?.resume()
+    }
+  }
+  private var documentSearchTerminationAttempt: DocumentSearchTerminationAttempt?
   private var editors: [EditorWindowController] { documentOwner?.windows ?? [] }
   private var moveDestination: DocumentMoveDestinationController?
   private var movePresentationGeneration = UUID()
@@ -39,6 +80,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
   init(
     session: SessionCoordinator, recovery: RecoveryCoordinator,
+    documentSearches: NativeApplicationSearches? = nil,
+    cancelExternalCommands: @escaping @MainActor () async -> Void = {
+      await ExternalCommandController.cancelAllAndWait()
+    },
+    makeDocumentSearchPanel: @escaping DocumentSearchPanelFactory = {
+      owner, ticket, source, onClose in
+      try DocumentSearchPanelController(
+        owner: owner, window: ticket, source: source, onClose: onClose)
+    },
+    presentDocumentSearchPanel: @escaping @MainActor (DocumentSearchPanelController) -> Void = {
+      $0.showWindow(nil)
+    },
     presentEditorWindow: @escaping @MainActor (EditorWindowController) -> Void,
     reportDocumentError: @escaping @MainActor (Error) -> Void,
     presentMoveDestination: @escaping @MainActor (DocumentMoveDestinationController) -> Void = {
@@ -55,6 +108,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       alert.runModal()
     }
   ) {
+    self.documentSearches =
+      documentSearches ?? NativeApplicationSearches(applicationBundle: Bundle.main.bundleURL)
+    self.cancelExternalCommands = cancelExternalCommands
+    self.makeDocumentSearchPanel = makeDocumentSearchPanel
+    self.presentDocumentSearchPanel = presentDocumentSearchPanel
     self.session = session
     self.documentRecovery = recovery
     self.presentEditorWindow = presentEditorWindow
@@ -181,6 +239,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
   }
   private func configureEditor(_ editor: EditorWindowController) {
+    editor.configureManagedDocumentSearch(
+      ownerForFind: { [weak self] in
+        guard let self, !self.preparingQuit else {
+          throw ApplicationDocumentSearchFailure.sourceUnavailable
+        }
+        return try self.documentSearches.ownerForFind()
+      },
+      makePanel: { [weak self] owner, ticket, source, onClose in
+        guard let self, !self.preparingQuit else {
+          throw ApplicationDocumentSearchFailure.sourceUnavailable
+        }
+        return try self.makeDocumentSearchPanel(owner, ticket, source, onClose)
+      },
+      presentPanel: { [weak self] panel in
+        guard let self, !self.preparingQuit else {
+          panel.close()
+          return
+        }
+        self.presentDocumentSearchPanel(panel)
+      })
     editor.applySettings(settings)
     editor.onOpenedURL = { [weak self] url in
       guard let self else { return }
@@ -400,36 +478,127 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    guard !preparingQuit else { return .terminateLater }
+    guard !preparingQuit, documentSearchTerminationAttempt == nil else { return .terminateLater }
     movePresentationGeneration = UUID()
     guard shortcutController?.canQuit != false else {
       shortcutController?.explainQuitVeto()
       return .terminateCancel
     }
+    let originalEditors = editors
+    let attempt = DocumentSearchTerminationAttempt()
+    documentSearchTerminationAttempt = attempt
     preparingQuit = true
-    moveDestination?.close()
-    moveDestination = nil
-    fileMonitoring.suspend()
-    recentFiles?.setSuspended(true)
-    Task {
-      await startupTask?.value
-      // Invalidate pending repair callbacks before the owner drains and freezes capture.
-      sessionPanel?.update(entries: session.unresolved)
-      do {
-        _ = try await managedDocuments().prepareQuit()
-      } catch {
-        documentOwner?.cancelPreparedQuit()
-        preparingQuit = false
-        fileMonitoring.resume()
-        recentFiles?.setSuspended(false)
-        reportDocumentError(error)
-        replyToTermination(false)
-        return
+    // Even nested modal/run-loop execution can only await this exact setup frame's return.
+    defer { attempt.setupDidReturn() }
+    attempt.task = Task { [self, attempt] in
+      await attempt.waitForSetupReturn()
+      await completeDocumentSearchTermination(attempt)
+    }
+    do {
+      let preparation = try documentSearches.prepareQuitIfCreated()
+      guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
+      attempt.preparation = preparation
+      for editor in originalEditors {
+        editor.retireManagedDocumentSearchForQuit()
+        guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
       }
-      await ExternalCommandController.cancelAllAndWait()
-      replyToTermination(true)
+      let previousMoveDestination = moveDestination
+      moveDestination = nil
+      previousMoveDestination?.close()
+      guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
+      fileMonitoring.suspend()
+      guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
+      recentFiles?.setSuspended(true)
+      guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
+    } catch {
+      if ownsDocumentSearchTermination(attempt) { attempt.setupError = error }
     }
     return .terminateLater
+  }
+
+  private func ownsDocumentSearchTermination(_ attempt: DocumentSearchTerminationAttempt) -> Bool {
+    documentSearchTerminationAttempt === attempt && preparingQuit && !attempt.replyConsumed
+  }
+
+  private func completeDocumentSearchTermination(_ attempt: DocumentSearchTerminationAttempt) async
+  {
+    guard ownsDocumentSearchTermination(attempt) else { return }
+    do {
+      if let error = attempt.setupError { throw error }
+      guard let preparation = attempt.preparation else { throw NativeWorkspaceError.notReady }
+      await startupTask?.value
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      try Task.checkCancellation()
+      sessionPanel?.update(entries: session.unresolved)
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      let decision = try await documentSearches.completeQuit(preparation) { [self, attempt] in
+        guard ownsDocumentSearchTermination(attempt) else { throw CancellationError() }
+        let owner = try managedDocuments()
+        guard ownsDocumentSearchTermination(attempt) else { throw CancellationError() }
+        let receipt = try await owner.prepareQuit()
+        guard ownsDocumentSearchTermination(attempt), documentOwner === owner else {
+          throw CancellationError()
+        }
+        // Only the actual native producer's return can fill this authority-bearing field.
+        attempt.nativeReceipt = receipt
+      }
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      attempt.searchDecision = decision
+      guard attempt.nativeReceipt != nil else { throw NativeWorkspaceError.notReady }
+      let settled: Bool
+      switch decision {
+      case .noSearchOwner: settled = true
+      case .terminal(_, _, _, .settled): settled = true
+      case .terminal(_, _, _, .unsettled), .admissionRefused(_): settled = false
+      }
+      guard settled else {
+        refuseDocumentSearchTermination(attempt, error: nil)
+        return
+      }
+      try Task.checkCancellation()
+      await cancelExternalCommands()
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      attempt.replyConsumed = true
+      replyToTermination(true)
+      // No mutation after the reply callout; a successful attempt remains reserved.
+    } catch {
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      refuseDocumentSearchTermination(attempt, error: error)
+    }
+  }
+
+  private func refuseDocumentSearchTermination(
+    _ attempt: DocumentSearchTerminationAttempt, error: Error?
+  ) {
+    guard ownsDocumentSearchTermination(attempt) else { return }
+    if let error {
+      reportDocumentError(error)
+      guard ownsDocumentSearchTermination(attempt) else { return }
+    }
+    // Native prepareQuit rolls back its own throwing paths. A returned receipt leaves
+    // a real prepared owner which this attempt must explicitly restore on later refusal.
+    if attempt.nativeReceipt != nil {
+      documentOwner?.cancelPreparedQuit()
+      guard ownsDocumentSearchTermination(attempt) else { return }
+    }
+    if let preparation = attempt.preparation, documentSearches.phase == .prepared {
+      // A refused resume stays honestly unavailable/prepared; terminal custody is never reopened.
+      let resumed = documentSearches.resumeAfterVeto(preparation)
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      if case .refused(let refusal) = resumed {
+        reportDocumentError(refusal)
+        guard ownsDocumentSearchTermination(attempt) else { return }
+      }
+    }
+    fileMonitoring.resume()
+    guard ownsDocumentSearchTermination(attempt) else { return }
+    recentFiles?.setSuspended(false)
+    guard ownsDocumentSearchTermination(attempt) else { return }
+    preparingQuit = false
+    attempt.replyConsumed = true
+    documentSearchTerminationAttempt = nil
+    replyToTermination(false)
+    // The false-reply callback may already own a new attempt. Never clear it here.
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
@@ -454,6 +623,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       )
     else { return }
     dispatch(id)
+  }
+
+  private func dispatchCapturedDocumentSearchCommand(
+    _ id: String, capturedWindow: NSWindow?,
+    sendNativeAction: @MainActor (Selector, Any?) -> Bool = { action, sender in
+      NSApp.sendAction(action, to: nil, from: sender)
+    }
+  ) -> Bool {
+    guard let capturedWindow,
+      let panel = capturedWindow.windowController as? DocumentSearchPanelController,
+      panel.window === capturedWindow
+    else { return false }
+    if id == "file.close" {
+      panel.close()
+    } else if let action = Self.nativeEditingActions[id] {
+      _ = sendNativeAction(action, self)
+    }
+    return true  // Exact search scope is claimed even for refusal or no native responder.
+  }
+  private func capturedDocumentSearchCommandAvailability(_ id: String, capturedWindow: NSWindow?)
+    -> Bool?
+  {
+    guard let capturedWindow,
+      let panel = capturedWindow.windowController as? DocumentSearchPanelController,
+      panel.window === capturedWindow
+    else { return nil }
+    return id == "file.close" || Self.nativeEditingActions[id] != nil
+  }
+  private func dispatchDocumentSearchCapturedThroughGuards(
+    _ id: String, capturedWindow: NSWindow?,
+    sendNativeAction: @MainActor (Selector, Any?) -> Bool
+  ) -> Bool {
+    guard !preparingQuit, id != "app.shortcuts", shortcutRegistryReady,
+      registry.commands.contains(where: { $0.id == id })
+    else { return false }
+    return dispatchCapturedDocumentSearchCommand(
+      id, capturedWindow: capturedWindow, sendNativeAction: sendNativeAction)
+  }
+  private func documentSearchCapturedAvailabilityThroughGuards(
+    _ id: String, capturedWindow: NSWindow?
+  ) -> Bool? {
+    guard !preparingQuit else { return false }
+    if id == "app.shortcuts" { return shortcutController != nil }
+    guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else {
+      return false
+    }
+    return capturedDocumentSearchCommandAvailability(id, capturedWindow: capturedWindow)
   }
 
   private static let nativeEditingActions: [String: Selector] = [
@@ -499,6 +715,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
     guard shortcutRegistryReady, registry.commands.contains(where: { $0.id == id }) else { return }
     let commandWindow = NSApp.keyWindow
+    if dispatchDocumentSearchCapturedThroughGuards(
+      id, capturedWindow: commandWindow,
+      sendNativeAction: { action, sender in NSApp.sendAction(action, to: nil, from: sender) })
+    {
+      return
+    }
     if dispatchCapturedPreviewCommand(id, capturedWindow: commandWindow) { return }
     if let viewer = NSApp.keyWindow?.windowController as? LargeFileWindowController {
       if id == "file.close" {
@@ -746,6 +968,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       return false
     }
     let commandWindow = NSApp.keyWindow
+    if let available = documentSearchCapturedAvailabilityThroughGuards(
+      id, capturedWindow: commandWindow)
+    {
+      return available
+    }
     if let available = capturedPreviewCommandAvailability(id, capturedWindow: commandWindow) {
       return available
     }

@@ -13,6 +13,10 @@ import PadCore
     if mode == "compatibility" {
       let controller = EditorWindowController(
         restoreStartup: false, onError: { _ in }, onSessionChange: {})
+      guard let originalCloseWindow = controller.window else {
+        check(false, "missing original window for injected component close")
+        exit(1)
+      }
       let text = "hello"
       let value = SessionPresentation(
         axis: .stacked,
@@ -26,12 +30,17 @@ import PadCore
             selection: .init(location: 0, length: 0), bookmarks: [], in: text))
         check(false, "nonlegacy single presentation requires resolved payload")
       } catch { check(true, "nonlegacy single presentation requires resolved payload") }
-      controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+      controller.windowWillClose(
+        Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
       exit(failures == 0 ? 0 : 1)
     }
     if mode == "authority-single" {
       let controller = EditorWindowController(
         restoreStartup: false, onError: { _ in }, onSessionChange: {})
+      guard let originalCloseWindow = controller.window else {
+        check(false, "missing original window for injected component close")
+        exit(1)
+      }
       let text = "before text"
       let value = SessionPresentation.single(selection: .init(location: 2, length: 0))
       let resolved = try RestoredPresentationState.resolve(value, bookmarks: [], in: text)
@@ -52,7 +61,8 @@ import PadCore
       check(
         controller.visiblePanes.count == 1 && live.editor.selectedRange().location == 4,
         "completed single-pane restore never replays over later selection")
-      controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+      controller.windowWillClose(
+        Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
       exit(failures == 0 ? 0 : 1)
     }
     let text = "first 😀\r\nsecond e\u{301}\n" + String(repeating: "line\n", count: 200)
@@ -68,6 +78,10 @@ import PadCore
     let controller = EditorWindowController(
       restoreStartup: false, onError: { _ in },
       onSessionChange: { changes += 1 })
+    guard let originalCloseWindow = controller.window else {
+      check(false, "missing original window for injected component close")
+      exit(1)
+    }
     let input =
       mode == "deferred" || mode == "native-edit" || mode.hasPrefix("reentry-")
         || mode == "prelayout" || mode == "discard" || mode.hasPrefix("authority")
@@ -96,7 +110,8 @@ import PadCore
         saved.panes[1].selection.location == 3,
         "refused first install still captures current live slot")
       check(saved.panes[0] == presentation.panes[0], "refused first install preserves dormant slot")
-      controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+      controller.windowWillClose(
+        Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
       exit(failures == 0 ? 0 : 1)
     }
     if mode == "deferred" || mode == "native-edit" || mode.hasPrefix("reentry-")
@@ -122,7 +137,8 @@ import PadCore
         check(
           document.storage.length == 2_000_001 && document.panePresentation.pending == nil,
           "discard changes layout metadata only")
-        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        controller.windowWillClose(
+          Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
         exit(failures == 0 ? 0 : 1)
       }
       if mode == "native-edit" {
@@ -145,7 +161,8 @@ import PadCore
       case "authority-edit":
         document.storage.replaceCharacters(in: .init(location: 0, length: 1), with: "Z")
       case "authority-close":
-        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        controller.windowWillClose(
+          Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
       case "authority-saving": document.saving = true
       case "authority-operation": operation = document.beginFileOperation()
       case "authority-tab": controller.newDocument()
@@ -205,7 +222,8 @@ import PadCore
             case "reentry-detach": document.panePool.first(where: { $0.editor === view })?.detach()
             case "reentry-command": controller.execute("file.save")
             case "reentry-close":
-              controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+              controller.windowWillClose(
+                Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
             case "reentry-edit":
               document.storage.replaceCharacters(in: .init(location: 0, length: 1), with: "Q")
             case "reentry-operation":
@@ -338,7 +356,8 @@ import PadCore
         !DocumentPanePresentation.applyOrigin(.init(x: 0, y: 500), to: pane),
         "unavailable geometry refuses origin without retry")
     }
-    controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+    controller.windowWillClose(
+      Notification(name: NSWindow.willCloseNotification, object: originalCloseWindow))
     exit(failures == 0 ? 0 : 1)
   }
 }

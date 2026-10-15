@@ -87,6 +87,8 @@ enum FileStateEndpointError: Error { case unavailable, stale }
   private let endpointOwner = UUID()
   private var detachment: FileStateEndpointDetachment?
   private var endpointTransition = false
+  private var detachingEndpoint = false
+  var isDetachingEndpoint: Bool { detachingEndpoint }
   private let fence: DeliveryFence
   private var binding: Binding?
   private var actionAuthorityID = UUID()
@@ -360,7 +362,11 @@ enum FileStateEndpointError: Error { case unavailable, stale }
       throw FileStateEndpointError.unavailable
     }
     endpointTransition = true
-    defer { endpointTransition = false }
+    detachingEndpoint = true
+    defer {
+      detachingEndpoint = false
+      endpointTransition = false
+    }
     guard let value = liveContext?(), FileStateBindingIdentity(value) == binding.identity,
       !invalidated, detachment == nil,
       self.binding?.identity == binding.identity
