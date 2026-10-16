@@ -22,5 +22,19 @@
       "testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply",
       "testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation"
     ]
+  },
+  "new9": {
+    "class": "LanguageManagerReadOnlyTests",
+    "methods": [
+      "testManagerConstructionKeepsOneApplicationCatalogAuthority",
+      "testActualTableAndDetailsUseCompleteConfirmedCatalog",
+      "testHeldRefreshUsesExistingProducerAndTruthfulBusyState",
+      "testReloadFailurePreservesConfirmedRowsAndAppErrorObserver",
+      "testSamePublicationQuitNotificationsUpdatePresentation",
+      "testReentrantDeliveryCannotOverwriteSuccessorPublication",
+      "testNativeCloseReentryPreservesExactNewManager",
+      "testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules",
+      "testCommittedQuitDetachesPresentationAfterActualOwnerJoin"
+    ]
   }
 }

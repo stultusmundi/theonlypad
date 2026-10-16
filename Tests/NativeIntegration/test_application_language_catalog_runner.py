@@ -1,9 +1,9 @@
-"""Ten finite pure contracts for the standalone fixed application/catalog runner.
+"""Thirteen finite pure contracts for the standalone fixed application/catalog runner.
 
 Only the synchronous child boundary is substituted. Synthetic object/bundle bytes
 are NEVER executed. No subprocess, compiler, native process, timer or real PID.
-The retained baseline is inert: positive premises fail ordinarily before deep
-controls. Root, not this packet's author, owns actual RED/GREEN execution.
+The retained baseline is the unchanged public old14 runner/proof: new positive
+premises fail ordinarily before deep controls. Root, not this packet's author, owns actual RED/GREEN execution.
 """
 import contextlib
 import hashlib
@@ -34,6 +34,7 @@ RUNNER = load('application_catalog_test_subject', HERE / 'run_application_langua
 PROOF = load('application_catalog_proof_test_subject', HERE / 'application_language_catalog_proof.py')
 OLD = 'DocumentSearchAppRoutingTests'
 NEW = 'ApplicationLanguageCatalogTests'
+MANAGER = 'LanguageManagerReadOnlyTests'
 METHODS = {
     OLD: (
         'testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors',
@@ -53,6 +54,17 @@ METHODS = {
         'testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply',
         'testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation',
     ),
+    MANAGER: (
+        'testManagerConstructionKeepsOneApplicationCatalogAuthority',
+        'testActualTableAndDetailsUseCompleteConfirmedCatalog',
+        'testHeldRefreshUsesExistingProducerAndTruthfulBusyState',
+        'testReloadFailurePreservesConfirmedRowsAndAppErrorObserver',
+        'testSamePublicationQuitNotificationsUpdatePresentation',
+        'testReentrantDeliveryCannotOverwriteSuccessorPublication',
+        'testNativeCloseReentryPreservesExactNewManager',
+        'testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules',
+        'testCommittedQuitDetachesPresentationAfterActualOwnerJoin',
+    ),
 }
 TEST_MAP = {
     'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift':
@@ -63,16 +75,19 @@ TEST_MAP = {
         'Package/Tests/NativeRoutingTests/CatalogTestFixture.swift',
 }
 TAILS = {
-    'AppDelegate.swift': ('DocumentSearchAppRoutingAccess.swift', 'ApplicationCatalogAccess.swift'),
+    'AppDelegate.swift': ('DocumentSearchAppRoutingAccess.swift', 'ApplicationCatalogAccess.swift',
+                          'LanguageManagerApplicationAccess.swift'),
     'EditorWindowController.swift': ('DocumentSearchEditorBindingAccess.swift',),
     'NativeApplicationDocuments.swift': ('DocumentSearchAppNativeOwnerAccess.swift',),
     'DocumentSearchPanelController.swift': ('DocumentSearchPanelAccess.swift',),
+    'NativeLanguageManagerSession.swift': ('LanguageManagerSessionAccess.swift',),
+    'NativeLanguageManagerController.swift': ('LanguageManagerControllerAccess.swift',),
 }
 ROOTS = ('Sources/PadCore', 'Sources/SearchExecution', 'Sources/TheOnlyPad')
 EXCLUDED = 'Sources/TheOnlyPad/TheOnlyPadApplication.swift'
 MODULES = ('PadCore', 'SearchExecution', 'NativeRouting', 'NativeRoutingTests', 'NativeRoutingPackageTests')
-STAGES = ('toolchain', 'build', 'binpath', 'old4', 'new10')
-BUDGETS = (30, 180, 30, 180, 180)
+STAGES = ('toolchain', 'build', 'binpath', 'old4', 'new10', 'new9')
+BUDGETS = (30, 180, 30, 180, 180, 180)
 OLD_TEST = 'Tests/NativeIntegration/DocumentSearchAppRoutingTests.swift'
 COMBINED = 'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift'
 
@@ -103,6 +118,37 @@ def positive_dict(case, value, label):
     if not isinstance(value, dict):
         return False
     return True
+
+
+
+def contract_plan(case, root, run, label):
+    try:
+        value = RUNNER.build_plan(root, run)
+    except ValueError:
+        value = None
+    if not positive_dict(case, value, label):
+        return None
+    return value
+
+
+def contract_roster(case, data):
+    try:
+        value = PROOF.application_methods(data)
+    except ValueError:
+        value = None
+    expected = [(owner, name) for owner, names in METHODS.items() for name in names]
+    case.assertEqual(value, expected, 'Exact23 declaration admission absent; deeper controls UNENTERED')
+    return value if value == expected else None
+
+
+def contract_success(case, text, selection):
+    try:
+        value = PROOF.application_success(text, selection)
+    except ValueError:
+        value = None
+    expected = dict(tests=len(METHODS[selection]), failures=0, className=selection)
+    case.assertEqual(value, expected, 'Exact selected success admission absent; deeper controls UNENTERED')
+    return value if value == expected else None
 
 
 def repository(root):
@@ -256,7 +302,9 @@ class ChildBoundary:
         self.prechild.append(dict(name=name, command=command_path.read_bytes() if command_path.exists() else None,
                                   build=(self.run / 'build-inputs.json').exists(),
                                   oldResult=(self.run / 'old4-result.json').read_bytes()
-                                  if (self.run / 'old4-result.json').exists() else None))
+                                  if (self.run / 'old4-result.json').exists() else None,
+                                  newResult=(self.run / 'new10-result.json').read_bytes()
+                                  if (self.run / 'new10-result.json').exists() else None))
         code = self.failures.get(name, 0)
         stdout = b''
         if name == 'toolchain':
@@ -265,8 +313,8 @@ class ChildBoundary:
             graph(self.run, json.loads((self.run / 'sources.json').read_text()))
         elif name == 'binpath':
             stdout = (str(self.run / 'BuildProducts' / (platform.machine() + '-apple-macosx/debug')) + '\n').encode()
-        elif name in ('old4', 'new10'):
-            selection = OLD if name == 'old4' else NEW
+        elif name in ('old4', 'new10', 'new9'):
+            selection = {'old4': OLD, 'new10': NEW, 'new9': MANAGER}[name]
             stdout = success(selection).encode()
             if code:
                 # Assertions may exceed methods. Success-only parser must not invent failure credit.
@@ -332,8 +380,8 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = repository(Path(tmp) / 'Repo')
             run = Path(tmp) / 'Run'
-            plan = RUNNER.build_plan(root, run)
-            if not positive_dict(self, plan, 'Fixed current-source plan'):
+            plan = contract_plan(self, root, run, 'Fixed current-source plan')
+            if plan is None:
                 return
             self.assertEqual(plan.get('testMappings'), TEST_MAP)
             self.assertEqual(plan.get('tailMappings'), {k: list(v) for k, v in TAILS.items()})
@@ -342,11 +390,14 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             expected = sorted(p.relative_to(root).as_posix() for prefix in ROOTS
                               for p in (root / prefix).rglob('*.swift') if p != root / EXCLUDED)
             self.assertEqual(plan.get('productionOrigins'), expected)
+            self.assertEqual(len(expected), 189, '188 frozen native production files plus one synthetic Core basename control')
+            self.assertIn('Sources/TheOnlyPad/NativeLanguageManagerSession.swift', expected)
+            self.assertIn('Sources/TheOnlyPad/NativeLanguageManagerController.swift', expected)
             self.assertIn('Sources/PadCore/TheOnlyPadApplication.swift', expected)
             self.assertNotIn(EXCLUDED, expected)
             write(root / 'Sources/PadCore/AddedCurrent.swift', '// new current source\n')
-            grown = RUNNER.build_plan(root, run)
-            if not positive_dict(self, grown, 'Fresh grown-source plan'):
+            grown = contract_plan(self, root, run, 'Fresh grown-source plan')
+            if grown is None:
                 return
             self.assertEqual(grown.get('productionOrigins'), sorted(expected + ['Sources/PadCore/AddedCurrent.swift']))
             self.assertFalse(any('.local/' in str(x) for x in grown.get('productionOrigins', [])))
@@ -354,7 +405,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
     def testRostersAndWholeOldPrefixCannotBeChangedOrDuplicated(self):
         # A truncated combined payload, changed declaration or stale support roster must refuse.
         combined = (CANDIDATE / COMBINED).read_bytes()
-        roster = PROOF.application_methods(combined)
+        roster = contract_roster(self, combined)
         expected = [(owner, name) for owner, names in METHODS.items() for name in names]
         self.assertEqual(roster, expected, 'Declaration parser absent; roster/prefix controls UNENTERED')
         if roster != expected:
@@ -386,8 +437,8 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         for mutation in ('missing', 'repeated', 'foreign', 'wrong-class', 'old-only', 'json-method', 'json-class', 'prefix', 'whole-test', 'extra-test'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
                 root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'
-                plan = RUNNER.build_plan(root, run)
-                if not positive_dict(self, plan, 'Otherwise-valid roster plan'):
+                plan = contract_plan(self, root, run, 'Otherwise-valid roster plan')
+                if plan is None:
                     return
                 text = (root / COMBINED).read_text()
                 needle = 'func ' + METHODS[NEW][0] + '('
@@ -419,8 +470,8 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         # Re-adopting changed bytes/inodes or deriving generated bytes from a later read is unsafe.
         with tempfile.TemporaryDirectory() as tmp:
             root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'; run.mkdir(mode=0o700)
-            plan = RUNNER.build_plan(root, run)
-            if not positive_dict(self, plan, 'Capture plan'):
+            plan = contract_plan(self, root, run, 'Capture plan')
+            if plan is None:
                 return
             manifest = RUNNER.freeze(root, run, plan)
             if not positive_dict(self, manifest, 'Captured original/generated authority'):
@@ -438,7 +489,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             segments = manifest.get('tailSegments')
             self.assertIsInstance(segments, list, 'Tail ranges/inverse authority missing')
             if not isinstance(segments, list): return
-            self.assertEqual(len(segments), 5)
+            self.assertEqual(len(segments), 8)
             for target, tails in TAILS.items():
                 original = (root / 'Sources/TheOnlyPad' / target).read_bytes()
                 offset = len(original)
@@ -456,8 +507,8 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         for mutation in ('origin', 'tail', 'generated', 'missing', 'extra-source', 'extra-test', 'symlink', 'inode', 'foreign-uid', 'read-then-write'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
                 root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'; run.mkdir(mode=0o700)
-                plan = RUNNER.build_plan(root, run)
-                if not positive_dict(self, plan, 'Mutation capture plan'): return
+                plan = contract_plan(self, root, run, 'Mutation capture plan')
+                if plan is None: return
                 if mutation == 'read-then-write':
                     watched = root / 'Sources/TheOnlyPad/AppDelegate.swift'
                     original_read = RUNNER.read_input
@@ -562,9 +613,9 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
 
     def testExactOld4AndNew10SuccessParserRejectsIncompleteForeignOrFailedOutput(self):
         # Parser grants success only to the exact terminal roster and final expected summary.
-        for selection in (OLD, NEW):
+        for selection in (OLD, NEW, MANAGER):
             text = success(selection)
-            parsed = PROOF.application_success(text, selection)
+            parsed = contract_success(self, text, selection)
             expected = dict(tests=len(METHODS[selection]), failures=0, className=selection)
             self.assertEqual(parsed, expected, 'Success parser absent; transcript controls UNENTERED')
             if parsed != expected: return
@@ -599,7 +650,9 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             if outcome is None: return
             code, result, child = outcome
             self.assertEqual((code, result.get('state'), result.get('exit')), (0, 'COMPLETE_PASS', 0))
+            if (code, result.get('state'), result.get('exit')) != (0, 'COMPLETE_PASS', 0): return
             self.assertEqual([(n, t) for n, t, _ in child.calls], list(zip(STAGES, BUDGETS)))
+            if [(n, t) for n, t, _ in child.calls] != list(zip(STAGES, BUDGETS)): return
             for actual, before in zip(child.calls, child.prechild):
                 name, budget, command = actual
                 self.assertIsNotNone(before['command'], 'Current command must exist before synchronous child')
@@ -618,13 +671,21 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 self.assertEqual(build[build.index(flag)+1], binpath[binpath.index(flag)+1])
             self.assertIn('-warnings-as-errors', build); self.assertIn('-warnings-as-errors', binpath)
             self.assertIn('--build-tests', build); self.assertIn('--show-bin-path', binpath)
-            self.assertEqual([r['build'] for r in child.prechild], [False, False, False, True, True])
+            self.assertEqual([r['build'] for r in child.prechild], [False, False, False, True, True, True])
             self.assertIsNone(child.prechild[3]['oldResult'])
             self.assertIsNotNone(child.prechild[4]['oldResult'])
             if child.prechild[4]['oldResult'] is None: return
             self.assertEqual(json.loads(child.prechild[4]['oldResult']), dict(tests=4, failures=0, className=OLD))
+            self.assertTrue((run / 'new10-result.json').is_file(), 'Actual old14 result before third selection controls')
+            if not (run / 'new10-result.json').is_file(): return
             self.assertEqual(json.loads((run / 'new10-result.json').read_text()), dict(tests=10, failures=0, className=NEW))
-            for index, selection in ((3, OLD), (4, NEW)):
+            self.assertIsNotNone(child.prechild[5]['newResult'])
+            if child.prechild[5]['newResult'] is None: return
+            self.assertEqual(json.loads(child.prechild[5]['newResult']), dict(tests=10, failures=0, className=NEW))
+            self.assertTrue((run / 'new9-result.json').is_file(), 'Actual new9 result before deeper result checks')
+            if not (run / 'new9-result.json').is_file(): return
+            self.assertEqual(json.loads((run / 'new9-result.json').read_text()), dict(tests=9, failures=0, className=MANAGER))
+            for index, selection in ((3, OLD), (4, NEW), (5, MANAGER)):
                 command = child.calls[index][2]
                 self.assertEqual(command[command.index('-XCTest')+1], 'NativeRoutingTests.' + selection)
                 self.assertEqual(command[-1], child.calls[3][2][-1])
@@ -640,6 +701,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
             if outcome is None: return
             self.assertEqual(outcome[0], 0, 'Positive stage path required before failure controls')
+            if outcome[0] != 0: return
         for failed, code, expected_state in (('old4', 1, 'OLD4_FAILED_NEW10_UNENTERED'), ('new10', 65, 'NATURAL_STAGE_FAILURE')):
             with self.subTest(failed=failed), tempfile.TemporaryDirectory() as tmp:
                 run = Path(tmp) / 'Run'
@@ -677,6 +739,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
             if outcome is None: return
             self.assertEqual(outcome[0], 0, 'Positive custody path required before tamper controls')
+            if outcome[0] != 0: return
         targets = ('Commands/toolchain.json', 'Stages/toolchain/status.json', 'Stages/toolchain/stdout.log',
                    'Stages/toolchain/stderr.log', 'Commands/build.json', 'sources.json', 'input-identities.json',
                    'old4-result.json', 'build-inputs.json', 'module', 'object', 'outputmap', 'link', 'bundle-inode')
@@ -721,6 +784,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
             if outcome is None: return
             self.assertEqual(outcome[0], 0, 'Positive postflight required before final controls')
+            if outcome[0] != 0: return
             self.assertTrue(outcome[1].get('postflightVerified'))
             evidence = outcome[1].get('stageEvidence')
             self.assertIsInstance(evidence, list, 'Actual adopted final-stage evidence required')
@@ -760,12 +824,154 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                     preserved.append((path, path.read_bytes()))
                 outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run', mutate=mutate)
                 if outcome is None: return
-                self.assertEqual([r[0] for r in outcome[2].calls], list(STAGES))
-                self.assertEqual(len(preserved), 1, 'Final mutation must reach actual emitted authority')
+                self.assertEqual([r[0] for r in outcome[2].calls], list(STAGES[:5]))
+                self.assertEqual(len(preserved), 1, 'Original new10 mutation must reach actual emitted authority before new9')
                 self.assertEqual(outcome[0], 125)
                 self.assertNotEqual(outcome[1].get('state'), 'COMPLETE_PASS')
                 path, data = preserved[0]
                 self.assertEqual(path.read_bytes(), data, 'Refusal must preserve evidence/custody, never repair it')
+
+    def testExactManagerThirdClassAndWholeFourteenPrefixAreRequired(self):
+        combined = (CANDIDATE / COMBINED).read_bytes()
+        admitted = contract_roster(self, combined)
+        if admitted is None: return
+        self.assertEqual(len(admitted), 23)
+        self.assertEqual(tuple(name for owner, name in admitted if owner == MANAGER), METHODS[MANAGER])
+        self.assertEqual(len(METHODS[MANAGER]), 9)
+        prefix = combined[:85690]
+        self.assertEqual(hashlib.sha256(prefix).hexdigest(),
+                         'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e')
+        self.assertGreater(len(combined), len(prefix))
+        for mutation in ('missing', 'duplicate', 'unknown', 'wrong-class', 'old14-only'):
+            with self.subTest(mutation=mutation):
+                text = combined.decode()
+                needle = 'func ' + METHODS[MANAGER][0] + '('
+                self.assertEqual(text.count(needle), 1)
+                if mutation == 'missing': text = text.replace(needle, 'func omittedCase(', 1)
+                elif mutation == 'duplicate': text += '\nextension LanguageManagerReadOnlyTests { func ' + METHODS[MANAGER][0] + '() {} }\n'
+                elif mutation == 'unknown': text = text.replace(needle, 'func testForeign(', 1)
+                elif mutation == 'wrong-class': text = text.replace('class ' + MANAGER, 'class ForeignManager', 1)
+                else: text = prefix.decode()
+                with self.assertRaises(ValueError): PROOF.application_methods(text.encode())
+        for mutation in ('prefix-byte', 'prefix-short', 'json-new9-method', 'json-new9-class'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'
+                plan = contract_plan(self, root, run, 'Otherwise-valid three-class support plan')
+                if plan is None: return
+                if mutation.startswith('json-'):
+                    path = root / 'Tests/NativeIntegration/application-language-catalog-methods.json'
+                    value = json.loads(path.read_text())
+                    if mutation == 'json-new9-method': value['new9']['methods'][0] = 'testForeign'
+                    else: value['new9']['class'] = 'ForeignManager'
+                    save(path, value)
+                else:
+                    value = (root / COMBINED).read_bytes()
+                    if mutation == 'prefix-byte': value = b'!' + value[1:]
+                    else: value = value[:85689] + value[85690:]
+                    write(root / COMBINED, value)
+                with self.assertRaises(ValueError): RUNNER.build_plan(root, run)
+
+    def testOldFourteenMustBothPassBeforeManagerSelection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
+            if outcome is None: return
+            self.assertEqual(outcome[0], 0, 'Complete six-stage positive admission before old14 stop controls')
+            if outcome[0] != 0: return
+            self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+            if [row[0] for row in outcome[2].calls] != list(STAGES): return
+            self.assertEqual(outcome[1].get('new9Result'), dict(tests=9, failures=0, className=MANAGER))
+        for failed, expected_count in (('old4', 4), ('new10', 5)):
+            with self.subTest(failed=failed), tempfile.TemporaryDirectory() as tmp:
+                run = Path(tmp) / 'Run'
+                outcome = orchestration(self, Path(tmp) / 'Repo', run, failures={failed: 1})
+                if outcome is None: return
+                code, result, child = outcome
+                self.assertEqual((code, result.get('exit')), (1, 1))
+                self.assertNotEqual(result.get('state'), 'COMPLETE_PASS')
+                self.assertEqual([row[0] for row in child.calls], list(STAGES[:expected_count]))
+                self.assertFalse((run / 'Stages/new9').exists(), 'No third selection after either old14 failure')
+                self.assertFalse((run / 'new9-result.json').exists())
+                self.assertNotIn('new9', result.get('selectionResults', {}))
+                self.assertNotIn('new9Result', result)
+                self.assertIn(b'54 failures', (run / 'Stages' / failed / 'stdout.log').read_bytes())
+                self.assertEqual((run / 'State' / failed / 'retained.synthetic').read_bytes(),
+                                 b'synthetic custody must survive refusal\n')
+
+    def testManagerSelectionRefusesCapturePriorCustodyAndNonRosterSuccess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
+            if outcome is None: return
+            self.assertEqual(outcome[0], 0, 'Exact manager success before final capture/custody controls')
+            if outcome[0] != 0: return
+            self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+            if [row[0] for row in outcome[2].calls] != list(STAGES): return
+            self.assertEqual(outcome[1].get('new9Result'), dict(tests=9, failures=0, className=MANAGER))
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / 'Run'
+            outcome = orchestration(self, Path(tmp) / 'Repo', run, failures={'new9': 65})
+            if outcome is None: return
+            code, result, child = outcome
+            self.assertEqual((code, result.get('exit'), result.get('state')), (65, 65, 'NATURAL_STAGE_FAILURE'))
+            self.assertEqual([row[0] for row in child.calls], list(STAGES))
+            self.assertTrue(result.get('postflightVerified'))
+            self.assertIn(b'54 failures', (run / 'Stages/new9/stdout.log').read_bytes(),
+                          'Assertion count may exceed9; natural nonzero must stay nonzero')
+            self.assertFalse((run / 'new9-result.json').exists())
+            self.assertNotIn('new9Result', result, 'Success-only parser invents no structured ordinary failure')
+            self.assertEqual((run / 'State/new9/retained.synthetic').read_bytes(),
+                             b'synthetic custody must survive refusal\n')
+        for mutation in ('missing-case', 'duplicate-case', 'unknown-case', 'unexpected',
+                         'strict-receipt', 'capture-count', 'prior-new10-result',
+                         'prior-new10-capture', 'current-command-inode', 'bundle-inode', 'retained-state'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                preserved = []
+                reached = []
+                def corrupt(name, output, receipt):
+                    if name != 'new9': return
+                    reached.append(name)
+                    run = output.parents[1]
+                    path = output / 'stdout.log'
+                    if mutation in ('missing-case', 'duplicate-case', 'unknown-case', 'unexpected'):
+                        text = path.read_text()
+                        terminal = next(line for line in text.splitlines(keepends=True) if "' passed (" in line)
+                        if mutation == 'missing-case': text = text.replace(terminal, '', 1)
+                        elif mutation == 'duplicate-case': text += terminal
+                        elif mutation == 'unknown-case': text = text.replace(METHODS[MANAGER][0], 'testForeign')
+                        else: text = text.replace('(0 unexpected)', '(1 unexpected)')
+                        write(path, text)
+                        size = len(path.read_bytes())
+                        receipt['captured']['stdout'] = dict(stored=size, received=size, discarded=0)
+                    elif mutation == 'strict-receipt':
+                        receipt['foreign'] = True
+                        path = output / 'status.json'
+                    elif mutation == 'capture-count':
+                        receipt['captured']['stdout']['received'] += 1
+                        path = output / 'status.json'
+                    elif mutation == 'prior-new10-result':
+                        path = run / 'new10-result.json'; write(path, path.read_bytes() + b'\n')
+                    elif mutation == 'prior-new10-capture':
+                        path = run / 'Stages/new10/stderr.log'; write(path, path.read_bytes() + b'\n')
+                    elif mutation == 'current-command-inode':
+                        path = run / 'Commands/new9.json'; replace_same_bytes(path)
+                    elif mutation == 'bundle-inode':
+                        path = run / 'BuildProducts' / (platform.machine() + '-apple-macosx/debug/NativeRoutingPackageTests.xctest/Contents/MacOS/NativeRoutingPackageTests')
+                        replace_same_bytes(path)
+                    else:
+                        path = run / 'State/new9/retained.synthetic'
+                        write(path, b'actual synthetic manager custody\n')
+                    save(output / 'status.json', receipt)
+                    preserved.append((path, path.read_bytes()))
+                run = Path(tmp) / 'Run'
+                outcome = orchestration(self, Path(tmp) / 'Repo', run, receipt_mutation=corrupt)
+                if outcome is None: return
+                self.assertEqual(reached, ['new9'], 'Actual fixed final boundary must be reached')
+                self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+                self.assertEqual(outcome[0], 125)
+                self.assertNotEqual(outcome[1].get('state'), 'COMPLETE_PASS')
+                self.assertEqual(len(preserved), 1)
+                if len(preserved) != 1: return
+                path, data = preserved[0]
+                self.assertEqual(path.read_bytes(), data, 'Refusal cannot repair/erase captured authority or custody')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 # Active integration checkpoint — 2026-10-16
 
-The development branch is confirmed remotely at `fa758e1`. Catalog startup/quit
+The preceding development checkpoint is confirmed remotely at `566f2ed`. Catalog startup/quit
 activation (`be6ec6f`), the Locate presentation correction, monitor package repair
 and the finer failure-only diagnostic are published. Routine non-force reviewed
 development pushes remain authorized; merges and releases remain separate.
@@ -17,20 +17,33 @@ query/fragment handling and all original checks. A compiling eight-test baseline
 has three ordinary failures; the productive candidate passes eight. The formatted
 public-source full run passes1,211 unique tests with warnings as errors, including
 all eight original preview tests; all499 saved inputs still match. Formatting
-and public checks pass. Older hosted verification is pending. See
+and public checks pass. Hosted run38882522572 repeats the same31-record interruption; the guard does not clear it. The helper-boundary diagnostic is implemented and locally verified; its hosted observation is pending. See
 [URL preflight evidence](verification/folder-preview-url-preflight.md).
 
-The private read-only manager component now passes its existing14 and new9
-hidden native cases through six natural zero-exit owned stages. It uses the
-single application catalog owner and exercises real table/details, refresh,
-same-publication quit notifications, reentry and close/reopen. Root verifies422
-frozen inputs and214 current basis facts before the separate Core adoption.
-Independent actual review and the maintained23-case command are in progress.
+The read-only manager is adopted in working source. The maintained application
+command passes original4, startup/quit10 and manager9 hidden native tests through
+six natural zero-exit direct watchdog stages (independent actual GO c08a4d57).
+The final tail-format pure runner retake passes all13 in685.248 seconds under an
+upfront1,200-second budget; all210 frozen facts match. The preceding formatted13
+pass (GO856720f6) and both earlier600-second incomplete runs remain separate.
+Current adopted app/helper source separately passes1,211 default tests with
+warnings as errors and504 unchanged input hashes. Neighboring catalog ownership
+passes14 read and31 mutation cases. See
+[manager evidence](verification/application-language-catalog.md).
 Editing, Save, recovery/import/export, menu activation and document propagation
-remain outstanding; this component is not a complete manager.
+remain outstanding. The ten-test editable API/inert baseline has independently reviewed ordinary RED:
+old23 pass first, then all10 new methods fail only missing workspace admission,
+with0 unexpected errors and deeper Save/departure controls unentered (GO823a9db3).
+The runtime authority is explicitly rebased to current188 origins. Productive
+draft/Save/close implementation is now in private development.
+The XML component's19-test attempt has18 passes and four ordinary namespace
+assertions in its remaining method. A source-identical diagnostic isolates all
+four inputs; explicit namespace checks and new coverage are next. No XML feature
+acceptance is claimed. New test-helper CI diagnostics pass12 pure protocol tests and45 public diagnostic
+checks. The actual local selected Swift test passes1/0 with42 outer and314 helper
+records, with571 originals/572 copies and saved authority exact. Hosted observation
+of this narrower diagnostic remains pending.
 
-The published application/catalog command still passes14 cases; its separate
-current-source actual-helper run passes three fixed fresh-process cases.
 The local package remains `be6ec6f`, with verified ad-hoc signature, archive and
 SBOM. Focused desktop setup exits65 while enabling automation before entering
 its method. User desktop readiness remains unanswered; no permission grant is
@@ -38,9 +51,8 @@ inferred. Historical cache-package desktop acceptance remains11 passes and one
 Locate failure across12 entered cases, with six planned cases and AXPress
 unentered. Current packaged/desktop acceptance remains outstanding.
 
-Next: publish the verified URL guard and inspect its hosted result; finish the
-maintained manager regression command and integrate the reviewed component,
-then implement editable draft/Save/dirty-close and quit through the same owner.
+Next: narrow the repeated hosted request failure without changing production; implement editable draft/Save/dirty-close and quit through the same owner after
+the reviewed read-only component; finish XML namespace refusal checks.
 Continue picker/propagation, native history/storage, matching desktop acceptance
 and every other applicable BUILD requirement. The full project is unfinished;
 these checkpoints do not pause the user's implementation request.

@@ -37,6 +37,12 @@ Use a fresh output directory. The watchdog directly owns this invocation; do not
 nest another session-owning watchdog. Synthetic raw evidence stays ignored.
 
 These results establish local input admission and regression coverage on ARM64
-macOS26 / Swift6.3.3. Older hosted Foundation verification remains pending.
+macOS26 / Swift6.3.3. Hosted run38882522572 still stops in the same eleventh-request interval; the guard does not clear that observed failure. The helper-boundary diagnostic is implemented and locally verified, with narrower hosted observation pending and no additional production change.
 This conservative guard is not proof of the hosted root cause, desktop
 acceptance, memory/performance bounds or overall feature completeness.
+
+The helper-boundary diagnostic passes twelve pure protocol tests and one
+actual local selected Swift test with42 outer plus314 inner records. It changes
+only a private frozen Test projection, not this Core guard or the original Test.
+The narrower hosted observation remains pending; see
+[diagnostic evidence](ci-failure-diagnostics.md). No hosted cause or fix is claimed.

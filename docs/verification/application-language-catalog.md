@@ -1,4 +1,72 @@
-# Application language catalog startup and quit
+# Application language catalog and read-only manager
+
+## Read-only manager checkpoint — 2026-10-16
+
+The application now retains a read-only native manager through the existing
+single catalog owner. Its actual table, confirmed details, Refresh and Close
+controls consume one coherent publication. A weak presentation session avoids
+a second store, writer or observer. Exact delivery and controller identities
+protect refresh, error callbacks, close/reopen and reentrant successors.
+Successful quit joins owner invalidation and retires the captured presentation
+before external-command draining; reversible veto and rollback remain earlier.
+
+This component has no public menu entry yet. Editing, draft Save, dirty-close
+consent, recovery/import/export, picker, document propagation and packaged user
+workflows remain outstanding. It does not complete requirement D-04.
+
+Implemented files are `AppDelegate.swift`, `NativeLanguageManagerController.swift`
+and `NativeLanguageManagerSession.swift`. The retained fixed command is:
+
+```sh
+scripts/test-application-language-catalog.sh
+```
+
+It passes 23 hidden native tests: original routing4, startup/quit10 and manager9,
+in six natural zero-exit direct watchdog stages. The actual run verifies 210
+candidate inputs, 209 originals, 409 frozen files and eight explicit access tails
+across six declaring sources. Five compiler modules, 192 objects and 229 artifacts
+remain bound through final postflight; six synthetic State directories are empty.
+The complete 85,690-byte prior14-test prefix is retained in the formatted combined
+110,027-byte source. Independent actual review accepts this scope (GO c08a4d57).
+Do not nest another process-group watchdog around this command.
+
+The manager tests exercise real controls, refresh, close/reopen, same-publication
+quit notifications, error/reentry fences and exact presentation retirement.
+They show no windows and establish no physical keyboard, visible sheet or
+accessibility acceptance.
+
+The maintained runner's thirteen pure contracts pass in a fresh unchanged
+formatted retake with an upfront 1,200-second owned budget (689.661 seconds in
+unittest; GO 856720f6). Both earlier 600-second runs remain incomplete: nine
+methods passed, the tenth was open, and three were unentered. No earlier full
+pass is credited. Pure controls use synthetic compiler/child boundaries and do
+not measure application performance. Historical preparation metadata named
+`previousSourceManifestSHA256` binds the preceding preparation file, not a Source
+manifest; direct captured input bindings remain authoritative.
+
+The adopted application sources separately pass an incremental warnings-as-errors
+build and all 1,211 default tests, with 504 saved input hashes unchanged. The
+actual application recompiles/relinks; the helper product is present from its
+prior build, without a fresh helper rebuild or launch in this invocation. The neighboring standalone owner command also passes read14 and mutation31
+against this source checkpoint. These invocations overlap and are not additive totals.
+Two later access-tail changes add only formatter-required line breaks and update
+their exact runner hash literals. The current public native command again passes
+all23; independent publication review accepts the derivative and neighboring
+evidence (GO6f186c1e). Strict recursive formatting passes. Its fresh same-Test pure13 retake also passes in685.248 seconds under the
+upfront1,200-second budget, with all210 frozen input facts exact. The earlier
+689.661-second formatted13 pass remains a separate byte-bound result.
+
+The local package remains source `be6ec6f`; no new package, hosted CI pass or
+desktop acceptance follows from this source adoption.
+
+Raw synthetic inputs, captures and receipts remain in ignored local evidence.
+
+## Earlier startup/quit checkpoint
+
+The following records describe the preceding `be6ec6f` activation checkpoint.
+Counts, package state and outstanding manager notes there are historical and are
+superseded by the read-only component checkpoint above.
+
 
 ## Implemented
 

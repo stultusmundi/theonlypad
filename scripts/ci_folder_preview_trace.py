@@ -19,6 +19,9 @@ VERIFIER = 'Tests/NativeIntegration/run_native_regressions.py'
 WATCH_SHA = 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d'
 VERIFIER_SHA = 'f4435e99ad7a547a90d01ce38c094d0813fac797a443a0e33654cce6b5ea9cef'
 TAG = b'CI_FOLDER_PREVIEW_TRACE'
+PATH_TAG = b'CI_FOLDER_PREVIEW_PATH'
+TEST_SHA256 = '8eac403828d8e4612f273ce91f7fd414ddc9a502203f659af34f933267675e42'
+RECORD_LIMIT = 512
 # Phase5 is the same literal pair in each of twelve source-bound request cases.
 STATEMENTS = [(phase, edge) for phase in range(10) for edge in range(2)]
 SEQUENCE = ([(phase, edge) for phase in range(5) for edge in range(2)]
@@ -118,8 +121,16 @@ def _marker(phase, edge, indent):
             + str(phase).encode('ascii') + b' e=' + str(edge).encode('ascii') + b'\\n".utf8))\n')
 
 
+def _path_marker(stage, indent):
+    return (b' ' * indent + b'FileHandle.standardError.write(Data("CI_FOLDER_PREVIEW_PATH s='
+            + str(stage).encode('ascii') + b'\\n".utf8))\n')
+
+
 def project_test(original):
-    _require(type(original) is bytes and TAG not in original)
+    _require(type(original) is bytes and TAG not in original and PATH_TAG not in original)
+    # Bind the whole selected source, including both helpers and every callsite.
+    # An inverse alone cannot authorize projecting a changed helper or body.
+    _require(hashlib.sha256(original).hexdigest() == TEST_SHA256)
     head = b'  func testAdmissionAndBudgetsRejectBeforeExpensiveWork() throws {\n'
     next_method = b'  func testSecondReadFailureReturnsNoPartialPreviewAndLeavesSourcesBackups() throws {\n'
     _require(original.count(head) == original.count(next_method) == 1)
@@ -186,32 +197,185 @@ def project_test(original):
         _require(inverse.count(statement) == 1)
         inverse = inverse.replace(statement, b'', 1)
     _require(inverse == original and projected.count(TAG) == len(STATEMENTS))
+    reader = b'        let reader = ControlledReader()\n'
+    reader_site = request_loop + _marker(5, 0, 8) + reader
+    _require(projected.count(reader_site) == 1)
+    projected = projected.replace(reader_site, request_loop + _marker(5, 0, 8)
+        + _path_marker(0, 8) + reader + _path_marker(1, 8), 1)
+
+    preview_head = b'  private func preview(\n'
+    assertion_head = b'  private func assertError<T>(\n'
+    fixture_head = b'  private func withFixture('
+    _require(all(projected.count(anchor) == 1
+                 for anchor in (preview_head, assertion_head, fixture_head)))
+    preview_start = projected.index(preview_head)
+    assertion_start = projected.index(assertion_head)
+    fixture_start = projected.index(fixture_head)
+    _require(preview_start < assertion_start < fixture_start)
+    preview = projected[preview_start:assertion_start]
+    assertion = projected[assertion_start:fixture_start]
+    preserved = b'    defer { fixture.assertPreserved() }\n'
+    preview_body = b'  ) throws -> FolderReplacementPreview {\n' + preserved
+    builder_call = b'    return try builder.preview(\n'
+    _require(preview.count(preview_body + builder_call) == 1)
+    expanded_preservation = (b'    defer {\n' + _path_marker(9, 6)
+        + b'      fixture.assertPreserved()\n' + _path_marker(10, 6) + b'    }\n')
+    diagnostic_defer = b'    defer {\n' + _path_marker(8, 6) + b'    }\n'
+    preview = preview.replace(preview_body + builder_call,
+        b'  ) throws -> FolderReplacementPreview {\n' + _path_marker(6, 4)
+        + expanded_preservation + diagnostic_defer + _path_marker(7, 4) + builder_call, 1)
+    throws_call = b'    XCTAssertThrowsError(try body(), file: file, line: line) {\n'
+    comparison = (b'      XCTAssertEqual($0 as? FolderReplacementPreviewError, expected, '
+                  b'file: file, line: line)\n')
+    assertion_body = throws_call + comparison + b'    }\n'
+    _require(assertion.count(assertion_body) == 1)
+    assertion = assertion.replace(assertion_body, _path_marker(2, 4) + throws_call
+        + _path_marker(3, 6) + comparison + _path_marker(4, 6) + b'    }\n'
+        + _path_marker(5, 4), 1)
+    projected = (projected[:preview_start] + preview + assertion + projected[fixture_start:])
+
+    # Independently undo both layers, including only the added defer syntax.
+    inverse = projected
+    for phase, edge in STATEMENTS:
+        indent = 4 if (phase, edge) in ((0, 0), (9, 1)) else (8 if phase == 5 else 6)
+        statement = _marker(phase, edge, indent)
+        _require(inverse.count(statement) == 1)
+        inverse = inverse.replace(statement, b'', 1)
+    for stage in range(11):
+        indent = 8 if stage in (0, 1) else (6 if stage in (3, 4, 8, 9, 10) else 4)
+        statement = _path_marker(stage, indent)
+        _require(inverse.count(statement) == 1)
+        inverse = inverse.replace(statement, b'', 1)
+    empty_defer = b'    defer {\n    }\n'
+    plain_preservation = b'    defer {\n      fixture.assertPreserved()\n    }\n'
+    _require(inverse.count(empty_defer) == inverse.count(plain_preservation) == 1)
+    inverse = inverse.replace(empty_defer, b'', 1).replace(plain_preservation, preserved, 1)
+    _require(inverse == original and projected.count(TAG) == 20 and projected.count(PATH_TAG) == 11)
     return projected
+
+
+def _trace_grammar():
+    """Fixed source-bound outer intervals and their nested helper call shapes."""
+    events = []
+    request = 0
+    for phase, edge in SEQUENCE:
+        events.append(('outer', phase, edge))
+        if edge != 0:
+            continue
+        if phase == 1:
+            calls = ('assertion',) * 14
+        elif phase == 5:
+            request += 1
+            calls = ('request',)
+        elif phase == 6:
+            calls = ('helper', 'assertion', 'assertion', 'assertion', 'helper')
+        elif phase == 7:
+            calls = ('helper', 'helper')
+        elif phase == 8:
+            calls = ('assertion',)
+        else:
+            calls = ()
+        for call in calls:
+            stages = (6, 7, 8, 9, 10)
+            if call != 'helper':
+                stages = (2,) + stages + (3, 4, 5)
+            if call == 'request':
+                stages = (0, 1) + stages
+            ordinal = request if phase == 5 else None
+            events.extend(('path', stage, ordinal) for stage in stages)
+    return events
+
+
+def _trace_report(outer_count, path_count, stage, ordinal):
+    if outer_count:
+        phase, edge = SEQUENCE[outer_count - 1]
+        horizon = 'all-intervals-ended' if outer_count == len(SEQUENCE) else (
+            'entered-without-end' if edge == 0 else 'completed-interval')
+    else:
+        phase, edge, horizon = None, None, 'not-observed'
+    if stage is None:
+        path_horizon = 'not-observed'
+    elif stage == 5:
+        path_horizon = 'all-helpers-ended' if path_count == 314 else 'assertion-returned'
+    elif stage == 10:
+        path_horizon = 'helper-ended'
+    else:
+        path_horizon = 'observed-prefix'
+    return dict(phase=phase, edge=edge, records=outer_count, horizon=horizon,
+                pathStage=stage, requestOrdinal=ordinal, pathRecords=path_count,
+                pathHorizon=path_horizon)
 
 
 def parse_trace(stdout, stderr):
     _require(type(stdout) is bytes and type(stderr) is bytes)
-    sequence = []
-    marker_stream = None
+    grammar = _trace_grammar()
+    cursor = outer_count = path_count = 0
+    stage = ordinal = marker_stream = None
     for stream, raw in (('stdout', stdout), ('stderr', stderr)):
         for line in raw.splitlines(keepends=True):
             stripped = line.strip()
-            potential = TAG in line or (bool(stripped) and TAG.startswith(stripped))
+            potential = (b'CI_FOLDER_PREVIEW_' in line or TAG in line or PATH_TAG in line
+                or (bool(stripped) and any(tag.startswith(stripped) for tag in (TAG, PATH_TAG))))
             if not potential:
                 continue
             _require(marker_stream is None or marker_stream == stream)
             marker_stream = stream
-            match = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
-            _require(match is not None and len(sequence) < len(SEQUENCE))
-            pair = (int(match[1]), int(match[2]))
-            _require(pair == SEQUENCE[len(sequence)])
-            sequence.append(pair)
-    if not sequence:
-        return dict(phase=None, edge=None, records=0, horizon='not-observed')
-    phase, edge = sequence[-1]
-    horizon = 'all-intervals-ended' if len(sequence) == len(SEQUENCE) else (
-        'entered-without-end' if edge == 0 else 'completed-interval')
-    return dict(phase=phase, edge=edge, records=len(sequence), horizon=horizon)
+            _require(outer_count + path_count < RECORD_LIMIT and cursor < len(grammar))
+            outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
+            path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
+            _require(outer is not None or path is not None)
+            if outer is not None:
+                event = ('outer', int(outer[1]), int(outer[2]))
+            else:
+                # The current outer pair determines custody; the report retains
+                # this ordinal after that pair ends until another PATH arrives.
+                current = SEQUENCE[outer_count - 1] if outer_count else None
+                request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
+                event = ('path', int(path[1]), request)
+            # Original XCTAssertThrowsError can return without its handler when
+            # no throw occurred. Only the complete 3,4 pair is optional.
+            expected = grammar[cursor]
+            if (expected[0:2] == ('path', 3)
+                    and event == ('path', 5, expected[2])):
+                cursor += 2
+            _require(event == grammar[cursor])
+            cursor += 1
+            if outer is not None:
+                outer_count += 1
+            else:
+                path_count += 1
+                stage, ordinal = event[1:]
+    return _trace_report(outer_count, path_count, stage, ordinal)
+
+
+def _valid_trace_report(trace):
+    """Validate only reachable closed reports, without accepting supplied text."""
+    _require(type(trace) is dict and set(trace) == {
+        'phase', 'edge', 'records', 'horizon', 'pathStage', 'requestOrdinal',
+        'pathRecords', 'pathHorizon'})
+    for key in ('phase', 'edge', 'pathStage', 'requestOrdinal'):
+        _require(trace[key] is None or type(trace[key]) is int)
+    _require(type(trace['records']) is int and type(trace['pathRecords']) is int)
+    _require(type(trace['horizon']) is str and type(trace['pathHorizon']) is str)
+    _require(0 <= trace['records'] <= len(SEQUENCE) and 0 <= trace['pathRecords'] <= 314)
+    outer = paths = ended_assertions = 0
+    stage = ordinal = None
+    # Every previously returned assertion independently permits omitting 3,4.
+    # Thus each canonical prefix has a finite even range of reachable counts.
+    for event in [None, *_trace_grammar()]:
+        if event is not None:
+            if event[0] == 'outer':
+                outer += 1
+            else:
+                paths += 1
+                stage, ordinal = event[1:]
+                if stage == 5:
+                    ended_assertions += 1
+        missing = paths - trace['pathRecords']
+        if (0 <= missing <= 2 * ended_assertions and missing % 2 == 0
+                and trace == _trace_report(outer, trace['pathRecords'], stage, ordinal)):
+            return
+    raise ValueError('diagnostic evidence refused')
 
 
 def _inventory(root):
@@ -412,15 +576,9 @@ def render(result):
     unavailable = ['ci-folder-preview-trace: unavailable', 'reason: incomplete-evidence']
     try:
         state, trace = result['state'], result['trace']
-        _require(state in ('observed', 'not-observed'))
-        records = trace['records']
-        _require(type(records) is int and 0 <= records <= len(SEQUENCE))
-        if records:
-            phase, edge = SEQUENCE[records - 1]
-            horizon = 'all-intervals-ended' if records == len(SEQUENCE) else ('entered-without-end' if edge == 0 else 'completed-interval')
-        else:
-            phase, edge, horizon = None, None, 'not-observed'
-        _require(trace == dict(phase=phase, edge=edge, records=records, horizon=horizon))
+        _require(type(state) is str and state in ('observed', 'not-observed'))
+        _valid_trace_report(trace)
+        records, phase, edge, horizon = (trace[key] for key in ('records', 'phase', 'edge', 'horizon'))
         _require(state == ('observed' if records else 'not-observed'))
         _require(result['signalObservation'] == 'not-observed-for-selected-test')
         for key in ('ownedExit', 'ownedReturnCode'):
@@ -429,6 +587,9 @@ def render(result):
         lines = ['ci-folder-preview-trace: ' + state,
             'trace: phase=' + str(-1 if phase is None else phase) + ' edge=' + str(-1 if edge is None else edge)
             + ' horizon=' + horizon + ' records=' + str(records),
+            'path: stage=' + str(-1 if trace['pathStage'] is None else trace['pathStage'])
+            + ' request=' + str(-1 if trace['requestOrdinal'] is None else trace['requestOrdinal'])
+            + ' horizon=' + trace['pathHorizon'] + ' records=' + str(trace['pathRecords']),
             'owned: exit=' + str(result['ownedExit']) + ' returnCode=' + str(result['ownedReturnCode'])
             + ' signal=not-observed-for-selected-test']
         _require(len(('\n'.join(lines) + '\n').encode('ascii')) <= 512)

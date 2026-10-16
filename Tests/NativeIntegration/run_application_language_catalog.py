@@ -1,4 +1,4 @@
-"""Fixed retained application/catalog regression; five serial direct owned stages."""
+"""Fixed retained application/catalog regression; six serial direct owned stages."""
 from pathlib import Path
 import hashlib
 import importlib.util
@@ -22,11 +22,11 @@ EXCLUDED_ENTRY = 'Sources/TheOnlyPad/TheOnlyPadApplication.swift'
 RECEIPT_FIELDS = set('command pid processGroup exitObserved registrationError groupSignalAttempted '
     'groupSignalError groupCleanup groupQuery waitCompleted returnCode waitError timedOut '
     'interruptedSignal truncated captureComplete failure exit seconds captured'.split())
-FIXED_SELECTIONS = {'old4': {'class': 'DocumentSearchAppRoutingTests', 'methods': ['testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors', 'testCapturedSearchAvailabilityAndDispatchShareIdentityAndRefusalPolicy', 'testActualManagedConfigurationStaysSearchLazyAndAppGuardsPrecedeScope', 'testActualQuitPublishesNativeReceiptThenJoinsSearchAndExternalExactlyOnceAcrossVetoAndRetry']}, 'new10': {'class': 'ApplicationLanguageCatalogTests', 'methods': ['testApplicationCatalogStartupRemainsLazyAndStartsOneActualRead', 'testApplicationCatalogFailureRetainsLastConfirmedPublicationAndDocumentStartup', 'testApplicationCatalogErrorPresentationReentryCannotClobberSuccessorState', 'testQuitBeforeCatalogStartupNeverConstructsOrReadsCatalog', 'testBusyCatalogQuitVetoDoesNotInvalidateAndReleasedReadSettles', 'testActualUnresolvedWriteBlocksQuitWithoutAcknowledgingOrDiscarding', 'testNativeVetoRollsBackOnlyActualCatalogReservationAndKeepsSuccessfulCatalogWrite', 'testUnsettledSearchVetoReleasesCatalogWithoutReopeningTerminalSearch', 'testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply', 'testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation']}}
+FIXED_SELECTIONS = {'old4': {'class': 'DocumentSearchAppRoutingTests', 'methods': ['testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors', 'testCapturedSearchAvailabilityAndDispatchShareIdentityAndRefusalPolicy', 'testActualManagedConfigurationStaysSearchLazyAndAppGuardsPrecedeScope', 'testActualQuitPublishesNativeReceiptThenJoinsSearchAndExternalExactlyOnceAcrossVetoAndRetry']}, 'new10': {'class': 'ApplicationLanguageCatalogTests', 'methods': ['testApplicationCatalogStartupRemainsLazyAndStartsOneActualRead', 'testApplicationCatalogFailureRetainsLastConfirmedPublicationAndDocumentStartup', 'testApplicationCatalogErrorPresentationReentryCannotClobberSuccessorState', 'testQuitBeforeCatalogStartupNeverConstructsOrReadsCatalog', 'testBusyCatalogQuitVetoDoesNotInvalidateAndReleasedReadSettles', 'testActualUnresolvedWriteBlocksQuitWithoutAcknowledgingOrDiscarding', 'testNativeVetoRollsBackOnlyActualCatalogReservationAndKeepsSuccessfulCatalogWrite', 'testUnsettledSearchVetoReleasesCatalogWithoutReopeningTerminalSearch', 'testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply', 'testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation']}, 'new9': {'class': 'LanguageManagerReadOnlyTests', 'methods': ['testManagerConstructionKeepsOneApplicationCatalogAuthority', 'testActualTableAndDetailsUseCompleteConfirmedCatalog', 'testHeldRefreshUsesExistingProducerAndTruthfulBusyState', 'testReloadFailurePreservesConfirmedRowsAndAppErrorObserver', 'testSamePublicationQuitNotificationsUpdatePresentation', 'testReentrantDeliveryCannotOverwriteSuccessorPublication', 'testNativeCloseReentryPreservesExactNewManager', 'testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules', 'testCommittedQuitDetachesPresentationAfterActualOwnerJoin']}}
 TEST_MAPPINGS = {'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift': 'Package/Tests/NativeRoutingTests/DocumentSearchAppRoutingTests.swift', 'Tests/NativeIntegration/ApplicationCatalogStoreControl.swift': 'Package/Tests/NativeRoutingTests/ApplicationCatalogStoreControl.swift', 'Tests/PadCoreTests/CatalogTestFixture.swift': 'Package/Tests/NativeRoutingTests/CatalogTestFixture.swift'}
-TAIL_MAPPINGS = {'AppDelegate.swift': ['DocumentSearchAppRoutingAccess.swift', 'ApplicationCatalogAccess.swift'], 'EditorWindowController.swift': ['DocumentSearchEditorBindingAccess.swift'], 'NativeApplicationDocuments.swift': ['DocumentSearchAppNativeOwnerAccess.swift'], 'DocumentSearchPanelController.swift': ['DocumentSearchPanelAccess.swift']}
-STAGE_BUDGETS = [{'name': 'toolchain', 'timeout': 30}, {'name': 'build', 'timeout': 180}, {'name': 'binpath', 'timeout': 30}, {'name': 'old4', 'timeout': 180}, {'name': 'new10', 'timeout': 180}]
-SUPPORT_HASHES = {'scripts/run-owned-search-tests.py': 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d', 'Tests/NativeIntegration/run_native_regressions.py': 'f4435e99ad7a547a90d01ce38c094d0813fac797a443a0e33654cce6b5ea9cef', 'Tests/NativeIntegration/application_language_catalog_proof.py': '187ee3391bff8f440495a02c3b5c0283e808b834f90025a5bafe08c93f779344', 'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift': 'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e', 'Tests/NativeIntegration/DocumentSearchAppRoutingTests.swift': '1e196900670029afdfd995f2b30bac50b2fa19e1f312c64809eddc366b3aa0b9', 'Tests/NativeIntegration/ApplicationCatalogStoreControl.swift': '7432da1fb7a622dbc2b4c168fbff8f5774a8d5728f0d9be458b7fa191007988a', 'Tests/PadCoreTests/CatalogTestFixture.swift': '411c68ccc900043125f1c970bf40a28993671e31ada8752cf80c60e45792795b', 'Tests/NativeIntegration/application-language-catalog-Package.swift': '1460f67527046bf1afa69e3083bfde7e342aa1a202a40e10533d67fc221597c8', 'Tests/NativeIntegration/test_application_language_catalog_runner.py': '443248b02fc8a71101205a5e58c64d2b2dcb26d222556ab6b1981dcbf6a8eb6f', 'Tests/NativeIntegration/DocumentSearchAppRoutingAccess.swift': '832fb07c9955621e209c5493234ecfbba65fc5871691cdb4301d4cb2bb40057a', 'Tests/NativeIntegration/ApplicationCatalogAccess.swift': '33c4bc49ac4236f40918bea1d0603c264b3e431858a38daa2338037227814c82', 'Tests/NativeIntegration/DocumentSearchEditorBindingAccess.swift': '602a3603c0f872ce2bb5814fd348138518b5276a33b469e2093625da05865537', 'Tests/NativeIntegration/DocumentSearchAppNativeOwnerAccess.swift': 'ec9ffa625b225067bb9573ca3c8087cc3828931885c20d736faabb87b722ee3b', 'Tests/NativeIntegration/DocumentSearchPanelAccess.swift': '063f08d19c8a6081344a3252a574ad7c921011349faf3c06989044810fe579df'}
+TAIL_MAPPINGS = {'AppDelegate.swift': ['DocumentSearchAppRoutingAccess.swift', 'ApplicationCatalogAccess.swift', 'LanguageManagerApplicationAccess.swift'], 'EditorWindowController.swift': ['DocumentSearchEditorBindingAccess.swift'], 'NativeApplicationDocuments.swift': ['DocumentSearchAppNativeOwnerAccess.swift'], 'DocumentSearchPanelController.swift': ['DocumentSearchPanelAccess.swift'], 'NativeLanguageManagerSession.swift': ['LanguageManagerSessionAccess.swift'], 'NativeLanguageManagerController.swift': ['LanguageManagerControllerAccess.swift']}
+STAGE_BUDGETS = [{'name': 'toolchain', 'timeout': 30}, {'name': 'build', 'timeout': 180}, {'name': 'binpath', 'timeout': 30}, {'name': 'old4', 'timeout': 180}, {'name': 'new10', 'timeout': 180}, {'name': 'new9', 'timeout': 180}]
+SUPPORT_HASHES = {'scripts/run-owned-search-tests.py': 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d', 'Tests/NativeIntegration/run_native_regressions.py': 'f4435e99ad7a547a90d01ce38c094d0813fac797a443a0e33654cce6b5ea9cef', 'Tests/NativeIntegration/application_language_catalog_proof.py': '85b2f579138352bcf2af435cb31729544096c23a88bbc04507576711e82b9de8', 'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift': '3b288f7fe64b03ea0f710a427aad315e01794dc7dd6b7a0f1aca3366628e1d2e', 'Tests/NativeIntegration/DocumentSearchAppRoutingTests.swift': '1e196900670029afdfd995f2b30bac50b2fa19e1f312c64809eddc366b3aa0b9', 'Tests/NativeIntegration/ApplicationCatalogStoreControl.swift': '7432da1fb7a622dbc2b4c168fbff8f5774a8d5728f0d9be458b7fa191007988a', 'Tests/PadCoreTests/CatalogTestFixture.swift': '411c68ccc900043125f1c970bf40a28993671e31ada8752cf80c60e45792795b', 'Tests/NativeIntegration/application-language-catalog-Package.swift': '1460f67527046bf1afa69e3083bfde7e342aa1a202a40e10533d67fc221597c8', 'Tests/NativeIntegration/test_application_language_catalog_runner.py': '1c3592a36793aa450179dc27ef874e7410342effab92fba82c8b0e1ee32a2cbc', 'Tests/NativeIntegration/DocumentSearchAppRoutingAccess.swift': '832fb07c9955621e209c5493234ecfbba65fc5871691cdb4301d4cb2bb40057a', 'Tests/NativeIntegration/ApplicationCatalogAccess.swift': '33c4bc49ac4236f40918bea1d0603c264b3e431858a38daa2338037227814c82', 'Tests/NativeIntegration/DocumentSearchEditorBindingAccess.swift': '602a3603c0f872ce2bb5814fd348138518b5276a33b469e2093625da05865537', 'Tests/NativeIntegration/DocumentSearchAppNativeOwnerAccess.swift': 'ec9ffa625b225067bb9573ca3c8087cc3828931885c20d736faabb87b722ee3b', 'Tests/NativeIntegration/DocumentSearchPanelAccess.swift': '063f08d19c8a6081344a3252a574ad7c921011349faf3c06989044810fe579df', 'Tests/NativeIntegration/LanguageManagerApplicationAccess.swift': 'f1700f0417ae0b17e7a407ec609d0a227354efef9a79425fb772bd6754be8c13', 'Tests/NativeIntegration/LanguageManagerSessionAccess.swift': 'fb121b41cbbbb3ddf7e4d3d540d614f1ded22502f76177c616bfad3d120702be', 'Tests/NativeIntegration/LanguageManagerControllerAccess.swift': 'b33b656e7b47bfd042e254c736951719ad6e333c836794c6aedda53849bd8a81'}
 
 
 def require(value, message):
@@ -175,6 +175,8 @@ def support(root):
     combined, old = captured[COMBINED_LOCATION], captured[OLD_TEST_LOCATION]
     prefix = projected_old_test_prefix(old)
     require(combined[:len(prefix)] == prefix, 'whole projected old Test prefix changed')
+    require(hashlib.sha256(combined[:85690]).hexdigest() == 'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e',
+            'whole original14 Test prefix changed')
     # The whole-file hash binds every method/body; the frozen proof separately
     # applies its exact accepted declaration parser before any child.
     return captured[PACKAGE_LOCATION].decode('utf-8')
@@ -200,7 +202,7 @@ def build_plan(root, run):
         'binpath': [swift, 'build', *common, '--show-bin-path', '-Xswiftc', '-warnings-as-errors'],
     }
     bundle = run / 'BuildProducts' / (platform.machine() + '-apple-macosx/debug/NativeRoutingPackageTests.xctest')
-    for name in ('old4', 'new10'):
+    for name in ('old4', 'new10', 'new9'):
         commands[name] = ['/usr/bin/xcrun', 'xctest', '-XCTest',
                           'NativeRoutingTests.' + FIXED_SELECTIONS[name]['class'], str(bundle)]
     commands = {name: ['/usr/bin/env', 'THEONLYPAD_STATE_DIRECTORY=' + str(run / 'State' / name),
@@ -257,6 +259,8 @@ def freeze(root, run, plan):
     prefix = projected_old_test_prefix(captured[OLD_TEST_LOCATION])
     require(captured[COMBINED_LOCATION][:len(prefix)] == prefix,
             'captured whole projected old prefix changed')
+    require(hashlib.sha256(captured[COMBINED_LOCATION][:85690]).hexdigest() == 'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e',
+            'captured whole original14 Test prefix changed')
     for relative, destination in destinations.items():
         parts = [relative]
         if relative.startswith('Sources/TheOnlyPad/'):
@@ -354,6 +358,8 @@ def verify_inputs(root, run, manifest):
     require(manifest['tailSegments'] == expected_segments, 'tail ranges/inverse changed')
     prefix = projected_old_test_prefix(originals[OLD_TEST_LOCATION])
     require(originals[COMBINED_LOCATION][:len(prefix)] == prefix, 'whole projected old prefix differs')
+    require(hashlib.sha256(originals[COMBINED_LOCATION][:85690]).hexdigest() == 'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e',
+            'whole frozen original14 Test prefix differs')
     for name, rows in manifest['trees'].items():
         require(tree(run, run / name) == rows, 'frozen exact membership changed')
     support_dir = checked(run, run / 'ToolSupport', directory=True)
@@ -504,7 +510,7 @@ def execute(root, run, child):
         names = {path.name for path in run.iterdir()}
         allowed = {'Original', 'Package', 'Runner', 'ToolSupport', 'State', 'Temporary', 'Stages', 'Commands',
                    'BuildProducts', 'sources.json', 'input-identities.json', 'build-inputs.json',
-                   'build-identities.json', 'old4-result.json', 'new10-result.json'}
+                   'build-identities.json', 'old4-result.json', 'new10-result.json', 'new9-result.json'}
         require(names <= allowed and len({name.casefold() for name in names}) == len(names), 'unexpected or aliased run namespace')
         reached = {value['name'] for value in result['stages']}
         require({path.name for path in (run / 'Commands').iterdir()} == {name + '.json' for name in reached}, 'command membership changed')
@@ -528,7 +534,7 @@ def execute(root, run, child):
             retained['exit'] = error.code
             raise
         retained['exit'] = code
-        if name in ('old4', 'new10'):
+        if name in ('old4', 'new10', 'new9'):
             text = read_input(run, run / 'Stages' / name / 'stdout.log')[0].decode('utf-8') + '\n' + read_input(run, run / 'Stages' / name / 'stderr.log')[0].decode('utf-8')
             parsed = proof.application_success(text, FIXED_SELECTIONS[name]['class'])
             save(run / (name + '-result.json'), parsed)
@@ -562,6 +568,11 @@ def execute(root, run, child):
         require(load_json(run, run / 'old4-result.json') == dict(tests=4, failures=0, className=FIXED_SELECTIONS['old4']['class']),
                 'old4 exact success required before new10')
         runstage('new10')
+        require(load_json(run, run / 'new10-result.json') == dict(tests=10, failures=0, className=FIXED_SELECTIONS['new10']['class']),
+                'original14 exact success required before new9')
+        runstage('new9')
+        require(load_json(run, run / 'new9-result.json') == dict(tests=9, failures=0, className=FIXED_SELECTIONS['new9']['class']),
+                'new9 exact success required before final pass')
         result.update(state='COMPLETE_PASS', exit=0)
     except StageFailure as error:
         valid = type(error.code) is int and 0 < error.code < 256

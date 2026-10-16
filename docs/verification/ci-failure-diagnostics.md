@@ -1,5 +1,47 @@
 # Bounded CI failure diagnostics
 
+## Current helper-boundary observation — 2026-10-16
+
+The fixed no-argument command now adds eleven literal helper-boundary write
+sites to its private frozen Swift test, alongside the existing twenty outer
+sites. Removal of both layers reconstructs the entire original Swift file,
+including helpers and assertions. The whole source hash and exact twelve-case
+request interval are checked before projection. Production Core and the original
+Swift Test remain unchanged.
+
+```sh
+python3 -B scripts/ci_folder_preview_trace.py
+python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
+```
+
+The new protocol's twelve pure tests have a compiling/importable baseline with
+nine ordinary failures, three passes and zero errors; the productive derivative
+passes all twelve. Public diagnostic discovery separately passes45. The original
+nine trace methods and their adversarial cases remain; three new methods cover
+helper source custody, request11 prefixes and nested ordering. Baseline failures
+mostly stop at missing projection premises; one reaches a fake child and then
+fails report equality. Deeper new assertions are not credited to that baseline.
+
+The actual local selected Swift test passes1/0 with42 outer and314 helper
+records. Its final report is phase9/end, all intervals ended, helper stage5,
+request outside-loop and all helpers ended. The saved authority,571 originals,
+572 frozen copies and strict twenty-field natural zero-exit watchdog receipt
+remain exact. The direct command owns its watchdog; never nest another.
+
+The parser admits only source-derived event order from one owned stream. It
+observes reader construction, expected-error entry/handler/comparison/return,
+preview helper/builder entry, unwind and preservation boundaries. An absent
+original error handler is an observation, never a passing assertion. Output has
+four closed numeric/enum lines and at most512 ASCII bytes; it contains no raw
+URL, fixture path, input, error description or signal inference.
+
+Hosted run38882522572 at `566f2ed` still fails core and reports the preceding
+outer-only31-record interruption in request11. The serialized-NUL guard did not
+clear it. The newly narrowed helper diagnostic has not yet produced a hosted
+observation. An exact accessor, selected-test signal and cause remain unknown;
+no additional production fix is inferred from the local pass. Historical
+observations below retain their own source bindings.
+
 The first hosted macOS core-test step failed in runs 38744925024 and
 38745131627. The owned watchdog retained its inner output, but that output was
 not exposed in the job log. The diagnostic added at `88d4917` subsequently
@@ -330,3 +372,15 @@ A reviewed serialized-path NUL guard and eight regression tests now pass the
 local1,211-test suite. Older hosted verification of the guard remains pending;
 see [preflight evidence](folder-preview-url-preflight.md). The core failure and
 all original assertions remain unchanged. No hosted cause or pass is inferred.
+
+## Guard hosted retake — 2026-10-16
+
+The verified URL guard is published at `566f2ed`.
+[Run38882522572](https://github.com/stultusmundi/theonlypad/actions/runs/38882522572)
+still fails core. Its diagnostic repeats the31-record prefix at the eleventh
+NUL-containing request. The guard does not clear this observed failure. The
+prefix does not establish builder or path-policy entry: it precedes reader
+construction, XCTest assertion handling, preview and deferred fixture checks.
+The reviewed test-helper boundary diagnostic is now implemented and locally
+verified; its narrower hosted observation remains pending. No exact failing accessor, Foundation defect or selected-test signal
+is established. The local1,211-test result remains a separate passing scope.

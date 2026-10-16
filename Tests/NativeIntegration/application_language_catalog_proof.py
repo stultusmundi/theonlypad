@@ -27,6 +27,17 @@ APPLICATION_METHODS={
     'testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply',
     'testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation',
 ),
+ 'LanguageManagerReadOnlyTests': (
+    'testManagerConstructionKeepsOneApplicationCatalogAuthority',
+    'testActualTableAndDetailsUseCompleteConfirmedCatalog',
+    'testHeldRefreshUsesExistingProducerAndTruthfulBusyState',
+    'testReloadFailurePreservesConfirmedRowsAndAppErrorObserver',
+    'testSamePublicationQuitNotificationsUpdatePresentation',
+    'testReentrantDeliveryCannotOverwriteSuccessorPublication',
+    'testNativeCloseReentryPreservesExactNewManager',
+    'testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules',
+    'testCommittedQuitDetachesPresentationAfterActualOwnerJoin',
+),
 }
 APPLICATION_CLASSES=tuple(APPLICATION_METHODS)
 
@@ -203,7 +214,7 @@ def verify_native_build(run,record,expected_record_hash):
 
 
 def application_methods(data):
-    """Exact fixed two-class/fourteen-method fixture census; not a general Swift parser."""
+    """Exact fixed three-class/twenty-three-method fixture census; not a general Swift parser."""
     owner=None;classes=[];methods=[]
     for match in re.finditer(r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bfunc\s+(test\w+)\s*\(',data.decode()):
         if match.group(1):

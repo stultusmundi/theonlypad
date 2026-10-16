@@ -1966,3 +1966,518 @@ extension AppRoutingStoreControl {
     }
   }
 }
+
+// Read-only manager contract. Reuses the exact real application fixture above.
+@MainActor private func withReadOnlyLanguageManager(
+  _ body: @MainActor (ApplicationCatalogFixture) async throws -> Void
+) async throws {
+  try await withApplicationCatalog { fixture in
+    defer { fixture.app.languageManagerTestFacts.controller?.close() }
+    try await body(fixture)
+  }
+}
+
+@MainActor private final class LanguageManagerCloseReentry {
+  let fixture: ApplicationCatalogFixture
+  let original: NativeLanguageManagerController
+  var successor: NativeLanguageManagerController?
+  var calls = 0
+  init(_ fixture: ApplicationCatalogFixture, _ original: NativeLanguageManagerController) {
+    self.fixture = fixture
+    self.original = original
+  }
+  func receive() {
+    guard calls == 0 else { return }
+    calls += 1
+    XCTAssertNil(
+      fixture.app.languageManagerTestFacts.controller,
+      "Exact original slot retires before native close notification")
+    XCTAssertFalse(original.languageManagerTestFacts.session.isAttached)
+    successor = fixture.app.languageManagerTestMake()
+  }
+}
+
+@MainActor final class LanguageManagerReadOnlyTests: XCTestCase {
+  private func manager(_ f: ApplicationCatalogFixture) -> NativeLanguageManagerController? {
+    let result = f.app.languageManagerTestMake()
+    XCTAssertNotNil(result, "Real application manager admission precedes every panel/producer wait")
+    guard let result else {
+      print("LANGUAGE_MANAGER_UNENTERED: real factory admission absent")
+      return nil
+    }
+    XCTAssertNotNil(result.window, "Actual hidden native window required")
+    guard let window = result.window else { return nil }
+    XCTAssertFalse(window.isVisible)
+    let session = result.languageManagerTestFacts.session
+    XCTAssertTrue(session.isAttached)
+    XCTAssertNotNil(session.snapshot, "Factory must install a real initial delivery")
+    guard session.isAttached, session.snapshot != nil else { return nil }
+    XCTAssertTrue(f.app.languageManagerTestFacts.controller === result)
+    XCTAssertTrue(f.app.languageManagerTestFacts.session === session)
+    return result
+  }
+
+  private func started(_ value: NativeLanguageCatalogAdmission) -> UUID? {
+    if case .started(let id) = value { return id }
+    XCTFail("Actual owner load admission required before producer wait")
+    return nil
+  }
+
+  func testManagerConstructionKeepsOneApplicationCatalogAuthority() async throws {
+    try await withApplicationCatalog(withCatalog: false) { f in
+      XCTAssertNil(f.app.applicationCatalogTestFacts.owner)
+      XCTAssertNil(f.app.languageManagerTestMake())
+      XCTAssertNil(f.app.applicationCatalogTestFacts.owner)
+      XCTAssertNil(f.app.languageManagerTestFacts.controller)
+    }
+    try await withReadOnlyLanguageManager { f in
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      XCTAssertTrue(control.calls.isEmpty)
+      guard let first = manager(f) else { return }
+      XCTAssertTrue(first.languageManagerTestFacts.session.languageManagerTestOwner === owner)
+      XCTAssertTrue(f.app.languageManagerTestMake() === first)
+      XCTAssertTrue(control.calls.isEmpty, "Panel construction cannot force an extra read")
+      guard await f.load() else { return }
+      XCTAssertTrue(f.app.languageManagerTestMake() === first)
+      XCTAssertEqual(control.count(.read), 1)
+      XCTAssertEqual(
+        first.languageManagerTestFacts.session.snapshot?.read.current?.id,
+        owner.state.current?.id)
+      XCTAssertTrue(first.languageManagerTestFacts.close.isEnabled)
+      first.languageManagerTestFacts.close.performClick(nil)
+      XCTAssertNil(f.app.languageManagerTestFacts.controller)
+      XCTAssertFalse(first.languageManagerTestFacts.session.isAttached)
+      if case .unavailable = first.languageManagerTestFacts.session.requestRefresh() {
+      } else {
+        XCTFail("Detached session cannot admit a new read")
+      }
+      guard let second = manager(f) else { return }
+      XCTAssertFalse(second === first)
+      XCTAssertTrue(second.languageManagerTestFacts.session.languageManagerTestOwner === owner)
+      XCTAssertEqual(control.count(.read), 1)
+      XCTAssertTrue(f.app.applicationCatalogTestFacts.owner === owner)
+      XCTAssertTrue(control.calls.allSatisfy { !$0.onMain })
+    }
+  }
+
+  func testActualTableAndDetailsUseCompleteConfirmedCatalog() async throws {
+    try await withReadOnlyLanguageManager { f in
+      // Real save at this fixture's ONE capsule; no forged LoadedLanguageCatalog/revisions.
+      let directory = f.directory
+      try await Task.detached(priority: .utility) {
+        let store = CustomLanguageStore(directory: directory)
+        let loaded = try store.load()
+        let definition = try LiteralLanguageDefinition(
+          id: CatalogTestFixture.id, name: "Atlas Ω", fileExtensions: ["atlas", "ax"],
+          keywords: ["café", "cafe\u{301}"], lineComment: "//",
+          blockComment: BlockCommentDelimiters(opening: "/*", closing: "*/"),
+          quotes: [
+            LiteralQuoteRule(opening: "\"", closing: "\"", escape: "\\", multiline: false),
+            LiteralQuoteRule(opening: "'", closing: "'", escape: nil, multiline: true),
+          ], highlightDecimalNumbers: false, indentation: .spaces(width: 4))
+        let other = try LiteralLanguageDefinition(
+          id: CatalogTestFixture.otherID, name: "Beta", fileExtensions: ["beta"],
+          keywords: ["return"], lineComment: "#", blockComment: nil, quotes: [],
+          highlightDecimalNumbers: true, indentation: .tabs(width: 2))
+        let extra = try BuiltInLanguageOverride(
+          language: .python, lineComment: .literal("#!"), blockComment: .disabled,
+          indentation: .spaces(width: 2))
+        let candidate = try LanguageCatalogSnapshot(
+          definitions: [definition, other], overrides: loaded.snapshot.overrides + [extra],
+          generation: loaded.snapshot.generation)
+        _ = try store.save(candidate, expected: loaded)
+      }.value
+      guard await f.load(), let panel = manager(f) else { return }
+      let expected = try await f.fresh()
+      let facts = panel.languageManagerTestFacts
+      let snapshot = facts.session.snapshot
+      XCTAssertNotNil(snapshot)
+      guard let current = snapshot?.read.current else {
+        return XCTFail("Confirmed publication required before table assertions")
+      }
+      XCTAssertEqual(
+        try LanguageCatalogCodec.encode(current.catalog),
+        try LanguageCatalogCodec.encode(expected.snapshot))
+      XCTAssertEqual(facts.renderedDefinitions, expected.snapshot.definitions)
+      XCTAssertEqual(facts.renderedOverrides, expected.snapshot.overrides)
+      XCTAssertEqual(facts.table.numberOfRows, 2)
+      XCTAssertEqual(facts.table.tableColumns.count, 1)
+      guard facts.table.numberOfRows == expected.snapshot.definitions.count,
+        facts.table.tableColumns.count == 1
+      else { return }
+      for row in 0..<facts.table.numberOfRows {
+        let cell =
+          facts.table.view(atColumn: 0, row: row, makeIfNecessary: true) as? NSTableCellView
+        XCTAssertNotNil(cell?.textField)
+        XCTAssertEqual(cell?.textField?.stringValue, expected.snapshot.definitions[row].name)
+      }
+      facts.table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+      XCTAssertEqual(
+        panel.languageManagerTestFacts.selectedDefinition,
+        expected.snapshot.definitions.first)
+      XCTAssertEqual(
+        facts.details.string,
+        """
+        Name: Atlas Ω
+        ID: 00000000-0000-4000-8000-000000000004
+        Extensions: atlas, ax
+        Keywords: café, cafe\u{301}
+        Line comment: //
+        Block comment: /* → */
+        Quotes:
+          " → "; escape: \\; multiline: no
+          ' → '; escape: none; multiline: yes
+        Decimal numbers: no
+        Indentation: spaces 4
+        """)
+      XCTAssertEqual(
+        facts.overrides.string,
+        """
+        swift: line comment disabled; block comment inherited; indentation tabs 3
+        python: line comment #!; block comment disabled; indentation spaces 2
+        """)
+      XCTAssertFalse(facts.details.isEditable)
+      XCTAssertFalse(facts.overrides.isEditable)
+      XCTAssertFalse(try XCTUnwrap(panel.window).isVisible)
+      let before = current.id
+      guard let operation = try await f.apply("Replacement") else { return }
+      XCTAssertEqual(facts.session.snapshot?.read.lastSettledRequestID, operation)
+      XCTAssertNotEqual(facts.session.snapshot?.read.current?.id, before)
+      XCTAssertEqual(
+        panel.languageManagerTestFacts.selectedDefinition?.id, CatalogTestFixture.id,
+        "Selection follows actual definition UUID across a new publication")
+      XCTAssertEqual(
+        panel.languageManagerTestFacts.details.string.components(separatedBy: "\n").first,
+        "Name: Replacement")
+    }
+  }
+
+  func testHeldRefreshUsesExistingProducerAndTruthfulBusyState() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let facts = panel.languageManagerTestFacts
+      let original = owner.state.current?.id
+      XCTAssertTrue(facts.refresh.isEnabled)
+      let gate = control.hold(.read)
+      defer { gate.release() }
+      facts.refresh.performClick(nil)
+      let id = owner.state.activeRequestID
+      XCTAssertNotNil(id, "Button must admit actual read before held-producer expectation")
+      guard let id else { return }
+      await fulfillment(of: [gate.entered], timeout: 3)
+      XCTAssertEqual(facts.session.snapshot?.read.activeRequestID, id)
+      XCTAssertEqual(facts.session.snapshot?.mutation.activeOperation?.id, id)
+      XCTAssertFalse(facts.refresh.isEnabled)
+      XCTAssertFalse(facts.status.stringValue.isEmpty)
+      facts.refresh.performClick(nil)
+      if case .unavailable = facts.session.requestRefresh() {
+      } else {
+        XCTFail("Disabled presentation must refuse locally")
+      }
+      if case .busy(let actual) = owner.requestLoad() {
+        XCTAssertEqual(actual, id)
+      } else {
+        XCTFail("Actual sole producer must report its existing busy ID")
+      }
+      XCTAssertEqual(control.count(.read), 2)
+      XCTAssertEqual(control.maximum, 1)
+      XCTAssertEqual(owner.state.current?.id, original)
+      gate.release()
+      guard await f.settle(id) else { return }
+      XCTAssertEqual(facts.session.snapshot?.read.lastSettledRequestID, id)
+      XCTAssertEqual(
+        panel.languageManagerTestFacts.renderedDefinitions,
+        owner.state.current?.catalog.definitions)
+      XCTAssertNotEqual(owner.state.current?.id, original)
+      XCTAssertNil(owner.state.activeRequestID)
+      XCTAssertEqual(
+        control.count(.read), 2,
+        "Finite settled window; Source review must additionally prohibit a queued refresh")
+      XCTAssertTrue(facts.refresh.isEnabled)
+      XCTAssertTrue(control.calls.allSatisfy { !$0.onMain })
+    }
+  }
+
+  func testReloadFailurePreservesConfirmedRowsAndAppErrorObserver() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let old = try XCTUnwrap(owner.state.current)
+      let oldWire = try LanguageCatalogCodec.encode(old.catalog)
+      let rows = panel.languageManagerTestFacts.renderedDefinitions
+      control.failReads(true)
+      guard let id = started(owner.requestLoad()), await f.settle(id) else { return }
+      let facts = panel.languageManagerTestFacts
+      XCTAssertEqual(facts.session.snapshot?.read.failure?.requestID, id)
+      XCTAssertEqual(f.app.applicationCatalogTestFacts.lastReportedFailureID, id)
+      XCTAssertEqual(
+        f.reports.count, 1, "App retains its actual sole owner observer/error reporter")
+      XCTAssertEqual(facts.renderedDefinitions, rows)
+      XCTAssertEqual(facts.table.numberOfRows, rows.count)
+      XCTAssertEqual(facts.session.snapshot?.read.current?.id, old.id)
+      XCTAssertEqual(
+        try LanguageCatalogCodec.encode(
+          try XCTUnwrap(
+            facts.session.snapshot?.read.current
+          ).catalog), oldWire)
+      XCTAssertTrue(facts.refresh.isEnabled)
+      XCTAssertFalse(facts.status.stringValue.isEmpty)
+      let failedDelivery = try XCTUnwrap(facts.session.snapshot?.deliveryID)
+      guard case .prepared(let reservation) = owner.prepareQuit() else {
+        return XCTFail("Real idle reservation required")
+      }
+      XCTAssertEqual(facts.session.snapshot?.read.failure?.requestID, id)
+      XCTAssertNotEqual(facts.session.snapshot?.deliveryID, failedDelivery)
+      XCTAssertEqual(f.reports.count, 1, "Same failure notification remains deduplicated")
+      XCTAssertTrue(owner.cancelPreparedQuit(reservation))
+    }
+  }
+
+  func testSamePublicationQuitNotificationsUpdatePresentation() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let facts = panel.languageManagerTestFacts
+      let first = try XCTUnwrap(facts.session.snapshot)
+      let status = facts.status.stringValue
+      guard case .prepared(let id) = owner.prepareQuit() else {
+        return XCTFail("Actual owner must issue the reservation")
+      }
+      let prepared = try XCTUnwrap(facts.session.snapshot)
+      XCTAssertEqual(prepared.read.current?.id, first.read.current?.id)
+      XCTAssertNotEqual(prepared.deliveryID, first.deliveryID)
+      XCTAssertEqual(prepared.mutation.preparedQuitID, id)
+      XCTAssertFalse(facts.session.isCurrentDelivery(first.deliveryID))
+      XCTAssertTrue(facts.session.isCurrentDelivery(prepared.deliveryID))
+      XCTAssertNotEqual(facts.status.stringValue, status)
+      XCTAssertFalse(facts.refresh.isEnabled)
+      if case .unavailable = facts.session.requestRefresh() {
+      } else {
+        XCTFail("Reserved owner must not receive a presentation refresh")
+      }
+      XCTAssertTrue(owner.cancelPreparedQuit(id))
+      let resumed = try XCTUnwrap(facts.session.snapshot)
+      XCTAssertNotEqual(resumed.deliveryID, prepared.deliveryID)
+      XCTAssertNil(resumed.mutation.preparedQuitID)
+      XCTAssertEqual(resumed.read.current?.id, first.read.current?.id)
+      XCTAssertEqual(facts.status.stringValue, status)
+      XCTAssertTrue(facts.refresh.isEnabled)
+      XCTAssertEqual(control.count(.read), 1)
+    }
+  }
+
+  func testReentrantDeliveryCannotOverwriteSuccessorPublication() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let session = panel.languageManagerTestFacts.session
+      let renderer = session.onChange
+      XCTAssertNotNil(renderer, "Actual controller must observe the presentation session")
+      guard let renderer else { return }
+      var successor: UUID?
+      var successorGate: MutationGate?
+      var rejectedOldDelivery: UUID?
+      var calls = 0
+      session.onChange = { snapshot in
+        if snapshot.read.failure != nil, snapshot.read.activeRequestID == nil, calls == 0 {
+          calls += 1
+          rejectedOldDelivery = snapshot.deliveryID
+          control.failReads(false)
+          successorGate = control.hold(.read)
+          successor = self.started(owner.requestLoad())
+        }
+        // Deliberately deliver old render AFTER nested real admission delivered its new snapshot.
+        renderer(snapshot)
+      }
+      defer {
+        session.onChange = renderer
+        successorGate?.release()
+      }
+      control.failReads(true)
+      guard let first = started(owner.requestLoad()) else { return }
+      guard await f.wait("one-shot actual presentation reentry", { calls == 1 }) else { return }
+      XCTAssertNotNil(successor, "Successor admission must precede its producer wait")
+      XCTAssertNotNil(successorGate)
+      guard let successor, let gate = successorGate else { return }
+      await fulfillment(of: [gate.entered], timeout: 3)
+      XCTAssertEqual(session.snapshot?.read.activeRequestID, successor)
+      XCTAssertEqual(owner.state.activeRequestID, successor)
+      XCTAssertNotEqual(successor, first)
+      if let rejectedOldDelivery { XCTAssertFalse(session.isCurrentDelivery(rejectedOldDelivery)) }
+      XCTAssertEqual(f.app.languageManagerTestFacts.deliveryID, session.snapshot?.deliveryID)
+      XCTAssertTrue(
+        f.reports.isEmpty,
+        "App must fence its old failure-report frame after nested manager admission")
+      gate.release()
+      guard await f.settle(successor) else { return }
+      XCTAssertEqual(session.snapshot?.read.current?.id, owner.state.current?.id)
+      XCTAssertEqual(session.snapshot?.read.lastSettledRequestID, successor)
+      XCTAssertNil(session.snapshot?.read.failure)
+      XCTAssertEqual(
+        panel.languageManagerTestFacts.renderedDefinitions,
+        owner.state.current?.catalog.definitions)
+      XCTAssertTrue(panel.languageManagerTestFacts.refresh.isEnabled)
+      XCTAssertEqual(control.count(.read), 3)
+      XCTAssertEqual(control.maximum, 1)
+    }
+  }
+
+  func testNativeCloseReentryPreservesExactNewManager() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let first = manager(f) else { return }
+      let window = try XCTUnwrap(first.window)
+      let reentry = LanguageManagerCloseReentry(f, first)
+      let observer = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification, object: window, queue: nil
+      ) { [weak reentry] _ in
+        MainActor.assumeIsolated { reentry?.receive() }
+      }
+      window.close()
+      NotificationCenter.default.removeObserver(observer)
+      XCTAssertEqual(reentry.calls, 1)
+      XCTAssertNotNil(reentry.successor, "Native notification must construct the real successor")
+      guard let successor = reentry.successor else { return }
+      XCTAssertFalse(successor === first)
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === successor)
+      XCTAssertTrue(successor.languageManagerTestFacts.session.isAttached)
+      first.close()
+      first.close()
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === successor)
+      XCTAssertTrue(successor.languageManagerTestFacts.session.isAttached)
+      let control = try XCTUnwrap(f.control)
+      control.failReads(true)
+      guard let owner = f.catalog, let id = started(owner.requestLoad()), await f.settle(id)
+      else { return }
+      XCTAssertEqual(
+        successor.languageManagerTestFacts.session.snapshot?.read.failure?.requestID, id)
+      XCTAssertEqual(f.reports.count, 1)
+      XCTAssertEqual(control.count(.read), 2)
+      XCTAssertFalse(try XCTUnwrap(successor.window).isVisible)
+    }
+  }
+
+  func testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let session = panel.languageManagerTestFacts.session
+      let originalPublication = owner.state.current?.id
+      f.native.permitsPublicationErrors = true
+      f.native.writer.arm(failing: true)
+      var successor: ApplicationCatalogJoinedAttempt?
+      var successorQuit: UUID?
+      var didReenter = false
+      f.native.replyHook = { accepted in
+        guard !accepted, !didReenter else { return }
+        didReenter = true
+        XCTAssertTrue(session.isAttached)
+        XCTAssertNil(session.snapshot?.mutation.preparedQuitID)
+        XCTAssertTrue(panel.languageManagerTestFacts.refresh.isEnabled)
+        XCTAssertTrue(f.app.languageManagerTestMake() === panel)
+        f.native.writer.restoreWrites()
+        f.native.writer.arm()
+        successor = f.beginQuit()
+        successorQuit = f.requireReservation()
+      }
+      guard let first = f.beginQuit(), let firstQuit = f.requireReservation() else { return }
+      guard
+        await f.wait(
+          "actual first native publication entry",
+          {
+            f.native.writer.applicationCatalogEntered
+          })
+      else { return }
+      XCTAssertEqual(session.snapshot?.mutation.preparedQuitID, firstQuit)
+      XCTAssertFalse(panel.languageManagerTestFacts.refresh.isEnabled)
+      f.native.writer.release()
+      let refused = await first.join()
+      XCTAssertNil(refused.nativeReceipt)
+      XCTAssertEqual(f.native.replies, [false])
+      XCTAssertTrue(didReenter)
+      XCTAssertNotNil(successor, "Real false-reply successor admission precedes writer wait")
+      XCTAssertNotNil(successorQuit)
+      guard let successor, let successorQuit else { return }
+      XCTAssertNotEqual(successorQuit, firstQuit)
+      XCTAssertEqual(f.app.task4Attempt?.id, successor.handle.id)
+      XCTAssertEqual(owner.mutationState.preparedQuitID, successorQuit)
+      XCTAssertEqual(session.snapshot?.mutation.preparedQuitID, successorQuit)
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === panel)
+      XCTAssertTrue(session.isAttached)
+      XCTAssertEqual(owner.state.current?.id, originalPublication)
+      guard
+        await f.wait(
+          "actual successor native publication entry",
+          {
+            f.native.writer.applicationCatalogEntered
+          })
+      else { return }
+      f.native.writer.release()
+      let committed = await successor.join()
+      try f.native.assertFreshNativeReceipt(try XCTUnwrap(committed.nativeReceipt))
+      XCTAssertEqual(f.native.replies, [false, true])
+      XCTAssertEqual(f.reports.count, 1)
+      XCTAssertTrue(f.reports.allSatisfy { ($0 as? AppRoutingError) == .publication })
+      XCTAssertEqual(control.count(.read), 1)
+      XCTAssertFalse(session.isAttached)
+      XCTAssertNil(f.app.languageManagerTestFacts.controller)
+    }
+  }
+
+  func testCommittedQuitDetachesPresentationAfterActualOwnerJoin() async throws {
+    try await withReadOnlyLanguageManager { f in
+      guard await f.load(), let panel = manager(f) else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let session = panel.languageManagerTestFacts.session
+      let originalWindow = try XCTUnwrap(panel.window)
+      let external = AppRoutingGate()
+      f.native.externalGate = external
+      f.native.writer.arm()
+      guard let attempt = f.beginQuit(), let reservation = f.requireReservation() else { return }
+      guard
+        await f.wait(
+          "actual final native publication entry",
+          {
+            f.native.writer.applicationCatalogEntered
+          })
+      else { return }
+      XCTAssertTrue(session.isAttached)
+      XCTAssertEqual(session.snapshot?.mutation.preparedQuitID, reservation)
+      XCTAssertNil(f.app.task4Attempt?.nativeReceipt)
+      f.native.writer.release()
+      guard await f.wait("actual external drain after catalog owner join", { external.calls == 1 })
+      else { return }
+      if case .invalidated = owner.state.lifetime {
+      } else {
+        XCTFail("Real owner invalidation must precede manager retirement")
+      }
+      XCTAssertNil(owner.mutationState.activeOperation)
+      XCTAssertFalse(session.isAttached)
+      XCTAssertNil(session.onChange)
+      XCTAssertNil(f.app.languageManagerTestFacts.controller)
+      XCTAssertNil(f.app.languageManagerTestFacts.session)
+      XCTAssertFalse(originalWindow.isVisible)
+      XCTAssertNotNil(f.app.task4Attempt?.nativeReceipt)
+      XCTAssertEqual(f.native.replies, [])
+      XCTAssertNil(f.app.languageManagerTestMake(), "Committed lifetime cannot recreate a panel")
+      external.release()
+      let done = await attempt.join()
+      try f.native.assertFreshNativeReceipt(try XCTUnwrap(done.nativeReceipt))
+      XCTAssertEqual(done.decision, .noSearchOwner)
+      XCTAssertTrue(done.replyConsumed)
+      XCTAssertEqual(f.native.replies, [true])
+      XCTAssertEqual(external.calls, 1)
+      XCTAssertEqual(external.returns, 1)
+      XCTAssertEqual(control.count(.read), 1)
+      XCTAssertEqual(control.maximum, 1)
+      XCTAssertTrue(f.reports.isEmpty)
+    }
+  }
+}

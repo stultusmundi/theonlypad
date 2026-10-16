@@ -66,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   private var languageCatalogOwner: NativeLanguageCatalogOwner?
   private var languageCatalogState: NativeLanguageCatalogState?
   private var lastReportedLanguageCatalogFailureID: UUID?
+  private var languageManagerController: NativeLanguageManagerController?
+  private var languageManagerSession: NativeLanguageManagerSession?
+  private var languageManagerDeliveryID: UUID?
   private var documentSearchTerminationAttempt: DocumentSearchTerminationAttempt?
   private var editors: [EditorWindowController] { documentOwner?.windows ?? [] }
   private var moveDestination: DocumentMoveDestinationController?
@@ -182,13 +185,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
   }
 
+  private func makeLanguageManager() -> NativeLanguageManagerController? {
+    guard !preparingQuit, let owner = languageCatalogOwner,
+      case .active = owner.state.lifetime
+    else { return nil }
+    if let controller = languageManagerController { return controller }
+    guard languageManagerSession == nil else { return nil }
+    let session = NativeLanguageManagerSession(owner: owner)
+    let controller = NativeLanguageManagerController(session: session) { [weak self] original in
+      self?.retireLanguageManager(original)
+    }
+    // Native construction can call out. Never install over a nested successor or retired owner.
+    guard !preparingQuit, languageCatalogOwner === owner, case .active = owner.state.lifetime,
+      languageManagerController == nil, languageManagerSession == nil
+    else {
+      controller.close()
+      return nil
+    }
+    languageManagerController = controller
+    languageManagerSession = session
+    let state = owner.state
+    languageCatalogState = state
+    let delivery = deliverLanguageManager(state, from: owner)
+    guard !preparingQuit, languageCatalogOwner === owner, case .active = owner.state.lifetime,
+      languageManagerController === controller, languageManagerSession === session,
+      languageManagerDeliveryID == delivery, session.isAttached
+    else { return nil }
+    return controller
+  }
+
+  private func retireLanguageManager(_ original: NativeLanguageManagerController) {
+    guard languageManagerController === original else { return }
+    let session = languageManagerSession
+    languageManagerController = nil
+    languageManagerSession = nil
+    languageManagerDeliveryID = nil
+    // Releasing presentation observers may call out. The exact slot is already empty.
+    session?.detach()
+  }
+
+  @discardableResult
+  private func deliverLanguageManager(
+    _ state: NativeLanguageCatalogState, from owner: NativeLanguageCatalogOwner
+  ) -> UUID {
+    let delivery = UUID()
+    let mutation = owner.mutationState
+    let controller = languageManagerController
+    let session = languageManagerSession
+    languageManagerDeliveryID = delivery
+    if let controller, let session {
+      session.receive(.init(deliveryID: delivery, read: state, mutation: mutation)) {
+        [weak self, weak owner, weak controller, weak session] in
+        guard let self, let owner, let controller, let session,
+          case .active = owner.state.lifetime
+        else { return false }
+        return self.languageCatalogOwner === owner
+          && self.languageManagerController === controller
+          && self.languageManagerSession === session
+          && self.languageManagerDeliveryID == delivery
+          // During reservation rollback, keep Refresh closed until App finishes resuming.
+          && (!self.preparingQuit || owner.mutationState.preparedQuitID != nil)
+      }
+    }
+    return delivery
+  }
+
   private func acceptLanguageCatalogState(
     _ state: NativeLanguageCatalogState, from owner: NativeLanguageCatalogOwner
   ) {
     guard languageCatalogOwner === owner else { return }
     languageCatalogState = state
-    guard case .active = state.lifetime, !preparingQuit, let failure = state.failure,
-      lastReportedLanguageCatalogFailureID != failure.requestID
+    let controller = languageManagerController
+    let session = languageManagerSession
+    let delivery = deliverLanguageManager(state, from: owner)
+    guard languageCatalogOwner === owner, languageManagerController === controller,
+      languageManagerSession === session, languageManagerDeliveryID == delivery
+    else { return }
+    guard case .active = state.lifetime, case .active = owner.state.lifetime,
+      !preparingQuit, state.activeRequestID == nil,
+      let failure = state.failure, lastReportedLanguageCatalogFailureID != failure.requestID
     else { return }
     lastReportedLanguageCatalogFailureID = failure.requestID
     reportDocumentError(
@@ -695,10 +770,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         throw ApplicationLanguageCatalogError.staleQuitPreparation
       }
       // Commit: neither catalog retirement nor the permanent external drain can be rolled back.
+      let originalManager = languageManagerController
       await invalidateLanguageCatalogAndWait(catalogPreparation)
       guard ownsDocumentSearchTermination(attempt) else { return }
       if case .reserved(let owner, _) = catalogPreparation, languageCatalogOwner === owner {
         languageCatalogState = owner.state
+      }
+      if let originalManager {
+        retireLanguageManager(originalManager)
+        guard ownsDocumentSearchTermination(attempt) else { return }
+        originalManager.close()
+        guard ownsDocumentSearchTermination(attempt) else { return }
       }
       await cancelExternalCommands()
       guard ownsDocumentSearchTermination(attempt) else { return }
@@ -747,6 +829,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     recentFiles?.setSuspended(false)
     guard ownsDocumentSearchTermination(attempt) else { return }
     preparingQuit = false
+    if let owner = languageCatalogOwner {
+      // The actual cancel notification arrived while rollback was still in progress.
+      // Deliver resumed capabilities only after native/search/monitor admission is restored.
+      deliverLanguageManager(owner.state, from: owner)
+      guard documentSearchTerminationAttempt === attempt, !preparingQuit, !attempt.replyConsumed
+      else { return }
+    }
     attempt.replyConsumed = true
     documentSearchTerminationAttempt = nil
     replyToTermination(false)

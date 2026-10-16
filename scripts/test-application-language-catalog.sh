@@ -1,5 +1,5 @@
 #!/bin/sh
-# Five fixed direct owned stages; no caller Source/build/helper/filter override.
+# Six fixed direct owned stages; no caller Source/build/helper/filter override.
 set -eu
 if [ "$#" -ne 0 ]; then
   echo 'Fixed application/catalog runner accepts no arguments.' >&2
