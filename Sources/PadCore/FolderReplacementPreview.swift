@@ -317,14 +317,36 @@ private struct FolderReplacementSourceBudgetExceeded: Error {
   let advertisedBytes: Int64
 }
 
-private enum FolderReplacementPathPolicy {
+enum FolderReplacementPathPolicy {
   static func path(_ url: URL) -> String { url.path(percentEncoded: false) }
 
-  static func valid(_ url: URL, requiresDirectory: Bool = false) -> Bool {
-    guard url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost" else {
+  // Reject serialized filesystem NUL before requesting decoded metadata from Foundation.
+  // A literal percent00 filename is serialized as percent2500 and is not decoded twice.
+  // Query and fragment data do not belong to the filesystem path.
+  private static func serializedPathContainsNUL(_ url: URL) -> Bool {
+    var previous: UInt8?
+    var beforePrevious: UInt8?
+    for byte in url.absoluteString.utf8 {
+      if byte == 0x3f || byte == 0x23 { break }
+      if byte == 0 || (beforePrevious == 0x25 && previous == 0x30 && byte == 0x30) {
+        return true
+      }
+      beforePrevious = previous
+      previous = byte
+    }
+    return false
+  }
+
+  static func valid(
+    _ url: URL, requiresDirectory: Bool = false,
+    decodedPath: (URL) -> String = FolderReplacementPathPolicy.path
+  ) -> Bool {
+    guard !serializedPathContainsNUL(url),
+      url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost"
+    else {
       return false
     }
-    let decoded = path(url)
+    let decoded = decodedPath(url)
     // Check NUL before any C-string conversion can hide or truncate it.
     guard !decoded.contains("\0"), decoded.utf8.count <= 4_096, decoded.hasPrefix("/") else {
       return false

@@ -1,53 +1,49 @@
 # Active integration checkpoint — 2026-10-16
 
-Development source is confirmed remotely at `be6ec6f`, including catalog activation, the Locate
-presentation correction, monitor package repair and failure-only phase diagnostic.
-The monitor harness completes seven named summaries; these are not seven XCTest
-cases. Matching packaged Locate and broader desktop acceptance remain outstanding.
-See [presentation verification](verification/disk-conflict-presentation.md).
+The development branch is confirmed remotely at `fa758e1`. Catalog startup/quit
+activation (`be6ec6f`), the Locate presentation correction, monitor package repair
+and the finer failure-only diagnostic are published. Routine non-force reviewed
+development pushes remain authorized; merges and releases remain separate.
 
-Catalog startup/quit activation is now adopted and pushed. The retained
-`scripts/test-application-language-catalog.sh` passes its original four and ten
-new hidden native cases against the actual owner and current Locate correction.
-Independent actual review verifies frozen sources, compiler artifacts, complete
-owned receipts and empty synthetic State. A separate current warnings-as-errors
-app/helper build passes1,203 default tests; Python discovery passes135 contracts.
-All567 pre-run source/test/support facts still match at independent post-run inspection. No visible
-sheets or packaged application activation is established by these tests.
-See [application verification](verification/application-language-catalog.md).
+Hosted run [38877082192](https://github.com/stultusmundi/theonlypad/actions/runs/38877082192)
+still fails core. Its source-bound31-record prefix enters the eleventh request,
+which contains filesystem NUL, without completing it. Earlier constructors and
+ten request pairs returned. An exact accessor, child signal and cause remain
+unknown. The original assertions and core failure remain intact.
 
-The application's ten runner contracts also pass separately on raw and formatted
-candidates. The formatting derivative preserves original executable tests using
-an exact reversible two-import header projection. The first180-second incomplete
-run remains retained; unchanged raw/formatted retakes use upfront600-second
-budgets. These synthetic checks do not measure application performance.
+The reviewed working URL preflight rejects filesystem NUL in serialized input
+before decoded-path access, while preserving literal-percent filenames, Unicode,
+query/fragment handling and all original checks. A compiling eight-test baseline
+has three ordinary failures; the productive candidate passes eight. The formatted
+public-source full run passes1,211 unique tests with warnings as errors, including
+all eight original preview tests; all499 saved inputs still match. Formatting
+and public checks pass. Older hosted verification is pending. See
+[URL preflight evidence](verification/folder-preview-url-preflight.md).
 
-Hosted run [38872057688](https://github.com/stultusmundi/theonlypad/actions/runs/38872057688)
-still fails core at `e40142e`. Its separate phase diagnostic observes nine ordered
-markers: phases0–3 complete; phase4 enters without an end before natural SwiftPM
-exit1. That interval includes request checks, budget boundaries and fixture
-verification/cleanup. The selected-test signal and actual cause remain unknown.
-The original command/failure remain unchanged. Local diagnostic execution passes
-all ten markers, so local success is not hosted acceptance.
-See [CI verification](verification/ci-failure-diagnostics.md).
+The private read-only manager component now passes its existing14 and new9
+hidden native cases through six natural zero-exit owned stages. It uses the
+single application catalog owner and exercises real table/details, refresh,
+same-publication quit notifications, reentry and close/reopen. Root verifies422
+frozen inputs and214 current basis facts before the separate Core adoption.
+Independent actual review and the maintained23-case command are in progress.
+Editing, Save, recovery/import/export, menu activation and document propagation
+remain outstanding; this component is not a complete manager.
 
-The subsequent `be6ec6f` hosted run38874745958 repeats that same interval.
-The finer working diagnostic now passes nine private contracts,42 public checks
-and one actual local selected Swift test with42 records/phase9 end. Exact12-case
-source binding and whole-test inverse preserve the original assertions;565
-original/566 copied facts and original receipt authority match. Final actual
-review/publication is pending. No finer hosted outcome or cause is claimed.
+The published application/catalog command still passes14 cases; its separate
+current-source actual-helper run passes three fixed fresh-process cases.
+The local package remains `be6ec6f`, with verified ad-hoc signature, archive and
+SBOM. Focused desktop setup exits65 while enabling automation before entering
+its method. User desktop readiness remains unanswered; no permission grant is
+inferred. Historical cache-package desktop acceptance remains11 passes and one
+Locate failure across12 entered cases, with six planned cases and AXPress
+unentered. Current packaged/desktop acceptance remains outstanding.
 
-
-The same-source actual-helper command also passes its three fixed cases in
-fresh processes, including joined quit. Independent publication review accepted the exact17 files before the verified
-non-force push. Matching local packaging/signatures/archive/SBOM pass; focused
-desktop setup exits65 while enabling automation mode before its method enters.
-No current desktop acceptance follows. Narrow the hosted phase4 failure
-without weakening assertions; continue manager/picker integration through the
-single catalog authority, matching package/desktop acceptance, unresolved native
-history/storage work and every remaining BUILD requirement. These checkpoints
-do not pause the user's full implementation request.
+Next: publish the verified URL guard and inspect its hosted result; finish the
+maintained manager regression command and integrate the reviewed component,
+then implement editable draft/Save/dirty-close and quit through the same owner.
+Continue picker/propagation, native history/storage, matching desktop acceptance
+and every other applicable BUILD requirement. The full project is unfinished;
+these checkpoints do not pause the user's implementation request.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 

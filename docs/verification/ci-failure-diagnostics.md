@@ -311,7 +311,22 @@ are separate scopes, not additive totals or a full application test run.
 Closed output stays within512 ASCII bytes. Single-stream, malformed-prefix,
 source-drift, receipt/capture/custody and split-stream refusal checks remain
 active. The accepted watchdog/verifier are unchanged. Do not nest this command
-under another session-owning watchdog. The finer hosted result remains pending;
-local success does not establish its cause, child signal, compiler artifact
-graph, desktop behavior or performance acceptance. Earlier ten-record results
+under another session-owning watchdog. The finer hosted observation is recorded below; local success alone does not
+establish its cause, child signal, compiler artifact graph, desktop behavior
+or performance acceptance. Earlier ten-record results
 remain historical and are not relabeled as42-record runs.
+
+## Finer hosted request observation — 2026-10-16
+
+The reviewed finer diagnostic is published at `fa758e1`.
+[Run38877082192](https://github.com/stultusmundi/theonlypad/actions/runs/38877082192)
+still fails core and reports31 ordered records: phase5 entered without its end.
+Under the exact twelve-case source binding, ten request pairs complete and the
+eleventh NUL-containing request begins. The interval includes preview admission,
+assertions and fixture preservation. Both URL constructors returned earlier.
+This is ordinal progress, not an exact failing accessor or child-signal finding.
+
+A reviewed serialized-path NUL guard and eight regression tests now pass the
+local1,211-test suite. Older hosted verification of the guard remains pending;
+see [preflight evidence](folder-preview-url-preflight.md). The core failure and
+all original assertions remain unchanged. No hosted cause or pass is inferred.
