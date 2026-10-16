@@ -37,6 +37,13 @@ RECEIPT_FIELDS = set(('command pid processGroup exitObserved registrationError g
     'interruptedSignal truncated captureComplete captured failure exit seconds').split())
 
 
+# Separate diagnostic sites; the original Core/path grammar does not recognize this tag.
+_PREDICATE_TAG = b'CI_PREVIEW_PREDICATE'
+_PREDICATE_CONSTRUCTION_KEY = object()
+_PREDICATE_SELECTED_SOURCE = b'    if diagnosticTrace {\n      let predicateCount = selectedURLs.count\n      let predicateSelected = predicateCount == 0 ? 0 : (predicateCount == 1 ? 1 : 2)\n      let predicateMain = Thread.isMainThread ? 1 : 0\n      FileHandle.standardError.write(Data("CI_PREVIEW_PREDICATE c=\\(predicateSelected) m=\\(predicateMain)\\n".utf8))\n    }\n'
+_PREDICATE_WRAPPER_SOURCE = b'  private func validURL(_ url: URL) -> Bool {\n    let predicateBit = diagnosticTrace ? 1 : 0\n    let predicateMain = Thread.isMainThread ? 1 : 0\n    FileHandle.standardError.write(Data("CI_PREVIEW_PREDICATE w=\\(predicateBit) m=\\(predicateMain)\\n".utf8))\n    return FolderReplacementPathPolicy.valid(url, diagnosticTrace: diagnosticTrace)\n  }'
+
+
 class _AvailabilityProgress:
     __slots__ = ('current', 'unavailable')
 
@@ -83,11 +90,14 @@ def _availability_line(progress):
 
 
 class _ParserRefusal:
-    __slots__ = ('code', 'transition')
+    __slots__ = ('code', 'transition', 'predicate', '_predicate_attempted', '_predicate_nonce')
 
     def __init__(self):
         self.code = None
         self.transition = None
+        self.predicate = None
+        self._predicate_attempted = False
+        self._predicate_nonce = object()
 
 
 # Closed diagnostic identities only; the original _core_next grammar owns acceptance.
@@ -214,6 +224,179 @@ def _parser_transition_require(value, record, state, stage):
     _parser_require(value, record, 4)
 
 
+class _PredicateObservation:
+    __slots__ = ('selected', 'calls', 'bits', '_witness', '_transition')
+
+    def __init__(self, key, *, selected, calls, bits, witness, transition):
+        if key is not _PREDICATE_CONSTRUCTION_KEY:
+            raise TypeError('diagnostic construction refused')
+        self.selected, self.calls, self.bits = selected, calls, bits
+        self._witness, self._transition = witness, transition
+
+
+def _predicate_tuple(selected, calls, bits):
+    if (type(selected) is not int or type(calls) is not int or type(bits) is not int
+            or not 0 <= selected <= 2 or not 0 <= calls <= 2 or not 0 <= bits <= 3):
+        return None
+    if not ((calls == 0 and bits == 0) or (calls == 1 and bits in (1, 2))
+            or (calls == 2 and bits in (1, 2, 3))):
+        return None
+    if (selected == 0 and calls != 0) or (selected == 1 and calls > 1):
+        return None
+    return selected, calls, bits
+
+
+def _predicate_pristine_refusal(record):
+    if type(record) is not _ParserRefusal:
+        return False
+    try:
+        return (record.code is None and record.transition is None and record.predicate is None
+                and record._predicate_attempted is False and type(record._predicate_nonce) is object)
+    except AttributeError:
+        return False
+
+
+def _predicate_observation(record):
+    pair = _parser_refusal_transition(record)
+    if pair is None:
+        return None
+    try:
+        observation, nonce, attempted = record.predicate, record._predicate_nonce, record._predicate_attempted
+        if (type(observation) is not _PredicateObservation or type(nonce) is not object
+                or attempted is not True or observation._witness is not nonce):
+            return None
+        saved = observation._transition
+        if (type(saved) is not tuple or len(saved) != 2
+                or type(saved[0]) is not int or type(saved[1]) is not int or saved != pair):
+            return None
+        return _predicate_tuple(observation.selected, observation.calls, observation.bits)
+    except AttributeError:
+        return None
+
+
+def _predicate_lines(raw):
+    # Already exact bytes, <=1MiB. Iterate without retaining a per-record list.
+    offset = 0
+    while offset < len(raw):
+        end = raw.find(b'\n', offset)
+        if end < 0:
+            yield raw[offset:]
+            return
+        yield raw[offset:end + 1]
+        offset = end + 1
+
+
+def _predicate_private_buffers(stdout, stderr):
+    clean = []  # Exactly two bounded private byte buffers, never the owned originals.
+    marker_stream = side_stream = core_stream = side_count = core_count = 0
+    for stream, raw in ((1, stdout), (2, stderr)):
+        kept = bytearray()
+        for line in _predicate_lines(raw):
+            stripped = line.strip()
+            side = (_PREDICATE_TAG in line
+                    or (bool(stripped) and _PREDICATE_TAG.startswith(stripped)))
+            if side:
+                count = re.fullmatch(rb'CI_PREVIEW_PREDICATE c=([012]) m=([01])\n', line)
+                wrapper = re.fullmatch(rb'CI_PREVIEW_PREDICATE w=([01]) m=([01])\n', line)
+                _require(count is not None or wrapper is not None)
+                match = count if count is not None else wrapper
+                _require(match[2] == b'1' and side_count < 128
+                         and side_stream in (0, stream))
+                side_stream = stream
+                side_count += 1
+                continue
+            core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
+            if core is not None:
+                _require(core_stream in (0, stream) and core_count < CORE_RECORD_LIMIT)
+                core_stream = stream
+                core_count += 1
+                continue
+            _require(not (CORE_TAG in line
+                          or (bool(stripped) and CORE_TAG.startswith(stripped))))
+            outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
+            path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
+            if outer is not None or path is not None:
+                _require(marker_stream in (0, stream))
+                marker_stream = stream
+            kept.extend(line)
+        clean.append(bytes(kept))
+    _require(marker_stream != 0 and side_stream == marker_stream == core_stream)
+    # The original coarse4 refused before this original path parser could run.
+    # This private-copy invocation validates order; its report is not acceptance.
+    _parse_path_trace(*clean)
+    return marker_stream
+
+
+def _predicate_window(raw):
+    outer_count = calls = bits = 0
+    window = seen_window = seen_five = completed = False
+    selected = None
+    for line in _predicate_lines(raw):
+        outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
+        path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
+        if outer is not None:
+            outer_count += 1
+            _require(outer_count <= len(SEQUENCE))
+        elif path is not None:
+            current = SEQUENCE[outer_count - 1] if outer_count else None
+            request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
+            stage = int(path[1])
+            if request == 11 and stage == 7:
+                _require(not seen_window)
+                window = seen_window = True
+            elif request == 11 and stage == 8:
+                _require(window and seen_five and selected is not None and completed)
+                window = False
+        core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
+        if core is not None:
+            _require(window)
+            stage = int(core[1])
+            if stage == 5:
+                _require(not seen_five and selected is None and not completed)
+                seen_five = True
+            elif stage == 6:
+                _require(seen_five and selected is not None and not completed)
+                completed = True
+        count = re.fullmatch(rb'CI_PREVIEW_PREDICATE c=([012]) m=1\n', line)
+        wrapper = re.fullmatch(rb'CI_PREVIEW_PREDICATE w=([01]) m=1\n', line)
+        if count is not None:
+            _require(window and seen_five and selected is None and not completed)
+            selected = int(count[1])
+        elif wrapper is not None and window:
+            _require(seen_five and selected is not None and not completed)
+            _require(selected != 1 or calls == 0)
+            calls = min(2, calls + 1)
+            bits |= 1 << int(wrapper[1])
+    _require(seen_window and not window and seen_five and completed)
+    value = _predicate_tuple(selected, calls, bits)
+    _require(value is not None)
+    return value
+
+
+def _collect_predicate_observation(stdout, stderr, *, refusal):
+    pair = _parser_refusal_transition(refusal)
+    if pair is None:
+        return
+    try:
+        nonce = refusal._predicate_nonce
+        if (refusal._predicate_attempted is not False or refusal.predicate is not None
+                or type(nonce) is not object):
+            return
+        # Unknown is a first outcome too. Never borrow a later stream after refusal.
+        refusal._predicate_attempted = True
+        _require(type(stdout) is bytes and type(stderr) is bytes
+                 and len(stdout) <= 1048576 and len(stderr) <= 1048576)
+        stream = _predicate_private_buffers(stdout, stderr)
+        selected, calls, bits = _predicate_window(stdout if stream == 1 else stderr)
+        _require(refusal._predicate_nonce is nonce and refusal._predicate_attempted is True
+                 and refusal.predicate is None and _parser_refusal_transition(refusal) == pair)
+        refusal.predicate = _PredicateObservation(_PREDICATE_CONSTRUCTION_KEY,
+            selected=selected, calls=calls, bits=bits, witness=nonce, transition=pair)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError):
+        # Diagnostics cannot replace the original refusal or disclose an error payload.
+        return
+
+
 def _availability_output(progress, parser_refusal=None):
     # Fixed literals and validated closed integers; never exception or input text.
     output = 'ci-folder-preview-trace: unavailable\nreason: incomplete-evidence'
@@ -224,6 +407,10 @@ def _availability_output(progress, parser_refusal=None):
         pair = _parser_refusal_transition(parser_refusal) if code == 4 else None
         if pair is not None:
             line += ' state=' + str(pair[0]) + ' incoming=' + str(pair[1])
+            observation = _predicate_observation(parser_refusal)
+            if observation is not None:
+                line += (' selected=' + str(observation[0]) + ' calls=' + str(observation[1])
+                         + ' bits=' + str(observation[2]))
     if line is not None:
         output += '\n' + line
     _require(len((output + '\n').encode('ascii')) <= 512)
@@ -765,10 +952,17 @@ def execute(root, run, plan, manifest, watchdog_main, *, progress=None, parser_r
         _availability_enter(progress, 16)
         verify_inputs(root, run, manifest)
         _availability_enter(progress, 17)
-        if parser_refusal is None:
-            trace = parse_trace(stdout, stderr)
-        else:
-            trace = parse_trace(stdout, stderr, refusal=parser_refusal)
+        predicate_boundary = _predicate_pristine_refusal(parser_refusal)
+        try:
+            if parser_refusal is None:
+                trace = parse_trace(stdout, stderr)
+            else:
+                trace = parse_trace(stdout, stderr, refusal=parser_refusal)
+        except ValueError:
+            # Only this original owned parse can supply its new first-refusal observation.
+            if predicate_boundary and _parser_refusal_transition(parser_refusal) is not None:
+                _collect_predicate_observation(stdout, stderr, refusal=parser_refusal)
+            raise
         _availability_enter(progress, 18)
         original_after = [_fact(root, root / row['path'])[0] for row in manifest['capture']['originals']]
         copy_after = [_fact(run, run / row['path'])[0] for row in manifest['capture']['copies']]
@@ -852,13 +1046,14 @@ def project_core(original):
     guards = [b'    guard ' + term + b' else { throw FolderReplacementPreviewError.invalidRequest }\n'
               for term in traced]
     replace(old, b''.join(guards[:5]) + _core_marker(2) + _core_marker(3)
-            + guards[5] + _core_marker(4) + _core_marker(5) + guards[6]
+            + guards[5] + _core_marker(4) + _core_marker(5)
+            + _PREDICATE_SELECTED_SOURCE + guards[6]
             + _core_marker(6) + _core_marker(7))
     validate = b'    try validate(limits)\n'
     replace(validate, _core_marker(0) + b'    defer {\n' + _core_marker(9, 6)
             + b'    }\n' + validate + _core_marker(1))
     replace(b'  private func validURL(_ url: URL) -> Bool { FolderReplacementPathPolicy.valid(url) }',
-            b'  private func validURL(_ url: URL) -> Bool { FolderReplacementPathPolicy.valid(url, diagnosticTrace: diagnosticTrace) }')
+            _PREDICATE_WRAPPER_SOURCE)
     replace(b'  private static func serializedPathContainsNUL(_ url: URL) -> Bool {',
             b'  private static func serializedPathContainsNUL(\n'
             b'    _ url: URL, diagnosticTrace: Bool = false\n  ) -> Bool {')
@@ -899,7 +1094,8 @@ def project_core(original):
     for old, new in reversed(edits):
         _require(inverse.count(new) == 1)
         inverse = inverse.replace(new, old, 1)
-    _require(inverse == original and projected.count(CORE_TAG) == 23)
+    _require(inverse == original and projected.count(CORE_TAG) == 23
+             and projected.count(_PREDICATE_TAG) == 2)
     return projected
 
 

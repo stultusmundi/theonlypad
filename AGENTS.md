@@ -516,12 +516,12 @@ CI availability observation (2026-10-16): hosted285105d/run38901443160 fails cor
 CI parser-refusal checkpoint (2026-10-16): `python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py' -v` passes55 public contracts; the separately frozen focused selection passes22 after6 ordinary baseline failure entries across4 methods. `python3 -B scripts/ci_folder_preview_trace.py` passes its actual selected Swift1 with42 outer/314 helper/25 Core records,580 Original/581 frozen facts and a strict natural0 receipt. The optional parser group extends only unavailable boundary17's third line, never accepts partial traces or identifies a production cause. Groups0–6 have genuine byte controls;7 remains static-only. The latest observed hosted run38907406926 still fails core and reports only parser-attempt boundary17; the new group requires a fresh hosted observation. This command owns its600-second watchdog; do not nest another session-owning watchdog. Production Core/original Swift Test are unchanged.
 
 
-Current private prerequisites and diagnostic checkpoint (2026-10-16): the maintained exact-task owner selection passes51 and its17 pure contracts pass, independently audited (GO07996b76); callback-in-progress/owner-cycle guarantees remain Source reasoning and these runs overlap prior owner51. Private local-departure baseline preserves old37 and reaches17 ordinary missing-implementation failures/0unexpected (GO20ab4a7b); four-file local Source is in progress, with default sheets/App quit still outstanding. The private XML editor component reaches17 unique methods:16 pass and one has3 ordinary undo-history assertions/0unexpected (GO59be5a8c); default-first overlaps. Preserved final text is not proof of unchanged history or its cause, and separate App close/quit acceptance remains blocked. A16-snapshot follow-up narrows history appearance to after delegate exit (actual GO159600b0). Its reviewer authored the trace/recipe and independently verified Root's execution; Root separately reviewed the Test/glue. The registration point remains unknown and no history-clearing fix is authorized by this interval observation.
+Earlier private prerequisites and diagnostic checkpoint (2026-10-16): the maintained exact-task owner selection passes51 and its17 pure contracts pass, independently audited (GO07996b76); callback-in-progress/owner-cycle guarantees remain Source reasoning and these runs overlap prior owner51. Private local-departure baseline preserves old37 and reaches17 ordinary missing-implementation failures/0unexpected (GO20ab4a7b); four-file local Source is in progress, with default sheets/App quit still outstanding. The private XML editor component reaches17 unique methods:16 pass and one has3 ordinary undo-history assertions/0unexpected (GO59be5a8c); default-first overlaps. Preserved final text is not proof of unchanged history or its cause, and separate App close/quit acceptance remains blocked. A16-snapshot follow-up narrows history appearance to after delegate exit (actual GO159600b0). Its reviewer authored the trace/recipe and independently verified Root's execution; Root separately reviewed the Test/glue. The registration point remains unknown and no history-clearing fix is authorized by this interval observation.
 
 CI transition observation checkpoint (2026-10-16): final private diagnostic discovery passes59 (old55+new4) after two preserved58-pass/one fixture-error attempts and reviewed Test-only adapters; productive Source is unchanged across corrections. Actual public `python3 -B scripts/ci_folder_preview_trace.py` passes selected Swift1 with42/314/25 records,581 Original/582 frozen facts, saved authority and strict natural0 receipt (independent actual GOcbabbe9f). Five success lines remain unchanged. Only unavailable boundary17/parser4 may gain validated closed state/incoming integers; grammar, privacy, receipt checks and512-byte ceiling remain intact. Hosted run38916819487 still fails with boundary17/parser4 and no identified cause; new hosted pair evidence is pending. No public59 discovery, full-suite, App/helper, package, GUI or performance claim follows. Never nest another watchdog around the diagnostic. See `docs/verification/ci-failure-diagnostics.md`; local package remains be6ec6f.
 
 
-Private continuation checkpoint (2026-10-16): formatted local manager departure
+Earlier private continuation checkpoint (2026-10-16): formatted local manager departure
 passes54 distinct hidden native cases (old37 then new17),0 failures/unexpected,
 nine strict natural0 stages,930 Original/1132 frozen facts and empty State roots.
 Different Source/format/binding reviews are20a35fcc/eb38c334/90cad83f; actual audit
@@ -535,3 +535,34 @@ is narrowed to the inherited approval interval, not an internal undo target.
 App-close V3 remains incomplete with unknown error family255 and retained State.
 See the catalog, XML and CI verification records. No package/desktop/whole-product
 acceptance follows; local package remains be6ec6f.
+
+
+Working-source diagnostic checkpoint (2026-10-16, confirmed remote basis1bdb1e78): Root observed63
+private diagnostic contracts pass after replacing version-dependent AST hash
+oracles with exact source-body hashes for44 protected functions. The earlier
+44 ordinary subtest failures remain retained; old59 bodies and productive Source
+are unchanged by that correction. A separate selected Swift1 passes locally
+with42/314/25 records and13 side wrappers: selected class1, stored wrapper diagnostic flag1 and
+main-thread observations. The stored wrapper diagnostic flag is sampled at
+wrapper entry, not a PathPolicy return value. Private actual audits79ee1f53/dbab8316
+are by the original Source/Test author independently of Root execution, not a
+second Source-quality review; different whole Source review7fda5f63 is separate.
+Root adopted the three diagnostic files into working source and observed public63
+discovery PASS/0 under a strict receipt. No commit/push is claimed here.
+Latest hosted38934132190 still fails with17/4/6/6 and zero artifacts;
+no cause or hosted fix is established. The command still owns its direct
+600-second watchdog; never nest another. See the CI verification record.
+
+The corrected private XML25 baseline is19 PASS/six failed methods/17 ordinary
+assertions/0 unexpected, including a passing corrected weak-lifetime control
+(actual GOf1a66932). The separate genuine App fixture settlement reaches seven
+missing-lease failures/18 ordinary assertions/0 unexpected (GObd448ad7); its
+reviewer authored that fixture/recipe and independently audited Root execution.
+Neither baseline proves App cancellation/quit or a productive approval repair.
+Root also observes old54 manager tests pass before twelve missing-presenter
+methods fail19 ordinary assertions/0 unexpected (actual GO104947a3); deeper
+sheet controls remain unentered. Private approval-adapter and
+native-sheet implementations are in progress, not accepted. Public manager37,
+packagebe6ec6f and desktop limits remain unchanged. Overall76 groups remain
+69 partial/7 outstanding/0 accepted; the prior12–24-week low-confidence planning
+range is not recomputed from these counts.

@@ -289,8 +289,35 @@ def _expected_core_without_markers():
     return expected
 
 
+# Exact Test-owned additions only; old 59 Test methods and the old full inverse stay whole.
+PREDICATE_SELECTED_SOURCE = b'    if diagnosticTrace {\n      let predicateCount = selectedURLs.count\n      let predicateSelected = predicateCount == 0 ? 0 : (predicateCount == 1 ? 1 : 2)\n      let predicateMain = Thread.isMainThread ? 1 : 0\n      FileHandle.standardError.write(Data("CI_PREVIEW_PREDICATE c=\\(predicateSelected) m=\\(predicateMain)\\n".utf8))\n    }\n'
+PREDICATE_WRAPPER_SOURCE = b'  private func validURL(_ url: URL) -> Bool {\n    let predicateBit = diagnosticTrace ? 1 : 0\n    let predicateMain = Thread.isMainThread ? 1 : 0\n    FileHandle.standardError.write(Data("CI_PREVIEW_PREDICATE w=\\(predicateBit) m=\\(predicateMain)\\n".utf8))\n    return FolderReplacementPathPolicy.valid(url, diagnosticTrace: diagnosticTrace)\n  }'
+PREDICATE_LEGACY_WRAPPER = b'  private func validURL(_ url: URL) -> Bool { FolderReplacementPathPolicy.valid(url, diagnosticTrace: diagnosticTrace) }'
+
+def strip_predicate_projection(projected):
+    """Accept the exact canonical two-fragment derivative, or the historical projection."""
+    if type(projected) is not bytes:
+        raise ValueError('Predicate projection must be bytes')
+    if b'CI_PREVIEW_PREDICATE' not in projected:
+        return projected
+    if (projected.count(b'CI_PREVIEW_PREDICATE') != 2
+            or projected.count(PREDICATE_SELECTED_SOURCE) != 1
+            or projected.count(PREDICATE_WRAPPER_SOURCE) != 1):
+        raise ValueError('Predicate projection is not the exact authorized derivative')
+    # Exact boundaries protect the original allSatisfy call and the position after Core5.
+    after_five = (b'    if diagnosticTrace {\n'
+                  b'      FileHandle.standardError.write(Data("CI_FOLDER_PREVIEW_CORE s=5\\n".utf8))\n'
+                  b'    }\n' + PREDICATE_SELECTED_SOURCE
+                  + b'    guard selectedURLs.allSatisfy(validURL) else { throw FolderReplacementPreviewError.invalidRequest }\n')
+    if projected.count(after_five) != 1:
+        raise ValueError('Predicate selected boundary drift')
+    return projected.replace(PREDICATE_SELECTED_SOURCE, b'', 1).replace(
+        PREDICATE_WRAPPER_SOURCE, PREDICATE_LEGACY_WRAPPER, 1)
+
+
 def strip_core_projection(projected):
     """Test-owned inverse for the only two Core regions admitted by the frozen transform."""
+    projected = strip_predicate_projection(projected)
     if type(projected) is not bytes or CORE_MARKER not in projected:
         raise ValueError('Core projection premise absent')
     codes = [int(match[1]) for match in CORE_CALL.finditer(projected)]

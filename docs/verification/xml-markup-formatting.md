@@ -1,7 +1,34 @@
 # XML markup formatter — Core checkpoint, 16 October 2026
 
 
-## Private native approval investigation — 2026-10-16
+## Corrected native and App baselines — 2026-10-16
+
+The private native approval selection now reaches25 unique methods:19 pass,
+six fail17 ordinary assertions,0 unexpected. The repeated default case passes
+and overlaps that roster. Native15 contributes one failed method/three
+assertions; managed2 passes; supplemental approval8 contributes five failed
+methods/fourteen assertions. The corrected weak-lifetime method passes at its
+genuine cleanup/handoff boundary. It does not prove a future adapter's lifetime.
+Independent actual audit GOf1a66932 verifies978 Original/1183 frozen facts,
+236 artifacts,199 objects/five modules,43 stage facts, seven strict receipts
+with natural exits0/0/0/0/1/0/1, complete captures and empty State roots.
+
+This ordinary baseline permits the reviewed narrow private XML approval-adapter
+implementation to proceed. That implementation is in progress and unaccepted;
+no unchanged-suite GREEN, App routing or public native-XML adoption is claimed.
+The original delegate/history failures and earlier weak-oracle failure remain
+preserved. Legitimate history must not be cleared or disabled, and inherited
+native approval must not be bypassed.
+
+The separate App fixture now joins its genuine pending close after its own
+external-origin closes, retaining the before/after pending-close guards. Its
+seven methods reach18 ordinary missing-lease assertions with0 unexpected;
+all four State roots are empty (actual audit GObd448ad7). The reviewer authored
+the fixture/recipe and audited Root execution; Root separately reviewed them.
+This is a valid shallow baseline, not App cancellation/quit behavior or App
+Source authorization. Earlier unknown255/incomplete runs remain retained.
+
+## Earlier private native approval investigation — 2026-10-16
 
 Native XML remains a private candidate. Its17 distinct native/managed methods
 produce16 passes and one method with three ordinary undo-history assertion
@@ -22,16 +49,18 @@ GO13099a7a is by the probe/recipe author, different from Root's prelaunch review
 and execution. This identifies an instrumented interval, not an AppKit internal
 registration, target or general undo guarantee. Observation can perturb timing.
 No history-clearing, registration suppression or native-approval bypass is a fix.
-A proposed XML-only approval fence needs independently reviewed genuine-history,
-forwarding, successor-delegate and reentry regressions before productive Source.
+At that checkpoint the proposed XML-only approval fence still needed
+genuine-history, forwarding, successor-delegate and reentry regressions. The
+corrected baseline above now supplies that prerequisite, not a passing repair.
 
-App integration remains separately blocked. Three closed-error-family diagnostic
+App integration was separately blocked at that checkpoint. Three closed-error-family diagnostic
 revisions retain four completed closes followed by a fifth retained close at
 stage16 with unmapped family255. The latest singleton has5 failures/1 unexpected,
 postflight true and retained synthetic fixture State (actual audit GOd948a47f).
 It does not establish a dirty document or error cause. Source suggests pending
 legacy recovery cleanup from a fixture-owned external origin; a passive Boolean
-probe is under review. No drain/guard bypass or App7 acceptance is claimed.
+probe was then under review. Later observation and genuine fixture settlement
+produce the shallow App7 baseline above; no App7 behavior acceptance follows.
 
 
 The working application source includes `LanguageService.formatXML`. It formats whitespace inside start/empty tags: attributes move onto indented lines and the closing delimiter receives indentation. It preserves element content, interelement whitespace, quotes and attribute values, character references, comments, CDATA, processing instructions, declaration spelling, BOM and existing line endings. This is not tree pretty-printing. The native command, editor transaction/undo integration, HTML formatting and external formatter integration remain outstanding under D-05.

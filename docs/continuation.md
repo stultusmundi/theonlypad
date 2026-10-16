@@ -1,8 +1,9 @@
 # Active integration checkpoint — 2026-10-16
 
-The preceding confirmed development checkpoint is `bc53634`. This report
-accompanies the reviewed diagnostic checkpoint; editable manager Source remains
-`2584f66`.
+The confirmed remote basis is `1bdb1e78`. Root adopted the three reviewed
+diagnostic files, including Source `cac3e5fe`, into working source. Public
+discovery passes63 in Root's retained execution; no commit/push or hosted pass
+is claimed at this checkpoint. Editable manager Source remains `2584f66`.
 Routine non-force reviewed development pushes remain authorized; merges, force
 pushes and releases remain separate.
 
@@ -33,20 +34,29 @@ independently of Root execution, not another Source-quality review. The genuine
 old37-pass/new17-ordinary-failure baseline remains preserved. This candidate is
 private and uses an injected presenter; production sheets/App quit remain undone.
 
-Latest hosted run38930156579 atbc53634 still fails core and records the refused
-pair boundary17/parser4/state6/incoming6. The bound eleventh request is a singleton
-NUL URL, so the empty-selection explanation does not fit its declared path.
-Different source/evidence review5c195cb3 finds no established cause; do not relax
-the grammar or patch Core speculatively. Zero artifacts are actually returned.
+Latest hosted run38934132190 at1bdb1e78 still fails core with unavailable125
+and boundary17/parser4/state6/incoming6. Its artifact query returns zero. The
+reason remains unknown. Root observed private63 diagnostic contracts pass after
+the portable source-hash oracle correction; the prior44 AST-hash assertion
+failures remain preserved. Separately, selected Swift1 passes locally with
+42/314/25 records and13 side wrappers, selected class1/stored wrapper diagnostic flag1 on the main
+thread. The stored flag is sampled at wrapper entry, not a PathPolicy return
+value. Actual audits79ee1f53/dbab8316 accept the private Python/Swift evidence;
+the reviewer authored the original Source/Tests and is independent of Root
+execution, not another Source-quality reviewer. Different Source7fda5f63 remains
+separate. Root also observed public63 PASS/0 after exact three-file adoption.
+No Core patch, relaxed grammar or hosted acceptance follows.
 
-The XML inherited-approval probe retains the three original canUndo failures and
-narrows their appearance to after original delegate exit and before real super
-returns (GO13099a7a, probe-author audit of Root execution). It identifies no
-internal target or registration operation. A separately reviewed XML-only fence
-design now requires supplemental genuine undo/redo/forwarding/reentry Tests
-before productive repair. App-close V3 is still incomplete with a fifth retained
-close/unknown255 after four completed closes (GOd948a47f); source suggests pending
-legacy cleanup, but no actual cause or cleanup correction is established yet.
+Corrected private XML25 now reaches19 PASS/six failed methods/17 ordinary
+assertions/0 unexpected, including the weak-lifetime control PASS (GOf1a66932).
+A narrow private approval adapter is in progress and unaccepted. The separate
+App7 genuine fixture-settlement baseline reaches18 ordinary missing-lease
+assertions/0 unexpected with empty State (GObd448ad7); deeper App behavior is
+unentered. Root observed manager old54 PASS then all12 new sheet methods fail
+19 ordinary missing-presenter assertions/0 unexpected (actual GO104947a3);
+deeper sheet controls remain unentered. Its private presenter
+implementation is also in progress and unaccepted; no actual sheet attachment
+or default App quit acceptance follows.
 
 Public menu activation, recovery/import/export, picker, document propagation and
 packaged workflows remain outstanding. The full product is unfinished.
@@ -70,7 +80,7 @@ none is a desktop, helper-launch or performance result. Strict formatting and
 public checks pass. See [catalog evidence](verification/application-language-catalog.md).
 
 Earlier hosted run38916819487 at71dd5e5 exposed only boundary17/parser4;
-latest run38930156579 above now supplies the refused state6/incoming6 pair.
+later runs, including38934132190 above, supply the refused state6/incoming6 pair.
 Final private59 passes after two retained Test-fixture errors (each58 pass/one
 error); Source is unchanged across those corrections. A separate actual public
 selected Swift1 passes with42/314/25 records,581 Original/582 frozen facts,
@@ -80,7 +90,7 @@ the pair appears only on a valid rejected transition. The command owns its
 600-second watchdog; never nest another.
 See [CI evidence](verification/ci-failure-diagnostics.md).
 
-XML Core passes26 adopted component cases; the private process worker passes14
+Earlier native checkpoint: XML Core passes26 adopted component cases; the private process worker passes14
 within a retained-owner lifetime. The earlier valid-fixture native17 baseline
 failed28 ordinary assertions with0 unexpected. The private two-file editor
 adapter now compiles and reaches all17 unique native/managed methods:16 pass,
@@ -96,12 +106,13 @@ and independently verified Root's execution; Root separately reviewed the
 Test/glue. This interval observation does not identify the registration point
 or authorize clearing legitimate history.
 
-The separate App7 run remains incomplete125: its first method reaches managed
-close refusal after clean-state checks, then six bodies are custody-blocked.
-Dirty input and the close refusal cause are not established. Its private close
-diagnostic does not grant App acceptance. Tests/failures remain preserved;
-App cancellation/zero-window quit, full native XML acceptance, HTML and external
-formatting are outstanding. No giant native long-line fixture is authorized.
+The earlier separate App7 run was incomplete125: its first method reached
+managed close refusal after clean-state checks, then six bodies were blocked by
+retained fixture custody. Dirty input was not established. Subsequent bounded
+pending-close observation and genuine fixture joining yield the shallow App7
+baseline above, preserving the old failures. App cancellation/zero-window quit,
+full native XML acceptance, HTML and external formatting remain outstanding.
+No giant native long-line fixture is authorized.
 
 Local package remains `be6ec6f`, with verified ad-hoc signature/archive/SBOM.
 Focused desktop setup stops65 enabling automation before its method. Desktop
@@ -110,12 +121,11 @@ cache-package results remain11 passes/one Locate failure across12 entered cases;
 six planned cases and AXPress are unentered. Original large-line memory-pressure
 failure, broad IME/VoiceOver, performance and packaged acceptance remain open.
 
-Next: review supplemental genuine-history/delegate Tests against the narrowed
-inherited-approval interval before XML repair; investigate the separate App
-pending-close hypothesis before App Source. Extend the private passing54 local
-departure candidate with production asynchronous sheets, then compose genuine
-monitor/task prerequisites and App quit through the same actual owner. Diagnose
-the hosted6/6 refusal without weakening grammar. Continue recovery,
+Next: finish review/publication of the working-source diagnostic checkpoint,
+then inspect the next hosted observation without forecasting its outcome. Review and test the in-progress XML approval adapter and native-sheet
+presenter against their preserved ordinary baselines. Keep App XML integration
+separate from the valid shallow cleanup baseline. Compose exact monitor/task
+prerequisites and App quit only through reviewed gates. Continue recovery,
 import/export/menu/picker/propagation and every applicable BUILD requirement.
 
 # Active diagnostic and integration checkpoint — 2026-10-15

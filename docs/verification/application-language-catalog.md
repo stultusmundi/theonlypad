@@ -1,6 +1,23 @@
 # Application language catalog and manager
 
 
+## Private native-sheet baseline — 2026-10-16
+
+Root observed the retained54 hidden native tests pass before entering12 new
+sheet methods. All12 fail19 ordinary missing-presenter/factory assertions,
+0 unexpected; ten direct stages exit0 nine times then1, with postflight verified
+and empty State roots. The deeper alert response, Store, reentry and lifetime
+controls are unentered on this inert baseline. This record is separate from
+production NSAlert attachment/end-sheet or visible desktop acceptance.
+
+A private presenter implementation is in progress and unaccepted. The passing
+local54 candidate and exact-task/monitor prerequisites remain private; the
+public manager command still covers37. No default sheet, App quit, menu,
+recovery/import/export, picker, propagation or packaged workflow is thereby
+accepted. Independent actual audit GO104947a3 accepts this narrow ordinary
+baseline; the deeper controls remain unentered. Productive Source and actual
+attachment require their own review and execution. Overlapping counts are not added.
+
 ## Private local departure candidate — 2026-10-16
 
 The formatted four-file local parent/child departure candidate now passes54 unique

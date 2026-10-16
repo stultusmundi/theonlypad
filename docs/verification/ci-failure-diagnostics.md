@@ -1,6 +1,49 @@
 # Bounded CI failure diagnostics
 
-## Latest hosted closed pair — 2026-10-16
+## Working-source predicate observation and latest hosted result — 2026-10-16
+
+The confirmed remote basis is `1bdb1e78`; the reviewed diagnostic is now
+adopted in working source, without a commit/push claim here. Hosted
+[run38934132190](https://github.com/stultusmundi/theonlypad/actions/runs/38934132190)
+still fails the original core step and reports unavailable125 with
+`boundary=17 parser=4 state=6 incoming=6`. The inspected artifact response contains
+zero artifacts. That pair identifies a refused diagnostic transition, not a
+production cause, signal or accepted partial trace.
+
+Root observed63 passing private Python contracts (old59 plus4), with0 failures
+or errors, after a reviewed portable-oracle correction. The preceding attempt
+has62 passing methods and one method with44 ordinary protected-function hash
+failures,0 errors. Those failures came from version-dependent Python AST dumps;
+the retained correction hashes the exact UTF-8 source of all44 protected
+functions from the pinned original. No productive Source or old59 Test bodies
+changed across that correction. Both attempts remain preserved.
+
+Root separately observed one actual selected Swift test pass, with42 outer,
+314 PATH and25 Core records, plus13 bounded side-wrapper records. For the bound
+request, the closed selected-count class is1 and the stored wrapper diagnostic
+flag is1, sampled at wrapper entry. This is not the PathPolicy return value.
+The selected-count observation and all observed wrappers are on the main thread.
+These are local observations, not an explanation of the hosted6/6 refusal.
+Root records582 Original/583 frozen facts, both exact source projections, empty
+State and a strict20-field natural0 receipt with complete captures. The five
+accepted output lines remain unchanged. Counts overlap and are not added.
+
+Actual audits GO79ee1f53/GOdbab8316 accept the private Python and selected Swift
+evidence. Their reviewer authored the original Source/Tests and independently
+verified Root execution; these are not another whole Source-quality review.
+Different whole Source GO7fda5f63 and portable-oracle reviews remain separate.
+Root then adopted exactly three files: diagnostic Source `cac3e5fe`, updated
+support Test `8b6f5e44` and new portable Test `62579da7`. Root's retained public
+discovery passes63 unique tests with0 failures/errors/skips and a strict20-field
+natural0 receipt in9.036972 seconds. This is a separate invocation of overlapping
+contracts; it is not added to private63. No commit/push or hosted outcome is
+claimed. The first-witness observation preserves
+one original path-policy call, strict grammar, source inverses, receipt checks,
+closed privacy bounds and the existing600-second direct watchdog. No Core or
+original Swift Test change, full-suite, App/helper launch, package, desktop,
+performance or root-cause acceptance follows. Do not nest another watchdog.
+
+## Earlier hosted closed pair — 2026-10-16
 
 Hosted [run38930156579](https://github.com/stultusmundi/theonlypad/actions/runs/38930156579)
 at `bc53634` fails the original core step. The diagnostic remains unavailable125
@@ -16,7 +59,8 @@ An empty-selection explanation contradicts this declared path. The remote raw
 child capsule/compiler graph is unavailable, so neither a Foundation defect,
 missing validator invocation nor compiler defect is established. Do not add a
 permissive grammar edge or change production Core based on this pair. A separate
-bounded predicate-entry observation is under design review.
+bounded predicate-entry observation was then under design review; its later
+private execution is recorded above.
 
 The local private59 and selected Swift1 results below remain separate passing
 scopes. The full product/hosted core remains incomplete; the original production
@@ -59,7 +103,8 @@ State is empty and the original five success lines contain no refusal suffix.
 These overlapping diagnostic counts are not added. No hosted state/incoming
 observation, cause, full-suite/App/helper/GUI, compiler-artifact graph or performance
 acceptance follows. The command directly owns its600-second watchdog; never nest
-another session-owning watchdog. The next hosted observation remains pending.
+another session-owning watchdog. The next hosted observation was pending at that checkpoint; later refusals
+are recorded above.
 
 ## Earlier hosted parser-refusal checkpoint — 2026-10-16
 
