@@ -90,7 +90,8 @@ def _availability_line(progress):
 
 
 class _ParserRefusal:
-    __slots__ = ('code', 'transition', 'predicate', '_predicate_attempted', '_predicate_nonce')
+    __slots__ = ('code', 'transition', 'predicate', '_predicate_attempted', '_predicate_nonce',
+                 '_transition_nonce', '_collector_domain', '_collector_nonce', '_collector_transition')
 
     def __init__(self):
         self.code = None
@@ -98,6 +99,19 @@ class _ParserRefusal:
         self.predicate = None
         self._predicate_attempted = False
         self._predicate_nonce = object()
+        # Bind collector freshness at construction without changing the legacy
+        # parser transition witness or its public state/incoming projection.
+        self._transition_nonce = self._predicate_nonce
+        self._collector_domain = None
+        self._collector_nonce = None
+        self._collector_transition = None
+
+
+_COLLECTOR_DOMAINS = (
+    'buffer-type', 'capture-cap', 'record-shape', 'thread', 'stream', 'side-cap',
+    'core-cap', 'marker-presence', 'window', 'prefix', 'old-path', 'tuple',
+    'collector-exception')
+_COLLECTOR_DOMAIN_IDS = {name: index + 1 for index, name in enumerate(_COLLECTOR_DOMAINS)}
 
 
 # Closed diagnostic identities only; the original _core_next grammar owns acceptance.
@@ -251,9 +265,51 @@ def _predicate_pristine_refusal(record):
         return False
     try:
         return (record.code is None and record.transition is None and record.predicate is None
-                and record._predicate_attempted is False and type(record._predicate_nonce) is object)
+                and record._predicate_attempted is False and type(record._predicate_nonce) is object
+                and record._transition_nonce is record._predicate_nonce and record._collector_domain is None
+                and record._collector_nonce is None and record._collector_transition is None)
     except AttributeError:
         return False
+
+
+def _collector_domain_mark(record, domain, nonce, pair):
+    if type(record) is not _ParserRefusal or domain not in _COLLECTOR_DOMAIN_IDS.values():
+        return
+    try:
+        if (record.code == 4 and record._predicate_attempted is True and record.predicate is None
+                and type(nonce) is object and record._predicate_nonce is nonce
+                and record._transition_nonce is nonce and record.transition == pair
+                and record._collector_domain is None and record._collector_nonce is None
+                and record._collector_transition is None):
+            record._collector_domain = domain
+            record._collector_nonce = nonce
+            record._collector_transition = pair
+    except AttributeError:
+        return
+
+
+def _collector_refusal_domain(record):
+    pair = _parser_refusal_transition(record)
+    if pair is None or type(record) is not _ParserRefusal:
+        return None
+    try:
+        domain, nonce, saved = (record._collector_domain, record._collector_nonce,
+                                record._collector_transition)
+        if (type(domain) is int and domain in _COLLECTOR_DOMAIN_IDS.values()
+                and record._predicate_attempted is True and record.predicate is None
+                and nonce is record._predicate_nonce is record._transition_nonce
+                and saved == pair):
+            return _COLLECTOR_DOMAINS[domain - 1]
+    except AttributeError:
+        return None
+    return None
+
+
+def _collector_require(value, refusal, domain, nonce, pair):
+    if value:
+        return
+    _collector_domain_mark(refusal, _COLLECTOR_DOMAIN_IDS[domain], nonce, pair)
+    _require(False)
 
 
 def _predicate_observation(record):
@@ -286,7 +342,7 @@ def _predicate_lines(raw):
         offset = end + 1
 
 
-def _predicate_private_buffers(stdout, stderr):
+def _predicate_private_buffers(stdout, stderr, *, refusal, nonce, pair):
     clean = []  # Exactly two bounded private byte buffers, never the owned originals.
     marker_stream = side_stream = core_stream = side_count = core_count = 0
     for stream, raw in ((1, stdout), (2, stderr)):
@@ -298,36 +354,49 @@ def _predicate_private_buffers(stdout, stderr):
             if side:
                 count = re.fullmatch(rb'CI_PREVIEW_PREDICATE c=([012]) m=([01])\n', line)
                 wrapper = re.fullmatch(rb'CI_PREVIEW_PREDICATE w=([01]) m=([01])\n', line)
-                _require(count is not None or wrapper is not None)
+                _collector_require(count is not None or wrapper is not None,
+                                   refusal, 'record-shape', nonce, pair)
                 match = count if count is not None else wrapper
-                _require(match[2] == b'1' and side_count < 128
-                         and side_stream in (0, stream))
+                _collector_require(match[2] == b'1', refusal, 'thread', nonce, pair)
+                _collector_require(side_count < 128, refusal, 'side-cap', nonce, pair)
+                _collector_require(side_stream in (0, stream), refusal, 'stream', nonce, pair)
                 side_stream = stream
                 side_count += 1
                 continue
             core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
             if core is not None:
-                _require(core_stream in (0, stream) and core_count < CORE_RECORD_LIMIT)
+                _collector_require(core_count < CORE_RECORD_LIMIT,
+                                   refusal, 'core-cap', nonce, pair)
+                _collector_require(core_stream in (0, stream), refusal, 'stream', nonce, pair)
                 core_stream = stream
                 core_count += 1
                 continue
-            _require(not (CORE_TAG in line
-                          or (bool(stripped) and CORE_TAG.startswith(stripped))))
+            _collector_require(not (CORE_TAG in line
+                          or (bool(stripped) and CORE_TAG.startswith(stripped))),
+                               refusal, 'record-shape', nonce, pair)
             outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
             path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
             if outer is not None or path is not None:
-                _require(marker_stream in (0, stream))
+                _collector_require(marker_stream in (0, stream),
+                                   refusal, 'stream', nonce, pair)
                 marker_stream = stream
             kept.extend(line)
         clean.append(bytes(kept))
-    _require(marker_stream != 0 and side_stream == marker_stream == core_stream)
+    _collector_require(marker_stream != 0 and side_stream != 0 and core_stream != 0,
+                       refusal, 'marker-presence', nonce, pair)
+    _collector_require(side_stream == marker_stream == core_stream,
+                       refusal, 'stream', nonce, pair)
     # The original coarse4 refused before this original path parser could run.
     # This private-copy invocation validates order; its report is not acceptance.
-    _parse_path_trace(*clean)
+    try:
+        _parse_path_trace(*clean)
+    except ValueError:
+        _collector_domain_mark(refusal, _COLLECTOR_DOMAIN_IDS['old-path'], nonce, pair)
+        raise
     return marker_stream
 
 
-def _predicate_window(raw):
+def _predicate_window(raw, *, refusal, nonce, pair):
     outer_count = calls = bits = 0
     window = seen_window = seen_five = completed = False
     selected = None
@@ -336,40 +405,50 @@ def _predicate_window(raw):
         path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
         if outer is not None:
             outer_count += 1
-            _require(outer_count <= len(SEQUENCE))
+            _collector_require(outer_count <= len(SEQUENCE),
+                               refusal, 'prefix', nonce, pair)
         elif path is not None:
             current = SEQUENCE[outer_count - 1] if outer_count else None
             request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
             stage = int(path[1])
             if request == 11 and stage == 7:
-                _require(not seen_window)
+                _collector_require(not seen_window, refusal, 'window', nonce, pair)
                 window = seen_window = True
             elif request == 11 and stage == 8:
-                _require(window and seen_five and selected is not None and completed)
+                _collector_require(window, refusal, 'window', nonce, pair)
+                _collector_require(seen_five and selected is not None and completed,
+                                   refusal, 'prefix', nonce, pair)
                 window = False
         core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
         if core is not None:
-            _require(window)
+            _collector_require(window, refusal, 'window', nonce, pair)
             stage = int(core[1])
             if stage == 5:
-                _require(not seen_five and selected is None and not completed)
+                _collector_require(not seen_five and selected is None and not completed,
+                                   refusal, 'prefix', nonce, pair)
                 seen_five = True
             elif stage == 6:
-                _require(seen_five and selected is not None and not completed)
+                _collector_require(seen_five and selected is not None and not completed,
+                                   refusal, 'prefix', nonce, pair)
                 completed = True
         count = re.fullmatch(rb'CI_PREVIEW_PREDICATE c=([012]) m=1\n', line)
         wrapper = re.fullmatch(rb'CI_PREVIEW_PREDICATE w=([01]) m=1\n', line)
         if count is not None:
-            _require(window and seen_five and selected is None and not completed)
+            _collector_require(window, refusal, 'window', nonce, pair)
+            _collector_require(seen_five and selected is None and not completed,
+                               refusal, 'prefix', nonce, pair)
             selected = int(count[1])
         elif wrapper is not None and window:
-            _require(seen_five and selected is not None and not completed)
-            _require(selected != 1 or calls == 0)
+            _collector_require(seen_five and selected is not None and not completed,
+                               refusal, 'prefix', nonce, pair)
+            _collector_require(selected != 1 or calls == 0,
+                               refusal, 'tuple', nonce, pair)
             calls = min(2, calls + 1)
             bits |= 1 << int(wrapper[1])
-    _require(seen_window and not window and seen_five and completed)
+    _collector_require(seen_window and not window, refusal, 'window', nonce, pair)
+    _collector_require(seen_five and completed, refusal, 'prefix', nonce, pair)
     value = _predicate_tuple(selected, calls, bits)
-    _require(value is not None)
+    _collector_require(value is not None, refusal, 'tuple', nonce, pair)
     return value
 
 
@@ -380,20 +459,32 @@ def _collect_predicate_observation(stdout, stderr, *, refusal):
     try:
         nonce = refusal._predicate_nonce
         if (refusal._predicate_attempted is not False or refusal.predicate is not None
-                or type(nonce) is not object):
+                or type(nonce) is not object or refusal._transition_nonce is not nonce
+                or refusal._collector_domain is not None or refusal._collector_nonce is not None
+                or refusal._collector_transition is not None):
             return
         # Unknown is a first outcome too. Never borrow a later stream after refusal.
         refusal._predicate_attempted = True
-        _require(type(stdout) is bytes and type(stderr) is bytes
-                 and len(stdout) <= 1048576 and len(stderr) <= 1048576)
-        stream = _predicate_private_buffers(stdout, stderr)
-        selected, calls, bits = _predicate_window(stdout if stream == 1 else stderr)
-        _require(refusal._predicate_nonce is nonce and refusal._predicate_attempted is True
-                 and refusal.predicate is None and _parser_refusal_transition(refusal) == pair)
+        _collector_require(type(stdout) is bytes and type(stderr) is bytes,
+                           refusal, 'buffer-type', nonce, pair)
+        _collector_require(len(stdout) <= 1048576 and len(stderr) <= 1048576,
+                           refusal, 'capture-cap', nonce, pair)
+        stream = _predicate_private_buffers(stdout, stderr, refusal=refusal, nonce=nonce, pair=pair)
+        selected, calls, bits = _predicate_window(stdout if stream == 1 else stderr,
+                                                  refusal=refusal, nonce=nonce, pair=pair)
+        _require(refusal._predicate_nonce is nonce and refusal._transition_nonce is nonce
+                 and refusal._predicate_attempted is True and refusal.predicate is None
+                 and _parser_refusal_transition(refusal) == pair)
         refusal.predicate = _PredicateObservation(_PREDICATE_CONSTRUCTION_KEY,
             selected=selected, calls=calls, bits=bits, witness=nonce, transition=pair)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError):
         # Diagnostics cannot replace the original refusal or disclose an error payload.
+        if _collector_refusal_domain(refusal) is None:
+            try:
+                nonce = refusal._predicate_nonce
+                _collector_domain_mark(refusal, _COLLECTOR_DOMAIN_IDS['collector-exception'], nonce, pair)
+            except (AttributeError, TypeError):
+                pass
         return
 
 
@@ -411,6 +502,9 @@ def _availability_output(progress, parser_refusal=None):
             if observation is not None:
                 line += (' selected=' + str(observation[0]) + ' calls=' + str(observation[1])
                          + ' bits=' + str(observation[2]))
+            domain = _collector_refusal_domain(parser_refusal)
+            if domain is not None:
+                line += ' collector=' + str(_COLLECTOR_DOMAIN_IDS[domain])
     if line is not None:
         output += '\n' + line
     _require(len((output + '\n').encode('ascii')) <= 512)

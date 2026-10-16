@@ -248,7 +248,7 @@ class FolderPreviewTransitionRefusalTests(unittest.TestCase):
                 code, stdout, stderr, escaped, imported = value
                 self.assertIsNone(escaped); self.assertEqual(code, 125); self.assertEqual(stderr, '')
                 self.assertEqual(stdout, '\n'.join(UNAVAILABLE + [
-                    f'availability: boundary=17 parser=4 state={pair[0]} incoming={pair[1]}']) + '\n')
+                    f'availability: boundary=17 parser=4 state={pair[0]} incoming={pair[1]} collector=8']) + '\n')
                 self.assertLessEqual(len(stdout.encode('ascii')), 512)
                 self.assertEqual(len(stdout.splitlines()), 3)
                 self.assertNotIn(SECRET, stdout); self.assertEqual(len(watch.calls), 1)

@@ -422,8 +422,9 @@ class FolderPreviewPredicateObservationTests(unittest.TestCase):
         code, stdout, stderr, escaped, _ = availability.FolderPreviewAvailabilityTests.main_call(self, root, watch)
         self.assertIsNone(escaped)
         self.assertEqual((code, stderr), (125, ''))
+        # The exact parser4 refusal also retains the first closed collector domain.
         self.assertEqual(stdout, '\n'.join(UNAVAILABLE + [
-            'availability: boundary=17 parser=4 state=6 incoming=6']) + '\n')
+            'availability: boundary=17 parser=4 state=6 incoming=6 collector=3']) + '\n')
         # Receipt refusal occurs before original parsing and cannot borrow plausible side data.
         root, _, _ = self.capsule()
         def refuse(receipt, output):
