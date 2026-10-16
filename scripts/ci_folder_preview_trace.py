@@ -91,7 +91,8 @@ def _availability_line(progress):
 
 class _ParserRefusal:
     __slots__ = ('code', 'transition', 'predicate', '_predicate_attempted', '_predicate_nonce',
-                 '_transition_nonce', '_collector_domain', '_collector_nonce', '_collector_transition')
+                 '_transition_nonce', '_collector_domain', '_collector_nonce', '_collector_transition',
+                 '_collector_window_detail')
 
     def __init__(self):
         self.code = None
@@ -105,6 +106,7 @@ class _ParserRefusal:
         self._collector_domain = None
         self._collector_nonce = None
         self._collector_transition = None
+        self._collector_window_detail = None
 
 
 _COLLECTOR_DOMAINS = (
@@ -267,23 +269,29 @@ def _predicate_pristine_refusal(record):
         return (record.code is None and record.transition is None and record.predicate is None
                 and record._predicate_attempted is False and type(record._predicate_nonce) is object
                 and record._transition_nonce is record._predicate_nonce and record._collector_domain is None
-                and record._collector_nonce is None and record._collector_transition is None)
+                and record._collector_nonce is None and record._collector_transition is None
+                and record._collector_window_detail is None)
     except AttributeError:
         return False
 
 
-def _collector_domain_mark(record, domain, nonce, pair):
+def _collector_domain_mark(record, domain, nonce, pair, window_detail=None):
     if type(record) is not _ParserRefusal or domain not in _COLLECTOR_DOMAIN_IDS.values():
+        return
+    if window_detail is not None and (domain != _COLLECTOR_DOMAIN_IDS['window']
+                                      or type(window_detail) is not int
+                                      or window_detail not in (1, 2, 3, 4, 5)):
         return
     try:
         if (record.code == 4 and record._predicate_attempted is True and record.predicate is None
                 and type(nonce) is object and record._predicate_nonce is nonce
                 and record._transition_nonce is nonce and record.transition == pair
                 and record._collector_domain is None and record._collector_nonce is None
-                and record._collector_transition is None):
+                and record._collector_transition is None and record._collector_window_detail is None):
             record._collector_domain = domain
             record._collector_nonce = nonce
             record._collector_transition = pair
+            record._collector_window_detail = window_detail
     except AttributeError:
         return
 
@@ -305,10 +313,28 @@ def _collector_refusal_domain(record):
     return None
 
 
-def _collector_require(value, refusal, domain, nonce, pair):
+def _collector_refusal_window_detail(record):
+    pair = _parser_refusal_transition(record)
+    if pair is None or type(record) is not _ParserRefusal:
+        return None
+    try:
+        detail = record._collector_window_detail
+        if (record._collector_domain == _COLLECTOR_DOMAIN_IDS['window']
+                and record._predicate_attempted is True and record.predicate is None
+                and record._collector_nonce is record._predicate_nonce is record._transition_nonce
+                and record._collector_transition == pair
+                and type(detail) is int and detail in (1, 2, 3, 4, 5)):
+            return detail
+    except AttributeError:
+        return None
+    return None
+
+
+def _collector_require(value, refusal, domain, nonce, pair, window_detail=None):
     if value:
         return
-    _collector_domain_mark(refusal, _COLLECTOR_DOMAIN_IDS[domain], nonce, pair)
+    _collector_domain_mark(refusal, _COLLECTOR_DOMAIN_IDS[domain], nonce, pair,
+                           window_detail=window_detail)
     _require(False)
 
 
@@ -412,16 +438,19 @@ def _predicate_window(raw, *, refusal, nonce, pair):
             request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
             stage = int(path[1])
             if request == 11 and stage == 7:
-                _collector_require(not seen_window, refusal, 'window', nonce, pair)
+                _collector_require(not seen_window, refusal, 'window', nonce, pair,
+                                   window_detail=5)
                 window = seen_window = True
             elif request == 11 and stage == 8:
-                _collector_require(window, refusal, 'window', nonce, pair)
+                _collector_require(window, refusal, 'window', nonce, pair,
+                                   window_detail=5)
                 _collector_require(seen_five and selected is not None and completed,
                                    refusal, 'prefix', nonce, pair)
                 window = False
         core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
         if core is not None:
-            _collector_require(window, refusal, 'window', nonce, pair)
+            _collector_require(window, refusal, 'window', nonce, pair,
+                               window_detail=1 if not seen_window else 2)
             stage = int(core[1])
             if stage == 5:
                 _collector_require(not seen_five and selected is None and not completed,
@@ -434,7 +463,8 @@ def _predicate_window(raw, *, refusal, nonce, pair):
         count = re.fullmatch(rb'CI_PREVIEW_PREDICATE c=([012]) m=1\n', line)
         wrapper = re.fullmatch(rb'CI_PREVIEW_PREDICATE w=([01]) m=1\n', line)
         if count is not None:
-            _collector_require(window, refusal, 'window', nonce, pair)
+            _collector_require(window, refusal, 'window', nonce, pair,
+                               window_detail=3 if not seen_window else 4)
             _collector_require(seen_five and selected is None and not completed,
                                refusal, 'prefix', nonce, pair)
             selected = int(count[1])
@@ -445,7 +475,8 @@ def _predicate_window(raw, *, refusal, nonce, pair):
                                refusal, 'tuple', nonce, pair)
             calls = min(2, calls + 1)
             bits |= 1 << int(wrapper[1])
-    _collector_require(seen_window and not window, refusal, 'window', nonce, pair)
+    _collector_require(seen_window and not window, refusal, 'window', nonce, pair,
+                       window_detail=5)
     _collector_require(seen_five and completed, refusal, 'prefix', nonce, pair)
     value = _predicate_tuple(selected, calls, bits)
     _collector_require(value is not None, refusal, 'tuple', nonce, pair)
@@ -461,7 +492,8 @@ def _collect_predicate_observation(stdout, stderr, *, refusal):
         if (refusal._predicate_attempted is not False or refusal.predicate is not None
                 or type(nonce) is not object or refusal._transition_nonce is not nonce
                 or refusal._collector_domain is not None or refusal._collector_nonce is not None
-                or refusal._collector_transition is not None):
+                or refusal._collector_transition is not None
+                or refusal._collector_window_detail is not None):
             return
         # Unknown is a first outcome too. Never borrow a later stream after refusal.
         refusal._predicate_attempted = True
@@ -505,6 +537,9 @@ def _availability_output(progress, parser_refusal=None):
             domain = _collector_refusal_domain(parser_refusal)
             if domain is not None:
                 line += ' collector=' + str(_COLLECTOR_DOMAIN_IDS[domain])
+                window_detail = _collector_refusal_window_detail(parser_refusal)
+                if domain == 'window' and window_detail is not None:
+                    line += ' window=' + str(window_detail)
     if line is not None:
         output += '\n' + line
     _require(len((output + '\n').encode('ascii')) <= 512)
