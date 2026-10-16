@@ -37,12 +37,17 @@ Use a fresh output directory. The watchdog directly owns this invocation; do not
 nest another session-owning watchdog. Synthetic raw evidence stays ignored.
 
 These results establish local input admission and regression coverage on ARM64
-macOS26 / Swift6.3.3. Hosted run38882522572 still stops in the same eleventh-request interval; the guard does not clear that observed failure. The helper-boundary diagnostic is implemented and locally verified, with narrower hosted observation pending and no additional production change.
+macOS26 / Swift6.3.3. Hosted run38882522572 still stops in the same eleventh-request interval; the guard does not clear that observed failure. The helper-boundary diagnostic was then implemented and locally verified without another production change; its later hosted observation is recorded below.
 This conservative guard is not proof of the hosted root cause, desktop
 acceptance, memory/performance bounds or overall feature completeness.
 
 The helper-boundary diagnostic passes twelve pure protocol tests and one
 actual local selected Swift test with42 outer plus314 inner records. It changes
 only a private frozen Test projection, not this Core guard or the original Test.
-The narrower hosted observation remains pending; see
+The subsequent hosted observation is recorded below; see
 [diagnostic evidence](ci-failure-diagnostics.md). No hosted cause or fix is claimed.
+
+Latest hosted run38890331512 at `893d6c6` narrows the interruption to the
+request11 marker immediately before the preview-builder call (31 outer/241 inner
+records). No builder-body entry, exact getter, signal or cause is established.
+The guard is unchanged; see [latest diagnostic observation](ci-failure-diagnostics.md).

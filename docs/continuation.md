@@ -1,15 +1,21 @@
 # Active integration checkpoint — 2026-10-16
 
-The preceding development checkpoint is confirmed remotely at `566f2ed`. Catalog startup/quit
+The development branch is confirmed remotely at `893d6c6`; the earlier URL
+preflight checkpoint is `566f2ed`. Catalog startup/quit
 activation (`be6ec6f`), the Locate presentation correction, monitor package repair
 and the finer failure-only diagnostic are published. Routine non-force reviewed
 development pushes remain authorized; merges and releases remain separate.
 
-Hosted run [38877082192](https://github.com/stultusmundi/theonlypad/actions/runs/38877082192)
-still fails core. Its source-bound31-record prefix enters the eleventh request,
-which contains filesystem NUL, without completing it. Earlier constructors and
-ten request pairs returned. An exact accessor, child signal and cause remain
-unknown. The original assertions and core failure remain intact.
+Hosted run [38890331512](https://github.com/stultusmundi/theonlypad/actions/runs/38890331512)
+at `893d6c6` still fails core. The narrowed diagnostic succeeds: outer phase5
+begins request11 without ending (31 records); helper stage7 is last, request11,
+with241 inner records. That marker is immediately before the original
+`builder.preview` call. Reader construction and assertion/helper entry returned;
+no unwind, preservation or error-handler marker follows. Builder body entry,
+an exact guard/accessor, selected-test signal and cause remain unknown. The
+reported owned SwiftPM exit is1. This is a source-bound closed hosted
+observation, not an independent audit of hosted raw receipts/artifacts. No
+additional production fix is inferred. Further bounded Core diagnosis is next.
 
 The reviewed working URL preflight rejects filesystem NUL in serialized input
 before decoded-path access, while preserving literal-percent filenames, Unicode,
@@ -17,7 +23,7 @@ query/fragment handling and all original checks. A compiling eight-test baseline
 has three ordinary failures; the productive candidate passes eight. The formatted
 public-source full run passes1,211 unique tests with warnings as errors, including
 all eight original preview tests; all499 saved inputs still match. Formatting
-and public checks pass. Hosted run38882522572 repeats the same31-record interruption; the guard does not clear it. The helper-boundary diagnostic is implemented and locally verified; its hosted observation is pending. See
+and public checks pass. Hosted run38882522572 repeats the same31-record interruption; the guard does not clear it. The helper-boundary diagnostic is implemented and locally verified; the hosted result is described above. See
 [URL preflight evidence](verification/folder-preview-url-preflight.md).
 
 The read-only manager is adopted in working source. The maintained application
@@ -36,13 +42,17 @@ old23 pass first, then all10 new methods fail only missing workspace admission,
 with0 unexpected errors and deeper Save/departure controls unentered (GO823a9db3).
 The runtime authority is explicitly rebased to current188 origins. Productive
 draft/Save/close implementation is now in private development.
-The XML component's19-test attempt has18 passes and four ordinary namespace
-assertions in its remaining method. A source-identical diagnostic isolates all
-four inputs; explicit namespace checks and new coverage are next. No XML feature
-acceptance is claimed. New test-helper CI diagnostics pass12 pure protocol tests and45 public diagnostic
+The XML Core formatter is adopted: both the raw and reviewed formatted26-method
+component selections pass, including seven namespace methods. The actual app
+build and default suite now pass1,228 unique tests with warnings as errors;
+all575 saved input facts match. Strict formatting and public checks pass.
+See [XML Core evidence](verification/xml-markup-formatting.md). Native command,
+undo/lifecycle integration, HTML and external formatting remain outstanding.
+The editable manager Source V1 has four independent review findings; four new
+regressions are under review before Root runs the held candidate. Its dependencies
+were frozen at the preceding188-source checkpoint before XML adoption. New test-helper CI diagnostics pass12 pure protocol tests and45 public diagnostic
 checks. The actual local selected Swift test passes1/0 with42 outer and314 helper
-records, with571 originals/572 copies and saved authority exact. Hosted observation
-of this narrower diagnostic remains pending.
+records, with571 originals/572 copies and saved authority exact. The hosted result is now the stage7/request11 interruption described above.
 
 The local package remains `be6ec6f`, with verified ad-hoc signature, archive and
 SBOM. Focused desktop setup exits65 while enabling automation before entering
@@ -52,7 +62,7 @@ Locate failure across12 entered cases, with six planned cases and AXPress
 unentered. Current packaged/desktop acceptance remains outstanding.
 
 Next: narrow the repeated hosted request failure without changing production; implement editable draft/Save/dirty-close and quit through the same owner after
-the reviewed read-only component; finish XML namespace refusal checks.
+the reviewed read-only component; integrate the reviewed XML native command design after its Test-first checks.
 Continue picker/propagation, native history/storage, matching desktop acceptance
 and every other applicable BUILD requirement. The full project is unfinished;
 these checkpoints do not pause the user's implementation request.

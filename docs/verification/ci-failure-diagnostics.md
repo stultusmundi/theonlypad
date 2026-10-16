@@ -1,6 +1,19 @@
 # Bounded CI failure diagnostics
 
-## Current helper-boundary observation — 2026-10-16
+## Latest hosted helper boundary — 2026-10-16
+
+Hosted run [38890331512](https://github.com/stultusmundi/theonlypad/actions/runs/38890331512)
+at `893d6c6` still fails core. The narrowed diagnostic succeeds: outer phase5
+begins request11 without ending (31 records); helper stage7 is last, request11,
+with241 inner records. That marker is immediately before the original
+`builder.preview` call. Reader construction and assertion/helper entry returned;
+no unwind, preservation or error-handler marker follows. Builder body entry,
+an exact guard/accessor, selected-test signal and cause remain unknown. The
+reported owned SwiftPM exit is1. This is a source-bound closed hosted
+observation, not an independent audit of hosted raw receipts/artifacts. No
+additional production fix is inferred. Further bounded Core diagnosis is next.
+
+## Local helper-boundary verification — 2026-10-16
 
 The fixed no-argument command now adds eleven literal helper-boundary write
 sites to its private frozen Swift test, alongside the existing twenty outer
@@ -37,8 +50,7 @@ URL, fixture path, input, error description or signal inference.
 
 Hosted run38882522572 at `566f2ed` still fails core and reports the preceding
 outer-only31-record interruption in request11. The serialized-NUL guard did not
-clear it. The newly narrowed helper diagnostic has not yet produced a hosted
-observation. An exact accessor, selected-test signal and cause remain unknown;
+clear it. The later narrowed hosted result is recorded above. An exact accessor, selected-test signal and cause remain unknown;
 no additional production fix is inferred from the local pass. Historical
 observations below retain their own source bindings.
 
@@ -369,7 +381,7 @@ assertions and fixture preservation. Both URL constructors returned earlier.
 This is ordinal progress, not an exact failing accessor or child-signal finding.
 
 A reviewed serialized-path NUL guard and eight regression tests now pass the
-local1,211-test suite. Older hosted verification of the guard remains pending;
+local1,211-test suite. Hosted verification of the guard was pending at that checkpoint;
 see [preflight evidence](folder-preview-url-preflight.md). The core failure and
 all original assertions remain unchanged. No hosted cause or pass is inferred.
 
@@ -382,5 +394,5 @@ NUL-containing request. The guard does not clear this observed failure. The
 prefix does not establish builder or path-policy entry: it precedes reader
 construction, XCTest assertion handling, preview and deferred fixture checks.
 The reviewed test-helper boundary diagnostic is now implemented and locally
-verified; its narrower hosted observation remains pending. No exact failing accessor, Foundation defect or selected-test signal
+verified; the later narrowed hosted observation is recorded below. No exact failing accessor, Foundation defect or selected-test signal
 is established. The local1,211-test result remains a separate passing scope.

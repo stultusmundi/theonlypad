@@ -181,3 +181,13 @@ public enum LanguageService {
     return output
   }
 }
+
+extension LanguageService {
+  /// Formats only whitespace inside XML start tags; element content remains exact.
+  public static func formatXML(
+    _ text: String, lineEnding: LineEnding = .lf,
+    isCancelled: @escaping @Sendable () -> Bool = { false }
+  ) throws -> String {
+    try XMLMarkupFormatter.format(text, lineEnding: lineEnding, isCancelled: isCancelled)
+  }
+}
