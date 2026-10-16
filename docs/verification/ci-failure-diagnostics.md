@@ -205,3 +205,18 @@ Contributor check (benign Python contracts only):
 ```sh
 python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
 ```
+
+## Hosted observation — 2026-10-16
+
+Run [38861487152](https://github.com/stultusmundi/theonlypad/actions/runs/38861487152)
+at development source `47d98d9` still fails core with natural SwiftPM exit1,
+complete captures and no watchdog timeout. Strict diagnostics succeed and identify
+a sole unfinished source-text candidate at
+`Tests/PadCoreTests/FolderReplacementPreviewTests.swift:102`, the admission/budget
+test. This is an observed event horizon, not a compiled declaration, root cause
+or descendant-signal diagnosis. The downstream diagnostic contracts and native
+checks were skipped after core failure; no hosted passing test suite is claimed.
+
+The same method passes locally in the full default suite. A bounded same-method
+phase trace is undergoing test review before implementation. No constructor or
+production behavior is changed on this observation alone.

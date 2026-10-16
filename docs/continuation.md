@@ -1,3 +1,34 @@
+# Active integration checkpoint — 2026-10-16
+
+The reviewed Locate presentation correction is adopted in the working source.
+`scripts/test-disk-conflict-presentation.sh` passes its original two and two new
+hidden native tests through five natural zero-exit stages. Twelve separate pure
+runner contracts pass; repository formatting and public-source checks pass.
+Independent actual review accepts the four hidden cases. Separate current-source
+default verification passes1,203 with no failures, skips or warnings, and
+NativeIntegration Python discovery passes125. Independent review accepts these
+separate scopes; they are not an aggregate acceptance count.
+See [presentation verification](verification/disk-conflict-presentation.md).
+The legacy monitor-lifecycle harness stops at compilation before tests because
+its direct invocation lacks current package/search dependency admission. Preserve
+that failure and repair the harness without changing its assertions.
+The historical packaged Locate failure remains unresolved until a matching
+visible retake; no package or desktop acceptance follows from these hidden tests.
+
+The private catalog startup/quit implementation passes all fourteen native tests
+and a separate full 1,203-test application/helper build. Its retained public
+runner is being implemented after ten inert-runner tests reached fifteen ordinary
+assertion failures with no errors; deeper graph/custody controls were unentered.
+Public AppDelegate activation and manager/picker integration remain pending.
+
+Development branch `feat/search-admission-joined-terminal` is confirmed remotely
+through `47d98d9`. Hosted run38861487152 failed core again. The bounded reporter
+observed a sole unfinished source-text candidate at
+`Tests/PadCoreTests/FolderReplacementPreviewTests.swift:102`; this is not a cause
+or a child-signal diagnosis. A test-only same-method phase diagnostic is under
+review before implementation. Preserve all existing calls/assertions and the
+original CI failure. Continue the full BUILD scope after these checkpoints.
+
 # Active diagnostic and integration checkpoint — 2026-10-15
 
 Routine non-force development-branch pushes remain authorized; merges, force pushes and releases require separate authorization. The remote development branch was read back exactly at `1b6fc56`, including catalog mutation checkpoint `ba4ff30`. Hosted run38773116543 still failed core; strict diagnostics succeeded but the cause remains unknown. A reviewed bounded event observation now passes33 synthetic diagnostic contracts privately, preserving all17 previous tests. It emits only a unique tracked source-text candidate with an explicit observation qualifier; no raw identity/message or failure cause is asserted. Separate public discovery also passes33/0 with unchanged inputs; the next hosted outcome remains unknown. See [CI verification](verification/ci-failure-diagnostics.md).

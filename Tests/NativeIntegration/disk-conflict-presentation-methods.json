@@ -1,0 +1,16 @@
+{
+  "old2": {
+    "class": "NativeRoutingTests.ManagedLocateTokenCharacterizationTests",
+    "methods": [
+      "testManagedUnchangedTokenLocateCancelPreservesDocument",
+      "testManagedRetainedTokenRefusesBeforeAndAfterDeliveryFreshPanelCancels"
+    ]
+  },
+  "new2": {
+    "class": "NativeRoutingTests.LocateDiskConflictPresentationTests",
+    "methods": [
+      "testUntouchedInstalledPanelStalesOnAcceptedT2DespiteDifferentSelectedTabAndReopensFresh",
+      "testCloseNotificationReentryCannotOverwriteExactInstalledSuccessor"
+    ]
+  }
+}

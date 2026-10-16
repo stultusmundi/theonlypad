@@ -7,15 +7,28 @@ import AppKit
 
 /// Presented only by an explicit owner action. Handlers must revalidate their captured context.
 @MainActor final class DocumentDiskConflictController: NSWindowController, NSWindowDelegate {
+  enum ActionRole: Equatable { case capturedContext, monitorControl }
   struct Action {
     let title: String
     let accessibilityID: String
-    let handler: () -> Void
+    let role: ActionRole
+    var handler: (() -> Void)?
+    init(
+      title: String, accessibilityID: String, role: ActionRole = .capturedContext,
+      handler: @escaping () -> Void
+    ) {
+      self.title = title
+      self.accessibilityID = accessibilityID
+      self.role = role
+      self.handler = handler
+    }
   }
   private var actions: [Action]
   private var actionButtons: [NSButton] = []
   private let closeButton = NSButton(title: "", target: nil, action: nil)
   private var consumed = false
+  private var stale = false
+  private var explanationLabel: NSTextField?
 
   init(documentName: String, explanation: String, actions: [Action]) {
     self.actions = actions
@@ -43,6 +56,7 @@ import AppKit
     name.setAccessibilityLabel(documentName)
     stack.addArrangedSubview(name)
     let reason = NSTextField(wrappingLabelWithString: explanation)
+    explanationLabel = reason
     reason.setAccessibilityIdentifier("document.diskConflictExplanation")
     reason.setAccessibilityLabel(explanation)
     stack.addArrangedSubview(reason)
@@ -74,6 +88,28 @@ import AppKit
   }
   required init?(coder: NSCoder) { nil }
 
+  /// Retire captured file credentials without replacing this panel or its monitor controls.
+  func markStale() {
+    guard !consumed, !stale else { return }
+    stale = true
+    let previousActions = actions
+    // Keep old captures alive until no mutation remains; releasing them can also call out.
+    defer { withExtendedLifetime(previousActions) {} }
+    let contextIndices = previousActions.indices.filter {
+      previousActions[$0].role == .capturedContext
+    }
+    let buttonsToDisable = contextIndices.map { actionButtons[$0] }
+    for index in contextIndices { actions[index].handler = nil }
+    // AppKit setters can call out. All records are already revoked before touching controls.
+    for button in buttonsToDisable { button.isEnabled = false }
+    guard !consumed else { return }
+    let explanation = NSLocalizedString(
+      "The file status changed. No file action was applied. Use Check Again, then close and reopen Resolve for current actions.",
+      comment: "Disk conflict panel whose captured file status changed")
+    explanationLabel?.stringValue = explanation
+    explanationLabel?.setAccessibilityLabel(explanation)
+  }
+
   private func consume() {
     consumed = true
     for button in actionButtons { button.isEnabled = false }
@@ -96,7 +132,7 @@ import AppKit
       let index = actionButtons.firstIndex(where: { $0 === sender }),
       actions.indices.contains(index)
     else { return }
-    let handler = actions[index].handler
+    guard let handler = actions[index].handler else { return }
     close()
     handler()
   }

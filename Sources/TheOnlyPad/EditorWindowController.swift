@@ -458,6 +458,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var onDiskStateChange: (() -> Void)?
   private var diskConflict: DocumentDiskConflictController?
   private var diskConflictDocumentID: UUID?
+  private struct DiskConflictPresentationIdentity {
+    let binding: FileStateBindingIdentity
+    let token: FileObservationToken
+  }
+  private var diskConflictPresentationIdentity: DiskConflictPresentationIdentity?
   private lazy var diskStatusRow = DocumentDiskStatusView { [weak self] action in
     self?.performDiskStatusAction(action)
   }
@@ -484,9 +489,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   func reconcileFileMonitoring() {
     if fileMonitoring?.isSuspended == true || preparingToQuit {
-      diskConflict?.close()
-      diskConflict = nil
-      diskConflictDocumentID = nil
+      if let panel = diskConflict { closeDiskConflict(panel) }
     }
     for document in documents {
       if pendingFileStateAdoptions.contains(document.id) { adoptFileState(document) }
@@ -552,9 +555,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   }
   private func invalidateFileState(_ document: EditorDocument) {
     if diskConflictDocumentID == document.id {
-      diskConflict?.close()
-      diskConflict = nil
-      diskConflictDocumentID = nil
+      if let panel = diskConflict { closeDiskConflict(panel) }
     }
     pendingFileStateAdoptions.remove(document.id)
     document.fileState?.invalidate()
@@ -570,6 +571,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       enabled: !windowClosed && !preparingToQuit && fileMonitoring?.isSuspended != true
         && document?.saving == false && document?.composingPaneID == nil
         && document.map({ applicationAllows(.fileOperation, document: $0) }) == true)
+    reconcileDiskConflictPresentation()
   }
   private func performDiskStatusAction(_ action: DocumentDiskStatusView.Action) {
     guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
@@ -581,11 +583,62 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     case .checkAgain: bridge.checkAgain()
     case .retryMonitoring: bridge.retryRegistration()
     case .resolve:
-      guard let panel = makeDiskConflict(document) else { return }
-      diskConflict?.close()
-      diskConflict = panel
-      diskConflictDocumentID = document.id
+      guard let panel = installDiskConflict(document) else { return }
       panel.showWindow(nil)
+    }
+  }
+  private func closeDiskConflict(_ panel: DocumentDiskConflictController) {
+    panel.close()
+    guard diskConflict === panel else { return }
+    diskConflict = nil
+    diskConflictDocumentID = nil
+    diskConflictPresentationIdentity = nil
+  }
+  private func installDiskConflict(_ document: EditorDocument) -> DocumentDiskConflictController? {
+    let previous = diskConflict
+    guard let panel = makeDiskConflict(document) else { return nil }
+    guard diskConflict === previous else {
+      panel.close()
+      return nil
+    }
+    let identity: DiskConflictPresentationIdentity?
+    if let live = fileStateContext(document), let token = document.fileState?.state.token {
+      identity = DiskConflictPresentationIdentity(
+        binding: FileStateBindingIdentity(live), token: token)
+    } else {
+      identity = nil
+    }
+    previous?.close()
+    // Closing calls out through AppKit. A nested installation owns its successor.
+    guard diskConflict === previous else {
+      panel.close()
+      return nil
+    }
+    diskConflict = panel
+    diskConflictDocumentID = document.id
+    diskConflictPresentationIdentity = identity
+    reconcileDiskConflictPresentation()
+    guard diskConflict === panel else {
+      panel.close()
+      return nil
+    }
+    return panel
+  }
+  private func reconcileDiskConflictPresentation() {
+    guard let panel = diskConflict else { return }
+    guard !windowClosed, !preparingToQuit, fileMonitoring?.isSuspended == false,
+      let document = documents.first(where: { $0.id == diskConflictDocumentID })
+    else {
+      closeDiskConflict(panel)
+      return
+    }
+    guard let identity = diskConflictPresentationIdentity,
+      let live = fileStateContext(document), let bridge = document.fileState,
+      identity.binding == FileStateBindingIdentity(live), identity.token == bridge.state.token,
+      bridge.state.observation != nil, bridge.state.noticeIsProminent
+    else {
+      panel.markStale()
+      return
     }
   }
   private func makeDiskConflict(_ document: EditorDocument) -> DocumentDiskConflictController? {
@@ -647,7 +700,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         })
     }
     actions.append(
-      .init(title: "Check Again", accessibilityID: "document.checkDisk") {
+      .init(title: "Check Again", accessibilityID: "document.checkDisk", role: .monitorControl) {
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
@@ -657,7 +710,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         bridge.checkAgain()
       })
     actions.append(
-      .init(title: "Retry Monitoring", accessibilityID: "document.retryMonitoring") {
+      .init(
+        title: "Retry Monitoring", accessibilityID: "document.retryMonitoring",
+        role: .monitorControl
+      ) {
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
@@ -667,7 +723,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
         bridge.retryRegistration()
       })
     actions.append(
-      .init(title: "Use Manual Checks", accessibilityID: "document.manualChecks") {
+      .init(
+        title: "Use Manual Checks", accessibilityID: "document.manualChecks", role: .monitorControl
+      ) {
         [weak self, weak document] in
         guard let self, let document, !self.windowClosed, !self.preparingToQuit,
           self.fileMonitoring?.isSuspended == false,
@@ -4873,8 +4931,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     for document in documents { retireMacroBinding(document) }
     diskActions?.cancel()
     locateActions?.cancel()
-    diskConflict?.close()
-    diskConflict = nil
+    if let panel = diskConflict { closeDiskConflict(panel) }
     for document in documents {
       if let routing = applicationRouting {
         do { try routing.detachDocumentEndpoint(document) } catch { errorHandler?(error) }

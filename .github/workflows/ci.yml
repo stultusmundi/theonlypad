@@ -50,6 +50,8 @@ jobs:
         run: scripts/test-document-search-real-helper.sh
       - name: Readonly folder preview native component
         run: scripts/test-folder-replacement-preview.sh
+      - name: Disk conflict presentation and Locate context
+        run: scripts/test-disk-conflict-presentation.sh
       - name: Fixed search helper protocol integration
         run: |
           python3 -m unittest discover -s Tests/SearchWorkerIntegration -p 'test_*.py'
