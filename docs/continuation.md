@@ -1,12 +1,16 @@
 # Active implementation checkpoint — 2026-10-16, evening
 
-Published diagnostic code is verified remotely at `7324901`; status documentation
-was previously published at `7c2bef5`. Latest inspected hosted run38955193456 on7324901
-fails with boundary17/parser4/state6/incoming6/collector9 and no predicate tuple.
-Code9 narrows the collector refusal to selected-window validation; its precise
-predicate and the production cause remain unknown. Public Python discovery passes72.
-Core grammar, original parser exception, privacy/caps and protected source checks
-remain preserved. Read-only diagnosis of the window refusal is in progress.
+The reviewed window-subcode diagnostic (`abc00bdf`) and its maintained controls
+are published at commit `da8e94564fa8d74c22192b92b6dd882c971817b5`; exact remote
+readback is verified. Root's maintained discovery on those source bytes passes81
+(8.962 seconds); the separate private81 run passes81 in9.783 seconds. The runs
+overlap and are not added. check-public and diffcheck both exit0.
+
+The latest inspected hosted run38955193456 remains on older code `7324901` and
+fails with boundary17/parser4/state6/incoming6/collector9, without a predicate
+tuple. Domain9 narrows the first collector refusal to selected-window validation;
+its exact window predicate and the production cause remain unknown. New hosted run38959402756 is in progress; no completed diagnostic result from
+that run has been inspected. No production cause or hosted success is claimed.
 
 Private XML application integration now passes six distinct methods in separate
 processes: cancellation3, unused-owner Quit, zero-window held-worker settlement
@@ -19,6 +23,13 @@ zero unexpected (GO89ac6fb7). The corrected broader App7 baseline remains
 incomplete with18 failures/one unexpected, empty State and no InvalidTransition
 text. Its catalog-read premise/cleanup amendment is exercised in the passing
 six-method run. The transfer seventh case and full App7 are not accepted.
+
+The later Native V3 actual result covers93 unique methods (94 occurrences), with
+82 passes, 11 failures, 25 ordinary assertions and 0 unexpected failures; the
+actual-run review accepts this bounded result (GO f8dc0156). Seven deeper macro
+controls were unentered because the required command premise was missing; macro
+source work remains in progress. This does not establish full XML or macro
+acceptance.
 
 Both neighboring macro-command failures reproduce in the controlled pre-XML
 baseline (GOc4e09ca9). Their text and undo assertions pass; the nested explicit-range
