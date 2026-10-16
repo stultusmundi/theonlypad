@@ -1,48 +1,12 @@
-# Active implementation checkpoint — 2026-10-16, evening
+# Active implementation checkpoint — 2026-10-16, current review
 
-The reviewed window-subcode diagnostic (`abc00bdf`) and its maintained controls
-are published at commit `da8e94564fa8d74c22192b92b6dd882c971817b5`; exact remote
-readback is verified. Root's maintained discovery on those source bytes passes81
-(8.962 seconds); the separate private81 run passes81 in9.783 seconds. The runs
-overlap and are not added. check-public and diffcheck both exit0.
+The published selected-window diagnostic remains the code at public HEAD `ceb180e` (the exact remote basis recorded for this checkpoint). Hosted run [38959402756](https://github.com/stultusmundi/theonlypad/actions/runs/38959402756), at `da8e945`, completed with failure and reports the closed boundary `unavailable=17/parser=4/state=6/incoming=6/collector=9/window=5`. The local 81-test Python pass verifies the bounded diagnostic contract; it does not establish a hosted fix. The selected-window subcode classifies a collector refusal only. The production cause remains unknown.
 
-The latest inspected hosted run38955193456 remains on older code `7324901` and
-fails with boundary17/parser4/state6/incoming6/collector9, without a predicate
-tuple. Domain9 narrows the first collector refusal to selected-window validation;
-its exact window predicate and the production cause remain unknown. New hosted run38959402756 is in progress; no completed diagnostic result from
-that run has been inspected. No production cause or hosted success is claimed.
+The latest private native macro SourceV2 verification remains unaccepted. Its 23 actual stages cover 93 unique methods (94 occurrences): 84 pass, 9 fail, 27 ordinary assertion failures and 0 unexpected failures. The original Search32 cohort now passes 32/32; Native19, XML27, App6 and the default selection pass in their separately bound scopes. The eight nested-string methods all entered their bodies and produced 26 assertion failures: 17 event-group observations were `1` where `0` was expected, four bookmark ranges were `[0, 4]` rather than `[4]` across the twin cases, and five real-undo observations found text corruption. The separate transfer1 result is unchanged. These results identify failed expectations, not their production cause or feature acceptance.
 
-Private XML application integration now passes six distinct methods in separate
-processes: cancellation3, unused-owner Quit, zero-window held-worker settlement
-before native checkpoint, and veto/retry reentry. Nine stages exit naturally,
-source/build graph matches, captures are complete and State is empty (different
-actual GO45f67efd). Counts overlap the earlier cancellation3 and are not added.
-XML native V2 retains its separate27-method pass. The two unchanged focused Quit
-methods first reproduced two ordinary missing-preparation assertions total,
-zero unexpected (GO89ac6fb7). The corrected broader App7 baseline remains
-incomplete with18 failures/one unexpected, empty State and no InvalidTransition
-text. Its catalog-read premise/cleanup amendment is exercised in the passing
-six-method run. The transfer seventh case and full App7 are not accepted.
+A separate actual audit (SHA-256 `116242c23b871e4d802e20e22540815c24d00cb691470e71b4b4452b81a63a22`) accepts this bounded evidence. The Source candidate remains private and unaccepted; no feature-completion claim follows. Five new diagnostic probes are sealed but unexecuted pending review. Earlier inert V3 evidence remains historical and is not a substitute for this SourceV2 result.
 
-The later Native V3 actual result covers93 unique methods (94 occurrences), with
-82 passes, 11 failures, 25 ordinary assertions and 0 unexpected failures; the
-actual-run review accepts this bounded result (GO f8dc0156). Seven deeper macro
-controls were unentered because the required command premise was missing; macro
-source work remains in progress. This does not establish full XML or macro
-acceptance.
-
-Both neighboring macro-command failures reproduce in the controlled pre-XML
-baseline (GOc4e09ca9). Their text and undo assertions pass; the nested explicit-range
-native replacement currently lacks a supported recording permit. Preserve the
-original expectations. A genuine child replacement design is approved for new
-Test authoring, with chronology/raw-gap/reentry/capacity behavior protected.
-
-Private manager hidden66 and separate real native-sheet1 remain verified and
-unadopted. Manager application Quit has reviewed design only; its concrete
-integration follows the XML checkpoint. Public manager37 and local packagebe6ec6f
-remain the prior accepted scopes. Desktop automation setup, accessibility/IME,
-performance, recovery/import/export/picker/propagation and all applicable BUILD
-requirements remain outstanding. Continue implementation; this is not completion.
+The public manager command and its separate local native-sheet check retain their previously documented scopes. Full App Quit/recovery, physical input, accessibility/IME, performance, and other outstanding BUILD requirements remain open. The requirements matrix remains 69 partial, 7 outstanding and 0 fully accepted; the low-confidence 12–24-week range remains a planning judgment, not a delivery date. Continue implementation; this is not completion.
 
 The following sections retain earlier checkpoints and their original limitations.
 

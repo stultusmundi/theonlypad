@@ -1,13 +1,6 @@
-# Bounded collector-refusal diagnostic — 2026-10-16 evening
+# Bounded collector-refusal diagnostic — 2026-10-16, current hosted result
 
-Previously published Source `431b1e64` at code checkpoint `7324901` added a
-first-refusal numeric `collector` field to the existing unavailable line. It is
-emitted only for the matching parser4 transition and constructor-bound collection
-nonce. Unknown/stale/foreign collection state cannot supply a new tuple or code.
-It preserves the original parser exception, Core grammar, protected transition
-functions, one collection attempt, the existing stripped-path parse and512-byte
-output cap. It emits no rejected payload or exception text. Successful output
-and wrappers outside the selected scope retain their existing behavior.
+Published Source `abc00bdf` at public development HEAD `ceb180e` keeps the first-refusal numeric `collector` field bound to the matching parser4 transition and constructor-bound collection nonce. The selected-window extension keeps domain9 stable and appends only the closed `window=1..5` value for that first matching refusal. The original parser exception, Core grammar, protected transition functions, one collection attempt, existing stripped-path parse, privacy boundary and512-byte output cap remain unchanged. No rejected payload or exception text is emitted.
 
 | Code | Collector refusal domain |
 | --- | --- |
@@ -25,36 +18,11 @@ and wrappers outside the selected scope retain their existing behavior.
 | 12 | Predicate tuple consistency |
 | 13 | Collector exception, without its text |
 
-The reviewed window subcode extension was adopted in working source and
-published. It keeps domain9 stable and appends one closed `window=1..5` suffix on the same parser4/
-nonce-bound first refusal: 1 Core before the selected window opens; 2 Core after
-it closes; 3 selected-count record before open; 4 selected-count record after
-close; 5 a path-window boundary invariant. This classifies the collector's first
-refusal only. It does not alter Core acceptance or establish a production cause.
-The exact source review accepted this narrow scope (GO87acbf1e). The source and
-maintained nine-test addition are published at commit
-`da8e94564fa8d74c22192b92b6dd882c971817b5`, with exact remote readback verified.
+Window subcodes are: 1 Core before the selected window opens; 2 Core after it closes; 3 selected-count record before open; 4 selected-count record after close; 5 a path-window boundary invariant. They describe which closed collector check refused the first matching witness. They do not establish a production cause or accept a partial trace.
 
-The nine focused controls first produced six expected observable failures against
-the unchanged prior source, then passed against the extension. Cases1 and5 call
-the window helper directly with a matching parser4 witness; cases2,3 and4
-exercise the integrated collector. Other controls retain the thirteen existing
-domain IDs, valid-window behavior, old-path domain11, first-witness/stale/foreign
-withholding, original exception parity, parser-call count, sanitization and the
-512-byte cap. The private overlay passes81 pure Python tests (9.783 seconds). Root's separate
-maintained discovery on the same source bytes passes81 (8.962 seconds).
-check-public and diffcheck both exit0. These are distinct, overlapping actual
-scopes and are not added. The latest inspected hosted run predates commit
-`da8e94564fa8d74c22192b92b6dd882c971817b5`; new hosted run38959402756 is in progress, with no completed diagnostic result
-inspected yet.
+Hosted [run38959402756](https://github.com/stultusmundi/theonlypad/actions/runs/38959402756) at `da8e945` completed with failure and reports `unavailable=17/parser=4/state=6/incoming=6/collector=9/window=5`. This is the first observed hosted window subcode. The local private81 and maintained81 Python passes verify diagnostic behavior only; they do not prove a hosted fix. The hosted production cause remains unknown. The retained local selected-Swift replay accepts its own complete captured trace, so it does not explain or contradict the hosted refusal. Do not infer a Core failure mode from the closed suffix.
 
-Latest inspected hosted run38955193456 at7324901 includes only the remote
-published diagnostic and fails with boundary17/parser4/state6/incoming6/collector9,
-without a predicate tuple. Code9 identifies selected-window validation as the
-first collector-refusal domain. The hosted output does not reveal subcode1..5,
-and the precise predicate and production cause remain unknown. The previous
-run38950247404 at7c2bef5 had no collector code. No Core fix or hosted success is
-claimed.
+The actual bounded review corrected the bound request ordinal: request11 is `[nulPath]`; `[longPath]` is request10. Domain9/window5 can arise from a valid partial old-path prefix that the legacy path parser accepts but the stricter selected-window validation does not; the hosted closed record does not expose enough raw data to establish whether that occurred. No additional diagnostic code is currently justified. The independent causal review corrects the bound request ordinal and records that the incomplete selected capture and primary Core failure remain distinct unknowns.
 
 Earlier evidence follows unchanged.
 
