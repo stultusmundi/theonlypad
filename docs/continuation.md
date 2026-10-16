@@ -1,6 +1,6 @@
 # Active integration checkpoint — 2026-10-16
 
-The preceding reviewed development checkpoint is confirmed remotely at `285105d`.
+The preceding reviewed development checkpoint is confirmed remotely at `2584f66`.
 Routine non-force reviewed development pushes remain authorized; merges, force
 pushes and releases remain separate.
 
@@ -8,7 +8,14 @@ Editable manager draft/Save is now adopted in working source through the same
 catalog owner. It preserves exact raw input, bounded catalog/form restoration,
 stable identities, actual Save/publication correlation and newer native input.
 Dirty/invalid/open-form Close/Quit still vetoes before reservations; full
-Save/Discard/Cancel confirmation is a reviewed planning task, not implemented.
+Save/Discard/Cancel confirmation has a reviewed design, not implementation.
+Exact monitor rollback and owner-task joining are separate Test-first
+prerequisites. Root observed the monitor9 baseline:8 ordinary missing-effect
+failures and1 existing-nil negative pass; deeper token/callback/service checks
+are unentered in that baseline. The reviewed private monitor Source now
+passes all9 component tests with independent execution review; legacy and application
+integration remain outstanding. Neither prerequisite nor the departure flow has been adopted into
+the application.
 Public menu activation, recovery/import/export, picker, document propagation and
 packaged workflows remain outstanding. The full product is unfinished.
 
@@ -30,22 +37,28 @@ with575 frozen inputs and five reviewed manager overlays. These counts overlap;
 none is a desktop, helper-launch or performance result. Strict formatting and
 public checks pass. See [catalog evidence](verification/application-language-catalog.md).
 
-Hosted [run38901443160](https://github.com/stultusmundi/theonlypad/actions/runs/38901443160)
-at `285105d` still fails core. Its Core diagnostic refuses incomplete evidence125
-without an accepted Core horizon. Earlier pre-builder request11 observations
-remain historical; no exact getter, selected-test signal or cause is inferred.
-The new optional closed numeric availability record passes19 private checks and
-52 public checks, preserving all old15 bodies and every receipt/protocol guard.
-The actual local selected Swift test passes1/0 with42 outer/314 helper/25 Core
-records and579 Original/580 frozen facts. Accepted output remains five lines;
-main unavailability adds at most one numeric boundary line and stays125.
-The direct command owns its600-second watchdog. A new hosted observation is
-pending; see [CI evidence](verification/ci-failure-diagnostics.md).
+Hosted [run38907406926](https://github.com/stultusmundi/theonlypad/actions/runs/38907406926)
+at `2584f66` still fails core. Its diagnostic refuses125 at attempted Python
+parser boundary17, not an accepted Core/PATH horizon or identified cause. The
+new first-refusal group observation preserves every existing parser/receipt
+predicate and extends only the third unavailable line with a bounded numeric
+group. Actual focused22 pass after6 ordinary baseline entries; public55 and
+selected Swift1 also pass. Selected evidence retains42/314/25 records,
+580 Original/581 frozen facts and strict natural0 custody. Group7 remains
+static-only; no production Core/original Swift Test patch or hosted fix is
+claimed. The command owns its600-second watchdog; never nest another around it.
+See [CI evidence](verification/ci-failure-diagnostics.md).
 
 XML Core remains adopted and passes26 component cases. Its private process
 worker passes14 real-Core/diff/cancellation/reentry/quit-preparation tests within
-a retained owner lifetime (independent GO8d99d1ab). An integrated native Test/API
-packet is being prepared against the now-adopted exact manager App source.
+a retained owner lifetime (independent GO8d99d1ab). The integrated24-case native Test/API
+packet has passed independent review. Its first actual attempt stops at a
+Sendable capture compiler error before entering any method. A separately
+reviewed compiler-only correction then builds cleanly, but the first selected
+native test reports one unexpected error. The parent result is incomplete125,
+postflight remains verified and later classes are unentered. No valid behavioral
+RED, formatting assertion horizon, production cause or native implementation
+follows from either failed attempt.
 Actual XML registry/controller/undo/App cancel/zero-window quit integration,
 HTML and external formatting remain outstanding. No giant native long-line
 fixture is authorized by these tiny component results.
@@ -57,12 +70,12 @@ cache-package results remain11 passes/one Locate failure across12 entered cases;
 six planned cases and AXPress are unentered. Original large-line memory-pressure
 failure, broad IME/VoiceOver, performance and packaged acceptance remain open.
 
-Next: publish this reviewed manager/diagnostic checkpoint and inspect the new
-hosted availability boundary; review/run native XML Test-first baseline and
-implement the complete native command/quit flow. Review the separate manager
-departure design, then implement genuine Save/Discard/Cancel and remaining
-recovery/import/export/menu/picker/propagation. Continue every applicable BUILD
-requirement after these internal checkpoints.
+Next: keep the reviewed parser-refusal diagnostic current and inspect its next
+hosted group. Investigate the unexpected first XML test before accepting a
+behavioral baseline or writing its native adapter. Complete exact monitor
+rollback/existing-task joining and genuine manager Save/Discard/Cancel through
+the same catalog owner, then recovery/import/export/menu/picker/propagation.
+Continue every applicable BUILD requirement after these internal checkpoints.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 

@@ -1,6 +1,44 @@
 # Bounded CI failure diagnostics
 
-## Latest hosted availability limitation — 2026-10-16
+## Latest hosted parser refusal — 2026-10-16
+
+Hosted [run38907406926](https://github.com/stultusmundi/theonlypad/actions/runs/38907406926)
+at `2584f66` still fails the original core step. The diagnostic returns125 with
+`availability: boundary=17`: the last attempted Python block was the trace
+parser. This supplies no accepted Core/PATH horizon or selected-test cause.
+The inspected job log contains only closed output and the actual run-artifact
+query returns zero artifacts; the selected child captures are unavailable from
+those inspected sources. No production Core or original Swift Test change is
+justified by this observation.
+
+The diagnostic now retains an optional first-refusal group from its existing
+parser, extending only the third unavailable line to
+`availability: boundary=17 parser=K`. The fixed groups identify stream ownership0,
+total cap1, marker shape2, Core window/cap3, Core transition4, window handback5,
+nested PATH grammar6 or final correlation7. They identify the rejecting
+diagnostic guard, not a child result or root cause. All predicates, limits,
+receipt checks, source inverses, accepted result dictionaries and default parser
+calls remain intact. No partial trace is accepted; no raw byte, path or exception
+text is emitted. Output remains at most three unavailable lines/512 ASCII bytes,
+with exit125; accepted output remains the original five lines.
+
+The measured baseline runs22 tests: old15 pass, three new methods fail their
+ordinary missing-API guards, and one existing availability method reports three
+ordinary exact missing-suffix failures. Six ordinary failure entries across four
+methods are not six failed methods; deeper new parser controls are unentered.
+After the independently reviewed change, all22 pass, including genuine byte
+refusals for groups0–6, first-refusal/privacy/default-output and retained synthetic
+custody controls. Group7 remains static-only. Public discovery separately passes
+55 tests with retained raw output. These counts overlap and are not added.
+
+The actual public selected Swift command also passes1/0, retaining42 outer/
+314 helper/25 Core records,580 Original/581 frozen identities, both exact source
+inverses and a strict20-field natural0 owned receipt. State is empty and accepted
+output has no availability/parser suffix. This establishes the local diagnostic
+path, not a hosted fix, full-suite, application, compiler-artifact, memory or
+signal result. A fresh hosted refusal-group observation remains outstanding.
+
+## Earlier hosted availability limitation — 2026-10-16
 
 Hosted [run38901443160](https://github.com/stultusmundi/theonlypad/actions/runs/38901443160)
 at `285105d` still fails the original core step. The new Core diagnostic refuses

@@ -82,10 +82,48 @@ def _availability_line(progress):
     return 'availability: boundary=' + str(fields[1])
 
 
-def _availability_output(progress):
+class _ParserRefusal:
+    __slots__ = ('code',)
+
+    def __init__(self):
+        self.code = None
+
+
+def _parser_refusal_code(record):
+    if type(record) is not _ParserRefusal:
+        return None
+    try:
+        code = record.code
+    except AttributeError:
+        return None
+    return code if type(code) is int and 0 <= code <= 7 else None
+
+
+def _parser_refusal_mark(record, code):
+    if type(record) is not _ParserRefusal or not (type(code) is int and 0 <= code <= 7):
+        return
+    try:
+        current = record.code
+    except AttributeError:
+        return
+    if current is None:
+        record.code = code
+
+
+def _parser_require(value, record, code):
+    if value:
+        return
+    _parser_refusal_mark(record, code)
+    _require(False)
+
+
+def _availability_output(progress, parser_refusal=None):
     # Fixed literals plus one validated bounded integer; never exception or input text.
     output = 'ci-folder-preview-trace: unavailable\nreason: incomplete-evidence'
     line = _availability_line(progress)
+    code = _parser_refusal_code(parser_refusal)
+    if line == 'availability: boundary=17' and code is not None:
+        line += ' parser=' + str(code)
     if line is not None:
         output += '\n' + line
     _require(len((output + '\n').encode('ascii')) <= 512)
@@ -576,7 +614,7 @@ def _load_module(run, path, name, expected):
     return module
 
 
-def execute(root, run, plan, manifest, watchdog_main, *, progress=None):
+def execute(root, run, plan, manifest, watchdog_main, *, progress=None, parser_refusal=None):
     root, run = Path(root).absolute(), Path(run).absolute()
     unavailable = dict(state='unavailable')
     try:
@@ -627,7 +665,10 @@ def execute(root, run, plan, manifest, watchdog_main, *, progress=None):
         _availability_enter(progress, 16)
         verify_inputs(root, run, manifest)
         _availability_enter(progress, 17)
-        trace = parse_trace(stdout, stderr)
+        if parser_refusal is None:
+            trace = parse_trace(stdout, stderr)
+        else:
+            trace = parse_trace(stdout, stderr, refusal=parser_refusal)
         _availability_enter(progress, 18)
         original_after = [_fact(root, root / row['path'])[0] for row in manifest['capture']['originals']]
         copy_after = [_fact(run, run / row['path'])[0] for row in manifest['capture']['copies']]
@@ -855,7 +896,7 @@ def _core_position(trace, horizon):
     raise ValueError('diagnostic evidence refused')
 
 
-def parse_trace(stdout, stderr):
+def parse_trace(stdout, stderr, *, refusal=None):
     _require(type(stdout) is bytes and type(stderr) is bytes)
     clean = []
     marker_stream = None
@@ -872,24 +913,24 @@ def parse_trace(stdout, stderr):
             if not potential:
                 kept.append(line)
                 continue
-            _require(marker_stream is None or marker_stream == stream)
+            _parser_require(marker_stream is None or marker_stream == stream, refusal, 0)
             marker_stream = stream
             total += 1
-            _require(total <= RECORD_LIMIT)
+            _parser_require(total <= RECORD_LIMIT, refusal, 1)
             core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
             if core is not None:
-                _require(window and core_count < CORE_RECORD_LIMIT)
+                _parser_require(window and core_count < CORE_RECORD_LIMIT, refusal, 3)
                 stage = int(core[1])
                 transitions = _core_next(state)
-                _require(stage in transitions)
+                _parser_require(stage in transitions, refusal, 4)
                 state = transitions[stage]
                 core_count += 1
                 continue
             outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
             path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
-            _require(outer is not None or path is not None)
+            _parser_require(outer is not None or path is not None, refusal, 2)
             if window:
-                _require(path is not None and int(path[1]) == 8 and state[0] == 'end')
+                _parser_require(path is not None and int(path[1]) == 8 and state[0] == 'end', refusal, 5)
                 window = False
             if outer is not None:
                 outer_count += 1
@@ -897,13 +938,21 @@ def parse_trace(stdout, stderr):
                 current = SEQUENCE[outer_count - 1] if 0 < outer_count <= len(SEQUENCE) else None
                 request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
                 if request == 11 and int(path[1]) == 7:
-                    _require(core_count == 0)
+                    _parser_require(core_count == 0, refusal, 3)
                     window = True
             kept.append(line)
         clean.append(b''.join(kept))
-    trace = _parse_path_trace(*clean)
+    try:
+        trace = _parse_path_trace(*clean)
+    except ValueError:
+        _parser_refusal_mark(refusal, 6)
+        raise
     core = _core_report(state, stage, core_count)
-    _core_position(trace, core['coreHorizon'])
+    try:
+        _core_position(trace, core['coreHorizon'])
+    except ValueError:
+        _parser_refusal_mark(refusal, 7)
+        raise
     return dict(trace, **core)
 
 
@@ -952,6 +1001,7 @@ def render(result):
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     progress = _AvailabilityProgress()
+    parser_refusal = _ParserRefusal()
     try:
         _availability_enter(progress, 0)
         validate_cli(argv)  # No files, imports or child work precede closed admission.
@@ -977,7 +1027,8 @@ def main(argv=None):
         _availability_enter(progress, 5)
         watchdog = _load_module(run, run / 'Tools/run-owned-search-tests.py',
                                 'folder_trace_watchdog', WATCH_SHA)
-        result = execute(root, run, plan, manifest, watchdog.main, progress=progress)
+        result = execute(root, run, plan, manifest, watchdog.main,
+                         progress=progress, parser_refusal=parser_refusal)
         _availability_enter(progress, 20)
         _save(run / 'result.json', result)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, ImportError):
@@ -991,7 +1042,7 @@ def main(argv=None):
                 or lines == ['ci-folder-preview-trace: unavailable', 'reason: incomplete-evidence']):
             _availability_fail(progress)
             result = dict(state='unavailable')
-            output = _availability_output(progress)
+            output = _availability_output(progress, parser_refusal=parser_refusal)
         else:
             _require(result.get('state') in ('observed', 'not-observed') and len(lines) == 5)
             output = '\n'.join(lines)
@@ -1000,7 +1051,7 @@ def main(argv=None):
             UnicodeError):
         _availability_fail(progress)
         result = dict(state='unavailable')
-        output = _availability_output(progress)
+        output = _availability_output(progress, parser_refusal=parser_refusal)
     print(output)
     return 0 if result.get('state') in ('observed', 'not-observed') else 125
 

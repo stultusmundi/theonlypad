@@ -64,4 +64,13 @@ refuses incomplete evidence125; no accepted Core horizon follows. Its new
 privacy-bounded availability record passes19 private protocol checks and52 public
 checks; current local selected Swift1/0 retains42/314/25 and579/580 exact file
 facts. Production Core and original Swift Test remain unchanged. New hosted
-availability-code observation is pending; see [diagnostic evidence](ci-failure-diagnostics.md).
+availability-code observation is recorded below; see [diagnostic evidence](ci-failure-diagnostics.md).
+
+Hosted run38907406926 at `2584f66` subsequently identifies only attempted Python
+parser boundary17 before diagnostic refusal125; no accepted Core/PATH report or
+production cause follows. The reviewed first-parser-refusal observation now
+passes22 focused and55 public Python controls plus the actual selected Swift
+case (580 Original/581 frozen facts). Its optional closed group code remains a
+diagnostic rejection label, never a production fix or relaxed parser acceptance.
+New hosted group observation is pending. Production Core and original Swift Test
+remain unchanged; see [current diagnostic evidence](ci-failure-diagnostics.md).

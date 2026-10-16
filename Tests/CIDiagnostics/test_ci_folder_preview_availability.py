@@ -91,11 +91,12 @@ class FolderPreviewAvailabilityTests(unittest.TestCase):
             os.umask(previous_umask)
         return code, out.getvalue(), err.getvalue(), escaped, imported
 
-    def assert_unavailable(self, result, boundary):
+    def assert_unavailable(self, result, boundary, parser=None):
         code, stdout, stderr, escaped, _ = result
         self.assertIsNone(escaped, 'Reporting must fail closed rather than escape')
         self.assertEqual(code, 125)
-        self.assertEqual(stdout, '\n'.join(UNAVAILABLE + [f'availability: boundary={boundary}']) + '\n')
+        suffix = '' if parser is None else f' parser={parser}'
+        self.assertEqual(stdout, '\n'.join(UNAVAILABLE + [f'availability: boundary={boundary}' + suffix]) + '\n')
         self.assertEqual(stderr, '')
         self.assertLessEqual(len(stdout.encode('ascii')), 512)
         self.assertNotIn(SECRET, stdout + stderr)
@@ -215,7 +216,7 @@ class FolderPreviewAvailabilityTests(unittest.TestCase):
                 self.assertEqual(len(watch.calls), 1)
                 self.assertIn('folder_trace_watchdog', result[4])
                 self.assertIn('folder_trace_verifier', result[4])
-                self.assert_unavailable(result, boundary)
+                self.assert_unavailable(result, boundary, parser=2 if payload_kind == 'protocol' else None)
                 runs = list((root / '.local/ci-folder-preview-trace').glob('run.*'))
                 self.assertEqual(len(runs), 1)
                 self.assertTrue((runs[0] / 'stage/status.json').is_file())
