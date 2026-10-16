@@ -1,3 +1,40 @@
+# Active implementation checkpoint — 2026-10-16, evening
+
+Published diagnostic code is verified remotely at `7324901`; status documentation
+was previously published at `7c2bef5`. Latest inspected hosted run38955193456 on7324901
+fails with boundary17/parser4/state6/incoming6/collector9 and no predicate tuple.
+Code9 narrows the collector refusal to selected-window validation; its precise
+predicate and the production cause remain unknown. Public Python discovery passes72.
+Core grammar, original parser exception, privacy/caps and protected source checks
+remain preserved. Read-only diagnosis of the window refusal is in progress.
+
+Private XML application integration now passes six distinct methods in separate
+processes: cancellation3, unused-owner Quit, zero-window held-worker settlement
+before native checkpoint, and veto/retry reentry. Nine stages exit naturally,
+source/build graph matches, captures are complete and State is empty (different
+actual GO45f67efd). Counts overlap the earlier cancellation3 and are not added.
+XML native V2 retains its separate27-method pass. The two unchanged focused Quit
+methods first reproduced two ordinary missing-preparation assertions total,
+zero unexpected (GO89ac6fb7). The corrected broader App7 baseline remains
+incomplete with18 failures/one unexpected, empty State and no InvalidTransition
+text. Its catalog-read premise/cleanup amendment is exercised in the passing
+six-method run. The transfer seventh case and full App7 are not accepted.
+
+Both neighboring macro-command failures reproduce in the controlled pre-XML
+baseline (GOc4e09ca9). Their text and undo assertions pass; the nested explicit-range
+native replacement currently lacks a supported recording permit. Preserve the
+original expectations. A genuine child replacement design is approved for new
+Test authoring, with chronology/raw-gap/reentry/capacity behavior protected.
+
+Private manager hidden66 and separate real native-sheet1 remain verified and
+unadopted. Manager application Quit has reviewed design only; its concrete
+integration follows the XML checkpoint. Public manager37 and local packagebe6ec6f
+remain the prior accepted scopes. Desktop automation setup, accessibility/IME,
+performance, recovery/import/export/picker/propagation and all applicable BUILD
+requirements remain outstanding. Continue implementation; this is not completion.
+
+The following sections retain earlier checkpoints and their original limitations.
+
 # Active integration checkpoint — 2026-10-16
 
 The confirmed remote basis is `1bdb1e78`. Root adopted the three reviewed

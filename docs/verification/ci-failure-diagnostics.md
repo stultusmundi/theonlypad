@@ -1,3 +1,46 @@
+# Bounded collector-refusal diagnostic — 2026-10-16 evening
+
+Published Source `431b1e64` at development commit `7324901` adds a first-refusal
+numeric `collector` field to the existing unavailable line. It is emitted only
+for the matching parser4 transition and constructor-bound collection nonce.
+Unknown/stale/foreign collection state cannot supply a new tuple or code.
+It preserves the original parser exception, Core grammar, protected transition
+functions, one collection attempt, the existing stripped-path parse and512-byte
+output cap. It emits no rejected payload or exception text. Successful output
+and wrappers outside the selected scope retain their existing behavior.
+
+| Code | Collector refusal domain |
+| --- | --- |
+| 1 | Buffer type |
+| 2 | Capture byte cap |
+| 3 | Record shape |
+| 4 | Thread marker |
+| 5 | Stream consistency |
+| 6 | Side-record cap |
+| 7 | Core-record cap |
+| 8 | Required marker presence |
+| 9 | Selected window |
+| 10 | Required prefix/order |
+| 11 | Existing stripped-path parser |
+| 12 | Predicate tuple consistency |
+| 13 | Collector exception, without its text |
+
+Four observable output tests first failed against the prior unchanged collector,
+then passed with the diagnostic. Root separately ran the private67-case overlay
+and nine focused controls. Public discovery then passed67; five additional
+maintained behavior controls bring current public discovery to72 passing tests.
+These runs overlap and are not added. Tests retain cap boundaries, nonce
+withholding, first-refusal stability, parser-exception parity and sanitized output.
+
+Latest inspected hosted run38955193456 at7324901 includes the new diagnostic and
+fails with boundary17/parser4/state6/incoming6/collector9, without a predicate tuple.
+Code9 identifies selected-window validation as the first collector-refusal domain.
+It does not yet distinguish which window predicate failed or establish the
+production cause. The previous run38950247404 at7c2bef5 had no collector code.
+No Core fix or hosted success is claimed.
+
+Earlier evidence follows unchanged.
+
 # Bounded CI failure diagnostics
 
 ## Working-source predicate observation and latest hosted result — 2026-10-16
