@@ -54,12 +54,24 @@ source/test/support input facts match before and after that run. NativeIntegrati
 Python discovery separately passes 125 tests with no failures or errors. Its
 synthetic child/graph controls do not establish native or desktop acceptance.
 
-The neighboring legacy `scripts/test-native-monitor-lifecycle.sh` attempt stops
-at compilation before any test runs. Its direct compiler command omits the
-package identity needed for current package-scoped search types and links only
-Core objects. The failure is retained; migrate the harness to matched current
-dependencies without changing assertions before claiming compatibility. The
-passing four-case retained runner does not replace that unperformed selection.
+The original neighboring `scripts/test-native-monitor-lifecycle.sh` attempt
+stopped at compilation before any test ran: its direct compiler command omitted
+the package identity needed for current package-scoped search types and linked
+only Core objects. That failure is retained. A narrow repair now reuses the
+unchanged shared artifact/package validator, captures both Core and Search
+objects/modules and compiles in Swift 5 mode with their actual package identity.
+The native harness, test access tails, assertions and existing timeout runner
+remain unchanged.
+
+The matching-debug-path retake compiles and completes the existing hidden
+harness. Its seven named completion summaries cover suspended open/save,
+conflict actions, reload/copy, uncertain reload, Locate and monitor lifecycle.
+These are summaries from one process, not seven XCTest cases or an assertion
+count. All 384 manifest hashes still match: 190 live originals/control files,
+93 augmented native sources and 101 dependency artifacts. This older harness
+does not retain the new runner's strict twenty-field receipts, complete compiler
+argument record or temporal artifact identities. Independent actual review accepts this
+limited scope; no desktop or packaged acceptance follows.
 
 ## Outstanding
 

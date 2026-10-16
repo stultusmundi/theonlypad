@@ -1,33 +1,38 @@
 # Active integration checkpoint — 2026-10-16
 
-The reviewed Locate presentation correction is adopted in the working source.
-`scripts/test-disk-conflict-presentation.sh` passes its original two and two new
-hidden native tests through five natural zero-exit stages. Twelve separate pure
-runner contracts pass; repository formatting and public-source checks pass.
-Independent actual review accepts the four hidden cases. Separate current-source
-default verification passes1,203 with no failures, skips or warnings, and
-NativeIntegration Python discovery passes125. Independent review accepts these
-separate scopes; they are not an aggregate acceptance count.
-See [presentation verification](verification/disk-conflict-presentation.md).
-The legacy monitor-lifecycle harness stops at compilation before tests because
-its direct invocation lacks current package/search dependency admission. Preserve
-that failure and repair the harness without changing its assertions.
-The historical packaged Locate failure remains unresolved until a matching
-visible retake; no package or desktop acceptance follows from these hidden tests.
+The reviewed Locate presentation correction is confirmed remotely at `5a1cd57`.
+Its fixed public runner passes four hidden native tests; separate current-source
+verification passes1,203 default tests and125 Python contracts. The legacy
+monitor compile failure is preserved. Its narrow dependency repair now compiles
+and completes the original native harness, with all384 recorded hashes matching
+and independent actual review accepted. Seven completion summaries are not seven
+XCTest cases. See [presentation verification](verification/disk-conflict-presentation.md).
+Matching packaged Locate and broader desktop acceptance remain outstanding.
 
-The private catalog startup/quit implementation passes all fourteen native tests
-and a separate full 1,203-test application/helper build. Its retained public
-runner is being implemented after ten inert-runner tests reached fifteen ordinary
-assertion failures with no errors; deeper graph/custody controls were unentered.
-Public AppDelegate activation and manager/picker integration remain pending.
+The new failure-only phase diagnostic passes six updated contracts, separate
+public39 and one actual local instrumented Swift test. Its initial unavailable
+run exposed SwiftPM forwarding test stderr into owned stdout. The decoder now
+accepts one ordered prefix from either single owned stream and refuses split
+streams. Independent final audit accepts the corrected local result and retained
+557 original/558 copied facts. No hosted cause or selected-test signal is claimed;
+the original core command/failure are unchanged. Publish this reviewed diagnostic
+checkpoint, then inspect the hosted phase result before changing validation.
+See [CI verification](verification/ci-failure-diagnostics.md).
 
-Development branch `feat/search-admission-joined-terminal` is confirmed remotely
-through `47d98d9`. Hosted run38861487152 failed core again. The bounded reporter
-observed a sole unfinished source-text candidate at
-`Tests/PadCoreTests/FolderReplacementPreviewTests.swift:102`; this is not a cause
-or a child-signal diagnosis. A test-only same-method phase diagnostic is under
-review before implementation. Preserve all existing calls/assertions and the
-original CI failure. Continue the full BUILD scope after these checkpoints.
+Catalog startup/quit integration remains private: fourteen native tests and a
+separate1,203-test app/helper build pass. The retained application command now
+passes ten raw and separately ten formatted pure contracts with independent
+review. The formatting derivative preserves all original executable tests and
+uses an exact reversible two-import header projection. The180-second incomplete
+run remains retained; unchanged raw and formatted retakes pass under upfront600
+budgets. These are synthetic runner checks, not application performance evidence.
+
+Next: explicitly adopt the reviewed ten catalog application files, recapture
+current public source and run the retained native14 command. Retake the full
+current app/helper suite before committing/pushing that application activation.
+Then continue manager/picker integration, matching package/desktop verification,
+the unresolved native history/storage work and every remaining BUILD requirement.
+These checkpoints do not pause the user's full implementation request.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 

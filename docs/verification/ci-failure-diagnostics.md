@@ -220,3 +220,47 @@ checks were skipped after core failure; no hosted passing test suite is claimed.
 The same method passes locally in the full default suite. A bounded same-method
 phase trace is undergoing test review before implementation. No constructor or
 production behavior is changed on this observation alone.
+
+## Same-method phase diagnostic — 2026-10-16
+
+The repeated hosted failure at development source `5a1cd57` is retained in
+[run38866824760](https://github.com/stultusmundi/theonlypad/actions/runs/38866824760).
+It still supplies only the unfinished admission/budget test candidate. The new
+failure-only workflow step uses:
+
+```sh
+python3 -B scripts/ci_folder_preview_trace.py
+```
+
+This fixed command freezes current sources, tests, examples and required tools
+into ignored synthetic state. It inserts exactly ten constant writes into the
+frozen admission/budget test: fixture entry, the invalid-limits loop, the long
+URL constructor, the NUL URL constructor and the remaining request/budget work
+through fixture cleanup. Removing the ten statements reconstructs the complete
+original test. Existing calls, assertions and public Swift source remain unchanged.
+One direct600-second owned watchdog runs the exact selected test; do not nest
+another session-owning watchdog around this command.
+
+The first local actual run passes the Swift test but reports unavailable. SwiftPM
+forwards all ten stderr writes into its owned stdout, exposing an incorrect
+decoder premise. That run remains retained. Two ordinary contract failures then
+reproduce the missing route with no test errors. The reviewed correction accepts
+one ordered prefix from either single owned stream and refuses markers split
+across both. All record grammar, ordering, capture, source and privacy checks
+remain active. The six updated contracts pass; separate public discovery passes
+all39, preserving the previous33. These pure tests substitute only the child
+boundary and do not establish hosted behavior.
+
+The corrected command now also completes one actual local Swift test under its
+own watchdog with natural exit zero. All ten markers arrive in order on owned
+stdout; the output reports phase4/end and all intervals ended. The saved result
+retains557 original and558 copied input facts, input authority, command and full
+capture facts. The console prints only three closed numeric/enum lines. This
+validates the local diagnostic path, not the hosted cause, a selected-test OS
+signal, complete application build provenance or performance. Independent final
+audit accepts these separate scopes. The original core CI command and its failure remain
+unchanged; the new conditional step cannot turn a failing core run into success.
+
+Raw synthetic captures remain ignored under `.local/ci-folder-preview-trace/`.
+A hosted phase result must be inspected before changing any URL constructor or
+production validation behavior.
