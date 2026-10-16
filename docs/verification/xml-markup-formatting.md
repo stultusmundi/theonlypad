@@ -1,5 +1,33 @@
 # XML markup formatter — Core checkpoint, 16 October 2026
 
+## Current private native undo comparison — 2026-10-17
+
+The nonXML native approval repair now completes a matching23-stage comparison:
+93 unique methods/94 occurrences,91 passing methods, two failed methods,
+four ordinary assertions and zero unexpected failures. Original Search32,
+Native19, XML27, App6 and the default selection pass in their bound scopes.
+All three previously corrupting grandchild/sibling/Unicode cases pass, but
+one new child-veto case incorrectly refuses its lawful parent (three assertions).
+The separate transfer case still fails one assertion. All State roots are empty;
+compilation uses warnings as errors. Independent actual review SHA-256
+`1bd30eef7b7acc098611117fefab663cbe5ec4c19a53589cf7da871e1fd13bcf`
+verifies the exact source/build bindings and23 natural direct-watchdog receipts.
+The repair remains private and unaccepted; no public native formatter adoption
+or complete XML/macro safety follows.
+
+The unchanged-source corrected Macro8 baseline separately completes all8 methods:
+five pass, three fail seven ordinary assertions, zero unexpected. Its actual audit
+is `17244b9de5dd01a07746ec0601e83b0154335d4f64993abbfa01204441e7db42`.
+Event closure, Core bookmark and genuine same-event sibling evidence justify only
+the reviewed Test oracle corrections; exact text, bookmarks and chronological
+commands remain required. These overlapping counts are not added.
+
+The preserved XML mode still has callback-bearing owner/group admission after
+native approval and retires its captured delegate before caller backing. Those
+are separately identified static risks, awaiting genuine history/lifetime
+reproductions and repair before public XML adoption. Existing XML27 passes do
+not establish their absence. The following sections retain earlier evidence.
+
 
 ## Corrected native and App baselines — 2026-10-16
 
