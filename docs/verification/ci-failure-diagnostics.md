@@ -1,6 +1,45 @@
 # Bounded CI failure diagnostics
 
-## Latest hosted parser refusal — 2026-10-16
+## Current closed transition observation — 2026-10-16
+
+Hosted [run38916819487](https://github.com/stultusmundi/theonlypad/actions/runs/38916819487)
+at `71dd5e5` still fails core and refuses diagnostic evidence at
+`boundary=17 parser=4`. This identifies a rejected recognized Core transition,
+not its state/incoming pair, child result or production cause. The inspected
+artifact query returns zero artifacts; raw selected-child captures remain
+unavailable from those inspected sources.
+
+The reviewed working-source diagnostic now adds only closed `state=S incoming=K`
+fields to that same unavailable line when its exact first-refusal record has
+boundary17/coarse4 and a valid pair. Forty fixed state IDs and23 recognized
+incoming stages identify the original rejected transition; they do not accept a
+partial trace. Original grammar, source projections, receipt checks, first-failure
+custody, exit125 and the512-byte/three-line unavailable ceiling remain intact.
+Other refusal lines and all five accepted lines are unchanged. No raw test name,
+marker bytes, path or exception text is exposed.
+
+The final private selection passes59 actual Python tests (old55 plus4 new), with
+13 historical original and14 frozen input facts. The original public script was
+subsequently replaced by the reviewed candidate; its old bytes remain retained.
+The first attempt passes58 with one unexpected Test fixture `KeyError` from a
+bare capture rather than its capture/authority wrapper. The second passes58 with
+one unexpected missing-capsule-helper error. Both are preserved, not behavioral
+RED or completed GREEN. Reviewed fixture-only corrections retain every assertion
+and the same productive Source. The final run exercises real byte transitions,
+first-pair privacy and main/reporting-custody controls through a synthetic child
+boundary; it does not execute Swift or prove hosted behavior.
+
+The separately invoked public selected Swift test passes1/0. Independent actual
+review (GOcbabbe9f) verifies581 current Original/582 frozen identities, both exact
+projections, the originally saved authority, full captures and a strict20-field
+natural0 receipt. All42 outer/314 helper/25 Core records complete on owned stdout;
+State is empty and the original five success lines contain no refusal suffix.
+These overlapping diagnostic counts are not added. No hosted state/incoming
+observation, cause, full-suite/App/helper/GUI, compiler-artifact graph or performance
+acceptance follows. The command directly owns its600-second watchdog; never nest
+another session-owning watchdog. The next hosted observation remains pending.
+
+## Earlier hosted parser-refusal checkpoint — 2026-10-16
 
 Hosted [run38907406926](https://github.com/stultusmundi/theonlypad/actions/runs/38907406926)
 at `2584f66` still fails the original core step. The diagnostic returns125 with
@@ -36,7 +75,7 @@ The actual public selected Swift command also passes1/0, retaining42 outer/
 inverses and a strict20-field natural0 owned receipt. State is empty and accepted
 output has no availability/parser suffix. This establishes the local diagnostic
 path, not a hosted fix, full-suite, application, compiler-artifact, memory or
-signal result. A fresh hosted refusal-group observation remains outstanding.
+signal result. A fresh hosted refusal-group observation was outstanding at that checkpoint; the later boundary17/parser4 result is recorded above.
 
 ## Earlier hosted availability limitation — 2026-10-16
 

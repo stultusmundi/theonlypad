@@ -83,10 +83,57 @@ def _availability_line(progress):
 
 
 class _ParserRefusal:
-    __slots__ = ('code',)
+    __slots__ = ('code', 'transition')
 
     def __init__(self):
         self.code = None
+        self.transition = None
+
+
+# Closed diagnostic identities only; the original _core_next grammar owns acceptance.
+_PARSER_TRANSITION_STATES = (
+    ('start', 'none', False),
+    ('entry', 'none', False),
+    ('limits', 'none', False),
+    ('scalars', 'none', False),
+    ('root-call', 'none', False),
+    ('root-done', 'none', False),
+    ('selected-call', 'none', False),
+    ('selected-done', 'none', False),
+    ('admitted', 'none', False),
+    ('end', 'none', False),
+    ('valid', 'root', False),
+    ('serialized', 'root', False),
+    ('bytes', 'root', False),
+    ('nul', 'root', False),
+    ('clean', 'root', False),
+    ('serialized-accepted', 'root', False),
+    ('file-accepted', 'root', False),
+    ('host-accepted', 'root', False),
+    ('decoded', 'root', False),
+    ('decoded-accepted', 'root', False),
+    ('directory-accepted', 'root', False),
+    ('pointer', 'root', False),
+    ('filesystem', 'root', False),
+    ('returned', 'root', False),
+    ('returned', 'root', True),
+    ('valid', 'selected', False),
+    ('serialized', 'selected', False),
+    ('bytes', 'selected', False),
+    ('nul', 'selected', False),
+    ('clean', 'selected', False),
+    ('serialized-accepted', 'selected', False),
+    ('file-accepted', 'selected', False),
+    ('host-accepted', 'selected', False),
+    ('decoded', 'selected', False),
+    ('decoded-accepted', 'selected', False),
+    ('directory-accepted', 'selected', False),
+    ('pointer', 'selected', False),
+    ('filesystem', 'selected', False),
+    ('returned', 'selected', False),
+    ('returned', 'selected', True),
+)
+_PARSER_TRANSITION_STAGES = (0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)
 
 
 def _parser_refusal_code(record):
@@ -117,13 +164,66 @@ def _parser_require(value, record, code):
     _require(False)
 
 
+def _parser_transition_state_id(state):
+    if (type(state) is not tuple or len(state) != 3
+            or type(state[0]) is not str or type(state[1]) is not str
+            or type(state[2]) is not bool):
+        return None
+    try:
+        return _PARSER_TRANSITION_STATES.index(state)
+    except ValueError:
+        return None
+
+
+def _parser_refusal_transition(record):
+    if type(record) is not _ParserRefusal or _parser_refusal_code(record) != 4:
+        return None
+    try:
+        pair = record.transition
+    except AttributeError:
+        return None
+    if type(pair) is not tuple or len(pair) != 2:
+        return None
+    state_id, incoming = pair
+    if (type(state_id) is not int or not 0 <= state_id < 40
+            or type(incoming) is not int or incoming not in _PARSER_TRANSITION_STAGES):
+        return None
+    return pair
+
+
+def _parser_transition_mark(record, state, stage):
+    if type(record) is not _ParserRefusal:
+        return
+    try:
+        code, pair = record.code, record.transition
+    except AttributeError:
+        return
+    if code is not None or pair is not None:
+        return
+    state_id = _parser_transition_state_id(state)
+    if (state_id is None or type(stage) is not int
+            or stage not in _PARSER_TRANSITION_STAGES):
+        return
+    record.transition = (state_id, stage)
+
+
+def _parser_transition_require(value, record, state, stage):
+    # value is the original, once-evaluated membership Boolean at guard4.
+    if value is False:
+        _parser_transition_mark(record, state, stage)
+    _parser_require(value, record, 4)
+
+
 def _availability_output(progress, parser_refusal=None):
-    # Fixed literals plus one validated bounded integer; never exception or input text.
+    # Fixed literals and validated closed integers; never exception or input text.
     output = 'ci-folder-preview-trace: unavailable\nreason: incomplete-evidence'
     line = _availability_line(progress)
     code = _parser_refusal_code(parser_refusal)
     if line == 'availability: boundary=17' and code is not None:
         line += ' parser=' + str(code)
+        pair = _parser_refusal_transition(parser_refusal) if code == 4 else None
+        if pair is not None:
+            line += ' state=' + str(pair[0]) + ' incoming=' + str(pair[1])
     if line is not None:
         output += '\n' + line
     _require(len((output + '\n').encode('ascii')) <= 512)
@@ -922,7 +1022,7 @@ def parse_trace(stdout, stderr, *, refusal=None):
                 _parser_require(window and core_count < CORE_RECORD_LIMIT, refusal, 3)
                 stage = int(core[1])
                 transitions = _core_next(state)
-                _parser_require(stage in transitions, refusal, 4)
+                _parser_transition_require(stage in transitions, refusal, state, stage)
                 state = transitions[stage]
                 core_count += 1
                 continue
