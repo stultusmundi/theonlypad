@@ -1,6 +1,20 @@
 # XML markup formatter — Core checkpoint, 16 October 2026
 
-## Current private native undo comparison — 2026-10-17
+## Current private Source2b comparison — 2026-10-17
+
+The private Source2b nonXML approval correction completes25 natural direct-watchdog stages with warnings treated as errors:102 unique methods/103 occurrences,101 distinct methods passing and one failed transfer method with one ordinary assertion, zero unexpected failures or skips. The required default-positive overlaps XML27 and is not added as a new unique method. Original Search32, Native19, XML27, App6, all eight corrected nested-string methods, seven genuine handoff-refusal controls and both caret-history cases pass. The lawful-parent-after-native-veto regression from Source1 now passes in these unchanged tests. The overall process still exits1 because transfer restoration remains a real failure.
+
+Actual evidence audit SHA-256 `abb9633d30c6149f737b9cd33d4ea3a91c2c58effdb152385ef4f733538d2d5a` verifies all25 strict receipts, matching inputs, build graph and empty application State. The auditor authored the assembly/recipe and earlier XML work and checked Root's execution; separate different Source/glue reviews remain the semantic/static authorities. This is bounded non-transfer compatibility evidence, not public adoption or a full Source GREEN. Source2b remains private and unadopted.
+
+Both strict original-delegate retirement attempts, on old Source and Source2b, remain incomplete125. Their closed observations are byte-identical: genuine deinit occurs after the operation returns while the enclosing pool drains; the required within-operation timing and child edit are unentered. Each strict method reports three total XCTest failures including one unexpected error; each separate required default-positive passes. Candidate audit `1646c517af237995baa3856be744ca38bac1dcd8460e65bbaf26aee64d24cc04` verifies the exact five natural stages and unchanged strict Test. This is neither behavioral RED nor strict lifetime/fix acceptance, and the retaining reference origin remains unknown. A separate postpool compatibility test cannot establish that strict boundary.
+
+Two new XML history controls now complete a genuine ordinary RED baseline on that same preserved XML path: both methods enter and fail nine ordinary assertions, with zero unexpected errors. The required default-positive passes; all five strict natural stages, matching source/build evidence and empty application State verify. After actual native approval, exact-lease cancellation in the real owner callback loses genuine seeded redo and leaves ghost undo (two assertions). Selection reentry at the measured explicit native group opening preserves backing refusal but real history acts on the XML difference instead of the original seed, corrupting text/chronological commands and leaving extra undo (seven assertions). Actual audit `3246d74cf8c93815677f86cf3225f3ef16fcfef97a545bdeb4c66384eef15639` verifies those entered premises and failures. No missing redo is manufactured to continue an unentered branch.
+
+Existing XML27 passes remain valid for their earlier cohort and do not generalize to these controls. Late XML history preservation now has a reproduced failure requiring correction before native adoption; original-delegate retirement remains a separate risk, deliberately excluded from these two controls by retaining the genuine original. Strict nonXML ARC125 does not prove that XML boundary. Transfer refusal still fails endpoint restoration; a separate proposed transfer fixture has a static grouping-premise concern around an assumed0-to1 native begin. Its correction is under review and no transfer behavior is accepted from it.
+
+No native Source adoption, strict lifetime acceptance or completion of D-05 follows. The following sections preserve the prior Source1 results, Core adoption and native investigation in their original scopes.
+
+## Historical private Source1 native undo comparison — 2026-10-17
 
 The nonXML native approval repair now completes a matching23-stage comparison:
 93 unique methods/94 occurrences,91 passing methods, two failed methods,
