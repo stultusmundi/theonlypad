@@ -2481,3 +2481,1315 @@ extension AppRoutingStoreControl {
     }
   }
 }
+
+// Editable manager slice: real owner, original private fixture, no shown windows or forged authority.
+@MainActor private func withEditableLanguageManager(
+  _ body: @MainActor (ApplicationCatalogFixture) async throws -> Void
+) async throws {
+  try await withApplicationCatalog { f in
+    var primary: Error?
+    do { try await body(f) } catch { primary = error }
+    // Release all genuine producers before joining, including every early assertion return.
+    f.control?.release()
+    f.control?.mode(.clean)
+    f.control?.failReads(false)
+    f.native.writer.restoreWrites()
+    f.native.writer.release()
+    f.native.externalGate?.release()
+    f.native.backend.joinHold?.release()
+    for attempt in f.attempts { _ = await attempt.join() }
+    if let owner = f.catalog, case .active = owner.state.lifetime {
+      if let id = owner.mutationState.activeOperation?.id {
+        guard await f.settle(id) else { throw AppRoutingError.unsafe }
+      }
+      if let id = owner.mutationState.preparedQuitID { XCTAssertTrue(owner.cancelPreparedQuit(id)) }
+      if let unresolved = owner.mutationState.unresolved {
+        let admission: NativeLanguageCatalogMutationAdmission
+        switch unresolved {
+        case .failedAttempt(let id, _, _): admission = owner.requestRetryFailedAttempt(id)
+        case .pending(_, let id, .publicationUncertain, _):
+          admission = owner.requestRetryPending(id)
+        case .pending(_, let id, .readbackUnconfirmed, _):
+          admission = owner.requestDiscardAndReload(
+            .pending(id), confirmation: .discardAttemptAndReload)
+        }
+        guard let id = f.requestID(admission), await f.settle(id),
+          owner.mutationState.unresolved == nil
+        else { throw AppRoutingError.unsafe }
+      }
+    }
+    if let panel = f.app.languageManagerTestFacts.controller {
+      let session = panel.languageManagerTestFacts.session
+      if let handle = session.editState?.activeForm?.handle {
+        guard case .accepted = session.discardFormChanges(handle: handle) else {
+          XCTFail("Actual form cleanup refused; retain exact fixture")
+          ApplicationCatalogCustody.retained = f
+          AppRoutingCustody.retain(f.native)
+          throw primary ?? AppRoutingError.unsafe
+        }
+      }
+      if let state = session.editState, state.isDirty || state.isStale {
+        guard
+          case .accepted = session.discardDraft(
+            expectedDraftID: state.draftID, expectedEpoch: state.rawEpoch)
+        else {
+          XCTFail("Actual local draft cleanup refused; retain exact fixture")
+          ApplicationCatalogCustody.retained = f
+          AppRoutingCustody.retain(f.native)
+          throw primary ?? AppRoutingError.unsafe
+        }
+      }
+      panel.close()
+      XCTAssertNil(f.app.languageManagerTestFacts.controller, "Genuine clean presentation cleanup")
+    }
+    if let primary { throw primary }
+  }
+}
+
+@MainActor private final class ManagerEditCloseObservation {
+  let fixture: ApplicationCatalogFixture
+  let original: NativeLanguageManagerController
+  let terminal: Bool
+  var count = 0
+  var successor: NativeLanguageManagerController?
+  init(
+    _ fixture: ApplicationCatalogFixture, _ original: NativeLanguageManagerController,
+    terminal: Bool
+  ) {
+    self.fixture = fixture
+    self.original = original
+    self.terminal = terminal
+  }
+  func receive() {
+    count += 1
+    XCTAssertEqual(count, 1)
+    XCTAssertNil(fixture.app.languageManagerTestFacts.controller)
+    XCTAssertFalse(original.languageManagerTestFacts.session.isAttached)
+    guard count == 1 else { return }
+    successor = fixture.app.languageManagerTestMake()
+    if terminal { XCTAssertNil(successor) } else { XCTAssertNotNil(successor) }
+  }
+}
+
+@MainActor private final class ManagerQuitFlushResponder: NSView {
+  var onResign: (@MainActor () -> Void)?
+  override var acceptsFirstResponder: Bool { true }
+  override func resignFirstResponder() -> Bool {
+    let action = onResign
+    onResign = nil  // One-shot actual native callback; nested flush cannot recurse.
+    action?()
+    return true
+  }
+}
+
+@MainActor final class LanguageManagerEditSaveTests: XCTestCase {
+  private func ready(_ f: ApplicationCatalogFixture) async
+    -> (NativeLanguageManagerController, NativeLanguageManagerSession)?
+  {
+    guard await f.load() else { return nil }
+    let panel = f.app.languageManagerTestMake()
+    XCTAssertNotNil(panel, "Actual read-only manager remains prerequisite")
+    guard let panel else { return nil }
+    let session = panel.languageManagerTestFacts.session
+    XCTAssertNotNil(session.editState, "Real editable workspace must exist before deeper horizons")
+    guard session.editState != nil else { return nil }
+    XCTAssertNotNil(panel.window, "Actual hidden native window required")
+    guard let window = panel.window else { return nil }
+    XCTAssertFalse(window.isVisible)
+    return (panel, session)
+  }
+  private func accepted(
+    _ value: NativeLanguageManagerEditAdmission,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> Bool {
+    if case .accepted = value { return true }
+    XCTFail("Real local edit admission required", file: file, line: line)
+    return false
+  }
+  private func opened(
+    _ value: NativeLanguageManagerFormAdmission,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> NativeLanguageManagerFormHandle? {
+    if case .opened(let handle) = value { return handle }
+    XCTFail(
+      "Actual session-issued form required before dependent UI access", file: file, line: line)
+    return nil
+  }
+  private func started(_ value: NativeLanguageManagerSaveAdmission) -> UUID? {
+    if case .started(let id) = value { return id }
+    XCTFail("Actual Save admission required before producer wait")
+    return nil
+  }
+  private func definition(_ session: NativeLanguageManagerSession)
+    -> NativeLanguageManagerRawDefinition?
+  {
+    guard case .definition(let value)? = session.editState?.activeForm?.raw else {
+      XCTFail("Actual definition form payload required")
+      return nil
+    }
+    return value
+  }
+  private func edit(_ session: NativeLanguageManagerSession, _ id: UUID)
+    -> NativeLanguageManagerFormHandle?
+  {
+    guard let s = session.editState else {
+      XCTFail("Workspace absent")
+      return nil
+    }
+    return opened(
+      session.beginEdit(
+        target: .definition(id), expectedDraftID: s.draftID,
+        expectedEpoch: s.rawEpoch))
+  }
+  private func expectInvalidSave(_ session: NativeLanguageManagerSession) {
+    guard let s = session.editState else {
+      XCTFail("Workspace absent")
+      return
+    }
+    if case .refused(.invalid(let issues)) = session.requestSave(
+      expectedDraftID: s.draftID, expectedEpoch: s.rawEpoch)
+    {
+      XCTAssertFalse(issues.isEmpty)
+    } else {
+      XCTFail("Invalid raw must refuse with actual field issues")
+    }
+  }
+  private func sameUnits(
+    _ a: String, _ b: String,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(a.utf16.elementsEqual(b.utf16), file: file, line: line)
+  }
+
+  func testNewAndEditKeepExactBoundedRawFieldsAndStableIDs() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f) else { return }
+      let original = try XCTUnwrap(s.editState)
+      XCTAssertEqual(
+        original.definitions.map(\.id), f.catalog?.state.current?.catalog.definitions.map(\.id))
+      panel.languageManagerEditingTestFacts.new.performClick(nil)
+      XCTAssertNotNil(
+        s.editState?.activeForm, "Actual New button must open the same real session form")
+      guard let form = s.editState?.activeForm, var raw = definition(s) else { return }
+      let handle = form.handle
+      let freshID = raw.id
+      XCTAssertNotEqual(freshID, CatalogTestFixture.id)
+      XCTAssertEqual(handle.target, .definition(freshID))
+      raw.name = "cafe\u{301}\0"
+      raw.extensionsText = ""
+      raw.keywordsText = "café\ncafe\u{301}"
+      raw.lineEnabled = false
+      raw.lineText = "\0uncommitted\n"
+      raw.blockEnabled = false
+      raw.blockOpening = "decomposed e\u{301}"
+      raw.blockClosing = "trailing "
+      raw.quotes = [
+        .init(
+          rowID: UUID(), opening: "\"", closing: "\"",
+          escapeEnabled: false, escapeText: "raw\0", multiline: true)
+      ]
+      raw.indentationKind = .spaces
+      raw.widthText = "not a number"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        let retained = definition(s)
+      else { return }
+      sameUnits(retained.name, raw.name)
+      sameUnits(retained.keywordsText, raw.keywordsText)
+      sameUnits(retained.lineText, raw.lineText)
+      sameUnits(retained.blockOpening, raw.blockOpening)
+      sameUnits(retained.blockClosing, raw.blockClosing)
+      XCTAssertEqual(retained.quotes.count, 1)
+      guard retained.quotes.count == 1 else { return }
+      sameUnits(retained.quotes[0].escapeText, raw.quotes[0].escapeText)
+      sameUnits(retained.widthText, raw.widthText)
+      XCTAssertEqual(retained.id, freshID)
+      XCTAssertEqual(s.editState?.activeForm?.handle.id, handle.id)
+      let beforeEpoch = s.editState?.rawEpoch
+      for oversized in [
+        String(repeating: "x", count: 65537),
+        (0..<17).map { "e\($0)" }.joined(separator: "\n"),
+        (0..<1025).map { "k\($0)" }.joined(separator: "\n"),
+      ] {
+        var refused = raw
+        if oversized.count > 65536 {
+          refused.name = oversized
+        } else if oversized.hasPrefix("e") {
+          refused.extensionsText = oversized
+        } else {
+          refused.keywordsText = oversized
+        }
+        if case .refused(.boundExceeded) = s.updateForm(handle: handle, raw: .definition(refused)) {
+        } else {
+          XCTFail("Raw bound must refuse without truncation")
+        }
+        XCTAssertEqual(s.editState?.rawEpoch, beforeEpoch)
+        sameUnits(try XCTUnwrap(definition(s)).name, raw.name)
+      }
+      var tooManyQuotes = raw
+      tooManyQuotes.quotes = (0..<5).map { _ in
+        .init(
+          rowID: UUID(), opening: "q", closing: "z",
+          escapeEnabled: false, escapeText: "", multiline: false)
+      }
+      if case .refused(.boundExceeded) = s.updateForm(
+        handle: handle, raw: .definition(tooManyQuotes))
+      {
+      } else {
+        XCTFail("Quote count bound must refuse without truncation")
+      }
+      XCTAssertEqual(s.editState?.rawEpoch, beforeEpoch)
+      XCTAssertEqual(f.control?.count(.save), 0)
+      guard accepted(s.discardFormChanges(handle: handle)) else { return }
+      XCTAssertNil(s.editState?.activeForm)
+      XCTAssertFalse(try XCTUnwrap(s.editState).definitions.contains { $0.id == freshID })
+      guard let again = opened(s.beginNewDefinition()), let second = definition(s) else { return }
+      XCTAssertNotEqual(second.id, freshID)
+      XCTAssertNotEqual(again.id, handle.id)
+      _ = accepted(s.discardFormChanges(handle: again))
+    }
+  }
+
+  func testValidationRejectsFieldAndCatalogCollisionsBeforeStoreAdmission() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (_, s) = await ready(f), let handle = opened(s.beginNewDefinition()),
+        var raw = definition(s)
+      else { return }
+      let before = try f.bytes()
+      let beforeCalls = f.control?.count(.save)
+      let valid = raw
+      for value in ["Bad\nName", "", String(repeating: "n", count: 81)] {
+        raw = valid
+        raw.name = value
+        guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+        expectInvalidSave(s)
+      }
+      for ext in ["demo", "UPPER", "a\n", "a\n\nb"] {
+        raw = valid
+        raw.name = "Draft"
+        raw.extensionsText = ext
+        guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+        expectInvalidSave(s)
+      }
+      for width in ["0", "9", "NaN"] {
+        raw = valid
+        raw.indentationKind = .spaces
+        raw.widthText = width
+        guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+        expectInvalidSave(s)
+      }
+      raw = valid
+      raw.quotes = [
+        .init(
+          rowID: UUID(), opening: "", closing: "\"",
+          escapeEnabled: true, escapeText: "xy", multiline: false)
+      ]
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+      expectInvalidSave(s)
+      let wrong = NativeLanguageManagerRawDefinition(
+        id: CatalogTestFixture.id,
+        name: valid.name, extensionsText: "fresh", keywordsText: "", lineEnabled: false,
+        lineText: "", blockEnabled: false, blockOpening: "", blockClosing: "", quotes: [],
+        highlightDecimalNumbers: false, indentationKind: .legacy, widthText: "")
+      if case .refused = s.updateForm(handle: handle, raw: .definition(wrong)) {
+      } else {
+        XCTFail("An opaque form cannot be retargeted to a conflicting UUID")
+      }
+      XCTAssertEqual(try f.bytes(), before)
+      XCTAssertEqual(f.control?.count(.save), beforeCalls)
+      // Duplicate names are legal; only extensions/UUIDs collide in Core.
+      raw = valid
+      raw.name = "Demo"
+      raw.extensionsText = "fresh"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.finishForm(handle: handle))
+      else { return }
+      XCTAssertTrue(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertEqual(f.control?.count(.save), beforeCalls)
+    }
+  }
+
+  func testDeleteAndRevertAreDraftOnlyUntilActualSave() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f) else { return }
+      let before = try f.bytes()
+      let initial = try XCTUnwrap(s.editState)
+      panel.languageManagerTestFacts.table.selectRowIndexes(
+        IndexSet(integer: 0), byExtendingSelection: false)
+      panel.languageManagerEditingTestFacts.delete.performClick(nil)
+      XCTAssertFalse(
+        try XCTUnwrap(s.editState).definitions.contains { $0.id == CatalogTestFixture.id })
+      XCTAssertTrue(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertEqual(try f.bytes(), before)
+      let deleted = try XCTUnwrap(s.editState)
+      XCTAssertEqual(deleted.draftID, initial.draftID)
+      panel.languageManagerEditingTestFacts.revert.performClick(nil)
+      XCTAssertEqual(s.editState?.definitions.map(\.id), initial.definitions.map(\.id))
+      XCTAssertFalse(try XCTUnwrap(s.editState).isDirty)
+      guard let handle = opened(s.beginNewDefinition()), var raw = definition(s) else { return }
+      raw.name = "Staged"
+      raw.extensionsText = "staged"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.finishForm(handle: handle))
+      else { return }
+      let staged = try XCTUnwrap(s.editState)
+      guard
+        accepted(
+          s.revertChange(
+            target: .definition(raw.id), expectedDraftID: staged.draftID,
+            expectedEpoch: staged.rawEpoch))
+      else { return }
+      XCTAssertFalse(try XCTUnwrap(s.editState).definitions.contains { $0.id == raw.id })
+      XCTAssertFalse(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertEqual(try f.bytes(), before)
+      XCTAssertEqual(f.control?.count(.save), 0)
+    }
+  }
+
+  func testChildEditorNeverRetargetsSelectionOrForeignHistory() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f) else { return }
+      let model = try XCTUnwrap(f.native.models.first)
+      let undo = model.undoManager
+      let originalText = model.storage.string
+      undo.beginUndoGrouping()
+      model.editor.insertText(
+        "!", replacementRange: NSRange(location: model.storage.length, length: 0))
+      undo.endUndoGrouping()
+      XCTAssertTrue(
+        undo.canUndo, "Actual foreign native history must exist before child construction")
+      XCTAssertTrue(undo.groupingLevel == 0 || undo.groupingLevel == 1)
+      guard undo.canUndo, !undo.isUndoing, !undo.isRedoing,
+        undo.groupingLevel == 0 || undo.groupingLevel == 1
+      else { return }
+      undo.undo()
+      try f.native.requireClean(model)
+      XCTAssertTrue(undo.canRedo, "Nonempty original history makes a foreign clear observable")
+      guard undo.canRedo else { return }
+      XCTAssertEqual(model.storage.string, originalText)
+      let beforeString = model.storage.string
+      let beforeUndo = undo.canUndo
+      let beforeRedo = undo.canRedo
+      let beforeGrouping = undo.groupingLevel
+      panel.languageManagerTestFacts.table.selectRowIndexes(
+        IndexSet(integer: 0), byExtendingSelection: false)
+      panel.languageManagerEditingTestFacts.edit.performClick(nil)
+      XCTAssertNotNil(s.editState?.activeForm, "Actual Edit button must construct a bound form")
+      guard let handle = s.editState?.activeForm?.handle else { return }
+      let first = panel.languageManagerEditingTestFacts.editor
+      XCTAssertNotNil(first, "Actual child editor must be installed by the real render/action path")
+      guard let first, let window = first.window else {
+        XCTFail("Actual child window absent")
+        return
+      }
+      XCTAssertTrue(window.parent === panel.window)
+      XCTAssertFalse(window.isVisible)
+      XCTAssertFalse(panel.languageManagerTestFacts.details.isEditable)
+      let controls = first.languageDefinitionEditingTestFacts
+      XCTAssertEqual(controls.handle.id, handle.id)
+      controls.name.stringValue = "Changed by actual field delegate"
+      first.controlTextDidChange(
+        Notification(name: NSControl.textDidChangeNotification, object: controls.name))
+      sameUnits(try XCTUnwrap(definition(s)).name, controls.name.stringValue)
+      panel.languageManagerTestFacts.table.deselectAll(nil)
+      XCTAssertTrue(panel.languageManagerEditingTestFacts.editor === first)
+      XCTAssertEqual(s.editState?.activeForm?.handle.target, .definition(CatalogTestFixture.id))
+      if case .refused(.formInProgress) = s.beginNewDefinition() {
+      } else {
+        XCTFail("Cannot retarget live form")
+      }
+      window.close()
+      XCTAssertTrue(panel.languageManagerEditingTestFacts.editor === first)
+      XCTAssertNotNil(s.editState?.activeForm)
+      XCTAssertEqual(model.storage.string, beforeString)
+      XCTAssertEqual(undo.canUndo, beforeUndo)
+      XCTAssertEqual(undo.canRedo, beforeRedo)
+      XCTAssertEqual(undo.groupingLevel, beforeGrouping)
+      controls.discard.performClick(nil)
+      XCTAssertNil(s.editState?.activeForm)
+      XCTAssertNil(panel.languageManagerEditingTestFacts.editor)
+      guard let next = edit(s, CatalogTestFixture.id),
+        let second = panel.languageManagerEditingTestFacts.editor
+      else { return }
+      XCTAssertFalse(second === first)
+      XCTAssertFalse(second.window === window)
+      XCTAssertNotEqual(next.id, handle.id)
+      second.languageDefinitionEditingTestFacts.done.performClick(nil)
+      XCTAssertNil(s.editState?.activeForm)
+      // Exercise the genuine preserved inverse, with the API-valid top-level 0/1 precondition.
+      guard undo.canRedo else {
+        XCTFail("Manager must preserve foreign redo")
+        return
+      }
+      undo.redo()
+      XCTAssertEqual(model.storage.string, originalText + "!")
+      XCTAssertTrue(undo.groupingLevel == 0 || undo.groupingLevel == 1)
+      guard undo.canUndo, !undo.isUndoing, !undo.isRedoing,
+        undo.groupingLevel == 0 || undo.groupingLevel == 1
+      else { return }
+      undo.undo()
+      try f.native.requireClean(model)
+      XCTAssertEqual(model.storage.string, originalText)
+    }
+  }
+
+  func testActualSaveUsesOriginalOwnerAndCompleteFreshReader() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let original = try await f.fresh()
+      raw.name = "Saved café"
+      raw.extensionsText = "one\ntwo"
+      raw.keywordsText = "café\ncafe\u{301}"
+      raw.lineEnabled = true
+      raw.lineText = "//"
+      raw.blockEnabled = true
+      raw.blockOpening = "/*"
+      raw.blockClosing = "*/"
+      raw.quotes = [
+        .init(
+          rowID: UUID(), opening: "\"", closing: "\"",
+          escapeEnabled: true, escapeText: "\\", multiline: true)
+      ]
+      raw.highlightDecimalNumbers = false
+      raw.indentationKind = .tabs
+      raw.widthText = "4"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.finishForm(handle: handle))
+      else { return }
+      let st = try XCTUnwrap(s.editState)
+      guard
+        let overrideHandle = opened(
+          s.beginEdit(
+            target: .builtIn(.swift),
+            expectedDraftID: st.draftID, expectedEpoch: st.rawEpoch))
+      else { return }
+      let overrideRaw = NativeLanguageManagerRawOverride(
+        language: .swift, lineKind: .literal,
+        lineText: "#override", blockKind: .disabled, blockOpening: "retained", blockClosing: "raw",
+        indentationKind: .spaces, widthText: "2")
+      guard accepted(s.updateForm(handle: overrideHandle, raw: .builtIn(overrideRaw))),
+        accepted(s.finishForm(handle: overrideHandle))
+      else { return }
+      panel.languageManagerEditingTestFacts.save.performClick(nil)
+      let operation = s.editState?.saveOperationID
+      XCTAssertNotNil(operation, "Actual Save button must admit the original owner's producer")
+      guard let operation, await f.settle(operation) else { return }
+      let loaded = try await f.fresh()
+      let current = try XCTUnwrap(owner.state.current)
+      XCTAssertEqual(
+        try LanguageCatalogCodec.encode(current.catalog),
+        try LanguageCatalogCodec.encode(loaded.snapshot))
+      XCTAssertEqual(loaded.snapshot.generation, original.snapshot.generation + 1)
+      let expected = try LiteralLanguageDefinition(
+        id: CatalogTestFixture.id, name: raw.name,
+        fileExtensions: ["one", "two"], keywords: ["café", "cafe\u{301}"], lineComment: "//",
+        blockComment: BlockCommentDelimiters(opening: "/*", closing: "*/"),
+        quotes: [LiteralQuoteRule(opening: "\"", closing: "\"", escape: "\\", multiline: true)],
+        highlightDecimalNumbers: false, indentation: .tabs(width: 4))
+      XCTAssertEqual(loaded.snapshot.definitions, [expected])
+      XCTAssertEqual(
+        loaded.snapshot.overrides,
+        [
+          try BuiltInLanguageOverride(
+            language: .swift,
+            lineComment: .literal("#override"), blockComment: .disabled,
+            indentation: .spaces(width: 2))
+        ])
+      XCTAssertEqual(CatalogTestFixture.profile(loaded.snapshot).definitionRevision, 4)
+      XCTAssertEqual(s.editState?.basePublicationID, current.id)
+      XCTAssertFalse(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertNil(s.editState?.saveOperationID)
+      XCTAssertTrue(s.languageManagerTestOwner === owner)
+      XCTAssertEqual(f.control?.count(.save), 1)
+      XCTAssertEqual(f.control?.maximum, 1)
+      XCTAssertTrue(try XCTUnwrap(f.control).calls.allSatisfy { !$0.onMain })
+    }
+  }
+
+  func testRefusedSaveKeepsRawBaseAndNoAdditionalProducer() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (_, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      raw.name = "Retain after real failure"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.finishForm(handle: handle))
+      else { return }
+      let before = try XCTUnwrap(s.editState)
+      let bytes = try f.bytes()
+      if case .refused(.wrongEpoch) = s.requestSave(
+        expectedDraftID: before.draftID, expectedEpoch: UUID())
+      {
+      } else {
+        XCTFail("Stale UI Save cannot write")
+      }
+      XCTAssertEqual(f.control?.count(.save), 0)
+      let control = try XCTUnwrap(f.control)
+      control.mode(.prepublication)
+      guard
+        let id = started(
+          s.requestSave(expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch)),
+        await f.settle(id)
+      else { return }
+      XCTAssertEqual(try f.bytes(), bytes)
+      XCTAssertEqual(s.editState?.basePublicationID, before.basePublicationID)
+      XCTAssertEqual(s.editState?.rawEpoch, before.rawEpoch)
+      sameUnits(try XCTUnwrap(s.editState?.definitions.first).name, raw.name)
+      guard case .failedAttempt(let attempt, .apply, _)? = f.catalog?.mutationState.unresolved
+      else {
+        XCTFail("Actual failed Store attempt must remain unresolved")
+        return
+      }
+      let saved = control.count(.save)
+      let now = try XCTUnwrap(s.editState)
+      if case .refused = s.requestSave(expectedDraftID: now.draftID, expectedEpoch: now.rawEpoch) {
+      } else {
+        XCTFail("Unresolved real write cannot be silently replaced")
+      }
+      if case .refused = s.discardDraft(expectedDraftID: now.draftID, expectedEpoch: now.rawEpoch) {
+      } else {
+        XCTFail("Local reset cannot acknowledge actual Store intent")
+      }
+      guard case .failedAttempt(let retained, _, _)? = f.catalog?.mutationState.unresolved else {
+        XCTFail("Actual attempt disappeared")
+        return
+      }
+      XCTAssertEqual(retained, attempt)
+      XCTAssertEqual(control.count(.save), saved)
+      XCTAssertEqual(s.editState?.rawEpoch, before.rawEpoch)
+      XCTAssertFalse(s.canDepart)
+      XCTAssertEqual(f.reports.count, 1)
+    }
+  }
+
+  func testSaveCompletionPreservesNewerRawInput() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      raw.name = "Submitted"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+      let original = try XCTUnwrap(s.editState)
+      let control = try XCTUnwrap(f.control)
+      let gate = control.hold(.save)
+      defer { gate.release() }
+      guard
+        let id = started(
+          s.requestSave(expectedDraftID: original.draftID, expectedEpoch: original.rawEpoch))
+      else { return }
+      await fulfillment(of: [gate.entered], timeout: 4)
+      guard await f.wait("real held Save entered", { control.count(.save) == 1 }) else { return }
+      raw.name = "Newer local"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+      let newer = try XCTUnwrap(s.editState)
+      XCTAssertNotEqual(newer.rawEpoch, original.rawEpoch)
+      if case .refused(.busy) = s.requestSave(
+        expectedDraftID: newer.draftID, expectedEpoch: newer.rawEpoch)
+      {
+      } else {
+        XCTFail("No second Save/queue during actual producer")
+      }
+      panel.close()
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === panel)
+      XCTAssertEqual(control.count(.save), 1)
+      gate.release()
+      guard await f.settle(id) else { return }
+      let saved = try await f.fresh()
+      XCTAssertEqual(saved.snapshot.definitions.first?.name, "Submitted")
+      sameUnits(try XCTUnwrap(definition(s)).name, "Newer local")
+      XCTAssertTrue(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertEqual(s.editState?.basePublicationID, f.catalog?.state.current?.id)
+      XCTAssertNil(s.editState?.saveOperationID)
+      // Discarding form input now returns the actual SAVED baseline, not pre-Save Demo.
+      guard accepted(s.discardFormChanges(handle: handle)) else { return }
+      sameUnits(try XCTUnwrap(s.editState?.definitions.first).name, "Submitted")
+      XCTAssertFalse(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertEqual(control.maximum, 1)
+    }
+  }
+
+  func testExternalPublicationMarksDirtyDraftStaleWithoutOverwrite() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      raw.name = "Keep local"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.finishForm(handle: handle))
+      else { return }
+      let before = try XCTUnwrap(s.editState)
+      guard try await f.apply("Actual unrelated publication") != nil else { return }
+      XCTAssertTrue(try XCTUnwrap(s.editState).isStale)
+      XCTAssertEqual(s.editState?.basePublicationID, before.basePublicationID)
+      XCTAssertEqual(s.editState?.rawEpoch, before.rawEpoch)
+      sameUnits(try XCTUnwrap(s.editState?.definitions.first).name, raw.name)
+      let writes = f.control?.count(.save)
+      if case .refused(.staleBase) = s.requestSave(
+        expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch)
+      {
+      } else {
+        XCTFail("No fresh publication substitution for dirty stale raw")
+      }
+      if case .unavailable = s.requestRefresh() {} else { XCTFail("Refresh must not destroy raw") }
+      XCTAssertEqual(f.control?.count(.save), writes)
+      panel.languageManagerEditingTestFacts.discard.performClick(nil)
+      XCTAssertFalse(try XCTUnwrap(s.editState).isDirty)
+      XCTAssertFalse(try XCTUnwrap(s.editState).isStale)
+      XCTAssertNotEqual(s.editState?.draftID, before.draftID)
+      XCTAssertEqual(s.editState?.basePublicationID, f.catalog?.state.current?.id)
+      sameUnits(try XCTUnwrap(s.editState?.definitions.first).name, "Actual unrelated publication")
+      XCTAssertEqual(f.control?.count(.save), writes)
+    }
+  }
+
+  func testDirtyAndInvalidActualCloseKeepsManagerAndChild() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      let window = try XCTUnwrap(panel.window)
+      raw.name = ""
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+      let child = panel.languageManagerEditingTestFacts.editor
+      for close in [
+        { panel.close() }, { window.close() },
+        { panel.languageManagerTestFacts.close.performClick(nil) },
+      ] {
+        close()
+        XCTAssertTrue(f.app.languageManagerTestFacts.controller === panel)
+        XCTAssertTrue(s.isAttached)
+        XCTAssertTrue(panel.languageManagerEditingTestFacts.editor === child)
+        sameUnits(try XCTUnwrap(definition(s)).name, "")
+      }
+      guard accepted(s.discardFormChanges(handle: handle)) else { return }
+      let observation = ManagerEditCloseObservation(f, panel, terminal: false)
+      let token = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification,
+        object: window, queue: nil
+      ) { [weak observation] _ in
+        MainActor.assumeIsolated { observation?.receive() }
+      }
+      window.close()
+      NotificationCenter.default.removeObserver(token)
+      XCTAssertEqual(
+        observation.count, 1, "Refused close must not permanently consume native close guard")
+      guard let successor = observation.successor else { return }
+      panel.close()
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === successor)
+      let successorWindow = try XCTUnwrap(successor.window)
+      let terminal = ManagerEditCloseObservation(f, successor, terminal: true)
+      let terminalToken = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification,
+        object: successorWindow, queue: nil
+      ) { [weak terminal] _ in
+        MainActor.assumeIsolated { terminal?.receive() }
+      }
+      defer { NotificationCenter.default.removeObserver(terminalToken) }
+      let external = AppRoutingGate()
+      f.native.externalGate = external
+      defer { external.release() }
+      f.native.writer.arm()
+      guard let attempt = f.beginQuit(), f.requireReservation() != nil else { return }
+      guard
+        await f.wait(
+          "actual terminal native publication", { f.native.writer.applicationCatalogEntered })
+      else { return }
+      f.native.writer.release()
+      guard await f.wait("actual terminal retire before external drain", { external.calls == 1 })
+      else { return }
+      XCTAssertEqual(terminal.count, 1, "Committed close must work after actual detach")
+      XCTAssertFalse(successor.languageManagerTestFacts.session.isAttached)
+      XCTAssertNil(f.app.languageManagerTestFacts.controller)
+      XCTAssertNil(terminal.successor)
+      successor.close()
+      XCTAssertEqual(terminal.count, 1)
+      external.release()
+      let result = await attempt.join()
+      XCTAssertNotNil(result.nativeReceipt)
+      XCTAssertEqual(f.native.replies, [true])
+    }
+  }
+
+  func testDirtyQuitVetoPrecedesCatalogSearchAndNativePreparation() async throws {
+    var completedReservationAndRollback = false
+    try await withEditableLanguageManager { f in
+      guard let (_, s) = await ready(f), let handle = edit(s, CatalogTestFixture.id),
+        var raw = definition(s)
+      else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      raw.name = "Dirty"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))) else { return }
+      let before = try XCTUnwrap(s.editState)
+      XCTAssertEqual(f.app.applicationShouldTerminate(NSApplication.shared), .terminateCancel)
+      XCTAssertNil(f.app.applicationCatalogTestCaptureAttempt())
+      XCTAssertNil(owner.mutationState.preparedQuitID)
+      XCTAssertEqual(f.native.ownerFactories, 0)
+      XCTAssertFalse(f.native.writer.applicationCatalogEntered)
+      // Owner reserve notifies synchronously, with a current renderable delivery.
+      let renderer = s.onChange
+      var reentries = 0
+      s.onChange = { snapshot in
+        if let actualQuit = snapshot.mutation.preparedQuitID, reentries == 0 {
+          reentries += 1
+          func expect(_ value: NativeLanguageManagerEditAdmission) {
+            if case .refused(.catalog(.quitPrepared(let id))) = value {
+              XCTAssertEqual(id, actualQuit)
+            } else {
+              XCTFail("Reserved catalog delivery cannot mutate local raw")
+            }
+          }
+          if case .refused(.catalog(.quitPrepared(let id))) = s.beginNewDefinition() {
+            XCTAssertEqual(id, actualQuit)
+          } else {
+            XCTFail("Reserved New admission")
+          }
+          if case .refused(.catalog(.quitPrepared(let id))) = s.beginEdit(
+            target: .definition(raw.id),
+            expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch)
+          {
+            XCTAssertEqual(id, actualQuit)
+          } else {
+            XCTFail("Reserved Edit admission")
+          }
+          expect(s.updateForm(handle: handle, raw: .definition(raw)))
+          expect(s.finishForm(handle: handle))
+          expect(s.discardFormChanges(handle: handle))
+          expect(
+            s.stageDelete(
+              profileID: raw.id, expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch))
+          expect(
+            s.revertChange(
+              target: .definition(raw.id), expectedDraftID: before.draftID,
+              expectedEpoch: before.rawEpoch))
+          expect(s.discardDraft(expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch))
+          if case .refused(.catalog(.quitPrepared(let id))) = s.requestSave(
+            expectedDraftID: before.draftID, expectedEpoch: before.rawEpoch)
+          {
+            XCTAssertEqual(id, actualQuit)
+          } else {
+            XCTFail("Reserved Save admission")
+          }
+          XCTAssertEqual(s.editState?.rawEpoch, before.rawEpoch)
+          XCTAssertEqual(s.editState?.activeForm?.handle.id, handle.id)
+        }
+        renderer?(snapshot)
+      }
+      let reservation = owner.prepareQuit()
+      XCTAssertEqual(reentries, 1)
+      guard case .prepared(let id) = reservation else {
+        XCTFail("Real reservation absent")
+        return
+      }
+      XCTAssertTrue(owner.cancelPreparedQuit(id))
+      s.onChange = renderer
+      raw.name = "After real cancel"
+      guard accepted(s.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(s.discardFormChanges(handle: handle))
+      else { return }
+      // Real App rollback, then positive local admission (no injected reservation).
+      f.native.permitsPublicationErrors = true
+      f.native.writer.arm(failing: true)
+      guard let attempt = f.beginQuit(), f.requireReservation() != nil else { return }
+      guard await f.wait("actual rollback writer", { f.native.writer.applicationCatalogEntered })
+      else { return }
+      f.native.writer.release()
+      _ = await attempt.join()
+      XCTAssertEqual(f.native.replies, [false])
+      guard let after = opened(s.beginNewDefinition()) else { return }
+      guard accepted(s.discardFormChanges(handle: after)) else { return }
+      completedReservationAndRollback = true
+    }
+    guard completedReservationAndRollback else { return }
+    // Native flush reentry installs a genuine nested attempt; outer frame cannot replace it.
+    try await withEditableLanguageManager { f in
+      guard let (panel, _) = await ready(f), let window = panel.window else { return }
+      let responder = ManagerQuitFlushResponder(frame: .zero)
+      window.contentView?.addSubview(responder)
+      let installed = window.makeFirstResponder(responder)
+      XCTAssertTrue(
+        installed, "Actual hidden native first-responder admission precedes flush horizon")
+      guard installed else { return }
+      var nested: ApplicationCatalogJoinedAttempt?
+      responder.onResign = { nested = f.beginQuit() }
+      f.native.writer.arm()
+      let answer = f.app.applicationShouldTerminate(NSApplication.shared)
+      XCTAssertEqual(answer, .terminateLater)
+      XCTAssertNotNil(nested, "Real flush callback must install nested attempt")
+      guard let nested else { return }
+      XCTAssertEqual(f.app.task4Attempt?.id, nested.handle.id)
+      XCTAssertEqual(f.native.startedAttempts, 1)
+      guard f.requireReservation() != nil,
+        await f.wait("nested original writer", { f.native.writer.applicationCatalogEntered })
+      else { return }
+      f.native.writer.release()
+      _ = await nested.join()
+      XCTAssertEqual(f.native.replies, [true])
+    }
+  }
+}
+
+// Four bounded regressions for the independently held five-file Source V1.
+// All production authority remains in the actual existing owner/Store fixture above.
+@MainActor private enum ManagerRegressionFailureCustody {
+  static var unclosedCandidate: NativeLanguageManagerController?
+}
+
+@MainActor private final class ManagerCandidateCloseObservation {
+  let fixture: ApplicationCatalogFixture
+  let installed: NativeLanguageManagerController
+  weak var candidate: NativeLanguageManagerController?
+  var retirementCalls = 0
+  var nativeCloseCalls = 0
+  init(_ fixture: ApplicationCatalogFixture, installed: NativeLanguageManagerController) {
+    self.fixture = fixture
+    self.installed = installed
+  }
+  func retired(_ value: NativeLanguageManagerController) {
+    retirementCalls += 1
+    XCTAssertTrue(value === candidate)
+    XCTAssertEqual(retirementCalls, 1)
+    XCTAssertTrue(fixture.app.languageManagerTestFacts.controller === installed)
+  }
+  func nativeClosed() {
+    nativeCloseCalls += 1
+    XCTAssertEqual(nativeCloseCalls, 1)
+    XCTAssertFalse(candidate?.languageManagerTestFacts.session.isAttached ?? true)
+    XCTAssertTrue(fixture.app.languageManagerTestFacts.controller === installed)
+    XCTAssertTrue(installed.languageManagerTestFacts.session.isAttached)
+  }
+}
+
+@MainActor final class LanguageManagerEditSaveRegressionTests: XCTestCase {
+  private func accepted(
+    _ value: NativeLanguageManagerEditAdmission,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> Bool {
+    guard case .accepted = value else {
+      XCTFail("Actual local admission required before regression horizon", file: file, line: line)
+      return false
+    }
+    return true
+  }
+  private func opened(_ value: NativeLanguageManagerFormAdmission)
+    -> NativeLanguageManagerFormHandle?
+  {
+    guard case .opened(let handle) = value else {
+      XCTFail("Actual session-issued form required before dependent controls")
+      return nil
+    }
+    return handle
+  }
+  private func current(_ session: NativeLanguageManagerSession)
+    -> NativeLanguageManagerRawDefinition?
+  {
+    guard case .definition(let raw)? = session.editState?.activeForm?.raw else {
+      XCTFail("Actual definition form required")
+      return nil
+    }
+    return raw
+  }
+  private func edit(_ session: NativeLanguageManagerSession, _ id: UUID)
+    -> NativeLanguageManagerFormHandle?
+  {
+    guard let state = session.editState else {
+      XCTFail("Actual workspace missing")
+      return nil
+    }
+    return opened(
+      session.beginEdit(
+        target: .definition(id), expectedDraftID: state.draftID,
+        expectedEpoch: state.rawEpoch))
+  }
+  private func ready(_ fixture: ApplicationCatalogFixture, seed64: Bool = false) async throws
+    -> (NativeLanguageManagerController, NativeLanguageManagerSession, [UUID])?
+  {
+    guard await fixture.load() else { return nil }
+    let owner = try XCTUnwrap(fixture.catalog)
+    if seed64 {
+      let publication = try XCTUnwrap(owner.state.current)
+      let ids = [CatalogTestFixture.id] + (1..<64).map { _ in UUID() }
+      XCTAssertEqual(Set(ids).count, 64)
+      guard Set(ids).count == 64 else { return nil }
+      let definitions = try ids.enumerated().map { index, id in
+        try LiteralLanguageDefinition(
+          id: id, name: "Profile \(index)", fileExtensions: [],
+          keywords: [], lineComment: nil, blockComment: nil, quotes: [],
+          highlightDecimalNumbers: false, indentation: .legacy)
+      }
+      // Core values are proposals; only this genuine request supplies receipt/generation authority.
+      let draft = try NativeLanguageCatalogDraft(
+        definitions: definitions,
+        overrides: publication.catalog.overrides)
+      guard
+        let operation = fixture.requestID(
+          owner.requestApply(
+            draft,
+            expectedPublication: .current(publication.id))), await fixture.settle(operation)
+      else { return nil }
+      let fresh = try await fixture.fresh()
+      XCTAssertEqual(fresh.snapshot.definitions, definitions)
+      XCTAssertEqual(fresh.snapshot.definitions.count, 64)
+      guard fresh.snapshot.definitions == definitions else { return nil }
+    }
+    let panel = fixture.app.languageManagerTestMake()
+    XCTAssertNotNil(panel, "Actual App manager factory precedes regression setup")
+    guard let panel else { return nil }
+    XCTAssertNotNil(panel.window)
+    guard let window = panel.window else { return nil }
+    XCTAssertFalse(window.isVisible)
+    let session = panel.languageManagerTestFacts.session
+    XCTAssertNotNil(session.editState)
+    guard let state = session.editState else { return nil }
+    XCTAssertTrue(session.languageManagerTestOwner === owner)
+    let ids = state.definitions.map(\.id)
+    if seed64 {
+      XCTAssertEqual(ids.count, 64)
+      guard ids.count == 64 else { return nil }
+    }
+    return (panel, session, ids)
+  }
+  private func sameText(
+    _ a: String, _ b: String,
+    file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(a.utf16.elementsEqual(b.utf16), file: file, line: line)
+  }
+  // Independent Test projection of declared raw fields, never the Source fits/strings helpers.
+  private func fields(_ raw: NativeLanguageManagerRawDefinition) -> [String] {
+    [
+      raw.name, raw.extensionsText, raw.keywordsText, raw.lineText, raw.blockOpening,
+      raw.blockClosing, raw.widthText,
+    ] + raw.quotes.flatMap { [$0.opening, $0.closing, $0.escapeText] }
+  }
+  private func units(_ state: NativeLanguageManagerEditState) -> Int {
+    state.definitions.flatMap { fields($0) }.reduce(0) { $0 + $1.utf16.count }
+      + state.overrides.flatMap { [$0.lineText, $0.blockOpening, $0.blockClosing, $0.widthText] }
+      .reduce(0) { $0 + $1.utf16.count }
+  }
+  private func sameDefinition(
+    _ a: NativeLanguageManagerRawDefinition,
+    _ b: NativeLanguageManagerRawDefinition
+  ) {
+    XCTAssertEqual(a.id, b.id)
+    XCTAssertEqual(fields(a).count, fields(b).count)
+    for (x, y) in zip(fields(a), fields(b)) { sameText(x, y) }
+    XCTAssertEqual(a.lineEnabled, b.lineEnabled)
+    XCTAssertEqual(a.blockEnabled, b.blockEnabled)
+    XCTAssertEqual(a.highlightDecimalNumbers, b.highlightDecimalNumbers)
+    switch (a.indentationKind, b.indentationKind) {
+    case (.legacy, .legacy), (.spaces, .spaces), (.tabs, .tabs): break
+    default: XCTFail("Raw indentation changed")
+    }
+    XCTAssertEqual(a.quotes.map(\.rowID), b.quotes.map(\.rowID))
+    for (x, y) in zip(a.quotes, b.quotes) {
+      XCTAssertEqual(x.escapeEnabled, y.escapeEnabled)
+      XCTAssertEqual(x.multiline, y.multiline)
+    }
+  }
+  private func unchanged(
+    _ before: NativeLanguageManagerEditState,
+    _ after: NativeLanguageManagerEditState
+  ) {
+    XCTAssertEqual(after.draftID, before.draftID)
+    XCTAssertEqual(after.rawEpoch, before.rawEpoch)
+    XCTAssertEqual(after.viewID, before.viewID)
+    XCTAssertEqual(after.basePublicationID, before.basePublicationID)
+    XCTAssertEqual(after.selectedTarget, before.selectedTarget)
+    XCTAssertEqual(after.isDirty, before.isDirty)
+    XCTAssertEqual(after.isStale, before.isStale)
+    XCTAssertEqual(after.saveOperationID, before.saveOperationID)
+    XCTAssertEqual(after.issues.count, before.issues.count)
+    XCTAssertEqual(after.activeForm?.handle.id, before.activeForm?.handle.id)
+    XCTAssertTrue(after.activeForm?.handle === before.activeForm?.handle)
+    XCTAssertEqual(after.definitions.map(\.id), before.definitions.map(\.id))
+    guard after.definitions.map(\.id) == before.definitions.map(\.id) else { return }
+    for (x, y) in zip(after.definitions, before.definitions) { sameDefinition(x, y) }
+    XCTAssertEqual(after.overrides.map(\.language), before.overrides.map(\.language))
+    for (x, y) in zip(after.overrides, before.overrides) {
+      switch (x.lineKind, y.lineKind) {
+      case (.inherit, .inherit), (.disabled, .disabled), (.literal, .literal): break
+      default: XCTFail("Raw override line policy changed")
+      }
+      switch (x.blockKind, y.blockKind) {
+      case (.inherit, .inherit), (.disabled, .disabled), (.literal, .literal): break
+      default: XCTFail("Raw override block policy changed")
+      }
+      switch (x.indentationKind, y.indentationKind) {
+      case (.legacy, .legacy), (.spaces, .spaces), (.tabs, .tabs): break
+      default: XCTFail("Raw override indentation changed")
+      }
+      for (a, b) in zip(
+        [x.lineText, x.blockOpening, x.blockClosing, x.widthText],
+        [y.lineText, y.blockOpening, y.blockClosing, y.widthText])
+      { sameText(a, b) }
+    }
+  }
+
+  func testRevertDeletedBaseRefusesSixtyFifthDefinitionWithoutChangingDraft() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (_, session, ids) = try await ready(f, seed64: true), let deleted = ids.first else {
+        return
+      }
+      let original = try XCTUnwrap(session.editState)
+      let beforeBytes = try f.bytes()
+      let control = try XCTUnwrap(f.control)
+      guard
+        accepted(
+          session.stageDelete(
+            profileID: deleted, expectedDraftID: original.draftID,
+            expectedEpoch: original.rawEpoch))
+      else { return }
+      XCTAssertEqual(session.editState?.definitions.count, 63)
+      guard let handle = opened(session.beginNewDefinition()), var raw = current(session) else {
+        return
+      }
+      raw.name = "Replacement staged"
+      guard accepted(session.updateForm(handle: handle, raw: .definition(raw))),
+        accepted(session.finishForm(handle: handle))
+      else { return }
+      let before = try XCTUnwrap(session.editState)
+      XCTAssertEqual(before.definitions.count, 64)
+      guard before.definitions.count == 64 else { return }
+      let calls = control.calls.map(\.kind)
+      let admission = session.revertChange(
+        target: .definition(deleted), expectedDraftID: before.draftID,
+        expectedEpoch: before.rawEpoch)
+      if case .refused(.boundExceeded) = admission {
+      } else {
+        XCTFail("Restoring a base definition cannot publish a sixty-fifth raw entry")
+      }
+      unchanged(before, try XCTUnwrap(session.editState))
+      XCTAssertEqual(control.calls.map(\.kind), calls)
+      XCTAssertEqual(try f.bytes(), beforeBytes)
+      // Correct refusal and defective V1 acceptance both leave a genuine local-reset cleanup route.
+      let cleanup = try XCTUnwrap(session.editState)
+      guard
+        accepted(
+          session.discardDraft(
+            expectedDraftID: cleanup.draftID,
+            expectedEpoch: cleanup.rawEpoch))
+      else { return }
+      XCTAssertEqual(session.editState?.definitions.count, 64)
+      XCTAssertFalse(try XCTUnwrap(session.editState).isDirty)
+    }
+  }
+
+  func testDiscardSavedFormBaselineRefusesAggregateOverflowAndKeepsCurrentForm() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (_, session, ids) = try await ready(f, seed64: true), let a = ids.first,
+        let originalHandle = edit(session, a), var submitted = current(session)
+      else { return }
+      let control = try XCTUnwrap(f.control)
+      let buffer = String(repeating: "x", count: 65536)
+      submitted.name = "Submitted A"  // A real effective change guarantees a real Store write hook.
+      submitted.lineEnabled = false
+      submitted.lineText = buffer
+      guard accepted(session.updateForm(handle: originalHandle, raw: .definition(submitted))) else {
+        return
+      }
+      let proposal = try XCTUnwrap(session.editState)
+      // Safe exact boundary pair; bounded-prefix-before-split remains a Source-review obligation.
+      var oneOver = submitted
+      oneOver.lineText += "x"
+      if case .refused(.boundExceeded) = session.updateForm(
+        handle: originalHandle,
+        raw: .definition(oneOver))
+      {
+      } else {
+        XCTFail("65537-unit field must refuse without truncation")
+      }
+      unchanged(proposal, try XCTUnwrap(session.editState))
+      XCTAssertEqual(control.count(.save), 1, "Only genuine64 seed publication so far")
+      let gate = control.hold(.save)
+      defer {
+        gate.release()  // Always before outer fixture joins, including early assertion returns.
+        // Current raw is valid. Finish, rather than re-discard the potentially oversized baseline.
+        if let active = session.editState?.activeForm?.handle {
+          _ = accepted(session.finishForm(handle: active))
+        }
+      }
+      let admission = session.requestSave(
+        expectedDraftID: proposal.draftID, expectedEpoch: proposal.rawEpoch)
+      let operation: UUID?
+      if case .started(let id) = admission { operation = id } else { operation = nil }
+      XCTAssertNotNil(operation, "Actual Save admission must precede held-hook wait")
+      guard let operation else { return }
+      await fulfillment(of: [gate.entered], timeout: 4)
+      guard await f.wait("real aggregate-test Save hook", { control.count(.save) == 2 }) else {
+        return
+      }
+      var currentA = submitted
+      currentA.name = "Current A"
+      currentA.lineText = ""
+      guard accepted(session.updateForm(handle: originalHandle, raw: .definition(currentA))),
+        accepted(session.finishForm(handle: originalHandle))
+      else { return }
+      for id in ids.dropFirst().prefix(31) {
+        guard let handle = edit(session, id), var raw = current(session) else { return }
+        raw.lineEnabled = false
+        raw.lineText = buffer
+        guard accepted(session.updateForm(handle: handle, raw: .definition(raw))),
+          accepted(session.finishForm(handle: handle))
+        else { return }
+      }
+      guard let reopened = edit(session, a) else { return }
+      let admitted = try XCTUnwrap(session.editState)
+      let retainedUnits = units(admitted)
+      XCTAssertEqual(admitted.definitions.count, 64)
+      XCTAssertGreaterThan(retainedUnits, 31 * 65536)
+      XCTAssertLessThan(retainedUnits, 2_097_152)
+      XCTAssertGreaterThan(retainedUnits + 65536, 2_097_152)
+      // Settlement must advance this NEW form's baseline to genuine immutable submitted A.
+      gate.release()
+      guard await f.settle(operation) else { return }
+      let fresh = try await f.fresh()
+      XCTAssertEqual(fresh.snapshot.definitions.count, 64)
+      XCTAssertEqual(fresh.snapshot.definitions.first?.name, "Submitted A")
+      XCTAssertNil(fresh.snapshot.definitions.first?.lineComment, "Disabled raw never enters wire")
+      let before = try XCTUnwrap(session.editState)
+      XCTAssertEqual(before.activeForm?.handle.id, reopened.id)
+      XCTAssertNil(before.saveOperationID)
+      XCTAssertEqual(before.basePublicationID, f.catalog?.state.current?.id)
+      let calls = control.calls.map(\.kind)
+      let discard = session.discardFormChanges(handle: reopened)
+      if case .refused(.boundExceeded) = discard {
+      } else {
+        XCTFail("Restoring saved 64KiB form baseline must not exceed aggregate raw capacity")
+      }
+      unchanged(before, try XCTUnwrap(session.editState))
+      XCTAssertEqual(control.calls.map(\.kind), calls)
+      XCTAssertEqual(control.count(.save), 2)
+      XCTAssertEqual(control.maximum, 1)
+      // Do not ask ordinary fixture cleanup to discard the same overflowing form again.
+      if let active = session.editState?.activeForm?.handle {
+        guard accepted(session.finishForm(handle: active)) else { return }
+      }
+      let withoutForm = try XCTUnwrap(session.editState)
+      if units(withoutForm) < 2_097_152 {
+        // Correct form refusal leaves the same under-cap current A. Revert must also preflight
+        // its saved large baseline; fixing only the64-count path is insufficient.
+        let revert = session.revertChange(
+          target: .definition(a), expectedDraftID: withoutForm.draftID,
+          expectedEpoch: withoutForm.rawEpoch)
+        if case .refused(.boundExceeded) = revert {
+        } else {
+          XCTFail(
+            "Aggregate Revert must preserve newer raw instead of restoring oversized baseline")
+        }
+        unchanged(withoutForm, try XCTUnwrap(session.editState))
+        XCTAssertEqual(control.calls.map(\.kind), calls)
+      }
+      // If defectiveV1 already published overflow, this additional Revert horizon is unentered.
+      let cleanable = try XCTUnwrap(session.editState)
+      guard
+        accepted(
+          session.discardDraft(
+            expectedDraftID: cleanable.draftID,
+            expectedEpoch: cleanable.rawEpoch))
+      else { return }
+      XCTAssertFalse(try XCTUnwrap(session.editState).isDirty)
+      XCTAssertLessThan(units(try XCTUnwrap(session.editState)), 65536)
+    }
+  }
+
+  func testNativeFieldSubmissionReentryKeepsSameHandleSuccessorInControlsAndDone() async throws {
+    try await withEditableLanguageManager { f in
+      guard let (panel, session, _) = try await ready(f) else { return }
+      panel.languageManagerTestFacts.table.selectRowIndexes(
+        IndexSet(integer: 0), byExtendingSelection: false)
+      panel.languageManagerEditingTestFacts.edit.performClick(nil)
+      XCTAssertNotNil(session.editState?.activeForm)
+      XCTAssertNotNil(panel.languageManagerEditingTestFacts.editor)
+      guard let form = session.editState?.activeForm,
+        let editor = panel.languageManagerEditingTestFacts.editor
+      else { return }
+      let handle = form.handle
+      let controls = editor.languageDefinitionEditingTestFacts
+      let renderer = session.onChange
+      var successorAdmissions = 0
+      var armed = true
+      let control = try XCTUnwrap(f.control)
+      let calls = control.calls.map(\.kind)
+      defer { session.onChange = renderer }
+      session.onChange = { snapshot in
+        if armed, case .definition(var raw)? = session.editState?.activeForm?.raw,
+          raw.name.utf16.elementsEqual("Outer".utf16)
+        {
+          // Burn before synchronous successor publication, never suppress the renderer.
+          armed = false
+          raw.name = "Successor"
+          if self.accepted(session.updateForm(handle: handle, raw: .definition(raw))) {
+            successorAdmissions += 1
+          }
+        }
+        renderer?(snapshot)
+      }
+      controls.name.stringValue = "Outer"
+      editor.controlTextDidChange(
+        Notification(
+          name: NSControl.textDidChangeNotification,
+          object: controls.name))
+      XCTAssertEqual(successorAdmissions, 1)
+      XCTAssertEqual(session.editState?.activeForm?.handle.id, handle.id)
+      sameText(try XCTUnwrap(current(session)).name, "Successor")
+      sameText(controls.name.stringValue, "Successor")
+      // Ordinary Done performs real native flush. Old stale control text cannot overwrite B.
+      controls.done.performClick(nil)
+      XCTAssertNil(session.editState?.activeForm)
+      sameText(try XCTUnwrap(session.editState?.definitions.first).name, "Successor")
+      XCTAssertEqual(control.calls.map(\.kind), calls)
+      XCTAssertEqual(control.count(.save), 0)
+    }
+  }
+
+  func testUninstalledCandidateCloseRetiresOnlyItsOwnSessionAndWindow() async throws {
+    try await withEditableLanguageManager { f in
+      XCTAssertNil(
+        ManagerRegressionFailureCustody.unclosedCandidate,
+        "A prior exact candidate remains in explicit failure custody")
+      guard ManagerRegressionFailureCustody.unclosedCandidate == nil,
+        let (installed, _, _) = try await ready(f)
+      else { return }
+      let owner = try XCTUnwrap(f.catalog)
+      let control = try XCTUnwrap(f.control)
+      let calls = control.calls.map(\.kind)
+      let freshSession = NativeLanguageManagerSession(owner: owner)
+      XCTAssertNil(freshSession.snapshot)
+      let observation = ManagerCandidateCloseObservation(f, installed: installed)
+      let candidate = NativeLanguageManagerController(session: freshSession) {
+        [weak observation] value in
+        observation?.retired(value)
+      }
+      observation.candidate = candidate
+      XCTAssertNotNil(candidate.window)
+      guard let window = candidate.window else {
+        ManagerRegressionFailureCustody.unclosedCandidate = candidate
+        return
+      }
+      XCTAssertFalse(window.isVisible)
+      let token = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification,
+        object: window, queue: nil
+      ) { [weak observation] _ in
+        MainActor.assumeIsolated { observation?.nativeClosed() }
+      }
+      defer { NotificationCenter.default.removeObserver(token) }
+      candidate.close()
+      candidate.close()
+      window.close()
+      XCTAssertEqual(observation.retirementCalls, 1)
+      XCTAssertEqual(observation.nativeCloseCalls, 1)
+      XCTAssertFalse(freshSession.isAttached)
+      XCTAssertTrue(f.app.languageManagerTestFacts.controller === installed)
+      XCTAssertTrue(installed.languageManagerTestFacts.session.isAttached)
+      XCTAssertEqual(control.calls.map(\.kind), calls)
+      XCTAssertFalse(window.isVisible)
+      if observation.nativeCloseCalls != 1 || freshSession.isAttached {
+        // V1 has no legitimate close route. Retain the known hidden object, not a fake bypass.
+        ManagerRegressionFailureCustody.unclosedCandidate = candidate
+      }
+    }
+  }
+}

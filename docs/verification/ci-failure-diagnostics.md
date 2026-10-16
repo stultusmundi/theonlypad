@@ -1,6 +1,46 @@
 # Bounded CI failure diagnostics
 
-## Latest hosted helper boundary — 2026-10-16
+## Latest hosted availability limitation — 2026-10-16
+
+Hosted [run38901443160](https://github.com/stultusmundi/theonlypad/actions/runs/38901443160)
+at `285105d` still fails the original core step. The new Core diagnostic refuses
+with incomplete evidence and exit125, so it supplies no accepted Core horizon.
+The separate failure reporter retains only a started-without-terminal source-text
+candidate at FolderReplacementPreviewTests.swift:102 and coarse categories;
+these do not establish the exact failure, signal or cause. No raw hosted
+watchdog/artifact authority has been independently audited.
+
+The current no-argument command therefore adds a main-owned in-memory record of
+the attempted Python boundary. On recognized unavailability it freezes the first
+code and may add one numeric line, `availability: boundary=N`, for0..21. It means
+only the attempted preparation, execution, receipt, protocol or reporting block
+before the first refusal; it does not prove a preceding operation or child
+succeeded. No exception text, path, argv, URL, retry, input fallback or relaxed
+validation is added. Later save/render failures cannot overwrite the first code.
+Default execute results and the renderer's two unavailable/five accepted lines
+remain unchanged; only main unavailable output gains the optional third line.
+Unavailability returns125, with output still capped at512 ASCII bytes including
+the final newline. Process death and failed stdout writes cannot be promised a
+report. The existing600-second direct watchdog, strict receipt checks, source
+inverses, parser and failure custody remain unchanged.
+
+A separate four-method test file retains the entire prior15-method file.
+Baseline runs19 methods: old15 pass; four new methods fail through12 ordinary
+entries and0 errors. Two stop at absent APIs; preparation/reporting cases reach
+real refusal paths, including two renderer exceptions and an incorrect zero exit
+after unavailable rendering. The productive private selection passes19/0 in
+2.950 seconds. Root independently reviewed Source; the separate Source author
+audited execution evidence, explicitly not a second independent Source review.
+Public discovery passes52/0 in a separately retained transcript.
+
+The current actual selected local Swift test passes1/0 with42 outer/314 helper/
+25 Core records. All579 Original/580 frozen facts, both inverses and saved
+authority remain bound, with a strict natural0 receipt. Accepted output retains
+its five lines; there is no availability line. This is not a full suite, actual
+hosted code observation, compiler-artifact graph, selected signal, production
+fix, memory or application acceptance. A new hosted run is required.
+
+## Earlier hosted helper boundary — 2026-10-16
 
 Hosted run [38895105449](https://github.com/stultusmundi/theonlypad/actions/runs/38895105449)
 at `a1e29bc` repeats the preceding `893d6c6` observation and still fails core. The narrowed diagnostic succeeds: outer phase5

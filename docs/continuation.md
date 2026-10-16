@@ -1,85 +1,68 @@
 # Active integration checkpoint — 2026-10-16
 
-The development branch is confirmed remotely at `a1e29bc`; the earlier URL
-preflight checkpoint is `566f2ed`. Catalog startup/quit
-activation (`be6ec6f`), the Locate presentation correction, monitor package repair
-and the finer failure-only diagnostic are published. Routine non-force reviewed
-development pushes remain authorized; merges and releases remain separate.
+The preceding reviewed development checkpoint is confirmed remotely at `285105d`.
+Routine non-force reviewed development pushes remain authorized; merges, force
+pushes and releases remain separate.
 
-Hosted run [38895105449](https://github.com/stultusmundi/theonlypad/actions/runs/38895105449)
-at `a1e29bc` repeats the preceding `893d6c6` observation and still fails core. The narrowed diagnostic succeeds: outer phase5
-begins request11 without ending (31 records); helper stage7 is last, request11,
-with241 inner records. That marker is immediately before the original
-`builder.preview` call. Reader construction and assertion/helper entry returned;
-no unwind, preservation or error-handler marker follows. Builder body entry,
-an exact guard/accessor, selected-test signal and cause remain unknown. The
-reported owned SwiftPM exit is1. This is a source-bound closed hosted
-observation, not an independent audit of hosted raw receipts/artifacts. No
-additional production fix is inferred. The reviewed Core/Test dual projection
-now passes15 protocol checks and48 public diagnostic checks separately. Its
-actual local selected Swift test passes1/0 with42 outer/314 helper/25 Core
-records, ending at builder-left. All574 originals/575 copies and strict natural0
-receipt match; production Core/Test remain unchanged. Hosted verification of
-these new boundaries is pending. Do not nest its direct600-second watchdog.
+Editable manager draft/Save is now adopted in working source through the same
+catalog owner. It preserves exact raw input, bounded catalog/form restoration,
+stable identities, actual Save/publication correlation and newer native input.
+Dirty/invalid/open-form Close/Quit still vetoes before reservations; full
+Save/Discard/Cancel confirmation is a reviewed planning task, not implemented.
+Public menu activation, recovery/import/export, picker, document propagation and
+packaged workflows remain outstanding. The full product is unfinished.
 
-The reviewed working URL preflight rejects filesystem NUL in serialized input
-before decoded-path access, while preserving literal-percent filenames, Unicode,
-query/fragment handling and all original checks. A compiling eight-test baseline
-has three ordinary failures; the productive candidate passes eight. The formatted
-public-source full run passes1,211 unique tests with warnings as errors, including
-all eight original preview tests; all499 saved inputs still match. Formatting
-and public checks pass. Hosted run38882522572 repeats the same31-record interruption; the guard does not clear it. The helper-boundary diagnostic is implemented and locally verified; the hosted result is described above. See
-[URL preflight evidence](verification/folder-preview-url-preflight.md).
+The actual public `scripts/test-application-language-catalog.sh` passes37 hidden
+cases through eight natural0 direct watchdog stages. Independent public review
+GOa5a7b6b1 verifies214 Original/417 frozen facts,10 tails, five modules/195 objects/
+232 artifacts,49 stage facts and eight empty State directories. The earlier
+matching private37 and raw preXML37 retain separate authorities. Four new V1
+regressions genuinely fail17 ordinary assertions after the earlier33 pass; V2
+repairs capacity, candidate close and reentry. Original whole23 prefix remains
+exact. Never nest another watchdog around the maintained command.
 
-The read-only manager is adopted in working source. The maintained application
-command passes original4, startup/quit10 and manager9 hidden native tests through
-six natural zero-exit direct watchdog stages (independent actual GO c08a4d57).
-The final tail-format pure runner retake passes all13 in685.248 seconds under an
-upfront1,200-second budget; all210 frozen facts match. The preceding formatted13
-pass (GO856720f6) and both earlier600-second incomplete runs remain separate.
-Current adopted app/helper source separately passes1,211 default tests with
-warnings as errors and504 unchanged input hashes. Neighboring catalog ownership
-passes14 read and31 mutation cases. See
-[manager evidence](verification/application-language-catalog.md).
-Editing, Save, recovery/import/export, menu activation and document propagation
-remain outstanding. The ten-test editable API/inert baseline has independently reviewed ordinary RED:
-old23 pass first, then all10 new methods fail only missing workspace admission,
-with0 unexpected errors and deeper Save/departure controls unentered (GO823a9db3).
-The runtime authority is explicitly rebased to current188 origins. Productive
-draft/Save/close implementation is now in private development.
-The XML Core formatter is adopted: both the raw and reviewed formatted26-method
-component selections pass, including seven namespace methods. The actual app
-build and default suite now pass1,228 unique tests with warnings as errors;
-all575 saved input facts match. Strict formatting and public checks pass.
-See [XML Core evidence](verification/xml-markup-formatting.md). Native command,
-undo/lifecycle integration, HTML and external formatting remain outstanding.
-The private editable manager now passes37 hidden cases after four genuine
-regressions exposed capacity, candidate close and native reentry defects in V1.
-V2 and its formatted derivative have independent source review. The raw37 run
-uses the preceding188-source dependency freeze; formatted current-source
-integration and its maintained runner remain outstanding. The expanded runner
-baseline runs15 methods with13 ordinary missing-admission failures,2 generic
-passes and0 errors. Deeper new runner controls remain unentered. Productive
-runner implementation is underway; no editable manager is public yet.
-The private XML worker passes14 component tests for real Core/diff execution,
-cancellation, reentry and quit preparation within a retained owner lifetime.
-Native command, App retention, undo and zero-window quit integration remain
-outstanding; component success does not establish those behaviors.
+The matching15 pure runner contracts pass with215 exact inputs under an
+upfront1800-second budget (485.952 unittest/486.162545 owned seconds). Current
+public default tests pass1228 unique cases with warnings as errors and577 exact
+saved inputs; only the App is freshly relinked in that incremental invocation.
+A separate same-source frozen run freshly builds app/helper and passes1228,
+with575 frozen inputs and five reviewed manager overlays. These counts overlap;
+none is a desktop, helper-launch or performance result. Strict formatting and
+public checks pass. See [catalog evidence](verification/application-language-catalog.md).
 
-The local package remains `be6ec6f`, with verified ad-hoc signature, archive and
-SBOM. Focused desktop setup exits65 while enabling automation before entering
-its method. User desktop readiness remains unanswered; no permission grant is
-inferred. Historical cache-package desktop acceptance remains11 passes and one
-Locate failure across12 entered cases, with six planned cases and AXPress
-unentered. Current packaged/desktop acceptance remains outstanding.
+Hosted [run38901443160](https://github.com/stultusmundi/theonlypad/actions/runs/38901443160)
+at `285105d` still fails core. Its Core diagnostic refuses incomplete evidence125
+without an accepted Core horizon. Earlier pre-builder request11 observations
+remain historical; no exact getter, selected-test signal or cause is inferred.
+The new optional closed numeric availability record passes19 private checks and
+52 public checks, preserving all old15 bodies and every receipt/protocol guard.
+The actual local selected Swift test passes1/0 with42 outer/314 helper/25 Core
+records and579 Original/580 frozen facts. Accepted output remains five lines;
+main unavailability adds at most one numeric boundary line and stays125.
+The direct command owns its600-second watchdog. A new hosted observation is
+pending; see [CI evidence](verification/ci-failure-diagnostics.md).
 
-Next: publish the reviewed Core-boundary diagnostic and inspect its hosted
-observation; complete the editable manager maintained runner and matching
-formatted current-source37 verification; integrate the reviewed XML native
-command design after its Test-first checks.
-Continue picker/propagation, native history/storage, matching desktop acceptance
-and every other applicable BUILD requirement. The full project is unfinished;
-these checkpoints do not pause the user's implementation request.
+XML Core remains adopted and passes26 component cases. Its private process
+worker passes14 real-Core/diff/cancellation/reentry/quit-preparation tests within
+a retained owner lifetime (independent GO8d99d1ab). An integrated native Test/API
+packet is being prepared against the now-adopted exact manager App source.
+Actual XML registry/controller/undo/App cancel/zero-window quit integration,
+HTML and external formatting remain outstanding. No giant native long-line
+fixture is authorized by these tiny component results.
+
+Local package remains `be6ec6f`, with verified ad-hoc signature/archive/SBOM.
+Focused desktop setup stops65 enabling automation before its method. Desktop
+readiness remains unanswered; no privacy/security grant is inferred. Historical
+cache-package results remain11 passes/one Locate failure across12 entered cases;
+six planned cases and AXPress are unentered. Original large-line memory-pressure
+failure, broad IME/VoiceOver, performance and packaged acceptance remain open.
+
+Next: publish this reviewed manager/diagnostic checkpoint and inspect the new
+hosted availability boundary; review/run native XML Test-first baseline and
+implement the complete native command/quit flow. Review the separate manager
+departure design, then implement genuine Save/Discard/Cancel and remaining
+recovery/import/export/menu/picker/propagation. Continue every applicable BUILD
+requirement after these internal checkpoints.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 

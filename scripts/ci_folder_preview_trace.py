@@ -37,6 +37,61 @@ RECEIPT_FIELDS = set(('command pid processGroup exitObserved registrationError g
     'interruptedSignal truncated captureComplete captured failure exit seconds').split())
 
 
+class _AvailabilityProgress:
+    __slots__ = ('current', 'unavailable')
+
+    def __init__(self):
+        self.current = None
+        self.unavailable = None
+
+
+def _availability_boundary(value):
+    return type(value) is int and 0 <= value <= 21
+
+
+def _availability_fields(progress):
+    if type(progress) is not _AvailabilityProgress:
+        return None
+    try:
+        current, unavailable = progress.current, progress.unavailable
+    except AttributeError:
+        return None
+    if not ((current is None or _availability_boundary(current))
+            and (unavailable is None or _availability_boundary(unavailable))):
+        return None
+    return current, unavailable
+
+
+def _availability_enter(progress, boundary):
+    fields = _availability_fields(progress)
+    if fields is not None and _availability_boundary(boundary) and fields[1] is None:
+        progress.current = boundary
+
+
+def _availability_fail(progress):
+    fields = _availability_fields(progress)
+    if fields is not None and _availability_boundary(fields[0]) and fields[1] is None:
+        progress.unavailable = fields[0]
+
+
+def _availability_line(progress):
+    fields = _availability_fields(progress)
+    if fields is None or not (_availability_boundary(fields[0])
+                              and _availability_boundary(fields[1])):
+        return None
+    return 'availability: boundary=' + str(fields[1])
+
+
+def _availability_output(progress):
+    # Fixed literals plus one validated bounded integer; never exception or input text.
+    output = 'ci-folder-preview-trace: unavailable\nreason: incomplete-evidence'
+    line = _availability_line(progress)
+    if line is not None:
+        output += '\n' + line
+    _require(len((output + '\n').encode('ascii')) <= 512)
+    return output
+
+
 def _require(value):
     if not value:
         raise ValueError('diagnostic evidence refused')
@@ -521,27 +576,34 @@ def _load_module(run, path, name, expected):
     return module
 
 
-def execute(root, run, plan, manifest, watchdog_main):
+def execute(root, run, plan, manifest, watchdog_main, *, progress=None):
     root, run = Path(root).absolute(), Path(run).absolute()
     unavailable = dict(state='unavailable')
     try:
+        _availability_enter(progress, 6)
         verify_inputs(root, run, manifest)
+        _availability_enter(progress, 7)
         _require(plan == manifest['capture']['plan'] == make_plan(root, run))
         _require(callable(watchdog_main))
         output = run / 'stage'
         _require(not output.exists() and not output.is_symlink())
         _save(run / 'command.json', dict(command=plan['command'], timeout=600))
         command_fact = _fact(run, run / 'command.json')[0]
+        _availability_enter(progress, 8)
         verifier = _load_module(run, run / 'Tools/run_native_regressions.py',
                                 'folder_trace_verifier', VERIFIER_SHA)
         # The accepted watchdog prints its own control summary. Retain it privately
         # so the only CI output remains this diagnostic's closed three-line projection.
+        _availability_enter(progress, 9)
         with (run / 'watchdog-control.stdout.log').open('x') as control_out, \
                 (run / 'watchdog-control.stderr.log').open('x') as control_err:
             with contextlib.redirect_stdout(control_out), contextlib.redirect_stderr(control_err):
                 code = watchdog_main(['--timeout', '600', '--output', str(output), '--', *plan['command']])
+        _availability_enter(progress, 10)
         _require(_fact(run, run / 'command.json')[0] == command_fact)
+        _availability_enter(progress, 11)
         verify_inputs(root, run, manifest)
+        _availability_enter(progress, 12)
         _owned(run, output, True)
         _require({p.name for p in output.iterdir()} == {'status.json', 'stdout.log', 'stderr.log'})
         receipt_fact, raw = _fact(run, output / 'status.json', 32768)
@@ -553,18 +615,25 @@ def execute(root, run, plan, manifest, watchdog_main):
         _require(type(receipt['captured']) is dict and set(receipt['captured']) == {'stdout', 'stderr'})
         for counts in receipt['captured'].values():
             _require(type(counts) is dict and set(counts) == {'received', 'stored', 'discarded'})
+        _availability_enter(progress, 13)
         stdout_fact, stdout = _fact(run, output / 'stdout.log', 1048576)
         stderr_fact, stderr = _fact(run, output / 'stderr.log', 1048576)
+        _availability_enter(progress, 14)
         _require(verifier.receipt_success(output, plan['command'], code))
+        _availability_enter(progress, 15)
         for row in (receipt_fact, stdout_fact, stderr_fact):
             _require(_fact(run, run / row['path'])[0] == row)
         _require(_fact(run, run / 'command.json')[0] == command_fact)
+        _availability_enter(progress, 16)
         verify_inputs(root, run, manifest)
+        _availability_enter(progress, 17)
         trace = parse_trace(stdout, stderr)
+        _availability_enter(progress, 18)
         original_after = [_fact(root, root / row['path'])[0] for row in manifest['capture']['originals']]
         copy_after = [_fact(run, run / row['path'])[0] for row in manifest['capture']['copies']]
         _require(original_after == manifest['capture']['originals']
                  and copy_after == manifest['capture']['copies'])
+        _availability_enter(progress, 19)
         for row in (receipt_fact, stdout_fact, stderr_fact, command_fact):
             _require(_fact(run, run / row['path'])[0] == row)
         return dict(state='observed' if trace['records'] else 'not-observed',
@@ -574,6 +643,7 @@ def execute(root, run, plan, manifest, watchdog_main):
                                   captures=[receipt_fact, stdout_fact, stderr_fact],
                                   originalAfter=original_after, copyAfter=copy_after))
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, ImportError):
+        _availability_fail(progress)
         return unavailable
 
 
@@ -881,13 +951,17 @@ def render(result):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    progress = _AvailabilityProgress()
     try:
+        _availability_enter(progress, 0)
         validate_cli(argv)  # No files, imports or child work precede closed admission.
+        _availability_enter(progress, 1)
         os.umask(0o077)
         path = Path(__file__).absolute()
         root = path.parents[1]
         _require(path == root / LOCATION)
         _owned(root, path)
+        _availability_enter(progress, 2)
         local = root / '.local'
         if not local.exists():
             local.mkdir(mode=0o700)
@@ -896,15 +970,38 @@ def main(argv=None):
         _mkdir(local, parent)
         run = Path(tempfile.mkdtemp(prefix='run.', dir=parent))
         run.chmod(0o700)
+        _availability_enter(progress, 3)
         plan = make_plan(root, run)
+        _availability_enter(progress, 4)
         manifest = freeze(root, run, plan)
+        _availability_enter(progress, 5)
         watchdog = _load_module(run, run / 'Tools/run-owned-search-tests.py',
                                 'folder_trace_watchdog', WATCH_SHA)
-        result = execute(root, run, plan, manifest, watchdog.main)
+        result = execute(root, run, plan, manifest, watchdog.main, progress=progress)
+        _availability_enter(progress, 20)
         _save(run / 'result.json', result)
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, ImportError):
+        _availability_fail(progress)
         result = dict(state='unavailable')
-    print('\n'.join(render(result)))
+    _availability_enter(progress, 21)
+    try:
+        lines = render(result)
+        _require(type(lines) is list and all(type(line) is str for line in lines))
+        if (result.get('state') == 'unavailable'
+                or lines == ['ci-folder-preview-trace: unavailable', 'reason: incomplete-evidence']):
+            _availability_fail(progress)
+            result = dict(state='unavailable')
+            output = _availability_output(progress)
+        else:
+            _require(result.get('state') in ('observed', 'not-observed') and len(lines) == 5)
+            output = '\n'.join(lines)
+        _require(len((output + '\n').encode('ascii')) <= 512)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RuntimeError, ImportError,
+            UnicodeError):
+        _availability_fail(progress)
+        result = dict(state='unavailable')
+        output = _availability_output(progress)
+    print(output)
     return 0 if result.get('state') in ('observed', 'not-observed') else 125
 
 

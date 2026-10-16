@@ -1,8 +1,9 @@
-"""Thirteen finite pure contracts for the standalone fixed application/catalog runner.
+"""Fifteen finite pure contracts for the standalone fixed application/catalog runner.
 
 Only the synchronous child boundary is substituted. Synthetic object/bundle bytes
 are NEVER executed. No subprocess, compiler, native process, timer or real PID.
-The retained baseline is the unchanged public old14 runner/proof: new positive
+The retained baseline is the public old23/six-stage runner with only two
+support SHA literals rebased; proof/policy/functions are unchanged. New positive
 premises fail ordinarily before deep controls. Root, not this packet's author, owns actual RED/GREEN execution.
 """
 import contextlib
@@ -35,6 +36,8 @@ PROOF = load('application_catalog_proof_test_subject', HERE / 'application_langu
 OLD = 'DocumentSearchAppRoutingTests'
 NEW = 'ApplicationLanguageCatalogTests'
 MANAGER = 'LanguageManagerReadOnlyTests'
+EDIT = 'LanguageManagerEditSaveTests'
+REGRESSION = 'LanguageManagerEditSaveRegressionTests'
 METHODS = {
     OLD: (
         'testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors',
@@ -65,7 +68,27 @@ METHODS = {
         'testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules',
         'testCommittedQuitDetachesPresentationAfterActualOwnerJoin',
     ),
+    EDIT: (
+        'testNewAndEditKeepExactBoundedRawFieldsAndStableIDs',
+        'testValidationRejectsFieldAndCatalogCollisionsBeforeStoreAdmission',
+        'testDeleteAndRevertAreDraftOnlyUntilActualSave',
+        'testChildEditorNeverRetargetsSelectionOrForeignHistory',
+        'testActualSaveUsesOriginalOwnerAndCompleteFreshReader',
+        'testRefusedSaveKeepsRawBaseAndNoAdditionalProducer',
+        'testSaveCompletionPreservesNewerRawInput',
+        'testExternalPublicationMarksDirtyDraftStaleWithoutOverwrite',
+        'testDirtyAndInvalidActualCloseKeepsManagerAndChild',
+        'testDirtyQuitVetoPrecedesCatalogSearchAndNativePreparation',
+    ),
+    REGRESSION: (
+        'testRevertDeletedBaseRefusesSixtyFifthDefinitionWithoutChangingDraft',
+        'testDiscardSavedFormBaselineRefusesAggregateOverflowAndKeepsCurrentForm',
+        'testNativeFieldSubmissionReentryKeepsSameHandleSuccessorInControlsAndDone',
+        'testUninstalledCandidateCloseRetiresOnlyItsOwnSessionAndWindow',
+    ),
 }
+SELECTIONS = {'old4': OLD, 'new10': NEW, 'new9': MANAGER,
+              'editSave10': EDIT, 'regression4': REGRESSION}
 TEST_MAP = {
     'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift':
         'Package/Tests/NativeRoutingTests/DocumentSearchAppRoutingTests.swift',
@@ -81,13 +104,15 @@ TAILS = {
     'NativeApplicationDocuments.swift': ('DocumentSearchAppNativeOwnerAccess.swift',),
     'DocumentSearchPanelController.swift': ('DocumentSearchPanelAccess.swift',),
     'NativeLanguageManagerSession.swift': ('LanguageManagerSessionAccess.swift',),
-    'NativeLanguageManagerController.swift': ('LanguageManagerControllerAccess.swift',),
+    'NativeLanguageManagerController.swift': ('LanguageManagerControllerAccess.swift',
+                                             'LanguageManagerEditingAccess.swift'),
+    'NativeLanguageDefinitionEditorController.swift': ('LanguageDefinitionEditingAccess.swift',),
 }
 ROOTS = ('Sources/PadCore', 'Sources/SearchExecution', 'Sources/TheOnlyPad')
 EXCLUDED = 'Sources/TheOnlyPad/TheOnlyPadApplication.swift'
 MODULES = ('PadCore', 'SearchExecution', 'NativeRouting', 'NativeRoutingTests', 'NativeRoutingPackageTests')
-STAGES = ('toolchain', 'build', 'binpath', 'old4', 'new10', 'new9')
-BUDGETS = (30, 180, 30, 180, 180, 180)
+STAGES = ('toolchain', 'build', 'binpath', 'old4', 'new10', 'new9', 'editSave10', 'regression4')
+BUDGETS = (30, 180, 30, 180, 180, 180, 180, 180)
 OLD_TEST = 'Tests/NativeIntegration/DocumentSearchAppRoutingTests.swift'
 COMBINED = 'Tests/NativeIntegration/ApplicationLanguageCatalogIntegrationTests.swift'
 
@@ -128,6 +153,25 @@ def contract_plan(case, root, run, label):
         value = None
     if not positive_dict(case, value, label):
         return None
+    stages = [dict(name=name, timeout=seconds) for name, seconds in zip(STAGES, BUDGETS)]
+    case.assertEqual(value.get('stages'), stages,
+                     'Eight actual planned stages absent; deeper child/artifact controls UNENTERED')
+    if value.get('stages') != stages:
+        return None
+    expected = {name: {'class': owner, 'methods': list(METHODS[owner])}
+                for name, owner in SELECTIONS.items()}
+    actual = value.get('selections')
+    case.assertIsInstance(actual, dict, 'Five selection plan absent; deeper controls UNENTERED')
+    if not isinstance(actual, dict):
+        return None
+    case.assertEqual(actual, expected, 'Five fixed native rosters absent; deeper controls UNENTERED')
+    if actual != expected:
+        return None
+    expected_tails = {name: list(tails) for name, tails in TAILS.items()}
+    case.assertEqual(value.get('tailMappings'), expected_tails,
+                     'Ten readonly access tails absent; deeper controls UNENTERED')
+    if value.get('tailMappings') != expected_tails:
+        return None
     return value
 
 
@@ -137,7 +181,7 @@ def contract_roster(case, data):
     except ValueError:
         value = None
     expected = [(owner, name) for owner, names in METHODS.items() for name in names]
-    case.assertEqual(value, expected, 'Exact23 declaration admission absent; deeper controls UNENTERED')
+    case.assertEqual(value, expected, 'Exact37 declaration admission absent; deeper controls UNENTERED')
     return value if value == expected else None
 
 
@@ -156,8 +200,8 @@ def repository(root):
 
     This also works after public adoption: only ordinary repository-relative
     origins are read. The private authoring Candidate is explicitly labeled a
-    future-layout fixture; its private AppDelegate substitution is outside the
-    runner API and is never a fallback. No fake compiler acceptance is native
+    future-layout fixture; its five private formatted Source substitutions are
+    outside the runner API and are never a fallback. No fake compiler acceptance is native
     compilation or public Source adoption.
     """
     for prefix in ROOTS:
@@ -304,7 +348,10 @@ class ChildBoundary:
                                   oldResult=(self.run / 'old4-result.json').read_bytes()
                                   if (self.run / 'old4-result.json').exists() else None,
                                   newResult=(self.run / 'new10-result.json').read_bytes()
-                                  if (self.run / 'new10-result.json').exists() else None))
+                                  if (self.run / 'new10-result.json').exists() else None,
+                                  selectionResults={key: (self.run / (key + '-result.json')).read_bytes()
+                                      if (self.run / (key + '-result.json')).is_file() else None
+                                      for key in SELECTIONS}))
         code = self.failures.get(name, 0)
         stdout = b''
         if name == 'toolchain':
@@ -313,8 +360,8 @@ class ChildBoundary:
             graph(self.run, json.loads((self.run / 'sources.json').read_text()))
         elif name == 'binpath':
             stdout = (str(self.run / 'BuildProducts' / (platform.machine() + '-apple-macosx/debug')) + '\n').encode()
-        elif name in ('old4', 'new10', 'new9'):
-            selection = {'old4': OLD, 'new10': NEW, 'new9': MANAGER}[name]
+        elif name in SELECTIONS:
+            selection = SELECTIONS[name]
             stdout = success(selection).encode()
             if code:
                 # Assertions may exceed methods. Success-only parser must not invent failure credit.
@@ -343,6 +390,8 @@ class ChildBoundary:
 
 def orchestration(case, root, run, **options):
     repository(root)
+    if contract_plan(case, root, run, 'Fixed37/eight-stage positive orchestration plan') is None:
+        return None
     run.mkdir(mode=0o700)
     child = ChildBoundary(run, **options)
     with contextlib.redirect_stdout(io.StringIO()):
@@ -390,9 +439,11 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             expected = sorted(p.relative_to(root).as_posix() for prefix in ROOTS
                               for p in (root / prefix).rglob('*.swift') if p != root / EXCLUDED)
             self.assertEqual(plan.get('productionOrigins'), expected)
-            self.assertEqual(len(expected), 189, '188 frozen native production files plus one synthetic Core basename control')
+            self.assertEqual(len(expected), 192, '191 frozen native production files plus one synthetic Core basename control')
             self.assertIn('Sources/TheOnlyPad/NativeLanguageManagerSession.swift', expected)
             self.assertIn('Sources/TheOnlyPad/NativeLanguageManagerController.swift', expected)
+            self.assertIn('Sources/TheOnlyPad/NativeLanguageManagerDraft.swift', expected)
+            self.assertIn('Sources/TheOnlyPad/NativeLanguageDefinitionEditorController.swift', expected)
             self.assertIn('Sources/PadCore/TheOnlyPadApplication.swift', expected)
             self.assertNotIn(EXCLUDED, expected)
             write(root / 'Sources/PadCore/AddedCurrent.swift', '// new current source\n')
@@ -401,6 +452,16 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 return
             self.assertEqual(grown.get('productionOrigins'), sorted(expected + ['Sources/PadCore/AddedCurrent.swift']))
             self.assertFalse(any('.local/' in str(x) for x in grown.get('productionOrigins', [])))
+        for tail in ('LanguageManagerEditingAccess.swift', 'LanguageDefinitionEditingAccess.swift'):
+            with self.subTest(newTail=tail), tempfile.TemporaryDirectory() as tmp:
+                root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'
+                plan = contract_plan(self, root, run, 'Otherwise-valid new editing tail support')
+                if plan is None: return
+                path = root / 'Tests/NativeIntegration' / tail
+                write(path, path.read_bytes() + b'// actual editing access drift\n')
+                with mock.patch.object(importlib.util, 'spec_from_file_location', side_effect=AssertionError('changed access imported dependency')):
+                    with self.assertRaises(ValueError): RUNNER.build_plan(root, run)
+                self.assertFalse(run.exists(), 'Changed access must refuse before output/child creation')
 
     def testRostersAndWholeOldPrefixCannotBeChangedOrDuplicated(self):
         # A truncated combined payload, changed declaration or stale support roster must refuse.
@@ -489,7 +550,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             segments = manifest.get('tailSegments')
             self.assertIsInstance(segments, list, 'Tail ranges/inverse authority missing')
             if not isinstance(segments, list): return
-            self.assertEqual(len(segments), 8)
+            self.assertEqual(len(segments), 10)
             for target, tails in TAILS.items():
                 original = (root / 'Sources/TheOnlyPad' / target).read_bytes()
                 offset = len(original)
@@ -613,7 +674,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
 
     def testExactOld4AndNew10SuccessParserRejectsIncompleteForeignOrFailedOutput(self):
         # Parser grants success only to the exact terminal roster and final expected summary.
-        for selection in (OLD, NEW, MANAGER):
+        for selection in (OLD, NEW, MANAGER, EDIT, REGRESSION):
             text = success(selection)
             parsed = contract_success(self, text, selection)
             expected = dict(tests=len(METHODS[selection]), failures=0, className=selection)
@@ -671,7 +732,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 self.assertEqual(build[build.index(flag)+1], binpath[binpath.index(flag)+1])
             self.assertIn('-warnings-as-errors', build); self.assertIn('-warnings-as-errors', binpath)
             self.assertIn('--build-tests', build); self.assertIn('--show-bin-path', binpath)
-            self.assertEqual([r['build'] for r in child.prechild], [False, False, False, True, True, True])
+            self.assertEqual([r['build'] for r in child.prechild], [False, False, False, True, True, True, True, True])
             self.assertIsNone(child.prechild[3]['oldResult'])
             self.assertIsNotNone(child.prechild[4]['oldResult'])
             if child.prechild[4]['oldResult'] is None: return
@@ -685,11 +746,33 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             self.assertTrue((run / 'new9-result.json').is_file(), 'Actual new9 result before deeper result checks')
             if not (run / 'new9-result.json').is_file(): return
             self.assertEqual(json.loads((run / 'new9-result.json').read_text()), dict(tests=9, failures=0, className=MANAGER))
-            for index, selection in ((3, OLD), (4, NEW), (5, MANAGER)):
+            for index, selection in ((3, OLD), (4, NEW), (5, MANAGER), (6, EDIT), (7, REGRESSION)):
+                before = child.prechild[index]
+                prior = before['selectionResults']
+                self.assertIsInstance(prior, dict, 'Actual prechild parsed-result bytes required')
+                if not isinstance(prior, dict): return
+                for previous in STAGES[3:index]:
+                    saved = prior.get(previous)
+                    self.assertIsInstance(saved, bytes, 'Every prior selection must pass before later child')
+                    if not isinstance(saved, bytes): return
+                    owner = SELECTIONS[previous]
+                    self.assertEqual(json.loads(saved), dict(tests=len(METHODS[owner]), failures=0, className=owner))
+                self.assertIsNone(prior.get(STAGES[index]), 'Current selection result cannot predate its child')
                 command = child.calls[index][2]
                 self.assertEqual(command[command.index('-XCTest')+1], 'NativeRoutingTests.' + selection)
                 self.assertEqual(command[-1], child.calls[3][2][-1])
                 self.assertNotIn('--filter', command); self.assertNotIn('--skip-build', command)
+            for stage_name, owner in SELECTIONS.items():
+                path = run / (stage_name + '-result.json')
+                self.assertTrue(path.is_file(), 'All five accepted selection results required before final pass')
+                if not path.is_file(): return
+                expected = dict(tests=len(METHODS[owner]), failures=0, className=owner)
+                self.assertEqual(json.loads(path.read_bytes()), expected)
+                self.assertEqual(result.get(stage_name + 'Result'), expected)
+            self.assertEqual(sum(row['tests'] for row in result['selectionResults'].values()), 37)
+            self.assertEqual(result.get('stateDirectoryEntries'), sorted('State/' + name for name in STAGES))
+            self.assertTrue(all(not list((run / 'State' / name).iterdir()) for name in STAGES),
+                            'All eight retained State directories must be empty')
             build_record = json.loads((run / 'build-inputs.json').read_text())
             self.assertEqual([x['module'] for x in build_record.get('compiler', [])], list(MODULES))
             self.assertEqual(len({p.name.casefold() for p in (run / 'ToolSupport', run / 'BuildProducts', run / 'Stages')}), 3)
@@ -789,7 +872,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             evidence = outcome[1].get('stageEvidence')
             self.assertIsInstance(evidence, list, 'Actual adopted final-stage evidence required')
             if not isinstance(evidence, list): return
-            final_path = 'Stages/new10/status.json'
+            final_path = 'Stages/regression4/status.json'
             rows = [row for row in evidence if row.get('path') == final_path]
             self.assertEqual(len(rows), 1, 'Actual accepted final receipt fact, not manufactured authority')
             if len(rows) != 1: return
@@ -835,13 +918,30 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         combined = (CANDIDATE / COMBINED).read_bytes()
         admitted = contract_roster(self, combined)
         if admitted is None: return
-        self.assertEqual(len(admitted), 23)
+        self.assertEqual(len(admitted), 37)
         self.assertEqual(tuple(name for owner, name in admitted if owner == MANAGER), METHODS[MANAGER])
         self.assertEqual(len(METHODS[MANAGER]), 9)
         prefix = combined[:85690]
         self.assertEqual(hashlib.sha256(prefix).hexdigest(),
                          'be3c5a274524de6dd10c96246406a4b5197da31c560f2918089a84cf7a74219e')
         self.assertGreater(len(combined), len(prefix))
+        self.assertEqual(hashlib.sha256(combined[:110027]).hexdigest(),
+                         '3b288f7fe64b03ea0f710a427aad315e01794dc7dd6b7a0f1aca3366628e1d2e')
+        self.assertEqual(tuple(name for owner, name in admitted if owner == EDIT), METHODS[EDIT])
+        self.assertEqual(tuple(name for owner, name in admitted if owner == REGRESSION), METHODS[REGRESSION])
+        self.assertEqual((len(METHODS[EDIT]), len(METHODS[REGRESSION])), (10, 4))
+        for owner in (EDIT, REGRESSION):
+            needle = ('func ' + METHODS[owner][0] + '(').encode()
+            self.assertEqual(combined.count(needle), 1)
+            for mutation in ('missing', 'duplicate', 'unknown', 'wrong-class', 'old23-only'):
+                with self.subTest(owner=owner, addedMutation=mutation):
+                    if mutation == 'missing': data = combined.replace(needle, b'func omittedCase(', 1)
+                    elif mutation == 'duplicate':
+                        data = combined + ('\nextension ' + owner + ' { func ' + METHODS[owner][0] + '() {} }\n').encode()
+                    elif mutation == 'unknown': data = combined.replace(needle, b'func testForeign(', 1)
+                    elif mutation == 'wrong-class': data = combined.replace(('class ' + owner).encode(), b'class ForeignEditable', 1)
+                    else: data = combined[:110027]
+                    with self.assertRaises(ValueError): PROOF.application_methods(data)
         for mutation in ('missing', 'duplicate', 'unknown', 'wrong-class', 'old14-only'):
             with self.subTest(mutation=mutation):
                 text = combined.decode()
@@ -853,20 +953,23 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 elif mutation == 'wrong-class': text = text.replace('class ' + MANAGER, 'class ForeignManager', 1)
                 else: text = prefix.decode()
                 with self.assertRaises(ValueError): PROOF.application_methods(text.encode())
-        for mutation in ('prefix-byte', 'prefix-short', 'json-new9-method', 'json-new9-class'):
+        for mutation in ('prefix-byte', 'prefix-short', 'json-new9-method', 'json-new9-class',
+                         'old23-prefix-byte', 'json-edit-method', 'json-edit-class', 'json-regression-method', 'json-regression-class'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
                 root = repository(Path(tmp) / 'Repo'); run = Path(tmp) / 'Run'
-                plan = contract_plan(self, root, run, 'Otherwise-valid three-class support plan')
+                plan = contract_plan(self, root, run, 'Otherwise-valid five-class support plan')
                 if plan is None: return
                 if mutation.startswith('json-'):
                     path = root / 'Tests/NativeIntegration/application-language-catalog-methods.json'
                     value = json.loads(path.read_text())
-                    if mutation == 'json-new9-method': value['new9']['methods'][0] = 'testForeign'
-                    else: value['new9']['class'] = 'ForeignManager'
+                    group = 'editSave10' if mutation.startswith('json-edit-') else 'regression4' if mutation.startswith('json-regression-') else 'new9'
+                    if mutation.endswith('-method'): value[group]['methods'][0] = 'testForeign'
+                    else: value[group]['class'] = 'ForeignManager'
                     save(path, value)
                 else:
                     value = (root / COMBINED).read_bytes()
                     if mutation == 'prefix-byte': value = b'!' + value[1:]
+                    elif mutation == 'old23-prefix-byte': value = value[:110026] + b'!' + value[110027:]
                     else: value = value[:85689] + value[85690:]
                     write(root / COMBINED, value)
                 with self.assertRaises(ValueError): RUNNER.build_plan(root, run)
@@ -875,7 +978,7 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
             if outcome is None: return
-            self.assertEqual(outcome[0], 0, 'Complete six-stage positive admission before old14 stop controls')
+            self.assertEqual(outcome[0], 0, 'Complete eight-stage positive admission before old14 stop controls')
             if outcome[0] != 0: return
             self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
             if [row[0] for row in outcome[2].calls] != list(STAGES): return
@@ -893,6 +996,8 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 self.assertFalse((run / 'new9-result.json').exists())
                 self.assertNotIn('new9', result.get('selectionResults', {}))
                 self.assertNotIn('new9Result', result)
+                self.assertFalse((run / 'Stages/editSave10').exists())
+                self.assertFalse((run / 'Stages/regression4').exists())
                 self.assertIn(b'54 failures', (run / 'Stages' / failed / 'stdout.log').read_bytes())
                 self.assertEqual((run / 'State' / failed / 'retained.synthetic').read_bytes(),
                                  b'synthetic custody must survive refusal\n')
@@ -912,7 +1017,9 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
             if outcome is None: return
             code, result, child = outcome
             self.assertEqual((code, result.get('exit'), result.get('state')), (65, 65, 'NATURAL_STAGE_FAILURE'))
-            self.assertEqual([row[0] for row in child.calls], list(STAGES))
+            self.assertEqual([row[0] for row in child.calls], list(STAGES[:6]))
+            self.assertFalse((run / 'Stages/editSave10').exists())
+            self.assertFalse((run / 'Stages/regression4').exists())
             self.assertTrue(result.get('postflightVerified'))
             self.assertIn(b'54 failures', (run / 'Stages/new9/stdout.log').read_bytes(),
                           'Assertion count may exceed9; natural nonzero must stay nonzero')
@@ -964,14 +1071,107 @@ class ApplicationLanguageCatalogRunnerTests(unittest.TestCase):
                 run = Path(tmp) / 'Run'
                 outcome = orchestration(self, Path(tmp) / 'Repo', run, receipt_mutation=corrupt)
                 if outcome is None: return
-                self.assertEqual(reached, ['new9'], 'Actual fixed final boundary must be reached')
-                self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+                self.assertEqual(reached, ['new9'], 'Actual fixed third selection boundary must be reached')
+                self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES[:6]))
+                self.assertFalse((run / 'Stages/editSave10').exists())
+                self.assertFalse((run / 'Stages/regression4').exists())
                 self.assertEqual(outcome[0], 125)
                 self.assertNotEqual(outcome[1].get('state'), 'COMPLETE_PASS')
                 self.assertEqual(len(preserved), 1)
                 if len(preserved) != 1: return
                 path, data = preserved[0]
                 self.assertEqual(path.read_bytes(), data, 'Refusal cannot repair/erase captured authority or custody')
+
+
+    def testEditableAndRegressionNaturalFailuresStopLaterSelectionsWithoutInventedPass(self):
+        # A later natural failure must stay nonzero and cannot create a final37 pass.
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
+            if outcome is None: return
+            self.assertEqual((outcome[0], outcome[1].get('state')), (0, 'COMPLETE_PASS'),
+                             'Actual eight-stage success required before new failure horizons')
+            self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+        for failed, code in (('editSave10', 65), ('regression4', 1)):
+            with self.subTest(failed=failed), tempfile.TemporaryDirectory() as tmp:
+                run = Path(tmp) / 'Run'
+                outcome = orchestration(self, Path(tmp) / 'Repo', run, failures={failed: code})
+                if outcome is None: return
+                actual, result, child = outcome
+                self.assertEqual((actual, result.get('exit'), result.get('state')),
+                                 (code, code, 'NATURAL_STAGE_FAILURE'))
+                self.assertEqual([row[0] for row in child.calls], list(STAGES[:STAGES.index(failed) + 1]))
+                self.assertTrue(result.get('postflightVerified'))
+                self.assertFalse((run / (failed + '-result.json')).exists())
+                self.assertNotIn(failed + 'Result', result)
+                self.assertNotIn(failed, result.get('selectionResults', {}))
+                if failed == 'editSave10':
+                    self.assertFalse((run / 'Stages/regression4').exists())
+                    self.assertFalse((run / 'regression4-result.json').exists())
+                self.assertIn(b'54 failures', (run / 'Stages' / failed / 'stdout.log').read_bytes())
+                self.assertEqual((run / 'State' / failed / 'retained.synthetic').read_bytes(),
+                                 b'synthetic custody must survive refusal\n')
+                for prior in STAGES[3:STAGES.index(failed)]:
+                    owner = SELECTIONS[prior]
+                    self.assertEqual(result.get(prior + 'Result'),
+                                     dict(tests=len(METHODS[owner]), failures=0, className=owner))
+
+    def testFinalRegressionRefusesWrongEditableClassAndPriorEditingAuthorityDrift(self):
+        # Earlier receipts/results and final custody must survive the eighth boundary unchanged.
+        with tempfile.TemporaryDirectory() as tmp:
+            outcome = orchestration(self, Path(tmp) / 'Repo', Path(tmp) / 'Run')
+            if outcome is None: return
+            self.assertEqual((outcome[0], outcome[1].get('state')), (0, 'COMPLETE_PASS'),
+                             'Actual final regression success required before final custody controls')
+            self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES))
+        for mutation in ('wrong-editable-class', 'prior-new9-result', 'prior-edit-result',
+                         'prior-edit-capture', 'final-command-inode', 'final-receipt',
+                         'final-bundle-inode', 'final-retained-state'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                preserved = []
+                reached = []
+                def corrupt(name, output, receipt):
+                    when = 'editSave10' if mutation == 'wrong-editable-class' else 'regression4'
+                    if name != when: return
+                    reached.append(name)
+                    run = output.parents[1]
+                    if mutation == 'wrong-editable-class':
+                        path = output / 'stdout.log'
+                        data = path.read_bytes().replace(EDIT.encode(), MANAGER.encode())
+                        self.assertNotEqual(data, path.read_bytes())
+                        write(path, data)
+                        receipt['captured']['stdout'] = dict(stored=len(data), received=len(data), discarded=0)
+                    elif mutation == 'prior-new9-result':
+                        path = run / 'new9-result.json'; write(path, path.read_bytes() + b'\n')
+                    elif mutation == 'prior-edit-result':
+                        path = run / 'editSave10-result.json'; write(path, path.read_bytes() + b'\n')
+                    elif mutation == 'prior-edit-capture':
+                        path = run / 'Stages/editSave10/stderr.log'; write(path, path.read_bytes() + b'\n')
+                    elif mutation == 'final-command-inode':
+                        path = run / 'Commands/regression4.json'; replace_same_bytes(path)
+                    elif mutation == 'final-receipt':
+                        receipt['foreign'] = True
+                        path = output / 'status.json'
+                    elif mutation == 'final-bundle-inode':
+                        path = run / 'BuildProducts' / (platform.machine() + '-apple-macosx/debug/NativeRoutingPackageTests.xctest/Contents/MacOS/NativeRoutingPackageTests')
+                        replace_same_bytes(path)
+                    else:
+                        path = run / 'State/regression4/retained.synthetic'
+                        write(path, b'actual synthetic final regression custody\n')
+                    save(output / 'status.json', receipt)
+                    preserved.append((path, path.read_bytes()))
+                run = Path(tmp) / 'Run'
+                outcome = orchestration(self, Path(tmp) / 'Repo', run, receipt_mutation=corrupt)
+                if outcome is None: return
+                when = 'editSave10' if mutation == 'wrong-editable-class' else 'regression4'
+                self.assertEqual(reached, [when], 'Actual new selection boundary required')
+                self.assertEqual([row[0] for row in outcome[2].calls], list(STAGES[:STAGES.index(when) + 1]))
+                self.assertEqual(outcome[0], 125)
+                self.assertNotEqual(outcome[1].get('state'), 'COMPLETE_PASS')
+                self.assertEqual(len(preserved), 1)
+                if len(preserved) != 1: return
+                path, data = preserved[0]
+                self.assertEqual(path.read_bytes(), data, 'Refusal cannot repair/delete actual failed evidence or custody')
+                if when == 'editSave10': self.assertFalse((run / 'Stages/regression4').exists())
 
 
 if __name__ == '__main__':

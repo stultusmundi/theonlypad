@@ -55,5 +55,13 @@ The guard is unchanged; see [latest diagnostic observation](ci-failure-diagnosti
 The later private Core/Test dual projection passes15 protocol checks and the
 actual selected Swift test locally (42 outer/314 helper/25 Core records).
 Public diagnostic discovery passes48 separately. Production Core and the
-original Test remain unchanged; a fresh hosted observation is still required.
+original Test remain unchanged. Hosted verification was pending at that
+checkpoint; its subsequent incomplete-evidence observation is recorded below.
 See [Core-boundary diagnostic evidence](ci-failure-diagnostics.md).
+
+Hosted run38901443160 at `285105d` still fails core, while the Core diagnostic
+refuses incomplete evidence125; no accepted Core horizon follows. Its new
+privacy-bounded availability record passes19 private protocol checks and52 public
+checks; current local selected Swift1/0 retains42/314/25 and579/580 exact file
+facts. Production Core and original Swift Test remain unchanged. New hosted
+availability-code observation is pending; see [diagnostic evidence](ci-failure-diagnostics.md).

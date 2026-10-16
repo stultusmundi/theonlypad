@@ -1,4 +1,71 @@
-# Application language catalog and read-only manager
+# Application language catalog and manager
+
+## Editable draft and Save component — 2026-10-16
+
+The current native manager edits a bounded local workspace through the same
+application catalog owner. New, Edit, Delete, Revert, Discard Form/Draft and Save
+use stable definition/form identities, exact raw fields and the existing Core
+validation. Raw input remains local until an actual accepted Save. The actual
+operation ID and publication receipt reconcile that submitted baseline while
+preserving newer input; unrelated deliveries never substitute for it.
+
+Whole-workspace limits are checked before normalization and before every
+restoration. Reentrant native field callbacks preserve a newer same-form input.
+A never-installed candidate can close only its own session/window. Dirty,
+invalid, open-form and pending-input Close/Quit requests currently veto safely
+before catalog/search/native quit reservation. Full Save/Discard/Cancel
+confirmation is planned separately; it is not implemented by this veto.
+
+Implemented sources are AppDelegate and the manager controller/session plus
+`NativeLanguageManagerDraft.swift` and
+`NativeLanguageDefinitionEditorController.swift`. There is still no public menu
+entry. Recovery/import/export presentation, full departure confirmation, picker,
+document propagation, visible workflows and packaged acceptance remain
+outstanding; D-04 is partial.
+
+The maintained command now passes37 hidden tests, retaining the entire prior23
+source prefix and adding10 editing/Save cases plus4 regressions:
+
+```sh
+scripts/test-application-language-catalog.sh
+```
+
+The exact private public-layout coordinator passed first, then the actual public
+shell entrypoint passed against adopted sources. Each uses one captured bundle
+and eight direct watchdog stages: toolchain, build, binpath, routing4,
+startup/quit10, read-only9, editing/Save10 and regression4. Each independently
+checks214 Original and417 frozen file identities,10 access tails, five modules,
+195 objects,232 artifacts and49 command/receipt/capture/result facts. All eight
+synthetic State directories are empty. Independent actual/public reviews accept
+these scopes (GO4dba303e and a5a7b6b1). Never nest another session-owning watchdog.
+
+The runner's15 pure contracts pass in485.952 unittest seconds (486.162545 owned
+seconds) under an upfront1,800-second budget with215 exact input facts. Its
+baseline has13 ordinary failures,2 generic passes and0 errors; plan-dependent
+new controls are unentered there. Productive GREEN reaches the fixed37 roster,
+new stages and refusal/custody checks. These are fake-child/compiler fixtures,
+not native execution or a performance benchmark.
+
+Four new native regressions first fail17 ordinary assertions against V1 after
+all33 earlier cases pass. V2 repairs catalog/form restoration capacity, candidate
+close and same-handle native callback reentry; all37 then pass. That raw run
+uses the preceding preXML188-source freeze. The formatted/current Core60 private
+and public37 selections above are separate later results, not relabeled raw
+runs. An earlier wrapper126 and a compiler1 attempt remain retained and earn no
+behavioral acceptance. The compiler-only shadowed optional-binding correction
+and later formatter-only tail breaks were independently reviewed.
+
+Current public app compilation/default tests pass1228 unique cases with warnings
+as errors and577 unchanged saved inputs. This incremental public run freshly
+links the App; it does not freshly rebuild or launch the helper. A separate
+matching frozen full run freshly compiles/links app and helper and passes1228,
+with575 frozen facts,571 public originals and five exact reviewed overlays.
+Counts overlap and are not added together. Strict recursive formatting and
+public checks pass. Local package remains `be6ec6f`; no new desktop, additional
+platform, memory/performance, release or complete-manager acceptance follows.
+
+The read-only records below describe earlier byte-bound checkpoints; their
+editing-outstanding notes are superseded only by this partial component.
 
 ## Read-only manager checkpoint — 2026-10-16
 

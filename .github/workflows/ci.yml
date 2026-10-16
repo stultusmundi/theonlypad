@@ -43,7 +43,7 @@ jobs:
           scripts/test-native-application-searches.sh
       - name: Native language catalog ownership
         run: scripts/test-native-language-catalog.sh
-      - name: Application language catalog startup and quit
+      - name: Application language catalog and manager
         run: scripts/test-application-language-catalog.sh
       - name: Native document storage snapshots
         run: scripts/test-document-text-storage.sh

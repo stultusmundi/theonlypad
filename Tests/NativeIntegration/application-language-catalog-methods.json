@@ -36,5 +36,29 @@
       "testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules",
       "testCommittedQuitDetachesPresentationAfterActualOwnerJoin"
     ]
+  },
+  "editSave10": {
+    "class": "LanguageManagerEditSaveTests",
+    "methods": [
+      "testNewAndEditKeepExactBoundedRawFieldsAndStableIDs",
+      "testValidationRejectsFieldAndCatalogCollisionsBeforeStoreAdmission",
+      "testDeleteAndRevertAreDraftOnlyUntilActualSave",
+      "testChildEditorNeverRetargetsSelectionOrForeignHistory",
+      "testActualSaveUsesOriginalOwnerAndCompleteFreshReader",
+      "testRefusedSaveKeepsRawBaseAndNoAdditionalProducer",
+      "testSaveCompletionPreservesNewerRawInput",
+      "testExternalPublicationMarksDirtyDraftStaleWithoutOverwrite",
+      "testDirtyAndInvalidActualCloseKeepsManagerAndChild",
+      "testDirtyQuitVetoPrecedesCatalogSearchAndNativePreparation"
+    ]
+  },
+  "regression4": {
+    "class": "LanguageManagerEditSaveRegressionTests",
+    "methods": [
+      "testRevertDeletedBaseRefusesSixtyFifthDefinitionWithoutChangingDraft",
+      "testDiscardSavedFormBaselineRefusesAggregateOverflowAndKeepsCurrentForm",
+      "testNativeFieldSubmissionReentryKeepsSameHandleSuccessorInControlsAndDone",
+      "testUninstalledCandidateCloseRetiresOnlyItsOwnSessionAndWindow"
+    ]
   }
 }

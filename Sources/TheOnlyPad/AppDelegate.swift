@@ -202,6 +202,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       controller.close()
       return nil
     }
+    // Construction may also have closed this exact candidate without creating a successor.
+    // Install its monotonic presentation lifetime before assigning either App slot.
+    guard controller.installPresentation(for: session) else {
+      controller.close()
+      return nil
+    }
     languageManagerController = controller
     languageManagerSession = session
     let state = owner.state
@@ -674,11 +680,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !preparingQuit, documentSearchTerminationAttempt == nil else { return .terminateLater }
-    movePresentationGeneration = UUID()
+    let manager = languageManagerController
+    let managerSession = languageManagerSession
+    let managerFrame = manager?.departureFrame
+    if let manager {
+      let admitted = manager.flushForDeparture()
+      // Native resignation can install a genuine nested attempt. Never replace its custody.
+      guard !preparingQuit, documentSearchTerminationAttempt == nil else { return .terminateLater }
+      guard admitted, languageManagerController === manager,
+        languageManagerSession === managerSession,
+        manager.departureFrame == managerFrame, manager.canDepart
+      else {
+        manager.explainDepartureVeto()
+        guard !preparingQuit, documentSearchTerminationAttempt == nil else {
+          return .terminateLater
+        }
+        return .terminateCancel
+      }
+    }
     guard shortcutController?.canQuit != false else {
       shortcutController?.explainQuitVeto()
+      guard !preparingQuit, documentSearchTerminationAttempt == nil else { return .terminateLater }
       return .terminateCancel
     }
+    guard !preparingQuit, documentSearchTerminationAttempt == nil else { return .terminateLater }
+    guard languageManagerController === manager, languageManagerSession === managerSession,
+      manager?.departureFrame == managerFrame, manager?.canDepart != false
+    else { return .terminateCancel }
+    movePresentationGeneration = UUID()
     let originalEditors = editors
     let attempt = DocumentSearchTerminationAttempt()
     documentSearchTerminationAttempt = attempt
@@ -771,15 +800,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       }
       // Commit: neither catalog retirement nor the permanent external drain can be rolled back.
       let originalManager = languageManagerController
+      let originalManagerSession = languageManagerSession
       await invalidateLanguageCatalogAndWait(catalogPreparation)
       guard ownsDocumentSearchTermination(attempt) else { return }
       if case .reserved(let owner, _) = catalogPreparation, languageCatalogOwner === owner {
         languageCatalogState = owner.state
       }
-      if let originalManager {
-        retireLanguageManager(originalManager)
-        guard ownsDocumentSearchTermination(attempt) else { return }
-        originalManager.close()
+      if let originalManager, let originalManagerSession {
+        commitLanguageManagerRetirement(
+          originalManager, session: originalManagerSession,
+          attempt: attempt, joined: catalogPreparation)
         guard ownsDocumentSearchTermination(attempt) else { return }
       }
       await cancelExternalCommands()
@@ -791,6 +821,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard ownsDocumentSearchTermination(attempt) else { return }
       refuseDocumentSearchTermination(attempt, error: error)
     }
+  }
+
+  /// Called only after the actual invalidation/join above returned in this commit frame.
+  private func commitLanguageManagerRetirement(
+    _ original: NativeLanguageManagerController, session: NativeLanguageManagerSession,
+    attempt: DocumentSearchTerminationAttempt, joined preparation: LanguageCatalogQuitPreparation
+  ) {
+    guard ownsDocumentSearchTermination(attempt), attempt.nativeReceipt != nil,
+      languageManagerController === original, languageManagerSession === session,
+      let decision = attempt.searchDecision
+    else { return }
+    switch decision {
+    case .noSearchOwner, .terminal(_, _, _, .settled): break
+    case .terminal(_, _, _, .unsettled), .admissionRefused(_): return
+    }
+    // A manager can exist only for the same actual catalog whose invalidation was joined.
+    guard case .reserved(let owner, let quitID) = preparation,
+      case .reserved(let actualOwner, let actualQuitID)? = attempt.catalogPreparation,
+      actualOwner === owner, actualQuitID == quitID, languageCatalogOwner === owner,
+      case .invalidated = owner.state.lifetime, owner.mutationState.activeOperation == nil,
+      session.isAttached
+    else { return }
+    let receipt = LanguageManagerCommittedRetirement(controller: original, session: session)
+    // Clear the exact App slot before detach/capture destruction and native notifications.
+    languageManagerController = nil
+    languageManagerSession = nil
+    languageManagerDeliveryID = nil
+    session.detach()
+    guard ownsDocumentSearchTermination(attempt) else { return }
+    // The receipt binds the retained originals, independent of the now-empty App slot.
+    original.closeAfterCommittedRetirement(receipt)
   }
 
   private func refuseDocumentSearchTermination(
@@ -1367,5 +1428,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     if !shortcutRegistryReady { withdrawShortcutEquivalents(main) }
     NSApp.mainMenu = main
     publishedCommandKeys = nextCommandKeys
+  }
+}
+
+// Presentation-only, exact-bound, one-use authority minted by the real App commit above.
+@MainActor final class LanguageManagerCommittedRetirement {
+  private let controller: NativeLanguageManagerController
+  private let session: NativeLanguageManagerSession
+  private var consumed = false
+  fileprivate init(
+    controller: NativeLanguageManagerController, session: NativeLanguageManagerSession
+  ) {
+    self.controller = controller
+    self.session = session
+  }
+  func consume(
+    for controller: NativeLanguageManagerController, session: NativeLanguageManagerSession
+  ) -> Bool {
+    guard !consumed, self.controller === controller, self.session === session else { return false }
+    consumed = true
+    return true
   }
 }

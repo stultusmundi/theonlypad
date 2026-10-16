@@ -38,6 +38,24 @@ APPLICATION_METHODS={
     'testApplicationVetoKeepsManagerAndOriginalCatalogReservationRules',
     'testCommittedQuitDetachesPresentationAfterActualOwnerJoin',
 ),
+ 'LanguageManagerEditSaveTests': (
+    'testNewAndEditKeepExactBoundedRawFieldsAndStableIDs',
+    'testValidationRejectsFieldAndCatalogCollisionsBeforeStoreAdmission',
+    'testDeleteAndRevertAreDraftOnlyUntilActualSave',
+    'testChildEditorNeverRetargetsSelectionOrForeignHistory',
+    'testActualSaveUsesOriginalOwnerAndCompleteFreshReader',
+    'testRefusedSaveKeepsRawBaseAndNoAdditionalProducer',
+    'testSaveCompletionPreservesNewerRawInput',
+    'testExternalPublicationMarksDirtyDraftStaleWithoutOverwrite',
+    'testDirtyAndInvalidActualCloseKeepsManagerAndChild',
+    'testDirtyQuitVetoPrecedesCatalogSearchAndNativePreparation',
+),
+ 'LanguageManagerEditSaveRegressionTests': (
+    'testRevertDeletedBaseRefusesSixtyFifthDefinitionWithoutChangingDraft',
+    'testDiscardSavedFormBaselineRefusesAggregateOverflowAndKeepsCurrentForm',
+    'testNativeFieldSubmissionReentryKeepsSameHandleSuccessorInControlsAndDone',
+    'testUninstalledCandidateCloseRetiresOnlyItsOwnSessionAndWindow',
+),
 }
 APPLICATION_CLASSES=tuple(APPLICATION_METHODS)
 
@@ -214,7 +232,7 @@ def verify_native_build(run,record,expected_record_hash):
 
 
 def application_methods(data):
-    """Exact fixed three-class/twenty-three-method fixture census; not a general Swift parser."""
+    """Exact fixed five-class/thirty-seven-method fixture census; not a general Swift parser."""
     owner=None;classes=[];methods=[]
     for match in re.finditer(r'\bclass\s+(\w+)\s*:\s*XCTestCase\b|\bfunc\s+(test\w+)\s*\(',data.decode()):
         if match.group(1):
