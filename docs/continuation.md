@@ -1,6 +1,7 @@
 # Active integration checkpoint — 2026-10-16
 
-The preceding reviewed development checkpoint is confirmed remotely at `2584f66`.
+The reviewed development branch is confirmed remotely at `71dd5e5`; the
+editable manager Source checkpoint remains `2584f66`.
 Routine non-force reviewed development pushes remain authorized; merges, force
 pushes and releases remain separate.
 
@@ -9,13 +10,20 @@ catalog owner. It preserves exact raw input, bounded catalog/form restoration,
 stable identities, actual Save/publication correlation and newer native input.
 Dirty/invalid/open-form Close/Quit still vetoes before reservations; full
 Save/Discard/Cancel confirmation has a reviewed design, not implementation.
-Exact monitor rollback and owner-task joining are separate Test-first
-prerequisites. Root observed the monitor9 baseline:8 ordinary missing-effect
-failures and1 existing-nil negative pass; deeper token/callback/service checks
-are unentered in that baseline. The reviewed private monitor Source now
-passes all9 component tests with independent execution review; legacy and application
-integration remain outstanding. Neither prerequisite nor the departure flow has been adopted into
-the application.
+Exact monitor rollback and owner-task joining remain private prerequisites.
+The monitor Source passes9 component tests and the unchanged132-line legacy
+harness passes26 checks, including real-service delivery; independent actual reviews accept both.
+The formatted exact-task owner Source passes51 Foundation tests (original45 plus
+six settlement cases), with independent review GO401d2f0b. Callback-in-progress
+and owner-cycle guarantees remain separately qualified Source reasoning. The
+candidate maintained command also passes51 through five direct-watchdog stages,
+75 Original/151 frozen facts, four modules/108 artifacts; Root verified this
+separate invocation. Its17 pure contracts pass, including missing/foreign/
+duplicate settlement identities and36/38 count refusals. These invocations overlap;
+never add them. Neither prerequisite has been adopted into the application.
+Local parent/child departure has17 additive reviewed Tests and inert APIs; its
+native baseline is being prepared. Default sheets, App quit and productive
+local departure behavior remain unimplemented.
 Public menu activation, recovery/import/export, picker, document propagation and
 packaged workflows remain outstanding. The full product is unfinished.
 
@@ -37,31 +45,38 @@ with575 frozen inputs and five reviewed manager overlays. These counts overlap;
 none is a desktop, helper-launch or performance result. Strict formatting and
 public checks pass. See [catalog evidence](verification/application-language-catalog.md).
 
-Hosted [run38907406926](https://github.com/stultusmundi/theonlypad/actions/runs/38907406926)
-at `2584f66` still fails core. Its diagnostic refuses125 at attempted Python
-parser boundary17, not an accepted Core/PATH horizon or identified cause. The
-new first-refusal group observation preserves every existing parser/receipt
-predicate and extends only the third unavailable line with a bounded numeric
-group. Actual focused22 pass after6 ordinary baseline entries; public55 and
-selected Swift1 also pass. Selected evidence retains42/314/25 records,
-580 Original/581 frozen facts and strict natural0 custody. Group7 remains
-static-only; no production Core/original Swift Test patch or hosted fix is
-claimed. The command owns its600-second watchdog; never nest another around it.
+Hosted [run38916819487](https://github.com/stultusmundi/theonlypad/actions/runs/38916819487)
+at `71dd5e5` still fails core. The latest diagnostic refuses125 at
+`boundary=17 parser=4`: a recognized Core marker is rejected by the existing
+transition predicate. No rejected state/stage pair, accepted Core/PATH horizon,
+child success or production cause is exposed. The artifacts API actually
+returns zero artifacts. Earlier38907406926 exposed only boundary17. Public55
+Python checks and a separate selected Swift1 pass with42/314/25 records and
+580 Original/581 frozen facts remain valid local evidence, not hosted success.
+A narrowly reviewed closed state/incoming observation has four prospective
+additive Test bodies, not yet executed or implemented. Original grammar,
+Core/Swift Test and all55 existing contracts stay unchanged. The actual selected
+diagnostic owns its600-second watchdog; never nest another around it.
 See [CI evidence](verification/ci-failure-diagnostics.md).
 
-XML Core remains adopted and passes26 component cases. Its private process
-worker passes14 real-Core/diff/cancellation/reentry/quit-preparation tests within
-a retained owner lifetime (independent GO8d99d1ab). The integrated24-case native Test/API
-packet has passed independent review. Its first actual attempt stops at a
-Sendable capture compiler error before entering any method. A separately
-reviewed compiler-only correction then builds cleanly, but the first selected
-native test reports one unexpected error. The parent result is incomplete125,
-postflight remains verified and later classes are unentered. No valid behavioral
-RED, formatting assertion horizon, production cause or native implementation
-follows from either failed attempt.
-Actual XML registry/controller/undo/App cancel/zero-window quit integration,
-HTML and external formatting remain outstanding. No giant native long-line
-fixture is authorized by these tiny component results.
+XML Core passes26 adopted component cases; the private process worker passes14
+within a retained owner lifetime. Earlier compiler/first-test setup failures stay
+retained. A numeric trace locates the setup throw at bookmark construction;
+external InvalidTransition rendering origin is not attributed. A separately
+reviewed tiny untraced fixture uses genuine line starts16→17→16 and preserves
+Unicode/macro/undo assertions. Its default-first repeat fails one ordinary
+missing-lease assertion; native15 plus managed2 complete17 unique ordinary
+failed methods/28 assertions/0 unexpected. Deep formatting assertions remain
+unentered. Different actual review GOf1dd3b70 permits a two-file editor adapter
+slice, now being implemented privately. This is no pass or full24 baseline.
+The App7 selection has7 unexpected errors: the first method reaches a managed
+close completion refusal after clean-state checks, then six bodies are blocked
+by retained exact fixture custody. Dirty input is not established as its cause.
+The whole run remains incomplete125; all931 Original/1136 frozen facts,236
+artifacts and seven strict receipts verify. App productive Source stays blocked
+pending separate investigation. Tests are preserved; App cancellation/zero-window
+quit, native acceptance, HTML and external formatting remain outstanding. No giant
+native long-line fixture is authorized by these tiny results.
 
 Local package remains `be6ec6f`, with verified ad-hoc signature/archive/SBOM.
 Focused desktop setup stops65 enabling automation before its method. Desktop
@@ -70,12 +85,15 @@ cache-package results remain11 passes/one Locate failure across12 entered cases;
 six planned cases and AXPress are unentered. Original large-line memory-pressure
 failure, broad IME/VoiceOver, performance and packaged acceptance remain open.
 
-Next: keep the reviewed parser-refusal diagnostic current and inspect its next
-hosted group. Investigate the unexpected first XML test before accepting a
-behavioral baseline or writing its native adapter. Complete exact monitor
-rollback/existing-task joining and genuine manager Save/Discard/Cancel through
-the same catalog owner, then recovery/import/export/menu/picker/propagation.
-Continue every applicable BUILD requirement after these internal checkpoints.
+Next: complete and review the native17 XML editor adapter, then verify that
+independent component; investigate the separate App close refusal before App
+Source. Run the reviewed local17 departure baseline, implement its Save/Discard/
+Cancel behavior, and integrate the genuine monitor/exact-task prerequisites
+through the same owner. Keep the maintained51 command and matching App/native
+regressions current before public adoption. Complete the reviewed closed CI
+state/incoming diagnostic without weakening grammar, then inspect the next
+hosted observation. Continue recovery/import/export/menu/picker/propagation and
+every applicable BUILD requirement after these internal checkpoints.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 
