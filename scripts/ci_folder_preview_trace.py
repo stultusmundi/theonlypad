@@ -12,6 +12,10 @@ import sys
 import tempfile
 
 TARGET = 'Tests/PadCoreTests/FolderReplacementPreviewTests.swift'
+CORE_TARGET = 'Sources/PadCore/FolderReplacementPreview.swift'
+CORE_SHA256 = '0c10c4653524bd032d649b5eb611b5253ab2b2c5fecf32166e24d705c76fd3bc'
+CORE_TAG = b'CI_FOLDER_PREVIEW_CORE'
+CORE_RECORD_LIMIT = 64
 LOCATION = 'scripts/ci_folder_preview_trace.py'
 SELECTOR = r'^PadCoreTests\.FolderReplacementPreviewTests/testAdmissionAndBudgetsRejectBeforeExpensiveWork$'
 WATCH = 'scripts/run-owned-search-tests.py'
@@ -126,7 +130,7 @@ def _path_marker(stage, indent):
             + str(stage).encode('ascii') + b'\\n".utf8))\n')
 
 
-def project_test(original):
+def _project_path_test(original):
     _require(type(original) is bytes and TAG not in original and PATH_TAG not in original)
     # Bind the whole selected source, including both helpers and every callsite.
     # An inverse alone cannot authorize projecting a changed helper or body.
@@ -306,7 +310,7 @@ def _trace_report(outer_count, path_count, stage, ordinal):
                 pathHorizon=path_horizon)
 
 
-def parse_trace(stdout, stderr):
+def _parse_path_trace(stdout, stderr):
     _require(type(stdout) is bytes and type(stderr) is bytes)
     grammar = _trace_grammar()
     cursor = outer_count = path_count = 0
@@ -396,7 +400,7 @@ def _inventory(root):
     for relative in ('Package.swift', 'scripts/swift.sh', WATCH, VERIFIER, LOCATION):
         _owned(root, root / relative)
         files.add(relative)
-    _require(TARGET in files)
+    _require(TARGET in files and CORE_TARGET in files)
     return sorted(files), sorted(excluded)
 
 
@@ -434,11 +438,11 @@ def freeze(root, run, plan):
         buffers[relative] = data
         originals.append(row)
     _require(originals == [_fact(root, root / row['path'])[0] for row in originals])
-    projected = project_test(buffers[TARGET])
+    projected = {TARGET: project_test(buffers[TARGET]), CORE_TARGET: project_core(buffers[CORE_TARGET])}
     for relative, destination in [*plan['inputs'].items(), *plan['tools'].items()]:
         target = run / destination
         _mkdir(run, target.parent)
-        data = projected if relative == TARGET else buffers[relative]
+        data = projected.get(relative, buffers[relative])
         with target.open('xb') as stream:
             stream.write(data)
         target.chmod(stat.S_IMODE((root / relative).lstat().st_mode))
@@ -451,8 +455,7 @@ def freeze(root, run, plan):
     captured = dict(plan=json.loads(json.dumps(plan)), originals=originals, copies=copies,
         originalDirectories=[_directory(root, p) for p in sorted(directories)],
         ownedDirectories=[_directory(run, run / name) for name in ('.', 'Project', 'Tools', 'State', 'Temporary')],
-        projection=dict(target=TARGET, originalSHA256=hashlib.sha256(buffers[TARGET]).hexdigest(),
-                        projectedSHA256=hashlib.sha256(projected).hexdigest(), records=len(SEQUENCE)))
+        projection=_projection_metadata(buffers, projected))
     _save(run / 'inputs.json', captured)
     manifest = dict(capture=captured, authority=_fact(run, run / 'inputs.json')[0])
     verify_inputs(root, run, manifest)
@@ -477,8 +480,10 @@ def verify_inputs(root, run, manifest):
     for row in captured['copies']:
         current, raw = _fact(run, run / row['path'])
         _require(current == row)
+    projected = {TARGET: project_test(originals[TARGET]), CORE_TARGET: project_core(originals[CORE_TARGET])}
+    _require(captured['projection'] == _projection_metadata(originals, projected))
     for relative, destination in [*captured['plan']['inputs'].items(), *captured['plan']['tools'].items()]:
-        expected = project_test(originals[relative]) if relative == TARGET else originals[relative]
+        expected = projected.get(relative, originals[relative])
         _require(_fact(run, run / destination)[1] == expected)
     # Check complete frozen input trees, including unknown files and symlink directories.
     expected = {row['path'] for row in captured['copies']}
@@ -572,7 +577,7 @@ def execute(root, run, plan, manifest, watchdog_main):
         return unavailable
 
 
-def render(result):
+def _render_path(result):
     unavailable = ['ci-folder-preview-trace: unavailable', 'reason: incomplete-evidence']
     try:
         state, trace = result['state'], result['trace']
@@ -596,6 +601,282 @@ def render(result):
         return lines
     except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
         return unavailable
+
+
+def _core_marker(stage, indent=4):
+    pad = b' ' * indent
+    return (pad + b'if diagnosticTrace {\n' + pad + b'  FileHandle.standardError.write(Data("'
+            + CORE_TAG + b' s=' + str(stage).encode('ascii') + b'\\n".utf8))\n' + pad + b'}\n')
+
+
+def project_core(original):
+    """Instrument only the SHA-bound admissions; retain a complete reversible edit log."""
+    _require(type(original) is bytes and hashlib.sha256(original).hexdigest() == CORE_SHA256)
+    projected, edits = original, []
+
+    def replace(old, new):
+        nonlocal projected
+        _require(projected.count(old) == 1 and old != new)
+        projected = projected.replace(old, new, 1)
+        edits.append((old, new))
+
+    old = (b'  private let reader: any FolderReplacementSnapshotReading\n\n'
+           b'  public init() { reader = FolderReplacementDefaultSnapshotReader() }\n'
+           b'  init(reader: any FolderReplacementSnapshotReading) { self.reader = reader }\n')
+    new = (b'  private let reader: any FolderReplacementSnapshotReading\n'
+           b'  private let diagnosticTrace: Bool\n\n'
+           b'  public init() { reader = FolderReplacementDefaultSnapshotReader(); diagnosticTrace = false }\n'
+           b'  init(reader: any FolderReplacementSnapshotReading, diagnosticTrace: Bool = false) { '
+           b'self.reader = reader; self.diagnosticTrace = diagnosticTrace }\n')
+    replace(old, new)
+    terms = [b'case .literal = query.mode', b'!query.pattern.isEmpty',
+             b'query.pattern.utf8.count <= limits.maxPatternUTF8Bytes',
+             b'replacement.utf8.count <= limits.maxReplacementUTF8Bytes',
+             b'selectedURLs.count <= limits.maxFiles',
+             b'FolderReplacementPathPolicy.valid(root, requiresDirectory: true)',
+             b'selectedURLs.allSatisfy(validURL)']
+    old = b'    guard ' + b',\n      '.join(terms) + b'\n    else { throw FolderReplacementPreviewError.invalidRequest }\n'
+    traced = terms.copy()
+    traced[5] = b'FolderReplacementPathPolicy.valid(root, requiresDirectory: true, diagnosticTrace: diagnosticTrace)'
+    guards = [b'    guard ' + term + b' else { throw FolderReplacementPreviewError.invalidRequest }\n'
+              for term in traced]
+    replace(old, b''.join(guards[:5]) + _core_marker(2) + _core_marker(3)
+            + guards[5] + _core_marker(4) + _core_marker(5) + guards[6]
+            + _core_marker(6) + _core_marker(7))
+    validate = b'    try validate(limits)\n'
+    replace(validate, _core_marker(0) + b'    defer {\n' + _core_marker(9, 6)
+            + b'    }\n' + validate + _core_marker(1))
+    replace(b'  private func validURL(_ url: URL) -> Bool { FolderReplacementPathPolicy.valid(url) }',
+            b'  private func validURL(_ url: URL) -> Bool { FolderReplacementPathPolicy.valid(url, diagnosticTrace: diagnosticTrace) }')
+    replace(b'  private static func serializedPathContainsNUL(_ url: URL) -> Bool {',
+            b'  private static func serializedPathContainsNUL(\n'
+            b'    _ url: URL, diagnosticTrace: Bool = false\n  ) -> Bool {')
+    replace(b'    for byte in url.absoluteString.utf8 {',
+            _core_marker(20) + b'    let absoluteString = url.absoluteString\n'
+            + _core_marker(21) + b'    for byte in absoluteString.utf8 {')
+    serialized = (b'      if byte == 0 || (beforePrevious == 0x25 && previous == 0x30 && byte == 0x30) {\n'
+                  b'        return true\n')
+    replace(serialized, serialized.replace(b'        return true\n', _core_marker(22, 8) + b'        return true\n'))
+    replace(b'      previous = byte\n    }\n    return false\n',
+            b'      previous = byte\n    }\n' + _core_marker(23) + b'    return false\n')
+    old = (b'    _ url: URL, requiresDirectory: Bool = false,\n'
+           b'    decodedPath: (URL) -> String = FolderReplacementPathPolicy.path\n'
+           b'  ) -> Bool {\n    guard !serializedPathContainsNUL(url),\n'
+           b'      url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost"\n'
+           b'    else {\n      return false\n    }\n')
+    new = (b'    _ url: URL, requiresDirectory: Bool = false,\n'
+           b'    decodedPath: (URL) -> String = FolderReplacementPathPolicy.path,\n'
+           b'    diagnosticTrace: Bool = false\n  ) -> Bool {\n'
+           + _core_marker(10) + b'    defer {\n' + _core_marker(24, 6) + b'    }\n'
+           b'    guard !serializedPathContainsNUL(url, diagnosticTrace: diagnosticTrace) else { return false }\n'
+           + _core_marker(12) + b'    guard url.isFileURL else { return false }\n'
+           + _core_marker(13) + b'    guard url.host == nil || url.host == "" || url.host == "localhost" else { return false }\n'
+           + _core_marker(14))
+    replace(old, new)
+    for old, new in [
+        (b'    let decoded = decodedPath(url)\n', b'    let decoded = decodedPath(url)\n' + _core_marker(15)),
+        (b'    // Selected regular-file inputs cannot silently shed directory-only terminal semantics.\n',
+         _core_marker(16) + b'    // Selected regular-file inputs cannot silently shed directory-only terminal semantics.\n'),
+        (b'    // A URI with conflicting decoded/actual filesystem views cannot choose between two files.\n',
+         _core_marker(17) + b'    // A URI with conflicting decoded/actual filesystem views cannot choose between two files.\n'),
+        (b'    return url.withUnsafeFileSystemRepresentation { pointer in\n',
+         b'    return url.withUnsafeFileSystemRepresentation { pointer in\n' + _core_marker(18, 6)),
+        (b'      guard let filesystem = String(validatingCString: pointer) else { return false }\n',
+         b'      guard let filesystem = String(validatingCString: pointer) else { return false }\n' + _core_marker(19, 6))]:
+        replace(old, new)
+    inverse = projected
+    for old, new in reversed(edits):
+        _require(inverse.count(new) == 1)
+        inverse = inverse.replace(new, old, 1)
+    _require(inverse == original and projected.count(CORE_TAG) == 23)
+    return projected
+
+
+def project_test(original):
+    projected = _project_path_test(original)
+    loop = b'      for (urls, query, replacement, limits) in requestCases {\n'
+    end = b'      let exact = try preview(\n'
+    _require(projected.count(loop) == projected.count(end) == 1)
+    start, stop = projected.index(loop), projected.index(end)
+    interval = projected[start:stop]
+    builder = b'builder: .init(reader: reader)'
+    _require(interval.count(builder) == 1)
+    enumerated = b'      for (ordinal, (urls, query, replacement, limits)) in requestCases.enumerated() {\n'
+    flagged = b'builder: .init(reader: reader, diagnosticTrace: ordinal == 10)'
+    modified = interval.replace(loop, enumerated, 1).replace(builder, flagged, 1)
+    inverse = modified.replace(enumerated, loop, 1).replace(flagged, builder, 1)
+    _require(inverse == interval)
+    return projected[:start] + modified + projected[stop:]
+
+
+def _projection_metadata(originals, projected):
+    return dict(target=TARGET, originalSHA256=hashlib.sha256(originals[TARGET]).hexdigest(),
+                projectedSHA256=hashlib.sha256(projected[TARGET]).hexdigest(), records=len(SEQUENCE),
+                coreTarget=CORE_TARGET, coreOriginalSHA256=hashlib.sha256(originals[CORE_TARGET]).hexdigest(),
+                coreProjectedSHA256=hashlib.sha256(projected[CORE_TARGET]).hexdigest())
+
+
+def _core_next(state):
+    """Finite observed call grammar. A successful comparison may return either Bool."""
+    phase, role, passing = state
+    fixed = {
+        'start': {0: ('entry', 'none', False)},
+        'entry': {1: ('limits', 'none', False), 9: ('end', 'none', False)},
+        'limits': {2: ('scalars', 'none', False), 9: ('end', 'none', False)},
+        'scalars': {3: ('root-call', 'none', False)},
+        'root-call': {10: ('valid', 'root', False)},
+        'root-done': {5: ('selected-call', 'none', False)},
+        'selected-call': {10: ('valid', 'selected', False)},
+        'selected-done': {7: ('admitted', 'none', False)},
+        'admitted': {9: ('end', 'none', False)}, 'end': {}}
+    if phase in fixed:
+        return fixed[phase]
+    steps = {'valid': {20: ('serialized', False)}, 'serialized': {21: ('bytes', False)},
+             'bytes': {22: ('nul', False), 23: ('clean', False)},
+             'nul': {24: ('returned', False)}, 'clean': {12: ('serialized-accepted', False)},
+             'serialized-accepted': {13: ('file-accepted', False), 24: ('returned', False)},
+             'file-accepted': {14: ('host-accepted', False), 24: ('returned', False)},
+             'host-accepted': {15: ('decoded', False)},
+             'decoded': {16: ('decoded-accepted', False), 24: ('returned', False)},
+             'decoded-accepted': {17: ('directory-accepted', False), 24: ('returned', False)},
+             'directory-accepted': {18: ('pointer', False)},
+             'pointer': {19: ('filesystem', False), 24: ('returned', False)},
+             'filesystem': {24: ('returned', True)}}
+    if phase == 'returned':
+        result = {9: ('end', 'none', False)}
+        if passing:
+            result[4 if role == 'root' else 6] = (
+                'root-done' if role == 'root' else 'selected-done', 'none', False)
+        return result
+    return {code: (next_phase, role, flag) for code, (next_phase, flag) in steps[phase].items()}
+
+
+def _core_report(state, stage, count):
+    return dict(coreStage=stage, coreRole=state[1], coreRecords=count,
+                coreHorizon=('not-entered' if count == 0 else
+                             'builder-left' if stage == 9 else 'call-entered-prefix'))
+
+
+def _core_position(trace, horizon):
+    """Bind a closed report to the canonical request-11 call interval."""
+    outer = paths = ended = 0
+    stage = ordinal = None
+    position = 'before'
+    for event in [None, *_trace_grammar()]:
+        if event is not None:
+            if event[0] == 'outer':
+                outer += 1
+            else:
+                paths += 1
+                stage, ordinal = event[1:]
+                if ordinal == 11 and stage == 7:
+                    position = 'window'
+                elif ordinal == 11 and stage == 8:
+                    position = 'after'
+                if stage == 5:
+                    ended += 1
+        missing = paths - trace['pathRecords']
+        if (0 <= missing <= 2 * ended and missing % 2 == 0
+                and trace == _trace_report(outer, trace['pathRecords'], stage, ordinal)):
+            _require((horizon == 'not-entered' and position in ('before', 'window'))
+                     or (horizon == 'call-entered-prefix' and position == 'window')
+                     or (horizon == 'builder-left' and position in ('window', 'after')))
+            return
+    raise ValueError('diagnostic evidence refused')
+
+
+def parse_trace(stdout, stderr):
+    _require(type(stdout) is bytes and type(stderr) is bytes)
+    clean = []
+    marker_stream = None
+    total = outer_count = core_count = 0
+    window = False
+    state, stage = ('start', 'none', False), -1
+    for stream, raw in (('stdout', stdout), ('stderr', stderr)):
+        kept = []
+        for line in raw.splitlines(keepends=True):
+            stripped = line.strip()
+            potential = (b'CI_FOLDER_PREVIEW_' in line
+                         or (bool(stripped) and any(tag.startswith(stripped)
+                             for tag in (TAG, PATH_TAG, CORE_TAG))))
+            if not potential:
+                kept.append(line)
+                continue
+            _require(marker_stream is None or marker_stream == stream)
+            marker_stream = stream
+            total += 1
+            _require(total <= RECORD_LIMIT)
+            core = re.fullmatch(rb'CI_FOLDER_PREVIEW_CORE s=(2[0-4]|1[023-9]|[0-79])\n', line)
+            if core is not None:
+                _require(window and core_count < CORE_RECORD_LIMIT)
+                stage = int(core[1])
+                transitions = _core_next(state)
+                _require(stage in transitions)
+                state = transitions[stage]
+                core_count += 1
+                continue
+            outer = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
+            path = re.fullmatch(rb'CI_FOLDER_PREVIEW_PATH s=(10|[0-9])\n', line)
+            _require(outer is not None or path is not None)
+            if window:
+                _require(path is not None and int(path[1]) == 8 and state[0] == 'end')
+                window = False
+            if outer is not None:
+                outer_count += 1
+            else:
+                current = SEQUENCE[outer_count - 1] if 0 < outer_count <= len(SEQUENCE) else None
+                request = (outer_count - 11) // 2 + 1 if current == (5, 0) else None
+                if request == 11 and int(path[1]) == 7:
+                    _require(core_count == 0)
+                    window = True
+            kept.append(line)
+        clean.append(b''.join(kept))
+    trace = _parse_path_trace(*clean)
+    core = _core_report(state, stage, core_count)
+    _core_position(trace, core['coreHorizon'])
+    return dict(trace, **core)
+
+
+def _validate_core_report(trace):
+    keys = {'coreStage', 'coreRole', 'coreRecords', 'coreHorizon'}
+    _require(type(trace) is dict and keys <= set(trace))
+    _require(type(trace['coreStage']) is int and type(trace['coreRecords']) is int)
+    _require(type(trace['coreRole']) is str and type(trace['coreHorizon']) is str)
+    wanted = {key: trace[key] for key in keys}
+    pending = [(('start', 'none', False), -1, 0)]
+    seen = set()
+    while pending:
+        state, stage, count = pending.pop()
+        if (state, stage, count) in seen:
+            continue
+        seen.add((state, stage, count))
+        if wanted == _core_report(state, stage, count):
+            return
+        _require(count <= 35)
+        pending.extend((next_state, code, count + 1)
+                       for code, next_state in _core_next(state).items())
+    raise ValueError('diagnostic evidence refused')
+
+
+def render(result):
+    if result.get('state') == 'unavailable':
+        return _render_path(result)
+    trace = result['trace']
+    core_keys = {'coreStage', 'coreRole', 'coreRecords', 'coreHorizon'}
+    path_keys = {'phase', 'edge', 'records', 'horizon', 'pathStage', 'requestOrdinal',
+                 'pathRecords', 'pathHorizon'}
+    _require(type(trace) is dict and set(trace) == path_keys | core_keys)
+    old = {key: trace[key] for key in path_keys}
+    _valid_trace_report(old)
+    _validate_core_report(trace)
+    _core_position(old, trace['coreHorizon'])
+    lines = _render_path(dict(result, trace=old))
+    if len(lines) == 2:
+        return lines
+    lines.insert(3, 'core: stage=' + str(trace['coreStage']) + ' role=' + trace['coreRole']
+                 + ' horizon=' + trace['coreHorizon'] + ' records=' + str(trace['coreRecords']))
+    _require(len(('\n'.join(lines) + '\n').encode('ascii')) <= 512)
+    return lines
 
 
 def main(argv=None):

@@ -2,8 +2,8 @@
 
 ## Latest hosted helper boundary — 2026-10-16
 
-Hosted run [38890331512](https://github.com/stultusmundi/theonlypad/actions/runs/38890331512)
-at `893d6c6` still fails core. The narrowed diagnostic succeeds: outer phase5
+Hosted run [38895105449](https://github.com/stultusmundi/theonlypad/actions/runs/38895105449)
+at `a1e29bc` repeats the preceding `893d6c6` observation and still fails core. The narrowed diagnostic succeeds: outer phase5
 begins request11 without ending (31 records); helper stage7 is last, request11,
 with241 inner records. That marker is immediately before the original
 `builder.preview` call. Reader construction and assertion/helper entry returned;
@@ -12,6 +12,43 @@ an exact guard/accessor, selected-test signal and cause remain unknown. The
 reported owned SwiftPM exit is1. This is a source-bound closed hosted
 observation, not an independent audit of hosted raw receipts/artifacts. No
 additional production fix is inferred. Further bounded Core diagnosis is next.
+
+## Local Core-boundary verification — 2026-10-16
+
+The same fixed command now instruments the private frozen builder as well as
+its frozen Test. Twenty-three additional literal write sites are enabled only
+for request11. Public production Core and the original Swift Test remain byte
+exact. Both whole-source hashes, exact edit inverses, saved input authority and
+current file identities are checked before and after the child. The projection
+splits the original admission expressions in their existing evaluation order;
+a local retains the existing serialized URL getter result so its return can be
+observed. These diagnostic changes affect layout and lifetime and do not prove
+that an uninstrumented hosted defect is repaired.
+
+The new contract retains all twelve prior methods and adds three Core protocol
+methods. A compiling Python baseline has fifteen ordinary missing-projection
+failures and zero errors; all deep controls are unentered at that baseline.
+The productive private selection passes15/0, and public diagnostic discovery
+passes48/0 separately. Root observed the latter tool output directly; a separate
+local raw transcript was not retained. Independent raw review covers the private
+fifteen-test result and actual Swift diagnostic. Two contradictory test literals were corrected and
+independently reviewed before productive execution; historical drafts and
+failures remain retained. No prior negative assertion was removed.
+
+The actual selected Swift test passes1/0 locally with42 outer,314 helper and25
+Core records. The final Core state is9, role none, builder-left; all outer and
+helper intervals end. All574 originals,575 frozen copies and saved authority
+match, with complete captures and a strict twenty-field natural zero-exit
+receipt. The coordinator owns its600-second watchdog; never nest another.
+This is selected local diagnostic execution, not a full-suite, hosted,
+compiler-artifact graph, signal, memory or application acceptance result.
+
+The combined parser validates all three nested protocols in one owned stream,
+with a64-record Core cap and512-record combined cap, refusing partial, foreign,
+out-of-order or split streams. Output is five closed lines and at most512 ASCII
+bytes. No raw URL, file path, error message or guessed signal is published.
+A fresh hosted run is required to observe the new Core boundaries. No production
+fix is inferred from the local pass.
 
 ## Local helper-boundary verification — 2026-10-16
 

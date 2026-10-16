@@ -47,7 +47,13 @@ only a private frozen Test projection, not this Core guard or the original Test.
 The subsequent hosted observation is recorded below; see
 [diagnostic evidence](ci-failure-diagnostics.md). No hosted cause or fix is claimed.
 
-Latest hosted run38890331512 at `893d6c6` narrows the interruption to the
+Hosted run38890331512 at `893d6c6`, repeated by run38895105449 at `a1e29bc`, narrows the interruption to the
 request11 marker immediately before the preview-builder call (31 outer/241 inner
 records). No builder-body entry, exact getter, signal or cause is established.
 The guard is unchanged; see [latest diagnostic observation](ci-failure-diagnostics.md).
+
+The later private Core/Test dual projection passes15 protocol checks and the
+actual selected Swift test locally (42 outer/314 helper/25 Core records).
+Public diagnostic discovery passes48 separately. Production Core and the
+original Test remain unchanged; a fresh hosted observation is still required.
+See [Core-boundary diagnostic evidence](ci-failure-diagnostics.md).
