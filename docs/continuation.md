@@ -1,3 +1,9 @@
+# Active diagnostic and integration checkpoint — 2026-10-15
+
+Routine non-force development-branch pushes remain authorized; merges, force pushes and releases require separate authorization. The remote development branch was read back exactly at `1b6fc56`, including catalog mutation checkpoint `ba4ff30`. Hosted run38773116543 still failed core; strict diagnostics succeeded but the cause remains unknown. A reviewed bounded event observation now passes33 synthetic diagnostic contracts privately, preserving all17 previous tests. It emits only a unique tracked source-text candidate with an explicit observation qualifier; no raw identity/message or failure cause is asserted. Separate public discovery also passes33/0 with unchanged inputs; the next hosted outcome remains unknown. See [CI verification](verification/ci-failure-diagnostics.md).
+
+Catalog startup/quit activation has a reviewed private AppDelegate implementation after a genuine compiling baseline: original4 tests pass; one absence control passes and nine new methods expose missing startup admission through ten ordinary assertions. A matching productive retake is pending. The private Locate presentation correction passes its original2 and new2 hidden tests, plus13 legacy panel checks; its maintained runner is being implemented after a genuine inert-runner baseline. Neither private result establishes public application activation or a fix for the historical desktop failure. Continue the full BUILD scope.
+
 # Latest current-package and runner checkpoint — 2026-10-15
 
 ## Catalog mutation checkpoint and next integration — 2026-10-15

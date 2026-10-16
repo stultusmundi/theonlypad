@@ -8,8 +8,10 @@ identified compiler failures before XCTest in run
 The Swift version step reports Swift 6.1.2. The original core test command and
 failure outcome remain unchanged.
 
-`scripts/ci_owned_failure_diagnostics.py` reads only the fixed core watchdog
-receipt and two bounded captures. It prints closed numeric summaries, category
+`scripts/ci_owned_failure_diagnostics.py` reads the fixed core watchdog receipt
+and two bounded captures. Strict mode may also query the tracked public roster
+and read bounded owned Swift Test sources for an event observation; summary-only
+mode omits those reads. It prints closed numeric summaries, category
 counts and at most four verified tracked `Sources/` or `Tests/` locations. It
 does not print raw logs, commands, test names, exception descriptions or absolute
 paths. A report has at most ten lines and 2048 ASCII bytes, including its final
@@ -148,3 +150,58 @@ All seventeen existing diagnostic tests pass against the exact private
 candidate and separately through public discovery. Source review confirms
 that only the query-budget constant changed. This is finite local regression
 evidence, not a hosted pass or a fix for the unidentified core failure.
+
+
+## Bounded XCTest event observations
+
+Hosted run [38773116543](https://github.com/stultusmundi/theonlypad/actions/runs/38773116543)
+at `1b6fc56` still failed core. Strict diagnostics succeeded and the numeric
+fallback was unentered. The last recognized class summary remained five tests
+with zero failures, with coarse error-category count one and the same four Undo
+callback locations. This does not identify the cause or establish a full-suite
+result. The longer roster-query budget does not prove a historical timeout.
+
+The reporter now recognizes a closed ASCII XCTest event grammar within one
+capture stream. It can report either a single paired failed terminal event with
+no unfinished starts, or a single unfinished start with no failed terminals.
+Both require an observed, waited, natural positive child exit and complete,
+nontruncated captures without timeout, interruption or watchdog/wait failure.
+Malformed, duplicate, ambiguous, cross-stream or over-limit events remain
+`unknown`. An unfinished event is an observation at exit, not a diagnosis.
+
+Only a unique method-shaped physical text line in the verified tracked Swift
+Test roster can supply the relative source location. The output explicitly says
+`source-text-candidate`: comments and string contents count, and no Swift lexer,
+class association, compiled-test membership or failure-cause claim is made.
+Raw event identities, messages and source text are never printed. One lazy,
+verified roster supplies both identity and ordinary location checks. Explicit
+summary-only mode still queries neither Git nor Swift sources.
+
+The scan admits at most512 Test files,256KiB per file and8MiB aggregate source
+content. Remaining aggregate allowance reaches the existing owned, no-follow,
+stable reader before content reads. That reader can probe one overflow byte to
+detect growth; this is not a strict total-I/O, allocation or RSS bound. Event
+limits are8,192 records,4,096 distinct identities,64 active starts,4,096 bytes per
+event record and128 bytes per identifier. Only LF separates records, and only
+ASCII space/tab count as horizontal whitespace. Identity uses one of the four
+location slots; the complete report remains at most ten ASCII lines and2,048
+bytes including final newlines.
+
+The original seventeen tests remain byte-exact. Sixteen added methods reached a
+genuine baseline of ten failing methods and thirteen ordinary assertions, with
+zero errors; all original seventeen passed. The reviewed productive candidate
+then passed all33 methods under the owned watchdog with complete captures and
+unchanged input identities. Tests cover positive and negative event grammar,
+receipt eligibility, safe reads, source ambiguity, exact per-file and aggregate
+limits, file-count limits, whitespace, shared location budgeting and summary
+mode. The event/identity overflow case exercises the limits jointly; the
+malformed overlong record does not isolate its byte cap. These are synthetic
+local diagnostic contracts, not a hosted core pass. Separate public discovery also passes all33 methods with unchanged public
+input identities and a complete owned-process receipt. A new hosted observation
+is still required.
+
+Contributor check (benign Python contracts only):
+
+```sh
+python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
+```

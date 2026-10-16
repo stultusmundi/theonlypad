@@ -591,8 +591,153 @@ def _has_signal_number(text):
 
 
 
+# These are capture-text observations, never compiled-test or failure-cause identities.
+_EVENT_ID = r'[A-Za-z_][A-Za-z0-9_]{0,127}'
+_EVENT_CLASS = _EVENT_ID + r'(?:\.' + _EVENT_ID + r'){0,2}'
+_EVENT_METHOD = r'test[A-Za-z0-9_]{0,124}'
+_EVENT_CASE = r'(?:-\[(?P<objc_class>' + _EVENT_CLASS + r') (?P<objc_method>' + _EVENT_METHOD + r')\]|(?P<dotted_class>' + _EVENT_CLASS + r')\.(?P<dotted_method>' + _EVENT_METHOD + r'))'
+_EVENT_RECORD = re.compile(
+    r"Test Case '" + _EVENT_CASE + r"' (?:(?P<start>started)\.|(?P<terminal>passed|failed|skipped) \([0-9]{1,6}(?:\.[0-9]{1,6})? seconds\)\.)\n", re.ASCII)
+
+
+def _event_observation(status, stdout, stderr):
+    if (not status['exitObserved'] or not status['waitCompleted'] or
+            status['timedOut'] or status['truncated'] or not status['captureComplete'] or
+            status['interruptedSignal'] is not None or status['failure'] is not None or
+            status['waitError'] is not None or not _int(status['returnCode'], 1, 255) or
+            status['exit'] != status['returnCode'] or
+            any(counts['discarded'] or counts['stored'] != counts['received']
+                for counts in status['captured'].values())):
+        return None
+    observed_stream = False
+    selected = None
+    for text in (stdout, stderr):
+        seen, active, failed = set(), set(), []
+        count = 0
+        # Only LF separates records. VT/FF are neither separators nor horizontal whitespace.
+        lines = text.split('\n')
+        for index, fragment in enumerate(lines):
+            if not fragment.lstrip(' \t').startswith('Test Case'):
+                continue
+            count += 1
+            if count > 8192 or index == len(lines) - 1:
+                return None
+            record = fragment + '\n'
+            if len(record.encode('utf-8')) > 4096:
+                return None
+            match = _EVENT_RECORD.fullmatch(record)
+            if match is None:
+                return None
+            identity = (match['objc_class'] or match['dotted_class'],
+                        match['objc_method'] or match['dotted_method'])
+            if match['start']:
+                if identity in seen:
+                    return None
+                seen.add(identity)
+                active.add(identity)
+                if len(seen) > 4096 or len(active) > 64:
+                    return None
+            else:
+                if identity not in active:
+                    return None
+                active.remove(identity)
+                if match['terminal'] == 'failed':
+                    failed.append(identity)
+        if count:
+            if observed_stream:
+                return None
+            observed_stream = True
+            if len(failed) == 1 and not active:
+                selected = ('reported-failure-event', failed[0][1])
+            elif not failed and len(active) == 1:
+                selected = ('started-without-terminal-at-exit', next(iter(active))[1])
+    return selected
+
+
+def _read_test_source(root_fd, relative, remaining):
+    parts = relative.split('/')
+    opened = [os.dup(root_fd)]
+    directories = []
+    try:
+        for part in parts[:-1]:
+            parent = opened[-1]
+            child = _open_dir(parent, part)
+            opened.append(child)
+            info = os.fstat(child)
+            named = os.stat(part, dir_fd=parent, follow_symlinks=False)
+            if not _same_stat(info, named):
+                raise _Problem(_REASON['unsafe'])
+            directories.append((parent, part, child, info))
+        data = _stable_leaf(opened[-1], parts[-1], min(256 * 1024, remaining))
+        for parent, name, child, before in directories:
+            if (not _same_stat(before, os.fstat(child)) or
+                    not _same_stat(before, os.stat(name, dir_fd=parent, follow_symlinks=False))):
+                raise _Problem(_REASON['unsafe'])
+        return data
+    finally:
+        for fd in reversed(opened):
+            os.close(fd)
+
+
+def _source_text_candidate(root, method, roster):
+    try:
+        paths = roster(root)
+        tests = sorted(path for path in paths
+                       if path.startswith('Tests/') and path.endswith('.swift'))
+        if not tests or len(tests) > 512 or any(not _safe_location_path(path) for path in tests):
+            return None
+        pattern = re.compile(rb'[ \t]*(?:@MainActor[ \t]+)?(?:override[ \t]+)?func[ \t]+'
+                             + re.escape(method.encode('ascii')) + rb'[ \t]*\(')
+        total = 0
+        matches = []
+        root_fd = _open_root(root)
+        try:
+            for path in tests:
+                data = _read_test_source(root_fd, path, 8 * 1024 * 1024 - total)
+                total += len(data)
+                if total > 8 * 1024 * 1024:
+                    return None
+                for number, line in enumerate(data.split(b'\n'), 1):
+                    if pattern.match(line):
+                        matches.append(path + ':' + str(number))
+                        if len(matches) > 1:
+                            return None
+        finally:
+            os.close(root_fd)
+        return matches[0] if len(matches) == 1 else None
+    except (_Problem, OSError):
+        return None
+
+
+def _shared_roster(root, supplier):
+    # Cache refusals as well as successes; identity and location share at most one query.
+    fetched = False
+    accepted = None
+    problem = None
+
+    def get(_root):
+        nonlocal fetched, accepted, problem
+        if not fetched:
+            fetched = True
+            try:
+                paths = tracked_public_roster(root) if supplier is None else supplier(root)
+                tracked = _valid_roster(paths)
+                if tracked is None:
+                    raise _Problem(_REASON['roster'])
+                accepted = tuple(sorted(tracked))
+            except Exception:
+                problem = _Problem(_REASON['roster'])
+        if problem is not None:
+            raise problem
+        return accepted
+    return get
+
+
 def _report(root, status, stdout, stderr, roster):
     combined = stdout + '\n' + stderr
+    roster = _shared_roster(root, roster)
+    observation = _event_observation(status, stdout, stderr)
+    candidate = _source_text_candidate(root, observation[1], roster) if observation else None
     locations = _admitted_locations(root, combined, roster)
     signals = _signal_counts(combined)
     result = [
@@ -609,7 +754,15 @@ def _report(root, status, stdout, stderr, roster):
         'xctest-id: unknown',
     ]
     total_bytes = sum(len(line.encode('ascii')) for line in result) + len(result)
-    for location in locations[:4]:
+    location_limit = 4
+    if candidate is not None:
+        identity = 'xctest-id: ' + observation[0] + ' source-text-candidate ' + candidate
+        proposed_bytes = total_bytes - len(result[-1]) + len(identity)
+        if proposed_bytes <= 2048:
+            result[-1] = identity
+            total_bytes = proposed_bytes
+            location_limit = 3
+    for location in locations[:location_limit]:
         line = 'location: ' + location
         line_bytes = len(line.encode('ascii')) + 1
         if len(result) < 10 and total_bytes + line_bytes <= 2048:
