@@ -1,6 +1,6 @@
-# Bounded collector-refusal diagnostic — 2026-10-16, current hosted result
+# Bounded collector-refusal diagnostic — 2026-10-17, current hosted result
 
-Published Source `abc00bdf` at public development HEAD `ceb180e` keeps the first-refusal numeric `collector` field bound to the matching parser4 transition and constructor-bound collection nonce. The selected-window extension keeps domain9 stable and appends only the closed `window=1..5` value for that first matching refusal. The original parser exception, Core grammar, protected transition functions, one collection attempt, existing stripped-path parse, privacy boundary and512-byte output cap remain unchanged. No rejected payload or exception text is emitted.
+Published Source `abc00bdf` remains in the public development branch at verified checkpoint `3bc67e9`. The selected-window extension keeps collector domain9 stable and appends only a closed `window=1..5` value for the first matching refusal. The original parser exception, Core grammar, protected transition functions, one collection attempt, existing stripped-path parse, privacy boundary and512-byte output cap remain unchanged. No rejected payload or exception text is emitted.
 
 | Code | Collector refusal domain |
 | --- | --- |
@@ -18,11 +18,9 @@ Published Source `abc00bdf` at public development HEAD `ceb180e` keeps the first
 | 12 | Predicate tuple consistency |
 | 13 | Collector exception, without its text |
 
-Window subcodes are: 1 Core before the selected window opens; 2 Core after it closes; 3 selected-count record before open; 4 selected-count record after close; 5 a path-window boundary invariant. They describe which closed collector check refused the first matching witness. They do not establish a production cause or accept a partial trace.
+Window subcodes are:1 Core before the selected window opens;2 Core after it closes;3 selected-count record before open;4 selected-count record after close;5 a path-window boundary invariant. Hosted [run38964297146](https://github.com/stultusmundi/theonlypad/actions/runs/38964297146) completed with failure at exact HEAD `3bc67e9` and reports `unavailable=17/parser=4/state=6/incoming=6/collector=9/window=5`. This is a closed collector refusal, not a Core cause or accepted partial trace. The production cause remains unknown.
 
-Hosted [run38959402756](https://github.com/stultusmundi/theonlypad/actions/runs/38959402756) at `da8e945` completed with failure and reports `unavailable=17/parser=4/state=6/incoming=6/collector=9/window=5`. This is the first observed hosted window subcode. The local private81 and maintained81 Python passes verify diagnostic behavior only; they do not prove a hosted fix. The hosted production cause remains unknown. The retained local selected-Swift replay accepts its own complete captured trace, so it does not explain or contradict the hosted refusal. Do not infer a Core failure mode from the closed suffix.
-
-The actual bounded review corrected the bound request ordinal: request11 is `[nulPath]`; `[longPath]` is request10. Domain9/window5 can arise from a valid partial old-path prefix that the legacy path parser accepts but the stricter selected-window validation does not; the hosted closed record does not expose enough raw data to establish whether that occurred. No additional diagnostic code is currently justified. The independent causal review corrects the bound request ordinal and records that the incomplete selected capture and primary Core failure remain distinct unknowns.
+The local81-test Python contract pass verifies the bounded diagnostic only; it does not establish a hosted fix. The retained selected-Swift replay accepts its own42 outer,314 PATH and25 Core records through the published parser, with no predicate refusal. That separate local capture does not explain the hosted refusal, and the production cause remains unknown.
 
 Earlier evidence follows unchanged.
 
