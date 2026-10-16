@@ -1,38 +1,43 @@
 # Active integration checkpoint — 2026-10-16
 
-The reviewed Locate presentation correction is confirmed remotely at `5a1cd57`.
-Its fixed public runner passes four hidden native tests; separate current-source
-verification passes1,203 default tests and125 Python contracts. The legacy
-monitor compile failure is preserved. Its narrow dependency repair now compiles
-and completes the original native harness, with all384 recorded hashes matching
-and independent actual review accepted. Seven completion summaries are not seven
-XCTest cases. See [presentation verification](verification/disk-conflict-presentation.md).
-Matching packaged Locate and broader desktop acceptance remain outstanding.
+Development source is confirmed remotely at `e40142e`, including the Locate
+presentation correction, monitor package repair and failure-only phase diagnostic.
+The monitor harness completes seven named summaries; these are not seven XCTest
+cases. Matching packaged Locate and broader desktop acceptance remain outstanding.
+See [presentation verification](verification/disk-conflict-presentation.md).
 
-The new failure-only phase diagnostic passes six updated contracts, separate
-public39 and one actual local instrumented Swift test. Its initial unavailable
-run exposed SwiftPM forwarding test stderr into owned stdout. The decoder now
-accepts one ordered prefix from either single owned stream and refuses split
-streams. Independent final audit accepts the corrected local result and retained
-557 original/558 copied facts. No hosted cause or selected-test signal is claimed;
-the original core command/failure are unchanged. Publish this reviewed diagnostic
-checkpoint, then inspect the hosted phase result before changing validation.
+Catalog startup/quit activation is now adopted in working source. The retained
+`scripts/test-application-language-catalog.sh` passes its original four and ten
+new hidden native cases against the actual owner and current Locate correction.
+Independent actual review verifies frozen sources, compiler artifacts, complete
+owned receipts and empty synthetic State. A separate current warnings-as-errors
+app/helper build passes1,203 default tests; Python discovery passes135 contracts.
+All567 pre-run source/test/support facts still match at independent post-run inspection. No visible
+sheets or packaged application activation is established by these tests.
+See [application verification](verification/application-language-catalog.md).
+
+The application's ten runner contracts also pass separately on raw and formatted
+candidates. The formatting derivative preserves original executable tests using
+an exact reversible two-import header projection. The first180-second incomplete
+run remains retained; unchanged raw/formatted retakes use upfront600-second
+budgets. These synthetic checks do not measure application performance.
+
+Hosted run [38872057688](https://github.com/stultusmundi/theonlypad/actions/runs/38872057688)
+still fails core at `e40142e`. Its separate phase diagnostic observes nine ordered
+markers: phases0–3 complete; phase4 enters without an end before natural SwiftPM
+exit1. That interval includes request checks, budget boundaries and fixture
+verification/cleanup. The selected-test signal and actual cause remain unknown.
+The original command/failure remain unchanged. Local diagnostic execution passes
+all ten markers, so local success is not hosted acceptance.
 See [CI verification](verification/ci-failure-diagnostics.md).
 
-Catalog startup/quit integration remains private: fourteen native tests and a
-separate1,203-test app/helper build pass. The retained application command now
-passes ten raw and separately ten formatted pure contracts with independent
-review. The formatting derivative preserves all original executable tests and
-uses an exact reversible two-import header projection. The180-second incomplete
-run remains retained; unchanged raw and formatted retakes pass under upfront600
-budgets. These are synthetic runner checks, not application performance evidence.
-
-Next: explicitly adopt the reviewed ten catalog application files, recapture
-current public source and run the retained native14 command. Retake the full
-current app/helper suite before committing/pushing that application activation.
-Then continue manager/picker integration, matching package/desktop verification,
-the unresolved native history/storage work and every remaining BUILD requirement.
-These checkpoints do not pause the user's full implementation request.
+The same-source actual-helper command also passes its three fixed cases in
+fresh processes, including joined quit. Independent publication review is in
+progress before committing/pushing this application activation. Narrow the hosted phase4 failure
+without weakening assertions; continue manager/picker integration through the
+single catalog authority, matching package/desktop acceptance, unresolved native
+history/storage work and every remaining BUILD requirement. These checkpoints
+do not pause the user's full implementation request.
 
 # Active diagnostic and integration checkpoint — 2026-10-15
 

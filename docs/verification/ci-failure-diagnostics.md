@@ -264,3 +264,19 @@ unchanged; the new conditional step cannot turn a failing core run into success.
 Raw synthetic captures remain ignored under `.local/ci-folder-preview-trace/`.
 A hosted phase result must be inspected before changing any URL constructor or
 production validation behavior.
+
+## Hosted phase observation — 2026-10-16
+
+Run [38872057688](https://github.com/stultusmundi/theonlypad/actions/runs/38872057688)
+at `e40142e` still fails the original core step. The separate failure-only
+instrumented selection reports nine ordered markers: phases0–3 complete, then
+phase4 begins without its end marker. SwiftPM exits naturally with1; the selected
+test's signal is unavailable. The diagnostic step succeeds as an observation,
+not as a test pass. Later normal workflow steps are skipped.
+
+Both long-path and NUL URL constructors returned before phase4. The remaining
+interval includes request preflight, exact/rejected budgets, Unicode boundary
+checks, the synthetic large-file mutation and fixture verification/cleanup. No
+individual operation is identified as the cause. The accepted local retake
+reaches all ten markers; it does not resolve this hosted failure. Preserve all
+assertions and the original core failure when adding narrower observation.

@@ -1,0 +1,26 @@
+{
+  "old4": {
+    "class": "DocumentSearchAppRoutingTests",
+    "methods": [
+      "testCapturedSearchPanelClaimsOnlyCloseAndSixNativeEditingSelectors",
+      "testCapturedSearchAvailabilityAndDispatchShareIdentityAndRefusalPolicy",
+      "testActualManagedConfigurationStaysSearchLazyAndAppGuardsPrecedeScope",
+      "testActualQuitPublishesNativeReceiptThenJoinsSearchAndExternalExactlyOnceAcrossVetoAndRetry"
+    ]
+  },
+  "new10": {
+    "class": "ApplicationLanguageCatalogTests",
+    "methods": [
+      "testApplicationCatalogStartupRemainsLazyAndStartsOneActualRead",
+      "testApplicationCatalogFailureRetainsLastConfirmedPublicationAndDocumentStartup",
+      "testApplicationCatalogErrorPresentationReentryCannotClobberSuccessorState",
+      "testQuitBeforeCatalogStartupNeverConstructsOrReadsCatalog",
+      "testBusyCatalogQuitVetoDoesNotInvalidateAndReleasedReadSettles",
+      "testActualUnresolvedWriteBlocksQuitWithoutAcknowledgingOrDiscarding",
+      "testNativeVetoRollsBackOnlyActualCatalogReservationAndKeepsSuccessfulCatalogWrite",
+      "testUnsettledSearchVetoReleasesCatalogWithoutReopeningTerminalSearch",
+      "testSuccessfulQuitReservesThenJoinsAndInvalidatesActualCatalogBeforeSingleReply",
+      "testFalseReplyReentryPreservesNewAttemptAndItsNewCatalogReservation"
+    ]
+  }
+}

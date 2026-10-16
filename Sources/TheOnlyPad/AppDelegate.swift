@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     let id = UUID()
     var task: Task<Void, Never>?
     var preparation: NativeApplicationSearchQuitPreparation?
+    var catalogPreparation: LanguageCatalogQuitPreparation?
     var nativeReceipt: SessionCheckpointReceipt?
     var searchDecision: NativeApplicationSearchQuitResult?
     var replyConsumed = false
@@ -43,6 +44,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       continuation?.resume()
     }
   }
+  @MainActor private enum LanguageCatalogQuitPreparation {
+    case notCreated
+    case reserved(owner: NativeLanguageCatalogOwner, quitID: UUID)
+  }
+  private enum ApplicationLanguageCatalogError: LocalizedError {
+    case quitRefused(NativeLanguageCatalogMutationRefusal)
+    case staleQuitPreparation
+
+    var errorDescription: String? {
+      switch self {
+      case .quitRefused:
+        return
+          "The language catalog is busy or has an unresolved change. Wait for its operation or resolve the change before quitting."
+      case .staleQuitPreparation:
+        return
+          "The language catalog changed while preparing to quit. Review its current state and try Quit again."
+      }
+    }
+  }
+  private var languageCatalogOwner: NativeLanguageCatalogOwner?
+  private var languageCatalogState: NativeLanguageCatalogState?
+  private var lastReportedLanguageCatalogFailureID: UUID?
   private var documentSearchTerminationAttempt: DocumentSearchTerminationAttempt?
   private var editors: [EditorWindowController] { documentOwner?.windows ?? [] }
   private var moveDestination: DocumentMoveDestinationController?
@@ -81,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   init(
     session: SessionCoordinator, recovery: RecoveryCoordinator,
     documentSearches: NativeApplicationSearches? = nil,
+    languageCatalogOwner: NativeLanguageCatalogOwner? = nil,
     cancelExternalCommands: @escaping @MainActor () async -> Void = {
       await ExternalCommandController.cancelAllAndWait()
     },
@@ -110,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
   ) {
     self.documentSearches =
       documentSearches ?? NativeApplicationSearches(applicationBundle: Bundle.main.bundleURL)
+    self.languageCatalogOwner = languageCatalogOwner
     self.cancelExternalCommands = cancelExternalCommands
     self.makeDocumentSearchPanel = makeDocumentSearchPanel
     self.presentDocumentSearchPanel = presentDocumentSearchPanel
@@ -121,7 +146,101 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     self.replyToTermination = replyToTermination
     self.presentSessionAdjustment = presentSessionAdjustment
     super.init()
+    if let languageCatalogOwner {
+      languageCatalogState = languageCatalogOwner.state
+      observeLanguageCatalog(languageCatalogOwner)
+    }
   }
+  private static var defaultLanguageCatalogDirectory: URL {
+    SettingsStore.defaultDirectory.deletingLastPathComponent().appendingPathComponent(
+      "Languages", isDirectory: true)
+  }
+  @discardableResult
+  private func startLanguageCatalogIfNeeded() -> NativeLanguageCatalogAdmission? {
+    guard !preparingQuit else { return nil }
+    let owner: NativeLanguageCatalogOwner
+    if let existing = languageCatalogOwner {
+      owner = existing
+    } else {
+      owner = NativeLanguageCatalogOwner(
+        store: CustomLanguageStore(directory: Self.defaultLanguageCatalogDirectory))
+      languageCatalogOwner = owner
+      languageCatalogState = owner.state
+      observeLanguageCatalog(owner)
+    }
+    let state = owner.state
+    guard case .active = state.lifetime, state.activeRequestID == nil,
+      state.current == nil, state.lastSettledRequestID == nil
+    else { return nil }
+    return owner.requestLoad()
+  }
+
+  private func observeLanguageCatalog(_ owner: NativeLanguageCatalogOwner) {
+    owner.onChange = { [weak self, weak owner] state in
+      guard let self, let owner, self.languageCatalogOwner === owner else { return }
+      self.acceptLanguageCatalogState(state, from: owner)
+    }
+  }
+
+  private func acceptLanguageCatalogState(
+    _ state: NativeLanguageCatalogState, from owner: NativeLanguageCatalogOwner
+  ) {
+    guard languageCatalogOwner === owner else { return }
+    languageCatalogState = state
+    guard case .active = state.lifetime, !preparingQuit, let failure = state.failure,
+      lastReportedLanguageCatalogFailureID != failure.requestID
+    else { return }
+    lastReportedLanguageCatalogFailureID = failure.requestID
+    reportDocumentError(
+      NSError(
+        domain: "TheOnlyPad.LanguageCatalog", code: 1,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "The language catalog operation failed. The last confirmed catalog remains available. Review the catalog before retrying the operation.",
+          NSUnderlyingErrorKey: failure.underlyingError,
+        ]))
+    // Error presentation may admit a new operation. Its observer owns all later state.
+  }
+
+  private func prepareLanguageCatalogForQuit() throws -> LanguageCatalogQuitPreparation {
+    guard preparingQuit else { throw ApplicationLanguageCatalogError.staleQuitPreparation }
+    guard let owner = languageCatalogOwner else { return .notCreated }
+    switch owner.prepareQuit() {
+    case .prepared(let id): return .reserved(owner: owner, quitID: id)
+    case .refused(let refusal): throw ApplicationLanguageCatalogError.quitRefused(refusal)
+    }
+  }
+
+  private func languageCatalogPreparationIsCurrent(
+    _ preparation: LanguageCatalogQuitPreparation
+  ) -> Bool {
+    switch preparation {
+    case .notCreated: return languageCatalogOwner == nil
+    case .reserved(let owner, let id):
+      guard languageCatalogOwner === owner, case .active = owner.state.lifetime else {
+        return false
+      }
+      let state = owner.mutationState
+      return state.preparedQuitID == id && state.activeOperation == nil && state.unresolved == nil
+    }
+  }
+
+  private func resumeLanguageCatalogAfterVeto(
+    _ preparation: LanguageCatalogQuitPreparation
+  ) -> Bool {
+    guard languageCatalogPreparationIsCurrent(preparation) else { return false }
+    switch preparation {
+    case .notCreated: return true
+    case .reserved(let owner, let id): return owner.cancelPreparedQuit(id)
+    }
+  }
+
+  private func invalidateLanguageCatalogAndWait(
+    _ preparation: LanguageCatalogQuitPreparation
+  ) async {
+    if case .reserved(let owner, _) = preparation { await owner.invalidateAndWait() }
+  }
+
   private func managedDocuments() throws -> NativeApplicationDocuments {
     if let documentOwner { return documentOwner }
     let owner = try NativeApplicationDocuments(
@@ -208,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
           Task { @MainActor [weak self] in self?.fileMonitoring.reconcile() }
         })
     }
+    startLanguageCatalogIfNeeded()
     restoreStartupSession()
     do {
       let arguments = Array(CommandLine.arguments.dropFirst()).filter { !$0.hasPrefix("-psn_") }
@@ -495,6 +615,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       await completeDocumentSearchTermination(attempt)
     }
     do {
+      let catalogPreparation = try prepareLanguageCatalogForQuit()
+      attempt.catalogPreparation = catalogPreparation
+      guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
       let preparation = try documentSearches.prepareQuitIfCreated()
       guard ownsDocumentSearchTermination(attempt) else { return .terminateLater }
       attempt.preparation = preparation
@@ -526,13 +649,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     do {
       if let error = attempt.setupError { throw error }
       guard let preparation = attempt.preparation else { throw NativeWorkspaceError.notReady }
+      guard let catalogPreparation = attempt.catalogPreparation,
+        languageCatalogPreparationIsCurrent(catalogPreparation)
+      else { throw ApplicationLanguageCatalogError.staleQuitPreparation }
       await startupTask?.value
       guard ownsDocumentSearchTermination(attempt) else { return }
       try Task.checkCancellation()
       sessionPanel?.update(entries: session.unresolved)
       guard ownsDocumentSearchTermination(attempt) else { return }
+      guard languageCatalogPreparationIsCurrent(catalogPreparation) else {
+        throw ApplicationLanguageCatalogError.staleQuitPreparation
+      }
       let decision = try await documentSearches.completeQuit(preparation) { [self, attempt] in
         guard ownsDocumentSearchTermination(attempt) else { throw CancellationError() }
+        guard languageCatalogPreparationIsCurrent(catalogPreparation) else {
+          throw ApplicationLanguageCatalogError.staleQuitPreparation
+        }
         let owner = try managedDocuments()
         guard ownsDocumentSearchTermination(attempt) else { throw CancellationError() }
         let receipt = try await owner.prepareQuit()
@@ -541,6 +673,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         // Only the actual native producer's return can fill this authority-bearing field.
         attempt.nativeReceipt = receipt
+        guard languageCatalogPreparationIsCurrent(catalogPreparation) else {
+          throw ApplicationLanguageCatalogError.staleQuitPreparation
+        }
       }
       guard ownsDocumentSearchTermination(attempt) else { return }
       attempt.searchDecision = decision
@@ -556,6 +691,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return
       }
       try Task.checkCancellation()
+      guard languageCatalogPreparationIsCurrent(catalogPreparation) else {
+        throw ApplicationLanguageCatalogError.staleQuitPreparation
+      }
+      // Commit: neither catalog retirement nor the permanent external drain can be rolled back.
+      await invalidateLanguageCatalogAndWait(catalogPreparation)
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      if case .reserved(let owner, _) = catalogPreparation, languageCatalogOwner === owner {
+        languageCatalogState = owner.state
+      }
       await cancelExternalCommands()
       guard ownsDocumentSearchTermination(attempt) else { return }
       attempt.replyConsumed = true
@@ -587,6 +731,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
       guard ownsDocumentSearchTermination(attempt) else { return }
       if case .refused(let refusal) = resumed {
         reportDocumentError(refusal)
+        guard ownsDocumentSearchTermination(attempt) else { return }
+      }
+    }
+    if let preparation = attempt.catalogPreparation {
+      let resumed = resumeLanguageCatalogAfterVeto(preparation)
+      guard ownsDocumentSearchTermination(attempt) else { return }
+      if !resumed {
+        reportDocumentError(ApplicationLanguageCatalogError.staleQuitPreparation)
         guard ownsDocumentSearchTermination(attempt) else { return }
       }
     }
