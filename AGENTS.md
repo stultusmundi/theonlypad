@@ -519,3 +519,19 @@ CI parser-refusal checkpoint (2026-10-16): `python3 -B -m unittest discover -s T
 Current private prerequisites and diagnostic checkpoint (2026-10-16): the maintained exact-task owner selection passes51 and its17 pure contracts pass, independently audited (GO07996b76); callback-in-progress/owner-cycle guarantees remain Source reasoning and these runs overlap prior owner51. Private local-departure baseline preserves old37 and reaches17 ordinary missing-implementation failures/0unexpected (GO20ab4a7b); four-file local Source is in progress, with default sheets/App quit still outstanding. The private XML editor component reaches17 unique methods:16 pass and one has3 ordinary undo-history assertions/0unexpected (GO59be5a8c); default-first overlaps. Preserved final text is not proof of unchanged history or its cause, and separate App close/quit acceptance remains blocked. A16-snapshot follow-up narrows history appearance to after delegate exit (actual GO159600b0). Its reviewer authored the trace/recipe and independently verified Root's execution; Root separately reviewed the Test/glue. The registration point remains unknown and no history-clearing fix is authorized by this interval observation.
 
 CI transition observation checkpoint (2026-10-16): final private diagnostic discovery passes59 (old55+new4) after two preserved58-pass/one fixture-error attempts and reviewed Test-only adapters; productive Source is unchanged across corrections. Actual public `python3 -B scripts/ci_folder_preview_trace.py` passes selected Swift1 with42/314/25 records,581 Original/582 frozen facts, saved authority and strict natural0 receipt (independent actual GOcbabbe9f). Five success lines remain unchanged. Only unavailable boundary17/parser4 may gain validated closed state/incoming integers; grammar, privacy, receipt checks and512-byte ceiling remain intact. Hosted run38916819487 still fails with boundary17/parser4 and no identified cause; new hosted pair evidence is pending. No public59 discovery, full-suite, App/helper, package, GUI or performance claim follows. Never nest another watchdog around the diagnostic. See `docs/verification/ci-failure-diagnostics.md`; local package remains be6ec6f.
+
+
+Private continuation checkpoint (2026-10-16): formatted local manager departure
+passes54 distinct hidden native cases (old37 then new17),0 failures/unexpected,
+nine strict natural0 stages,930 Original/1132 frozen facts and empty State roots.
+Different Source/format/binding reviews are20a35fcc/eb38c334/90cad83f; actual audit
+1b0a85f6 is by its Source/driver author, independently of Root execution. Candidate
+remains private/injected-presenter only; production sheets/App quit are outstanding.
+Latest hosted run38930156579 atbc53634 still fails core and records unavailable
+boundary17/parser4/state6/incoming6; the bound request is a singleton NUL URL.
+Cause is unknown; no grammar relaxation or Core change is justified. XML native
+remains16/17 with three ordinary undo-history assertions; the preserved failure
+is narrowed to the inherited approval interval, not an internal undo target.
+App-close V3 remains incomplete with unknown error family255 and retained State.
+See the catalog, XML and CI verification records. No package/desktop/whole-product
+acceptance follows; local package remains be6ec6f.

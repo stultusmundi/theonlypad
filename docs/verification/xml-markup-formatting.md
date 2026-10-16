@@ -1,5 +1,39 @@
 # XML markup formatter — Core checkpoint, 16 October 2026
 
+
+## Private native approval investigation — 2026-10-16
+
+Native XML remains a private candidate. Its17 distinct native/managed methods
+produce16 passes and one method with three ordinary undo-history assertion
+failures,0 unexpected. Final text, real delegate callback counts and exact lease
+cancellation assertions pass. The default-first invocation overlaps these17.
+Different actual review GO59be5a8c verifies the frozen component evidence; it
+accepts the failure record, not a native formatter completion claim.
+
+A separate Test-only16-snapshot follow-up narrows history appearance to after
+original delegate exit. A subsequent actual inherited-approval probe preserves
+all three original assertions and records28 ordered observations. For selection,
+storage-change and exact-cancel stale-true cases, history is absent at delegate
+exit and present with group1 immediately after the real inherited approval
+returns; settlement has group0. The false-veto control stays without history.
+All968 Original/1173 frozen facts,236 artifacts,199 objects/five modules,25 evidence
+facts and four strict natural0/0/0/1 receipts verify; State is empty. Audit
+GO13099a7a is by the probe/recipe author, different from Root's prelaunch review
+and execution. This identifies an instrumented interval, not an AppKit internal
+registration, target or general undo guarantee. Observation can perturb timing.
+No history-clearing, registration suppression or native-approval bypass is a fix.
+A proposed XML-only approval fence needs independently reviewed genuine-history,
+forwarding, successor-delegate and reentry regressions before productive Source.
+
+App integration remains separately blocked. Three closed-error-family diagnostic
+revisions retain four completed closes followed by a fifth retained close at
+stage16 with unmapped family255. The latest singleton has5 failures/1 unexpected,
+postflight true and retained synthetic fixture State (actual audit GOd948a47f).
+It does not establish a dirty document or error cause. Source suggests pending
+legacy recovery cleanup from a fixture-owned external origin; a passive Boolean
+probe is under review. No drain/guard bypass or App7 acceptance is claimed.
+
+
 The working application source includes `LanguageService.formatXML`. It formats whitespace inside start/empty tags: attributes move onto indented lines and the closing delimiter receives indentation. It preserves element content, interelement whitespace, quotes and attribute values, character references, comments, CDATA, processing instructions, declaration spelling, BOM and existing line endings. This is not tree pretty-printing. The native command, editor transaction/undo integration, HTML formatting and external formatter integration remain outstanding under D-05.
 
 The original ten XML methods and nine existing language methods produced18 passes and one failing method with four ordinary namespace assertions. A source-identical finite diagnostic isolated unbound prefixes, reserved namespace declarations and duplicate expanded attributes. Seven independently reviewed namespace methods then produced three passes and four failing methods with24 ordinary assertions on that same baseline. No unexpected errors occurred. Earlier private Test drafts with static review findings were retained and never credited as executed tests.

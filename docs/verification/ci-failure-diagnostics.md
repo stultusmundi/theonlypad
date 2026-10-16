@@ -1,6 +1,28 @@
 # Bounded CI failure diagnostics
 
-## Current closed transition observation — 2026-10-16
+## Latest hosted closed pair — 2026-10-16
+
+Hosted [run38930156579](https://github.com/stultusmundi/theonlypad/actions/runs/38930156579)
+at `bc53634` fails the original core step. The diagnostic remains unavailable125
+and now exposes `boundary=17 parser=4 state=6 incoming=6`. State6 is the fixed
+`selected-call` state; incoming6 is the original marker after selected URL
+validation. The original grammar expects predicate-entry10 first. This identifies
+a refused pair, not its cause or an accepted partial trace.
+
+Different retained-evidence/source-path review (GO5c195cb3) verifies all three
+successful fetches and the actual zero-artifact response. The bound request array's
+eleventh entry is `[nulPath]`; its loop/helper pass that singleton unchanged.
+An empty-selection explanation contradicts this declared path. The remote raw
+child capsule/compiler graph is unavailable, so neither a Foundation defect,
+missing validator invocation nor compiler defect is established. Do not add a
+permissive grammar edge or change production Core based on this pair. A separate
+bounded predicate-entry observation is under design review.
+
+The local private59 and selected Swift1 results below remain separate passing
+scopes. The full product/hosted core remains incomplete; the original production
+Core and Swift Test bytes are unchanged by the diagnostic.
+
+## Earlier local closed transition observation — 2026-10-16
 
 Hosted [run38916819487](https://github.com/stultusmundi/theonlypad/actions/runs/38916819487)
 at `71dd5e5` still fails core and refuses diagnostic evidence at

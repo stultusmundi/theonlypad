@@ -1,6 +1,6 @@
 # Active integration checkpoint — 2026-10-16
 
-The preceding confirmed development checkpoint is `1958011`. This report
+The preceding confirmed development checkpoint is `bc53634`. This report
 accompanies the reviewed diagnostic checkpoint; editable manager Source remains
 `2584f66`.
 Routine non-force reviewed development pushes remain authorized; merges, force
@@ -10,7 +10,8 @@ Editable manager draft/Save is now adopted in working source through the same
 catalog owner. It preserves exact raw input, bounded catalog/form restoration,
 stable identities, actual Save/publication correlation and newer native input.
 Dirty/invalid/open-form Close/Quit still vetoes before reservations; full
-Save/Discard/Cancel confirmation has a reviewed design, not implementation.
+Save/Discard/Cancel confirmation remains unadopted publicly. Its private local
+implementation is verified below; production sheets/App quit are outstanding.
 Exact monitor rollback and owner-task joining remain private prerequisites.
 The monitor Source passes9 component tests and the unchanged132-line legacy
 harness passes26 checks, including real-service delivery; independent actual reviews accept both.
@@ -23,12 +24,30 @@ review GO07996b76 now verifies this separate invocation and its17 pure contracts
 including missing/foreign/
 duplicate settlement identities and36/38 count refusals. These invocations overlap;
 never add them. Neither prerequisite has been adopted into the application.
-Local parent/child departure now has a genuine baseline: old37 pass, all17 new
-methods fail17 ordinary missing-implementation assertions with0 unexpected.
-Independent actual review GO20ab4a7b verifies679 Original/881 frozen facts,233
-artifacts and nine strict receipts; State is empty. Deeper local controls remain
-unentered on this baseline. Four-file local production Source is in progress
-privately; default sheets and App quit integration remain outstanding.
+Private formatted parent/child departure now passes54 unique hidden native tests:
+original37 then17 new cases,0 failures/unexpected. Nine strict natural0 stages,
+930 Original/1132 frozen facts,233 artifacts,196 objects/five modules,55 evidence
+facts and empty State roots verify. Different logic/format/binding reviews are
+20a35fcc/eb38c334/90cad83f; actual audit1b0a85f6 is by the Source/driver author,
+independently of Root execution, not another Source-quality review. The genuine
+old37-pass/new17-ordinary-failure baseline remains preserved. This candidate is
+private and uses an injected presenter; production sheets/App quit remain undone.
+
+Latest hosted run38930156579 atbc53634 still fails core and records the refused
+pair boundary17/parser4/state6/incoming6. The bound eleventh request is a singleton
+NUL URL, so the empty-selection explanation does not fit its declared path.
+Different source/evidence review5c195cb3 finds no established cause; do not relax
+the grammar or patch Core speculatively. Zero artifacts are actually returned.
+
+The XML inherited-approval probe retains the three original canUndo failures and
+narrows their appearance to after original delegate exit and before real super
+returns (GO13099a7a, probe-author audit of Root execution). It identifies no
+internal target or registration operation. A separately reviewed XML-only fence
+design now requires supplemental genuine undo/redo/forwarding/reentry Tests
+before productive repair. App-close V3 is still incomplete with a fifth retained
+close/unknown255 after four completed closes (GOd948a47f); source suggests pending
+legacy cleanup, but no actual cause or cleanup correction is established yet.
+
 Public menu activation, recovery/import/export, picker, document propagation and
 packaged workflows remain outstanding. The full product is unfinished.
 
@@ -50,17 +69,15 @@ with575 frozen inputs and five reviewed manager overlays. These counts overlap;
 none is a desktop, helper-launch or performance result. Strict formatting and
 public checks pass. See [catalog evidence](verification/application-language-catalog.md).
 
-Hosted [run38916819487](https://github.com/stultusmundi/theonlypad/actions/runs/38916819487)
-at `71dd5e5` still fails core at `boundary=17 parser=4`; rejected state/incoming,
-accepted partial trace and cause remain unknown. The artifacts API returns zero.
-The working diagnostic now records a closed first state/incoming pair without
-changing grammar or accepting partial evidence. Final private59 passes after two
-retained Test fixture errors (each58 pass/one error); Source is unchanged across
-those corrections. A separate actual public selected Swift1 passes with42/314/25
-records,581 Original/582 frozen facts, strict natural0 receipt and empty State.
-Independent actual review GOcbabbe9f accepts these scopes; no hosted fix follows.
-Five success lines stay unchanged; the new pair appears only on a valid rejected
-transition. This command owns its600-second watchdog; never nest another.
+Earlier hosted run38916819487 at71dd5e5 exposed only boundary17/parser4;
+latest run38930156579 above now supplies the refused state6/incoming6 pair.
+Final private59 passes after two retained Test-fixture errors (each58 pass/one
+error); Source is unchanged across those corrections. A separate actual public
+selected Swift1 passes with42/314/25 records,581 Original/582 frozen facts,
+strict natural0 receipt and empty State. Independent actual review GOcbabbe9f
+accepts these local scopes, not a hosted fix. Five success lines stay unchanged;
+the pair appears only on a valid rejected transition. The command owns its
+600-second watchdog; never nest another.
 See [CI evidence](verification/ci-failure-diagnostics.md).
 
 XML Core passes26 adopted component cases; the private process worker passes14
@@ -93,13 +110,12 @@ cache-package results remain11 passes/one Locate failure across12 entered cases;
 six planned cases and AXPress are unentered. Original large-line memory-pressure
 failure, broad IME/VoiceOver, performance and packaged acceptance remain open.
 
-Next: review the bounded XML undo observations and locate the registration
-interval before a native repair; investigate the separate App close refusal
-before App Source. Complete and verify private local Save/Discard/Cancel Source
-against the genuine17-case baseline, then integrate monitor/exact-task
-prerequisites through the same owner with matching maintained/native regressions.
-Inspect the next hosted state/incoming observation after this diagnostic
-checkpoint without weakening grammar. Continue recovery,
+Next: review supplemental genuine-history/delegate Tests against the narrowed
+inherited-approval interval before XML repair; investigate the separate App
+pending-close hypothesis before App Source. Extend the private passing54 local
+departure candidate with production asynchronous sheets, then compose genuine
+monitor/task prerequisites and App quit through the same actual owner. Diagnose
+the hosted6/6 refusal without weakening grammar. Continue recovery,
 import/export/menu/picker/propagation and every applicable BUILD requirement.
 
 # Active diagnostic and integration checkpoint — 2026-10-15

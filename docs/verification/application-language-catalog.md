@@ -1,5 +1,31 @@
 # Application language catalog and manager
 
+
+## Private local departure candidate — 2026-10-16
+
+The formatted four-file local parent/child departure candidate now passes54 unique
+hidden native tests: retained37 plus17 new methods,0 failures and0 unexpected.
+The unchanged old37 must pass before local17 is entered. Root's sole execution
+has nine direct owned-watchdog stages, each natural0, with930 Original/1132 frozen
+facts,202 exact copy recipes,233 artifacts,196 objects/five modules,55 stage
+facts and all nine synthetic State roots empty. Source logic GO20a35fcc,
+format-only GOeb38c334 and final projection/binding GO90cad83f are different
+reviews. Actual evidence audit GO1b0a85f6 is by the Source/driver author,
+independently of Root execution; it is not another independent Source review.
+
+Cases cover parent Save/Discard/Cancel, child Done/Discard/Cancel, genuine original
+Store operation/Task joins, failed Save, busy Wait/Cancel, newer raw input and
+stale native/presentation responses. No Test cancels the real Store producer to
+make departure complete. The genuine baseline remains old37 passing/new17
+ordinary missing-implementation failures,0 unexpected (GO20ab4a7b).
+
+This is a private injected-presenter candidate, with accepted private exact-task
+owner prerequisite. It is not yet adopted into public application Source.
+Production asynchronous sheets and app-quit preflight/rollback remain outstanding,
+alongside menu/recovery/import/export/picker/document propagation and packaged
+acceptance. Counts overlap earlier manager/owner selections and are not added.
+
+
 ## Editable draft and Save component — 2026-10-16
 
 The current native manager edits a bounded local workspace through the same
