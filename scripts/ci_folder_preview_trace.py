@@ -19,7 +19,12 @@ VERIFIER = 'Tests/NativeIntegration/run_native_regressions.py'
 WATCH_SHA = 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d'
 VERIFIER_SHA = 'f4435e99ad7a547a90d01ce38c094d0813fac797a443a0e33654cce6b5ea9cef'
 TAG = b'CI_FOLDER_PREVIEW_TRACE'
-SEQUENCE = [(phase, edge) for phase in range(5) for edge in range(2)]
+# Phase5 is the same literal pair in each of twelve source-bound request cases.
+STATEMENTS = [(phase, edge) for phase in range(10) for edge in range(2)]
+SEQUENCE = ([(phase, edge) for phase in range(5) for edge in range(2)]
+            + [(5, edge) for _ in range(12) for edge in range(2)]
+            + [(phase, edge) for phase in range(6, 10) for edge in range(2)])
+REQUEST_INTERVAL_SHA256 = '9156e200fd75e813ebdf1e17f4fd3f4ae9e67b2e14588b748fe21825bc973e41'
 RECEIPT_FIELDS = set(('command pid processGroup exitObserved registrationError groupSignalAttempted '
     'groupSignalError groupCleanup groupQuery waitCompleted returnCode waitError timedOut '
     'interruptedSignal truncated captureComplete captured failure exit seconds').split())
@@ -139,7 +144,19 @@ def project_test(original):
               b'    }\n'
               b'  }\n\n'
               b'  // Catches returning the first result after later file I/O or selected-content rejection.\n')
-    for anchor in (entry + invalid, loop + long_url + nul_url + requests, suffix):
+    request_loop = b'      for (urls, query, replacement, limits) in requestCases {\n'
+    exact = b'      let exact = try preview(\n'
+    unicode_boundary = b'      let exactPattern = try preview(\n'
+    mutation_boundary = b'      let handle = try FileHandle(forWritingTo: fixture.a)\n'
+    request_end = (b'        XCTAssertEqual(reader.fileCalls, 0)\n'
+                   b'      }\n\n' + exact)
+    # Bind every case, its order and every loop oracle before relying on twelve pairs.
+    _require(method.count(requests) == method.count(exact) == 1)
+    request_interval = method[method.index(requests):method.index(exact)]
+    _require(hashlib.sha256(request_interval).hexdigest() == REQUEST_INTERVAL_SHA256)
+    _require(method.count(b'      let zeroMatches = try preview(') == 1)
+    for anchor in (entry + invalid, loop + long_url + nul_url + requests, suffix,
+                   request_loop, request_end, unicode_boundary, mutation_boundary):
         _require(method.count(anchor) == 1)
     _require(method.startswith(entry + invalid) and method.endswith(suffix))
     modified = method.replace(entry, head + _marker(0, 0, 4)
@@ -148,15 +165,27 @@ def project_test(original):
         loop + _marker(1, 1, 6) + _marker(2, 0, 6) + long_url
         + _marker(2, 1, 6) + _marker(3, 0, 6) + nul_url
         + _marker(3, 1, 6) + _marker(4, 0, 6) + requests, 1)
-    final = suffix.replace(b'    }\n  }\n', b'    }\n' + _marker(4, 1, 4) + b'  }\n', 1)
+    modified = modified.replace(request_loop,
+        _marker(4, 1, 6) + request_loop + _marker(5, 0, 8), 1)
+    modified = modified.replace(request_end,
+        b'        XCTAssertEqual(reader.fileCalls, 0)\n' + _marker(5, 1, 8)
+        + b'      }\n\n' + _marker(6, 0, 6) + exact, 1)
+    modified = modified.replace(unicode_boundary,
+        _marker(6, 1, 6) + _marker(7, 0, 6) + unicode_boundary, 1)
+    modified = modified.replace(mutation_boundary,
+        _marker(7, 1, 6) + _marker(8, 0, 6) + mutation_boundary, 1)
+    final = suffix.replace(b'    }\n  }\n',
+        _marker(8, 1, 6) + _marker(9, 0, 6) + b'    }\n'
+        + _marker(9, 1, 4) + b'  }\n', 1)
     modified = modified.replace(suffix, final, 1)
     projected = original[:start] + modified + original[end:]
     inverse = projected
-    for phase, edge in SEQUENCE:
-        statement = _marker(phase, edge, 4 if (phase, edge) in ((0, 0), (4, 1)) else 6)
+    for phase, edge in STATEMENTS:
+        indent = 4 if (phase, edge) in ((0, 0), (9, 1)) else (8 if phase == 5 else 6)
+        statement = _marker(phase, edge, indent)
         _require(inverse.count(statement) == 1)
         inverse = inverse.replace(statement, b'', 1)
-    _require(inverse == original and projected.count(TAG) == 10)
+    _require(inverse == original and projected.count(TAG) == len(STATEMENTS))
     return projected
 
 
@@ -172,15 +201,15 @@ def parse_trace(stdout, stderr):
                 continue
             _require(marker_stream is None or marker_stream == stream)
             marker_stream = stream
-            match = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-4]) e=([01])\n', line)
-            _require(match is not None and len(sequence) < 10)
+            match = re.fullmatch(rb'CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\n', line)
+            _require(match is not None and len(sequence) < len(SEQUENCE))
             pair = (int(match[1]), int(match[2]))
             _require(pair == SEQUENCE[len(sequence)])
             sequence.append(pair)
     if not sequence:
         return dict(phase=None, edge=None, records=0, horizon='not-observed')
     phase, edge = sequence[-1]
-    horizon = 'all-intervals-ended' if len(sequence) == 10 else (
+    horizon = 'all-intervals-ended' if len(sequence) == len(SEQUENCE) else (
         'entered-without-end' if edge == 0 else 'completed-interval')
     return dict(phase=phase, edge=edge, records=len(sequence), horizon=horizon)
 
@@ -259,7 +288,7 @@ def freeze(root, run, plan):
         originalDirectories=[_directory(root, p) for p in sorted(directories)],
         ownedDirectories=[_directory(run, run / name) for name in ('.', 'Project', 'Tools', 'State', 'Temporary')],
         projection=dict(target=TARGET, originalSHA256=hashlib.sha256(buffers[TARGET]).hexdigest(),
-                        projectedSHA256=hashlib.sha256(projected).hexdigest(), records=10))
+                        projectedSHA256=hashlib.sha256(projected).hexdigest(), records=len(SEQUENCE)))
     _save(run / 'inputs.json', captured)
     manifest = dict(capture=captured, authority=_fact(run, run / 'inputs.json')[0])
     verify_inputs(root, run, manifest)
@@ -385,10 +414,10 @@ def render(result):
         state, trace = result['state'], result['trace']
         _require(state in ('observed', 'not-observed'))
         records = trace['records']
-        _require(type(records) is int and 0 <= records <= 10)
+        _require(type(records) is int and 0 <= records <= len(SEQUENCE))
         if records:
             phase, edge = SEQUENCE[records - 1]
-            horizon = 'all-intervals-ended' if records == 10 else ('entered-without-end' if edge == 0 else 'completed-interval')
+            horizon = 'all-intervals-ended' if records == len(SEQUENCE) else ('entered-without-end' if edge == 0 else 'completed-interval')
         else:
             phase, edge, horizon = None, None, 'not-observed'
         _require(trace == dict(phase=phase, edge=edge, records=records, horizon=horizon))

@@ -14,15 +14,16 @@ TARGET = 'Tests/PadCoreTests/FolderReplacementPreviewTests.swift'
 METHOD = 'testAdmissionAndBudgetsRejectBeforeExpensiveWork'
 SELECTOR = r'^PadCoreTests\.FolderReplacementPreviewTests/testAdmissionAndBudgetsRejectBeforeExpensiveWork$'
 MARKER = b'CI_FOLDER_PREVIEW_TRACE'
-SEQUENCE = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (3, 1), (4, 0), (4, 1)]
-CALL = re.compile(rb'(?m)^ {4,6}FileHandle\.standardError\.write\(Data\("CI_FOLDER_PREVIEW_TRACE p=([0-4]) e=([01])\\n"\.utf8\)\)\n')
+STATEMENTS = [(p, e) for p in range(10) for e in (0, 1)]
+SEQUENCE = STATEMENTS[:10] + [(5, 0), (5, 1)] * 12 + STATEMENTS[12:]
+CALL = re.compile(rb'(?m)^ {4,8}FileHandle\.standardError\.write\(Data\("CI_FOLDER_PREVIEW_TRACE p=([0-9]) e=([01])\\n"\.utf8\)\)\n')
 ORIGINAL = (ROOT / TARGET).read_bytes()
 spec = importlib.util.spec_from_file_location('ci_folder_preview_trace_contract', ROOT / 'scripts/ci_folder_preview_trace.py')
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 
 
-def trace(count=10):
+def trace(count=42):
     return b''.join(f'CI_FOLDER_PREVIEW_TRACE p={p} e={e}\n'.encode('ascii') for p, e in SEQUENCE[:count])
 
 
@@ -93,6 +94,7 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
             return None
         return root, run, files, plan, manifest
 
+    # Historical method name retained; now twenty literal writes emit forty-two records.
     # Break caught: rewritten original statements, extra logging or wrong constructor interval.
     def test_projection_is_only_ten_markers_with_exact_whole_original_inverse(self):
         projected = runner.project_test(ORIGINAL)
@@ -100,8 +102,8 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
         if not isinstance(projected, bytes):
             return
         matches = list(CALL.finditer(projected))
-        self.assertEqual([(int(m[1]), int(m[2])) for m in matches], SEQUENCE)
-        self.assertEqual(projected.count(MARKER), 10)
+        self.assertEqual([(int(m[1]), int(m[2])) for m in matches], STATEMENTS)
+        self.assertEqual(projected.count(MARKER), 20)
         self.assertEqual(CALL.sub(b'', projected), ORIGINAL)
         method = projected.index(('  func ' + METHOD + '() throws {').encode())
         body = projected.index(b'    try withFixture { fixture in\n', method)
@@ -114,8 +116,8 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
         self.assertTrue(invalid < matches[3].start() < matches[4].start() < long_url)
         self.assertTrue(long_url < matches[5].start() < matches[6].start() < nul_url)
         self.assertTrue(nul_url < matches[7].start() < matches[8].start() < requests)
-        self.assertTrue(requests < matches[9].start() < next_method)
-        self.assertTrue(matches[9][0].startswith(b'    FileHandle'), 'Final marker must be outside fixture body')
+        self.assertTrue(requests < matches[9].start() < matches[19].start() < next_method)
+        self.assertTrue(matches[19][0].startswith(b'    FileHandle'), 'Final marker must be outside fixture body')
         method_source = projected[method:next_method]
         entry = (b'  func testAdmissionAndBudgetsRejectBeforeExpensiveWork() throws {\n' + matches[0][0]
                  + b'    try withFixture { fixture in\n' + matches[1][0] + matches[2][0]
@@ -131,9 +133,9 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
         self.assertIn(constructor_boundary, method_source,
                       'real loop/zero-I/O assertions and both exact URL constructors must bound the phases')
         suffix = (b'      assertError(.sourceLimit) { try preview(fixture, urls: [fixture.a]) }\n'
-                  b'    }\n' + matches[9][0] + b'  }\n\n'
+                  + matches[17][0] + matches[18][0] + b'    }\n' + matches[19][0] + b'  }\n\n'
                   b'  // Catches returning the first result after later file I/O or selected-content rejection.\n')
-        self.assertIn(suffix, method_source, 'phase4 END must follow actual final assertion and fixture return')
+        self.assertIn(suffix, method_source, 'phase8 END and phase9 BEGIN follow final assertion; phase9 END follows fixture return')
         self.assertEqual(projected[:method], ORIGINAL[:ORIGINAL.index(('  func ' + METHOD).encode())])
 
     # Break caught: accidentally tracing another method or accepting ambiguous/stale anchors.
@@ -159,11 +161,14 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
 
     # Break caught: discarded last BEGIN, accepted missing middle END, or log/record truncation.
     def test_decoder_accepts_complete_and_entered_without_end_but_refuses_bad_records(self):
-        complete = runner.parse_trace(b'', trace())
+        try:
+            complete = runner.parse_trace(b'', trace())
+        except ValueError:
+            complete = None
         self.assertIsInstance(complete, dict, 'No trace decoder; later ordered-prefix controls UNENTERED')
         if not isinstance(complete, dict):
             return
-        self.assertEqual(complete, dict(phase=4, edge=1, records=10, horizon='all-intervals-ended'))
+        self.assertEqual(complete, dict(phase=9, edge=1, records=42, horizon='all-intervals-ended'))
         self.assertEqual(runner.parse_trace(b'ordinary stdout\n', trace(5)),
                          dict(phase=2, edge=0, records=5, horizon='entered-without-end'))
         self.assertEqual(runner.parse_trace(b'', trace(4)),
@@ -323,12 +328,12 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
                          'Actual parent stdout markers must be admitted before deeper trace/privacy checks')
         if stdout_result.get('state') != 'observed':
             return
-        self.assertEqual(stdout_result['trace'], dict(phase=4, edge=1, records=10, horizon='all-intervals-ended'))
+        self.assertEqual(stdout_result['trace'], dict(phase=9, edge=1, records=42, horizon='all-intervals-ended'))
         self.assertEqual((stdout_result['ownedExit'], stdout_result['ownedReturnCode']), (0, 0))
         self.assertEqual(stdout_result['signalObservation'], 'not-observed-for-selected-test')
         stdout_lines = runner.render(stdout_result)
         self.assertEqual(stdout_lines, ['ci-folder-preview-trace: observed',
-            'trace: phase=4 edge=1 horizon=all-intervals-ended records=10',
+            'trace: phase=9 edge=1 horizon=all-intervals-ended records=42',
             'owned: exit=0 returnCode=0 signal=not-observed-for-selected-test'])
         stdout_text = '\n'.join(stdout_lines) + '\n'
         self.assertLessEqual(len(stdout_text.encode('ascii')), 512)
@@ -376,6 +381,110 @@ class FolderPreviewTraceContractTests(unittest.TestCase):
                 self.assertEqual(runner.render(result), ['ci-folder-preview-trace: unavailable', 'reason: incomplete-evidence'])
                 self.assertEqual(retained.read_bytes(), b'preserve original diagnostic custody')
                 self.assertTrue((run / 'stage').exists(), 'Raw failure evidence must remain retained')
+
+
+    # Break caught: fixed twelve-iteration decoder accepted after request-array or loop-body drift.
+    def test_projection_refuses_request_case_membership_order_and_loop_drift(self):
+        self.assertIsInstance(runner.project_test(ORIGINAL), bytes)
+        first = b'        ([fixture.a, fixture.a], literal(), "X", .init()),\n'
+        second = b'        ([fixture.a, fixture.b], literal(), "X", .init(maxFiles: 1)),\n'
+        self.assertEqual(ORIGINAL.count(first + second), 1)
+        loop = b'      for (urls, query, replacement, limits) in requestCases {\n'
+        start = ORIGINAL.index(loop)
+        end = ORIGINAL.index(b'      let exact = try preview(', start)
+        original_loop = ORIGINAL[start:end]
+        changed_loop = original_loop.replace(b'XCTAssertEqual(reader.fileCalls, 0)',
+                                             b'XCTAssertEqual(reader.fileCalls, 1)', 1)
+        self.assertNotEqual(original_loop, changed_loop)
+        variants = {
+            'removed-case': ORIGINAL.replace(first, b'', 1),
+            'added-case': ORIGINAL.replace(first, first + first, 1),
+            'reordered-cases': ORIGINAL.replace(first + second, second + first, 1),
+            'changed-case': ORIGINAL.replace(second, second.replace(b'maxFiles: 1', b'maxFiles: 0'), 1),
+            'changed-loop-oracle': ORIGINAL[:start] + changed_loop + ORIGINAL[end:],
+            'changed-loop-entry': ORIGINAL.replace(loop, loop.replace(b'in requestCases', b'in requestCases.reversed()'), 1),
+        }
+        for kind, data in variants.items():
+            self.assertNotEqual(data, ORIGINAL)
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                runner.project_test(data)
+        self.assertEqual((ROOT / TARGET).read_bytes(), ORIGINAL)
+
+    # Break caught: repeated BEGIN/END, early exit, extra iteration, or prefix ordinal discarded.
+    def test_repeated_phase_five_prefixes_and_exact_twelve_iteration_boundary(self):
+        try:
+            actual = runner.parse_trace(b'', trace())
+        except ValueError:
+            actual = None
+        self.assertEqual(actual, dict(phase=9, edge=1, records=42, horizon='all-intervals-ended'),
+                         'Finer sequence unavailable; repeated-loop horizons UNENTERED')
+        if actual != dict(phase=9, edge=1, records=42, horizon='all-intervals-ended'):
+            return
+        for iteration in range(12):
+            begin_count = 11 + 2 * iteration
+            for stdout in (False, True):
+                for count, edge, horizon in [(begin_count, 0, 'entered-without-end'),
+                                             (begin_count + 1, 1, 'completed-interval')]:
+                    with self.subTest(iteration=iteration, stdout=stdout, edge=edge):
+                        streams = (trace(count), b'') if stdout else (b'', trace(count))
+                        self.assertEqual(runner.parse_trace(*streams),
+                                         dict(phase=5, edge=edge, records=count, horizon=horizon))
+        records = trace().splitlines(keepends=True)
+        for iteration in range(12):
+            at = 10 + 2 * iteration
+            variants = [records[:at] + records[at + 1:],
+                        records[:at + 1] + [records[at]] + records[at + 1:],
+                        records[:at] + records[at:at + 2][::-1] + records[at + 2:],
+                        records[:at] + records[34:]]
+            for kind, variant in enumerate(variants):
+                with self.subTest(iteration=iteration, malformed=kind), self.assertRaises(ValueError):
+                    runner.parse_trace(b'', b''.join(variant))
+        for variant in [records[:34] + records[32:34] + records[34:],
+                        records[:32] + records[34:], records[:-1] + [records[-1], records[-1]]]:
+            with self.subTest(extra_or_missing=len(variant)), self.assertRaises(ValueError):
+                runner.parse_trace(b''.join(variant), b'')
+
+    # Break caught: reporting iteration finished before zero-I/O assertions, or cleanup before return.
+    def test_literal_loop_writes_and_cleanup_boundary_preserve_whole_source(self):
+        projected = runner.project_test(ORIGINAL)
+        self.assertIsInstance(projected, bytes)
+        if not isinstance(projected, bytes):
+            return
+        matches = list(CALL.finditer(projected))
+        self.assertEqual(len(matches), 20, 'Finer projection unavailable; loop/cleanup boundaries UNENTERED')
+        if len(matches) != 20:
+            return
+        self.assertEqual([(int(m[1]), int(m[2])) for m in matches], STATEMENTS)
+        self.assertEqual(CALL.sub(b'', projected), ORIGINAL)
+        loop = b'      for (urls, query, replacement, limits) in requestCases {\n'
+        array_start = ORIGINAL.index(b'      let requestCases:')
+        loop_start = ORIGINAL.index(loop, array_start)
+        array = ORIGINAL[array_start:loop_start]
+        self.assertIn(array + matches[9][0] + loop + matches[10][0]
+                      + b'        let reader = ControlledReader()\n', projected)
+        self.assertTrue(matches[10][0].startswith(b'        FileHandle'))
+        self.assertTrue(matches[11][0].startswith(b'        FileHandle'))
+        self.assertIn(b'        XCTAssertEqual(reader.rootCalls, 0)\n'
+                      b'        XCTAssertEqual(reader.fileCalls, 0)\n'
+                      + matches[11][0] + b'      }\n\n' + matches[12][0]
+                      + b'      let exact = try preview(\n', projected)
+        self.assertIn(b'      XCTAssertEqual(zeroMatches.matchCount, 0)\n\n'
+                      + matches[13][0] + matches[14][0]
+                      + b'      let exactPattern = try preview(\n', projected)
+        self.assertIn(b'      XCTAssertEqual(exactReplacement.outputBytes, 4096)\n\n'
+                      + matches[15][0] + matches[16][0]
+                      + b'      let handle = try FileHandle(forWritingTo: fixture.a)\n', projected)
+        boundary = (b'      assertError(.sourceLimit) { try preview(fixture, urls: [fixture.a]) }\n'
+                    + matches[17][0] + matches[18][0] + b'    }\n' + matches[19][0] + b'  }\n')
+        self.assertIn(boundary, projected)
+        self.assertTrue(matches[18][0].startswith(b'      FileHandle'))
+        self.assertTrue(matches[19][0].startswith(b'    FileHandle'))
+        for moved in [ORIGINAL.replace(b'      assertError(.sourceLimit) { try preview(fixture, urls: [fixture.a]) }\n    }',
+                                        b'    }\n      assertError(.sourceLimit) { try preview(fixture, urls: [fixture.a]) }', 1),
+                      ORIGINAL.replace(b'      let zeroMatches = try preview(', b'      let otherMatches = try preview(', 1)]:
+            self.assertNotEqual(moved, ORIGINAL)
+            with self.assertRaises(ValueError):
+                runner.project_test(moved)
 
 
 if __name__ == '__main__':

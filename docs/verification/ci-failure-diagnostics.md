@@ -280,3 +280,38 @@ checks, the synthetic large-file mutation and fixture verification/cleanup. No
 individual operation is identified as the cause. The accepted local retake
 reaches all ten markers; it does not resolve this hosted failure. Preserve all
 assertions and the original core failure when adding narrower observation.
+
+## Finer request and cleanup observation — 2026-10-16
+
+Run [38874745958](https://github.com/stultusmundi/theonlypad/actions/runs/38874745958)
+at `be6ec6f` reproduces the same nine-marker phase4 interruption and natural
+SwiftPM exit1. No individual operation or selected-test signal is identified.
+
+The next fixed projection keeps the same original test and selector. It adds20
+literal marker statements to its frozen copy and emits42 records: phases0–3
+retain their original boundaries; phase4 constructs requests; phase5 brackets
+each of twelve requests and its zero-I/O assertions; phase6 covers budgets and
+zero matches; phase7 covers Unicode boundaries; phase8 covers synthetic mutation
+and source-limit refusal; phase9 covers fixture verification/cleanup. Its final
+marker follows the actual withFixture return. Repeated phase5 pairs provide
+ordinal progress under an exact source guard, not distinct request identities.
+The complete request array and loop are bound before relying on twelve pairs.
+Removing the20 statements reconstructs every original byte. No production
+validation, test assertion or original core-step failure is changed.
+
+The unchanged nine contracts first expose12 ordinary failure entries with zero
+errors against the earlier ten-marker script; two inherited methods pass.
+After the reviewed narrow implementation, all nine pass. Public diagnostic
+discovery separately passes42 checks (the previous33 plus the updated nine).
+One actual local selected Swift test passes with all42 ordered records and
+phase9 end;565 original/566 copied facts and the original captured authority
+remain matched, with complete natural zero-exit owned receipt/captures. These
+are separate scopes, not additive totals or a full application test run.
+
+Closed output stays within512 ASCII bytes. Single-stream, malformed-prefix,
+source-drift, receipt/capture/custody and split-stream refusal checks remain
+active. The accepted watchdog/verifier are unchanged. Do not nest this command
+under another session-owning watchdog. The finer hosted result remains pending;
+local success does not establish its cause, child signal, compiler artifact
+graph, desktop behavior or performance acceptance. Earlier ten-record results
+remain historical and are not relabeled as42-record runs.

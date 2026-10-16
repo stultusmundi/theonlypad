@@ -23,7 +23,8 @@ own attempt and reservation.
 
 ## Tested
 
-The fixed public command passes its original four routing tests and ten catalog
+Development commit `be6ec6f` is pushed and read back exactly. The fixed public
+command passes its original four routing tests and ten catalog
 startup/quit tests against current working sources:
 
 ```sh
@@ -72,6 +73,10 @@ regressions in fresh processes (Find/replacement/undo/joined quit, malformed
 regex retry and stale approval after edit/undo). This retake covers the unchanged
 helper cases with current AppDelegate; it does not show windows or establish
 broad containment, memory or packaged Bundle.main acceptance.
+
+A matching local package passes ad-hoc signing and standalone archive/SBOM
+validation. The selected desktop baseline stops during UI automation setup
+(xcodebuild65) before any test method; it provides no application pass or fail.
 
 ## Outstanding
 

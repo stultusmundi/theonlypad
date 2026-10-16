@@ -1,12 +1,12 @@
 # Active integration checkpoint — 2026-10-16
 
-Development source is confirmed remotely at `e40142e`, including the Locate
+Development source is confirmed remotely at `be6ec6f`, including catalog activation, the Locate
 presentation correction, monitor package repair and failure-only phase diagnostic.
 The monitor harness completes seven named summaries; these are not seven XCTest
 cases. Matching packaged Locate and broader desktop acceptance remain outstanding.
 See [presentation verification](verification/disk-conflict-presentation.md).
 
-Catalog startup/quit activation is now adopted in working source. The retained
+Catalog startup/quit activation is now adopted and pushed. The retained
 `scripts/test-application-language-catalog.sh` passes its original four and ten
 new hidden native cases against the actual owner and current Locate correction.
 Independent actual review verifies frozen sources, compiler artifacts, complete
@@ -31,9 +31,19 @@ The original command/failure remain unchanged. Local diagnostic execution passes
 all ten markers, so local success is not hosted acceptance.
 See [CI verification](verification/ci-failure-diagnostics.md).
 
+The subsequent `be6ec6f` hosted run38874745958 repeats that same interval.
+The finer working diagnostic now passes nine private contracts,42 public checks
+and one actual local selected Swift test with42 records/phase9 end. Exact12-case
+source binding and whole-test inverse preserve the original assertions;565
+original/566 copied facts and original receipt authority match. Final actual
+review/publication is pending. No finer hosted outcome or cause is claimed.
+
+
 The same-source actual-helper command also passes its three fixed cases in
-fresh processes, including joined quit. Independent publication review is in
-progress before committing/pushing this application activation. Narrow the hosted phase4 failure
+fresh processes, including joined quit. Independent publication review accepted the exact17 files before the verified
+non-force push. Matching local packaging/signatures/archive/SBOM pass; focused
+desktop setup exits65 while enabling automation mode before its method enters.
+No current desktop acceptance follows. Narrow the hosted phase4 failure
 without weakening assertions; continue manager/picker integration through the
 single catalog authority, matching package/desktop acceptance, unresolved native
 history/storage work and every remaining BUILD requirement. These checkpoints
