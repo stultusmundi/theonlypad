@@ -1262,3 +1262,11 @@ serial execution; remaining BUILD scope, public native adoption and packaged
 acceptance remain active work.
 
 Current neighboring verification: the legacy managed-documents runner failed at compilation before executing tests because its copied test access extensions are stale. Preserve all original tests and migrate this command to the fixed native coordinator; do not interpret the historical count as current verification.
+
+Latest bounded status refresh (2026-10-16): hosted run38941755759 at public HEAD7ec098c still fails closed with boundary17/parser4/state6/incoming6 and no predicate tuple. Local diagnostic success does not identify its cause or justify a production fix.
+
+The private XML approval-fence V2 passes27 unique native methods (28 executions with default-first overlap), including the original25 and two restore-before-true controls; historical REDs remain retained. A separate neighboring32-method result has30 passes and two ordinary macro-command assertion failures in nested-edit cases. Their cause and regression status are unresolved. App7 static composition review remains accepted; the deeper baseline attempt is now incomplete (exit125). Seven methods were selected, but only the first two entered fixture bodies. Cancellation assertions were reached; the second also encountered cleanup refusal/managed-dirty assertions and an unexpected native teardown transition. The remaining five were refused before fixture custody. Eighteen failure reports/six unexpected results and retained synthetic State remain; postflight verified. This is not a seven-method ordinary RED or an accepted App behavior cohort, and no product cause is attributed. No production adoption or broader XML behavior acceptance follows.
+
+The private manager departure/native-presenter suite passes66 hidden methods; a separate actual native sheet test verifies attach/detach/hide. Full App Quit/recovery remains separate and unaccepted. The Source changes remain private and unadopted. Overall feature acceptance and the existing planning-range limits are unchanged.
+
+The separately isolated original cancellation-refusal method now provides narrow RED: one method, three ordinary one-live-window assertions, zero unexpected errors and empty synthetic State, with different actual review `a2cadcd8`. Preserve the incomplete full App7 outcome.

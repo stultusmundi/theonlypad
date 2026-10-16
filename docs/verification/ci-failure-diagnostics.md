@@ -617,3 +617,9 @@ construction, XCTest assertion handling, preview and deferred fixture checks.
 The reviewed test-helper boundary diagnostic is now implemented and locally
 verified; the later narrowed hosted observation is recorded below. No exact failing accessor, Foundation defect or selected-test signal
 is established. The local1,211-test result remains a separate passing scope.
+
+## Latest hosted retake — 2026-10-16
+
+Hosted [run38941755759](https://github.com/stultusmundi/theonlypad/actions/runs/38941755759) at public HEAD `7ec098c` still fails in the closed diagnostic. Its bounded summary is `boundary=17 parser=4 state=6 incoming=6`; it supplies no selected-call predicate tuple. The predicate collector’s reason for withholding its tuple remains unidentified; the original parser refusal is recorded above. This result does not establish a production cause, Core defect or fix. Preserve the existing grammar and refusal behavior; local selected-test and pure-contract passes remain separate evidence.
+
+No raw hosted output is reproduced here. The diagnostic Source/Test changes are published at `7ec098c`; the XML and manager product changes remain private. No package, desktop or performance claim follows.

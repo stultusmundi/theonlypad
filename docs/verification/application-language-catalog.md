@@ -267,3 +267,8 @@ Raw synthetic evidence stays ignored under
 `.local/application-language-catalog-integration/`. Existing standalone
 [read](native-language-catalog-loading.md) and
 [mutation](native-language-catalog-mutation.md) results remain separate scopes.
+
+
+## Latest private manager/native-presenter status — 2026-10-16
+
+The private departure/native-presenter suite passes66 hidden methods with zero failures or unexpected errors (independent evidence review8cece87). A separate actual native sheet test passes one selected method and verifies attachment, detachment and hiding (actual evidence review504ac60). These checks cover the private component boundary only. Source changes remain private and unadopted; public manager37 is unchanged. Full application Quit/recovery, startup activation, visible app workflows, package acceptance, physical input, accessibility, IME and performance remain outstanding. The local package remains `be6ec6f`; the acceptance matrix is unchanged.
