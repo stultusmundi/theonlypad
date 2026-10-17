@@ -1,3 +1,17 @@
+# Swift build-progress diagnostic correction — 17 October 2026
+
+The crash-record scanner now distinguishes a narrow class of Swift build-progress records from JSON candidates. It ignores only complete column-zero ASCII records with one to ten decimal digits on each side of a slash, the exact `] ` delimiter, at least one printable task character, no literal `crashReport` substring and at most 8,192 UTF-8 bytes. Oversized matching records refuse with `crash-cap-exceeded`; other JSON candidates retain the original parsing and refusal rules. No record text is emitted or repaired. Workflow, capture reader, process receipt validation and crash-frame output remain unchanged.
+
+Seven synthetic regression tests reproduced four ordinary failures across 142 tests, with no errors and the existing 135 passing. The corrected parser passes all 142. Replaying the retained successful 1,228-test local build capture now yields `no-crash-report`, replacing its earlier `invalid-crash-json` refusal. This proves the local diagnostic correction, without another child launch.
+
+Hosted runs [38998238622](https://github.com/stultusmundi/theonlypad/actions/runs/38998238622) at `901fd9a` and [38999111190](https://github.com/stultusmundi/theonlypad/actions/runs/38999111190) at `a4202be` failed in the core step and skipped later native checks. Both crash diagnostics reported `invalid-crash-json`. Their offending captured record and underlying crash cause remain unknown; the local progress-record finding does not establish either. The corrected diagnostic has not yet been observed on a hosted run.
+
+```sh
+python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
+```
+
+Earlier evidence follows unchanged.
+
 # Closed crash-frame detail — 17 October 2026
 
 The diagnostic adds `--crash-detail` and a separate core-failure-conditioned CI step. Only the existing 600-second core-test command receives the bounded Swift backtrace configuration. The original test selection, watchdog, reader, earlier diagnostic modes and failure outcome remain unchanged. No raw captures are uploaded or printed by this mode.

@@ -998,6 +998,17 @@ def _crash_require(value, reason):
         raise _CrashProblem(reason)
 
 
+def _crash_progress(record):
+    # This is a closed lexical exception, not a crash-report recognizer.
+    if 'crashReport' in record:
+        return False
+    if re.fullmatch(r'\[[0-9]{1,10}/[0-9]{1,10}\] [\x20-\x7e]+', record) is None:
+        return False
+    # The accepted grammar is ASCII, so this is also its UTF-8 byte length.
+    _crash_require(len(record.encode('utf-8')) <= 8192, 'crash-cap-exceeded')
+    return True
+
+
 def _crash_status(status):
     reason = 'invalid-status'
     _crash_require(type(status) is dict and all(type(key) is str for key in status)
@@ -1215,6 +1226,8 @@ def classify_crash_detail(status, stdout, stderr):
             start = end + 1
             if terminated and record.endswith('\r'):
                 record = record[:-1]
+            if _crash_progress(record):
+                continue
             if not (record.lstrip(' \t').startswith(('{', '[')) or 'crashReport' in record):
                 continue
             attempts += 1
