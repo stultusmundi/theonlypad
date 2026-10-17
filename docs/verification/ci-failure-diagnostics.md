@@ -1,3 +1,15 @@
+# Hosted observation at 92ffe0d — 17 October 2026
+
+Run [38993055988](https://github.com/stultusmundi/theonlypad/actions/runs/38993055988) failed in the initial unit-test step. The added error-family step completed successfully and emitted:
+
+```text
+detail-v1: kinds=16 isolation=2 ownedSignal=0 reportedSignalState=1 reportedSignal=11
+```
+
+This observes the exact XCTest unexpected-signal wording with one reported signal 11, plus source actor-isolation warnings. No matching source isolation-error or fixed executor-fatal family was observed. The owned Swift test driver returned 1; it was not itself observed terminating by signal. Captures were complete and untruncated, with no timeout. These bounded text families do not identify the crashing function or cause. The last-started source candidate and warning locations remain observations only.
+
+The separate folder phase diagnostic still reports incomplete evidence at boundary17/parser4/state6/incoming6/collector9/window5; this is its own parser/collector refusal, not a causal application finding. Later native stages were skipped. The final local public-source diagnostic suite passes all 100 tests. No hosted repair or broader acceptance is claimed. Earlier records below remain historical and unchanged.
+
 # Closed error-family detail — 2026-10-17
 
 The diagnostic now has a separate `--error-detail` mode, invoked by its own core-failure-conditioned CI step. It emits two bounded ASCII lines with five validated integer fields; captured messages, paths, arguments and exception text are never emitted. The original reports, reader, capture/status limits, source-location behavior and workflow fallback remain unchanged. No capture is uploaded.

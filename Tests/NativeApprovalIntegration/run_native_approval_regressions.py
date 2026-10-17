@@ -18,9 +18,9 @@ import sys
 import uuid
 
 DRIVERS = {
-    'Tests/NativeIntegration/run_application_language_catalog.py': ('Runner/run_application_language_catalog.py', 'b61d227f167d2d2490f0c8455248bfc7a5c23a64b0f1b078ce6eddfa61d456ff'),
+    'Tests/NativeIntegration/run_application_language_catalog.py': ('Runner/run_application_language_catalog.py', 'fab396f551bcb7ba498fe21950ef8ad1a1cdfdbbd45a81a7fdaae5311516a24f'),
     'Tests/NativeIntegration/application_language_catalog_proof.py': ('Runner/application_language_catalog_proof.py', 'a51a380f2016265187d577416f840eaa83cacd0b6d083aba08f353b5d355cefb'),
-    'Tests/NativeIntegration/run_native_regressions.py': ('Runner/run_native_regressions.py', 'f4435e99ad7a547a90d01ce38c094d0813fac797a443a0e33654cce6b5ea9cef'),
+    'Tests/NativeIntegration/run_native_regressions.py': ('Runner/run_native_regressions.py', 'ff737184848e47d3d7f655196f6a16c25de62acb4671112209dc74c741dc50cf'),
     'scripts/run-owned-search-tests.py': ('Runner/run-owned-search-tests.py', 'd5bd867e4a65b4ee053209fe0a5822867b8d0878fd6d059f474c9b28a0f6286d'),
 }
 FIELDS = set('command pid processGroup exitObserved registrationError groupSignalAttempted groupSignalError groupCleanup groupQuery waitCompleted returnCode waitError timedOut interruptedSignal truncated captureComplete failure exit seconds captured'.split())

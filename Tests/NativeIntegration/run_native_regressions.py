@@ -835,7 +835,7 @@ def discover(root,suite,prebuilt):
         paths.update((root/'Sources').rglob('*.swift'))
         if suite=='close':
             paths.add(root/'Package.swift')
-            for name in ('PadCoreTests','SearchExecutionTests'):
+            for name in ('PadCoreTests','SearchExecutionTests','PadSearchWorkerRuntimeTests'):
                 paths.update((root/'Tests'/name).glob('*.swift'))
     else:
         paths.update((root/'Sources/TheOnlyPad').glob('*.swift'))
@@ -1090,7 +1090,7 @@ def freeze(root,run,suite,prebuilt=False):
         if not prebuilt:
             for item in items:
                 name=item['source']
-                if name=='Package.swift' or name.startswith(('Sources/','Tests/PadCoreTests/','Tests/SearchExecutionTests/')):
+                if name=='Package.swift' or name.startswith(('Sources/','Tests/PadCoreTests/','Tests/SearchExecutionTests/','Tests/PadSearchWorkerRuntimeTests/')):
                     generate('BuildPackage/'+name,(run/item['frozen']).read_bytes(),name)
     trees=['Package'] if suite!='close' else ['NativeSources']+([] if prebuilt else ['BuildPackage'])
     manifest=dict(version=1,suite=suite,prebuilt=prebuilt,sources=items,generated=generated,inputTrees=trees,

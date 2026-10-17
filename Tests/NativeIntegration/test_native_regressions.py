@@ -777,4 +777,61 @@ suffix
                          'NativeMacroApprovedViewCapacityTests|NativeMacroApprovedViewPayloadTests|NativeMacroApprovedViewReceiptTests|NativeMacroChronologyTests|NativeMacroControlledExplicitCapacityTests|NativeMacroStrictExplicitCapacityTests')
         with self.assertRaises(SystemExit): RUNNER.parse_args(['macro','/synthetic/debug'])
 
+class ColdCloseWorkerTargetTests(unittest.TestCase):
+    setUp = NativeRunnerTests.setUp
+    fixture = NativeRunnerTests.fixture
+    # Inherit only fixture helpers; this class's own methods are the new contracts.
+    def worker_fixture(self):
+        root, run = self.fixture(suite='close')
+        current = next(parent for parent in Path(__file__).absolute().parents
+                       if (parent / 'Package.swift').is_file() and (parent / 'Sources').is_dir())
+        package = (current / 'Package.swift').read_bytes()
+        self.assertIn(b'name: "PadSearchWorkerRuntimeTests"', package,
+                      'The real current manifest must declare the originally omitted target')
+        (root / 'Package.swift').write_bytes(package)
+        (root / 'Sources/PadSearchWorkerRuntime').mkdir()
+        (root / 'Sources/PadSearchWorkerRuntime/Runtime.swift').write_text('// tiny runtime source\n')
+        path = root / 'Tests/PadSearchWorkerRuntimeTests/WorkerTests.swift'
+        path.parent.mkdir(parents=True)
+        path.write_text('// exact synthetic worker Test bytes: \u03a9\n')
+        return root, run, path
+
+    def test_cold_close_freezes_every_current_manifest_test_target(self):
+        import re
+        root, run, worker = self.worker_fixture()
+        manifest = RUNNER.freeze(root, run, 'close')
+        names = set(re.findall(r'\.testTarget\(\s*name:\s*"([A-Za-z0-9_]+)"',
+                               (root / 'Package.swift').read_text()))
+        frozen = {path.name for path in (run / 'BuildPackage/Tests').iterdir() if path.is_dir()}
+        self.assertEqual(frozen, names, 'Keep all targets declared by the unchanged real manifest')
+        self.assertEqual((run / 'BuildPackage/Package.swift').read_bytes(), (root / 'Package.swift').read_bytes())
+        RUNNER.verify(run, manifest)
+
+    def test_cold_close_worker_tests_are_exact_and_both_mutation_forms_refuse(self):
+        root, run, worker = self.worker_fixture()
+        manifest = RUNNER.freeze(root, run, 'close')
+        frozen = run / 'BuildPackage/Tests/PadSearchWorkerRuntimeTests/WorkerTests.swift'
+        self.assertTrue(frozen.is_file(), 'Declared worker Test target needs its original source')
+        self.assertEqual(frozen.read_bytes(), worker.read_bytes())
+        self.assertEqual((run / 'Original/Tests/PadSearchWorkerRuntimeTests/WorkerTests.swift').read_bytes(), worker.read_bytes())
+        RUNNER.verify(run, manifest)
+        foreign = frozen.with_name('Foreign.swift');foreign.write_text('// foreign membership\n')
+        with self.assertRaises(ValueError):RUNNER.verify(run, manifest)
+        foreign.unlink();frozen.write_bytes(frozen.read_bytes() + b'foreign bytes')
+        with self.assertRaises(ValueError):RUNNER.verify(run, manifest)
+
+    def test_cold_close_worker_source_mutation_during_capture_refuses(self):
+        root, run, worker = self.worker_fixture();actual_read = RUNNER.read_real;visits = 0
+        def read(directory, path):
+            nonlocal visits
+            raw = actual_read(directory, path)
+            if Path(path) == worker:
+                visits += 1
+                # discover's first read is preflight; freeze's second is authoritative.
+                if visits == 2:worker.write_bytes(raw + b'changed during capture')
+            return raw
+        with patch.object(RUNNER, 'read_real', read), self.assertRaises(ValueError):
+            RUNNER.freeze(root, run, 'close')
+
+
 if __name__=='__main__': unittest.main()
