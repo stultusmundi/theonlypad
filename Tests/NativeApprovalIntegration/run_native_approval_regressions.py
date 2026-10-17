@@ -1,4 +1,4 @@
-"""Fixed current-source nonXML native approval gate,68 unique/69 occurrences.
+"""Fixed current-source nonXML approval plus transfer gate,74 unique/75 occurrences.
 
 The wrapper resolves its repository; inputs are public layout only. One accepted
 owned-process watchdog per fixed stage. No native child is started on import.
@@ -25,19 +25,22 @@ DRIVERS = {
 }
 FIELDS = set('command pid processGroup exitObserved registrationError groupSignalAttempted groupSignalError groupCleanup groupQuery waitCompleted returnCode waitError timedOut interruptedSignal truncated captureComplete failure exit seconds captured'.split())
 ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError, AttributeError, ImportError)
-FIXED_SELECTIONS = [{'stage': 'positive', 'classes': [{'class': 'SearchReplacementTests', 'methods': ['testRealDelegateReplaceAllPreservesSingleStepUnicodeUndoRedo']}], 'timeout': 90, 'mandatoryPositive': True}, {'stage': 'search32', 'classes': [{'class': 'SearchReplacementTests', 'methods': ['testSameLengthDelegateEditRefusesStaleReplaceAll', 'testDetachedDelegateTargetRefusesReplacement', 'testSavingDuringDelegateRefusesReplacement', 'testEditThenRestoreDuringDelegateStillRefusesOldRevision', 'testDelegateRefusalPreservesTextAndExistingUndo', 'testRealDelegateReplaceAllPreservesSingleStepUnicodeUndoRedo', 'testRealDelegateBookkeepingIsNotCommittedAfterUndoBoundaryReentry', 'testPendingSameTextDelegateEditRefusesUnprocessedMutation', 'testPostDelegateAuthorityCallbackPreservesOwnUndoAndMacroOnly', 'testNestedIdenticalDelegateCallKeepsItsOwnMacroAndUndo', 'testSuccessfulReplacementCommitsBookmarksAndOneMacroWithUndo', 'testUndoGroupCallbackCannotPublishPreparedSearchBookkeeping', 'testJSONSuccessAllowsSelectionChangeAndRetainsSingleUndo', 'testReplaySuccessRetainsActionBookmarksAndSingleUndo', 'testReplayRefusesReentrantNativeDelegateTextChange', 'testReplayRefusesOriginalCancellationDuringNativeDelegate', 'testReplayPreservesNewerOperationAfterAdmissionCallback', 'testTextUtilityUnicodePartialSuccessPreservesRangeBookmarksAndUndo', 'testTextUtilityPartialNoOpRetainsExistingBookmarkBookkeepingSemantics', 'testJSONActualCompletionRefusesReentrantDelegateTextChange', 'testLineEndingSuccessRetainsMinimalMacroAndSingleUndo', 'testTextUtilityRefusesReentrantNativeTextChange', 'testTextUtilityRefusesSelectionChangeDuringNativeDelegate', 'testAsyncCommandSuccessRetainsSelectionMacroAndUndo', 'testNoOpAsyncCommandSuccessStillInstallsResultSelection', 'testLineEndingConversionRefusesNewerOperationAfterAdmissionCallback', 'testAsyncCommandRefusesSelectionChangedDuringNativeDelegate', 'testNoOpAsyncCommandPreservesNewerOperationAndCaret', 'testPartialUnicodeTransformPreservesMacroRangeBookmarksAndSingleUndo', 'testInvalidPartialRangesRefuseBeforeDelegateOrMacro', 'testScalarBoundaryInsideGraphemeRemainsEditableAndNoOpWrapperRefuses', 'testDocumentTransformRefusesReentrantEditWithoutPublishingOuterMacro']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'native19', 'classes': [{'class': 'NativeMacroChronologyTests', 'methods': ['testChronologicalUnicodeReplacementUndoRedoPayloadsAndReplay', 'testChronologicalLengthChangingUndoContinueInvalidatesRedo', 'testChronologicalPreRecordingHistoryAndBookmarkOnlyReplay', 'testChronologicalGroupedAndCoalescedEditsReplayActualText', 'testRejectedFallbackNativeInsertionPublishesNoGhostMacroCommand', 'testDeniedNativeUndoLeavesChronologicalStreamAndTextUnchanged', 'testRefusedSearchProposalPreservesChronologicalPrefixAndCallbackEdits']}, {'class': 'NativeMacroApprovedViewReceiptTests', 'methods': ['testForeignExactApprovedWriteAppendsOnceWithoutCallerAttribution', 'testFalseOuterDecisionCannotApproveLaterRawWrite', 'testTrueNoWriteDecisionExpiresWhenHistoryInvocationReturns', 'testTrueDecisionCannotApproveDifferentReplacementPayload', 'testExtraPendingNilAfterControllerPermissionBurnsApproval', 'testPendingNilValueNilABAPreservesTextButNotRecordingApproval']}, {'class': 'NativeMacroApprovedViewCapacityTests', 'methods': ['testThirtyThirdRealProcessingBarrierDoesNotExceedCombinedCapacity', 'testRejectedPairRethrowsOnceAndRestoresActualStacks']}, {'class': 'NativeMacroApprovedViewPayloadTests', 'methods': ['testExactUTF16DelegateRequestAcknowledgesActualBookkeeping', 'testCanonicalEquivalentDifferentUTF16DelegateCannotAuthenticateBookkeeping']}, {'class': 'NativeMacroStrictExplicitCapacityTests', 'methods': ['testActualStrictEntryInsideThirtyTwoProcessingScopesPreservesSharedCapacity']}, {'class': 'NativeMacroControlledExplicitCapacityTests', 'methods': ['testActualControlledEntryInsideThirtyTwoProcessingScopesPreservesSharedCapacity']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'nested8', 'classes': [{'class': 'NativeMacroNestedStringReplacementTests', 'methods': ['testActualConcreteRangeChildRecordsOnceAndLeavesUsableOriginalAuthority', 'testChildNativeVetoHasOnePermissionNoFallbackAndKeepsLawfulParent', 'testRawCharacterWriteInSameAdmissionStillDisclosesIncompleteInterval', 'testRealEmptyStopAndRestartProtectNewEpochFromOldParent', 'testUnicodeReplacementCaretHistoryAndBookmarksMatchActualNonrecordingTwin', 'testSiblingChildrenKeepChronologicalCommandsAndOneNativeEventUndoWithoutOuter', 'testActualGrandchildCommitRejectsBothStaleAncestorsWithoutClearingIt', 'testSharedRealProcessingCapacityKeepsTextOnceAndMarksMissingRecording']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'negative7', 'classes': [{'class': 'NativeVetoHandoffNegativeTests', 'methods': ['testControllerReplacementWithoutChildHasNoHandoff', 'testGenuineVetoCannotAuthorizeForeignSuccessor', 'testGenuineVetoCannotAuthorizeNilSuccessor', 'testConfigurationRefusalBeforeNativePermissionHasNoVetoReceipt', 'testGenuineVetoCannotSurviveRawTextRevisionABA', 'testGenuineVetoCannotSurviveRealEmptyRecorderEpochABA', 'testSecondRecognizedNativeVetoCannotReplaceFirstWindowDisposition']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'caret2', 'classes': [{'class': 'NativeCaretApprovalHistoryTests', 'methods': ['testOwnerReentryRefusesCaretWithoutAddingGhostToSeededUndo', 'testOwnerReentryRefusesCaretWithoutDestroyingSeededRedo']}], 'timeout': 180, 'mandatoryPositive': False}]
-FIXED_STAGES = ['toolchain', 'build', 'binpath', 'positive', 'search32', 'native19', 'nested8', 'negative7', 'caret2']
-TIMEOUTS = {'toolchain': 30, 'build': 180, 'binpath': 30, 'positive': 90, 'search32': 180, 'native19': 180, 'nested8': 180, 'negative7': 180, 'caret2': 180}
+FIXED_SELECTIONS = [{'stage': 'positive', 'classes': [{'class': 'SearchReplacementTests', 'methods': ['testRealDelegateReplaceAllPreservesSingleStepUnicodeUndoRedo']}], 'timeout': 90, 'mandatoryPositive': True}, {'stage': 'search32', 'classes': [{'class': 'SearchReplacementTests', 'methods': ['testSameLengthDelegateEditRefusesStaleReplaceAll', 'testDetachedDelegateTargetRefusesReplacement', 'testSavingDuringDelegateRefusesReplacement', 'testEditThenRestoreDuringDelegateStillRefusesOldRevision', 'testDelegateRefusalPreservesTextAndExistingUndo', 'testRealDelegateReplaceAllPreservesSingleStepUnicodeUndoRedo', 'testRealDelegateBookkeepingIsNotCommittedAfterUndoBoundaryReentry', 'testPendingSameTextDelegateEditRefusesUnprocessedMutation', 'testPostDelegateAuthorityCallbackPreservesOwnUndoAndMacroOnly', 'testNestedIdenticalDelegateCallKeepsItsOwnMacroAndUndo', 'testSuccessfulReplacementCommitsBookmarksAndOneMacroWithUndo', 'testUndoGroupCallbackCannotPublishPreparedSearchBookkeeping', 'testJSONSuccessAllowsSelectionChangeAndRetainsSingleUndo', 'testReplaySuccessRetainsActionBookmarksAndSingleUndo', 'testReplayRefusesReentrantNativeDelegateTextChange', 'testReplayRefusesOriginalCancellationDuringNativeDelegate', 'testReplayPreservesNewerOperationAfterAdmissionCallback', 'testTextUtilityUnicodePartialSuccessPreservesRangeBookmarksAndUndo', 'testTextUtilityPartialNoOpRetainsExistingBookmarkBookkeepingSemantics', 'testJSONActualCompletionRefusesReentrantDelegateTextChange', 'testLineEndingSuccessRetainsMinimalMacroAndSingleUndo', 'testTextUtilityRefusesReentrantNativeTextChange', 'testTextUtilityRefusesSelectionChangeDuringNativeDelegate', 'testAsyncCommandSuccessRetainsSelectionMacroAndUndo', 'testNoOpAsyncCommandSuccessStillInstallsResultSelection', 'testLineEndingConversionRefusesNewerOperationAfterAdmissionCallback', 'testAsyncCommandRefusesSelectionChangedDuringNativeDelegate', 'testNoOpAsyncCommandPreservesNewerOperationAndCaret', 'testPartialUnicodeTransformPreservesMacroRangeBookmarksAndSingleUndo', 'testInvalidPartialRangesRefuseBeforeDelegateOrMacro', 'testScalarBoundaryInsideGraphemeRemainsEditableAndNoOpWrapperRefuses', 'testDocumentTransformRefusesReentrantEditWithoutPublishingOuterMacro']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'native19', 'classes': [{'class': 'NativeMacroChronologyTests', 'methods': ['testChronologicalUnicodeReplacementUndoRedoPayloadsAndReplay', 'testChronologicalLengthChangingUndoContinueInvalidatesRedo', 'testChronologicalPreRecordingHistoryAndBookmarkOnlyReplay', 'testChronologicalGroupedAndCoalescedEditsReplayActualText', 'testRejectedFallbackNativeInsertionPublishesNoGhostMacroCommand', 'testDeniedNativeUndoLeavesChronologicalStreamAndTextUnchanged', 'testRefusedSearchProposalPreservesChronologicalPrefixAndCallbackEdits']}, {'class': 'NativeMacroApprovedViewReceiptTests', 'methods': ['testForeignExactApprovedWriteAppendsOnceWithoutCallerAttribution', 'testFalseOuterDecisionCannotApproveLaterRawWrite', 'testTrueNoWriteDecisionExpiresWhenHistoryInvocationReturns', 'testTrueDecisionCannotApproveDifferentReplacementPayload', 'testExtraPendingNilAfterControllerPermissionBurnsApproval', 'testPendingNilValueNilABAPreservesTextButNotRecordingApproval']}, {'class': 'NativeMacroApprovedViewCapacityTests', 'methods': ['testThirtyThirdRealProcessingBarrierDoesNotExceedCombinedCapacity', 'testRejectedPairRethrowsOnceAndRestoresActualStacks']}, {'class': 'NativeMacroApprovedViewPayloadTests', 'methods': ['testExactUTF16DelegateRequestAcknowledgesActualBookkeeping', 'testCanonicalEquivalentDifferentUTF16DelegateCannotAuthenticateBookkeeping']}, {'class': 'NativeMacroStrictExplicitCapacityTests', 'methods': ['testActualStrictEntryInsideThirtyTwoProcessingScopesPreservesSharedCapacity']}, {'class': 'NativeMacroControlledExplicitCapacityTests', 'methods': ['testActualControlledEntryInsideThirtyTwoProcessingScopesPreservesSharedCapacity']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'nested8', 'classes': [{'class': 'NativeMacroNestedStringReplacementTests', 'methods': ['testActualConcreteRangeChildRecordsOnceAndLeavesUsableOriginalAuthority', 'testChildNativeVetoHasOnePermissionNoFallbackAndKeepsLawfulParent', 'testRawCharacterWriteInSameAdmissionStillDisclosesIncompleteInterval', 'testRealEmptyStopAndRestartProtectNewEpochFromOldParent', 'testUnicodeReplacementCaretHistoryAndBookmarksMatchActualNonrecordingTwin', 'testSiblingChildrenKeepChronologicalCommandsAndOneNativeEventUndoWithoutOuter', 'testActualGrandchildCommitRejectsBothStaleAncestorsWithoutClearingIt', 'testSharedRealProcessingCapacityKeepsTextOnceAndMarksMissingRecording']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'negative7', 'classes': [{'class': 'NativeVetoHandoffNegativeTests', 'methods': ['testControllerReplacementWithoutChildHasNoHandoff', 'testGenuineVetoCannotAuthorizeForeignSuccessor', 'testGenuineVetoCannotAuthorizeNilSuccessor', 'testConfigurationRefusalBeforeNativePermissionHasNoVetoReceipt', 'testGenuineVetoCannotSurviveRawTextRevisionABA', 'testGenuineVetoCannotSurviveRealEmptyRecorderEpochABA', 'testSecondRecognizedNativeVetoCannotReplaceFirstWindowDisposition']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'caret2', 'classes': [{'class': 'NativeCaretApprovalHistoryTests', 'methods': ['testOwnerReentryRefusesCaretWithoutAddingGhostToSeededUndo', 'testOwnerReentryRefusesCaretWithoutDestroyingSeededRedo']}], 'timeout': 180, 'mandatoryPositive': False}, {'stage': 'transfer6', 'classes': [{'class': 'TransferPreferredResponderTests', 'methods': ['testActualPreferredResponderAndHistoryAcrossThreeTinyLayouts', 'testExactStagedPreferredRefusalRestoresOriginalResponderAndHistory', 'testDeclaredFalseSuccessWithoutInstallingResponderMustRestore', 'testRealFocusCallbackEndpointRetirementCannotGrantMutationAndRetriesExactly', 'testRollbackPreferredRefusalRetainsThenExactReleasedRetryRestores', 'testDefaultOrdinaryHostStillFocusesAndEditsWithoutTransferScope']}], 'timeout': 180, 'mandatoryPositive': False}]
+FIXED_STAGES = ['toolchain', 'build', 'binpath', 'positive', 'search32', 'native19', 'nested8', 'negative7', 'caret2', 'transfer6']
+TIMEOUTS = {'toolchain': 30, 'build': 180, 'binpath': 30, 'positive': 90, 'search32': 180, 'native19': 180, 'nested8': 180, 'negative7': 180, 'caret2': 180, 'transfer6': 180}
 
 LOCATION = 'Tests/NativeApprovalIntegration/'
 PROVIDERS = ('NativeApprovalEventBoundaryOracle.swift', 'NativeNestedStringApprovalTests.swift',
              'NativeVetoHandoffNegativeTests.swift', 'NativeCaretApprovalHistoryTests.swift',
              'NativeApprovalControllerAccess.swift', 'NativeApprovalBrokerAccess.swift')
+TRANSFER_PROVIDERS = ('TransferPreferredResponderTests.swift', 'TransferPreferredControllerAccess.swift',
+                      'TransferPreferredOwnerAccess.swift', 'TransferPreferredNativeFocusHook.swift')
 TEST_CLIENTS = ('SearchReplacementTests.swift', 'NativeMacroChronologyTests.swift',
                 'MacroChronologyReplayTests.swift', 'NativeMacroStorageTask1ATests.swift')
 DECLARING = ('EditorWindowController.swift', 'DocumentTextView.swift', 'EditorDocument.swift',
              'DocumentCommitTextStorage.swift', 'ApprovedViewCommitBroker.swift',
-             'NativeMacroCommitContext.swift', 'SearchPanelController.swift', 'TextUtilitiesController.swift')
+             'NativeMacroCommitContext.swift', 'SearchPanelController.swift', 'TextUtilitiesController.swift',
+             'NativeApplicationDocuments.swift')
 PACKAGE = '''// swift-tools-version: 6.0
 import PackageDescription
 let package = Package(name:"NativeRouting", platforms:[.macOS(.v14)], targets:[.target(name:"PadCore"),.target(name:"SearchExecution",dependencies:["PadCore"]),.target(name:"NativeRouting",dependencies:["PadCore","SearchExecution"]),.testTarget(name:"NativeRoutingTests",dependencies:["NativeRouting","PadCore"])],swiftLanguageModes:[.v5])
@@ -55,7 +58,7 @@ def validate_cli(argv):
 
 def fixed_plan():
     return copy.deepcopy(dict(stages=FIXED_STAGES, selections=FIXED_SELECTIONS,
-                              uniqueMethods=68, occurrences=69))
+                              uniqueMethods=74, occurrences=75))
 
 
 def checked(root, path, directory=False):
@@ -115,7 +118,8 @@ def discover(root):
         require('Sources/TheOnlyPad/' + name in assembled, 'missing declaring Source')
     support = [*DRIVERS, 'scripts/swift.sh', 'scripts/test-native-approval-regressions.sh',
                *['Tests/NativeIntegration/' + name for name in (*TEST_CLIENTS, 'NativeMacroChronologyAccess.swift')],
-               *[LOCATION + name for name in PROVIDERS],
+               'Tests/NativeIntegration/DocumentSearchEditorBindingAccess.swift',
+               *[LOCATION + name for name in (*PROVIDERS, *TRANSFER_PROVIDERS)],
                *[LOCATION + name for name in ('run_native_approval_regressions.py', 'public_capture.py',
                                              'test_public_capture.py', 'test_native_approval_runner.py')]]
     inputs = sorted(set(sources + support))
@@ -146,6 +150,12 @@ def combine_search(data):
         require(a < b, 'Search access marker order changed')
         value = value[:a] + value[b:]
     return value + b''.join(data[LOCATION + name] for name in PROVIDERS[:4])
+
+
+def compose_transfer(data):
+    value = data[LOCATION + TRANSFER_PROVIDERS[0]]
+    validate_methods(value, FIXED_SELECTIONS[-1]['classes'])
+    return value
 
 
 def validate_methods(data, classes, allow_other_classes=False):
@@ -219,11 +229,33 @@ def compose(data, native, package_sources):
                               native.native_replay_completion, native.native_text_utility_controller):
                 text = operation(text)
             value = text.encode() + native.macro_access(macro, name) + b'\n' + data[LOCATION + PROVIDERS[4]]
+            # Append only same-file Test observations after the unchanged original seven derivations.
+            value += (b'\n' + data['Tests/NativeIntegration/DocumentSearchEditorBindingAccess.swift']
+                      + b'\n' + data[LOCATION + TRANSFER_PROVIDERS[1]]
+                      + b'\n' + data[LOCATION + TRANSFER_PROVIDERS[3]])
+            start = b'@MainActor private final class EditorAdmissionWindow: NSWindow {'
+            end = b'@MainActor\nfinal class EditorWindowController:'
+            signature = b'  override func makeFirstResponder(_ responder: NSResponder?) -> Bool {\n'
+            anchor = b'    guard !checkingFocusAdmission else { return false }'
+            branch = (b'    if let controller = windowController as? EditorWindowController,\n'
+                      b'      let result = TransferPreferredNativeHook.beforeFocus?(controller, responder) { return result }\n')
+            require(value.count(start) == value.count(end) == 1, 'exact native admission window class required')
+            a, z = value.index(start), value.index(end)
+            require(a < z, 'native admission window scope differs')
+            window = value[a:z]
+            require(window.count(signature) == window.count(anchor) == 1
+                    and signature + anchor in window and branch not in value,
+                    'exact native admission focus anchor required')
+            projected = window.replace(anchor, branch + anchor, 1)
+            require(projected.replace(branch, b'', 1) == window, 'native focus Test insertion inverse differs')
+            value = value[:a] + projected + value[z:]
         elif relative.startswith('Sources/TheOnlyPad/') and name in native.MACRO_ACCESS:
             value += native.macro_access(macro, name)
             if name == 'ApprovedViewCommitBroker.swift':value += b'\n' + data[LOCATION + PROVIDERS[5]]
         elif relative.startswith('Sources/TheOnlyPad/') and name in ('SearchPanelController.swift', 'TextUtilitiesController.swift'):
             value += native.search_replacement_access(search, 'PANEL' if name.startswith('Search') else 'UTILITY').encode()
+        elif relative == 'Sources/TheOnlyPad/NativeApplicationDocuments.swift':
+            value += b'\n' + data[LOCATION + TRANSFER_PROVIDERS[2]]
         outputs[target] = value
         if value != data[relative]:
             proof = raw_proof(data[relative], value)
@@ -232,7 +264,8 @@ def compose(data, native, package_sources):
     require({Path(r['target']).name for r in derivations} == {
         'EditorWindowController.swift', 'ApprovedViewCommitBroker.swift', 'EditorDocument.swift',
         'DocumentCommitTextStorage.swift', 'NativeMacroCommitContext.swift', 'SearchPanelController.swift',
-        'TextUtilitiesController.swift'}, 'only seven fixed declaring-source Test projections allowed')
+        'TextUtilitiesController.swift', 'NativeApplicationDocuments.swift'},
+        'only eight fixed declaring-source Test projections allowed')
     combined = combine_search(data)
     selections = {r['stage']: r['classes'] for r in FIXED_SELECTIONS}
     validate_methods(combined, sum([selections[n] for n in ('search32', 'nested8', 'negative7', 'caret2')], []))
@@ -241,6 +274,7 @@ def compose(data, native, package_sources):
     validate_methods(clients, selections['native19'], allow_other_classes=True)
     for name in TEST_CLIENTS:
         outputs['Package/Tests/NativeRoutingTests/' + name] = combined if name.startswith('Search') else data['Tests/NativeIntegration/' + name]
+    outputs['Package/Tests/NativeRoutingTests/TransferPreferredResponderTests.swift'] = compose_transfer(data)
     outputs['Package/Package.swift'] = PACKAGE
     return outputs, derivations
 
@@ -331,8 +365,9 @@ def verify_state(run):
 def execute(root, run, h, native, manifest, captured):
     result = dict(state='INCOMPLETE', exit=125, stages=[], stageEvidence=[],
                   qualification='Current-source maintained nonXML native approval gate only. '
-                  'Fixed68 unique/69 occurrences; ordinary failures remain1, compiler/unexpected/'
-                  'retained custody/integrity failures125. No broader XML/transfer/GUI acceptance.',
+                  'Fixed74 unique/75 occurrences including original68/69 subplan; ordinary failures remain1, compiler/unexpected/'
+                  'retained custody/integrity failures125. Full method census does not prove guarded deep entry; '
+                  'no broader XML/C3/GUI or Source adoption acceptance.',
                   targetEntered=False, mandatoryPositiveComplete=False)
     evidence = result['stageEvidence']
     artifact = None
@@ -439,14 +474,23 @@ def execute(root, run, h, native, manifest, captured):
         result['targetEntered'] = all(row['stage'] in reached and
             reached[row['stage']].get('parsedResult', {}).get('executed') == sum(len(c['methods']) for c in row['classes'])
             for row in FIXED_SELECTIONS)
-        result['complete68MethodCensus'] = result['targetEntered']
+        result['completeFixedMethodCensus'] = result['targetEntered']
+        result['complete68MethodCensus'] = all(row['stage'] in reached and
+            reached[row['stage']].get('parsedResult', {}).get('executed') == sum(len(c['methods']) for c in row['classes'])
+            for row in FIXED_SELECTIONS[:-1])
+        result['transferDeepControlEntry'] = 'NOT_INDEPENDENTLY_PROVEN_BY_OUTPUT'
         observed = [(identity, outcome) for stage in result['stages']
             for identity, outcome in stage.get('parsedResult', {}).get('observed', [])]
         result['observedOccurrences'] = len(observed)
         result['observedUniqueMethods'] = len({identity for identity, _ in observed})
-        if result['targetEntered']:
-            require(len(observed) == 69 and len({identity for identity, _ in observed}) == 68,
-                    'complete68/69 actual census differs')
+        old_observed = [(identity, outcome) for stage in result['stages'] if stage['name'] != 'transfer6'
+            for identity, outcome in stage.get('parsedResult', {}).get('observed', [])]
+        if result['complete68MethodCensus']:
+            require(len(old_observed) == 69 and len({identity for identity, _ in old_observed}) == 68,
+                    'complete68/69 actual subplan census differs')
+        if result['completeFixedMethodCensus']:
+            require(len(observed) == 75 and len({identity for identity, _ in observed}) == 74,
+                    'complete74/75 actual full census differs')
         result['mandatoryPositiveComplete'] = all(row['stage'] in reached and reached[row['stage']]['exit'] == 0
             for row in FIXED_SELECTIONS if row['mandatoryPositive'])
         if all(stage['exit'] == 0 for stage in result['stages']):

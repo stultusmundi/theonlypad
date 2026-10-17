@@ -514,6 +514,84 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var transferProjection:
     (snapshot: DocumentTransferSnapshot, receipt: EditorTransferEndpointReceipt)?
   private var projectionFocus: (token: UUID, paneID: UUID)?
+  /// One real transfer projection retains its original identities through native callouts.
+  /// This is observation/effect custody, never a registry lease or user admission grant.
+  @MainActor private final class TransferProjectionFocusFrame {
+    let snapshot: DocumentTransferSnapshot
+    let receipt: EditorTransferEndpointReceipt
+    let expected: DocumentWindowSnapshot
+    let revision: UUID
+    let assignment: DocumentAssignment
+    let registry: ApplicationDocuments
+    let window: NSWindow
+    let host: EditorPaneHost
+    let policy: WindowPresentationPolicy
+    let policyRevision: UUID
+    let models: [EditorDocument]
+    let storages: [NSTextStorage]
+    let histories: [UndoManager]
+    let pools: [[EditorPane]]
+    let selected: EditorDocument?
+    let preferred: EditorPane?
+    let removedPanes: [EditorPane]
+    let priorResponderIdentity: ObjectIdentifier?
+    // Assigned only from applyRegistryProjection's actual token, once, before its callouts.
+    var token: UUID?
+
+    init(
+      snapshot: DocumentTransferSnapshot, receipt: EditorTransferEndpointReceipt,
+      expected: DocumentWindowSnapshot, revision: UUID, routing: EditorApplicationRouting,
+      window: NSWindow, host: EditorPaneHost, policyRevision: UUID,
+      oldModels: [EditorDocument]
+    ) throws {
+      guard expected.groups.count == 1, expected.id == receipt.windowID,
+        receipt.endpointID == routing.endpointID, receipt.lease == snapshot.lease
+      else {
+        throw NativeDocumentTransferError.changed
+      }
+      self.snapshot = snapshot
+      self.receipt = receipt
+      self.expected = expected
+      self.revision = revision
+      self.assignment = routing.assignment
+      self.registry = routing.registry
+      self.window = window
+      self.host = host
+      self.policy = receipt.presentationPolicy
+      self.policyRevision = policyRevision
+      self.models = receipt.models
+      self.storages = receipt.models.map(\.storage)
+      self.histories = receipt.models.map(\.undoManager)
+      self.pools = receipt.models.map(\.panePool)
+      let selectedModel = receipt.models.first { $0.id == expected.groups[0].selectedDocumentID }
+      self.selected = selectedModel
+      if let selected = selectedModel {
+        guard let view = receipt.views[selected.id], view.model == ObjectIdentifier(selected),
+          selected.preferredPaneID == view.preferredPaneID
+        else {
+          throw NativeDocumentTransferError.changed
+        }
+        let desiredID = view.preferredPaneID ?? view.panes.first(where: \.attached)?.id
+        let desired = selected.panePool.first { $0.id == desiredID && $0.isAttached }
+        guard let desired,
+          view.panes.contains(where: {
+            $0.id == desired.id && $0.object == ObjectIdentifier(desired) && $0.attached
+          })
+        else { throw NativeDocumentTransferError.changed }
+        self.preferred = desired
+      } else {
+        guard expected.groups[0].documentIDs.isEmpty else {
+          throw NativeDocumentTransferError.changed
+        }
+        self.preferred = nil
+      }
+      let next = Set(expected.groups[0].documentIDs)
+      self.removedPanes = oldModels.filter { !next.contains($0.id) }.flatMap(\.panePool)
+      self.priorResponderIdentity = window.firstResponder.map { ObjectIdentifier($0) }
+    }
+  }
+  private var transferProjectionFocusFrame: TransferProjectionFocusFrame?
+
   private var projectionValid = false
   private var applicationPreparation: UUID?
   private var pendingEndpointAttachments = Set<UUID>()
@@ -707,11 +785,28 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
   }
 
-  private func presentPanes(_ document: EditorDocument, wrap: Bool) throws {
+  private func presentPanes(
+    _ document: EditorDocument, wrap: Bool,
+    focusRestoration: PaneHostFocusRestoration = .automatic,
+    transferFocusFrame: TransferProjectionFocusFrame? = nil
+  ) throws {
+    @MainActor func validateTransferLayout(_ complete: Bool) throws {
+      if let transferFocusFrame {
+        try requireTransferFocusFrame(
+          transferFocusFrame, requiringToken: true,
+          layoutComplete: complete)
+      }
+    }
+    guard focusRestoration == .automatic || transferFocusFrame != nil else {
+      throw NativeDocumentTransferError.changed
+    }
+    try validateTransferLayout(false)
     let panes = document.panePool.filter(\.isAttached)
     try withTransferNativeLayout {
-      try host.present(panes: panes, axis: document.splitAxis)
+      try host.present(panes: panes, axis: document.splitAxis, focusRestoration: focusRestoration)
+      try validateTransferLayout(true)
       window?.contentView?.layoutSubtreeIfNeeded()
+      try validateTransferLayout(true)
       if let window {
         var minimum = NSSize(width: 540, height: 360)
         if panes.count == 2 {
@@ -723,16 +818,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           }
         }
         window.minSize = minimum
+        try validateTransferLayout(true)
         var frame = window.frame
         frame.size.width = max(frame.width, minimum.width)
         frame.size.height = max(frame.height, minimum.height)
-        if frame != window.frame { window.setFrame(frame, display: false) }
+        if frame != window.frame {
+          window.setFrame(frame, display: false)
+          try validateTransferLayout(true)
+        }
         window.contentView?.layoutSubtreeIfNeeded()
+        try validateTransferLayout(true)
       }
     }
     configureWrap(document, enabled: wrap)
+    try validateTransferLayout(true)
     refreshInteractivity(document)
+    try validateTransferLayout(true)
     installApprovedViewRouting(document)
+    try validateTransferLayout(true)
   }
 
   private func openedTarget(_ document: EditorDocument, pane source: EditorPane? = nil)
@@ -7047,6 +7150,223 @@ extension EditorWindowController {
     defer { projectionFocus = nil }
     return window?.makeFirstResponder(pane.editor) ?? false
   }
+  /// Stored frame checks do not run endpoint/user admission or choose a newer target.
+  private func transferFocusFrameIsCurrent(
+    _ frame: TransferProjectionFocusFrame, requiringToken: Bool, layoutComplete: Bool
+  ) -> Bool {
+    guard transferProjectionFocusFrame === frame, let scope = transferProjection,
+      scope.receipt === frame.receipt, scope.snapshot.lease == frame.snapshot.lease,
+      scope.snapshot.request == frame.snapshot.request,
+      scope.snapshot.handle === frame.snapshot.handle,
+      scope.snapshot.phase == frame.snapshot.phase,
+      scope.snapshot.expectedState == frame.snapshot.expectedState,
+      scope.snapshot.source == frame.snapshot.source,
+      scope.snapshot.target == frame.snapshot.target,
+      scope.snapshot.originalSource == frame.snapshot.originalSource,
+      scope.snapshot.originalTarget == frame.snapshot.originalTarget,
+      !scope.snapshot.requiresReconciliation, !windowClosed, !preparingToQuit,
+      self.window === frame.window, self.host === frame.host,
+      frame.window.windowController === self,
+      let routing = applicationRouting, routing.registry === frame.registry,
+      routing.endpointID == frame.receipt.endpointID, routing.assignment == frame.assignment,
+      routing.registry.workspaceRevision == frame.revision,
+      routing.registry.window(id: sessionID) == frame.expected,
+      settingsPolicyRevision == frame.policyRevision,
+      WindowPresentationPolicy(settings) == frame.policy,
+      frame.receipt.projected == frame.expected,
+      frame.receipt.acceptedState == frame.snapshot.expectedState,
+      frame.token != nil,
+      requiringToken ? projectionToken == frame.token : projectionToken == nil,
+      documents.map(\.id) == frame.expected.groups[0].documentIDs,
+      selectedID == frame.expected.groups[0].selectedDocumentID, current === frame.selected,
+      frame.models.count == frame.storages.count, frame.models.count == frame.histories.count,
+      frame.models.count == frame.pools.count
+    else { return false }
+    for (index, model) in frame.models.enumerated() {
+      guard routing.registry.handle(id: model.id) === model,
+        model.storage === frame.storages[index], model.undoManager === frame.histories[index],
+        model.panePool.count == frame.pools[index].count,
+        zip(model.panePool, frame.pools[index]).allSatisfy({ $0 === $1 }),
+        let captured = frame.receipt.states[model.id]
+      else { return false }
+      let expected =
+        model.id == frame.snapshot.request.documentID
+        ? frame.snapshot.expectedState : captured
+      guard (try? model.captureTransferState(preparation: transferPreparation)) == expected else {
+        return false
+      }
+    }
+    if let selected = frame.selected, let preferred = frame.preferred,
+      let view = frame.receipt.views[selected.id]
+    {
+      guard selected.preferredPaneID == view.preferredPaneID,
+        preferredPane(in: selected) === preferred, preferred.isAttached,
+        preferred.document === selected, selected.panePool.contains(where: { $0 === preferred }),
+        preferred.editor.textStorage === selected.storage
+      else { return false }
+      if layoutComplete {
+        guard host.displayedIDs == selected.panePool.filter(\.isAttached).map(\.id),
+          frame.host.window === frame.window,
+          selected.panePool.filter(\.isAttached).allSatisfy({ pane in
+            pane.editor.delegate === self && pane.editor.window === frame.window
+              && pane.scroll.window === frame.window && pane.scroll.isDescendant(of: frame.host)
+              && pane.editor.textStorage === selected.storage
+              && pane.layoutManager.textStorage === selected.storage
+          })
+        else { return false }
+      }
+    } else if frame.selected != nil || frame.preferred != nil {
+      return false
+    } else if layoutComplete && !host.displayedIDs.isEmpty {
+      return false
+    }
+    return true
+  }
+  private func requireTransferFocusFrame(
+    _ frame: TransferProjectionFocusFrame, requiringToken: Bool, layoutComplete: Bool
+  ) throws {
+    guard
+      transferFocusFrameIsCurrent(
+        frame, requiringToken: requiringToken,
+        layoutComplete: layoutComplete)
+    else { throw NativeDocumentTransferError.changed }
+    _ = try registryModels(
+      frame.expected, revision: frame.revision,
+      endpointID: frame.receipt.endpointID)
+    try validateTransferEndpoint(frame.snapshot, receipt: frame.receipt, allowLayoutOrigins: true)
+    guard
+      transferFocusFrameIsCurrent(
+        frame, requiringToken: requiringToken,
+        layoutComplete: layoutComplete)
+    else { throw NativeDocumentTransferError.changed }
+  }
+  private func transferFocusScopeIsOwned(
+    _ frame: TransferProjectionFocusFrame, pane: EditorPane
+  ) -> Bool {
+    transferProjectionFocusFrame === frame && transferProjection?.receipt === frame.receipt
+      && projectionToken == frame.token && projectionFocus?.token == frame.token
+      && projectionFocus?.paneID == pane.id && frame.preferred === pane
+      && pane.editor === frame.preferred?.editor
+  }
+  private func focusTransferProjection(_ frame: TransferProjectionFocusFrame) throws {
+    try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+    if let pane = frame.preferred {
+      guard let token = frame.token, projectionFocus == nil else {
+        throw NativeDocumentTransferError.changed
+      }
+      let editor = pane.editor
+      projectionFocus = (token, pane.id)
+      defer {
+        if transferFocusScopeIsOwned(frame, pane: pane) { projectionFocus = nil }
+      }
+      let before = editor.isSelectable
+      var selectableAssigned = false
+      // Property cleanup uses only the original local custody and native binding.
+      // A throwing owner/view validator is not itself evidence that this custody was lost.
+      @MainActor func selectableEffectIsCurrent(_ expected: Bool) -> Bool {
+        transferFocusScopeIsOwned(frame, pane: pane)
+          && transferFocusFrameIsCurrent(frame, requiringToken: true, layoutComplete: true)
+          && pane.editor === editor && editor.window === frame.window
+          && editor.textStorage === pane.document.storage && editor.isSelectable == expected
+          && transferFocusFrameIsCurrent(frame, requiringToken: true, layoutComplete: true)
+          && transferFocusScopeIsOwned(frame, pane: pane)
+      }
+      do {
+        try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+        guard transferFocusScopeIsOwned(frame, pane: pane), editor.isSelectable == before else {
+          throw NativeDocumentTransferError.changed
+        }
+        if !before {
+          editor.isSelectable = true
+          selectableAssigned = true
+          try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+          guard transferFocusScopeIsOwned(frame, pane: pane), editor.isSelectable else {
+            throw NativeDocumentTransferError.changed
+          }
+        }
+        // Exactly one desired-editor attempt. Native Bool and actual identity are independent.
+        let focused = frame.window.makeFirstResponder(editor)
+        try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+        guard transferFocusScopeIsOwned(frame, pane: pane) else {
+          throw NativeDocumentTransferError.changed
+        }
+        if !before {
+          guard editor.isSelectable else { throw NativeDocumentTransferError.changed }
+          editor.isSelectable = before
+          selectableAssigned = false
+          try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+        }
+        guard transferFocusScopeIsOwned(frame, pane: pane), editor.isSelectable == before,
+          focused, frame.window.firstResponder === editor
+        else {
+          throw NativeDocumentTransferError.changed
+        }
+      } catch {
+        // Restore only this still-owned actual assignment, before the owned scope defer.
+        // Lost/superseding custody receives no setter and no fresh owner admission.
+        if selectableAssigned, !before, selectableEffectIsCurrent(true) {
+          editor.isSelectable = before
+          selectableAssigned = false
+          guard selectableEffectIsCurrent(before) else { throw error }
+        }
+        throw error
+      }
+    } else {
+      @MainActor func removed(_ responder: NSResponder?) -> Bool {
+        guard let responder else { return false }
+        if frame.removedPanes.contains(where: { $0.editor === responder || $0.scroll === responder }
+        ) {
+          return true
+        }
+        guard let view = responder as? NSView else { return false }
+        return frame.removedPanes.contains { view.isDescendant(of: $0.scroll) }
+      }
+      let actual = frame.window.firstResponder
+      if removed(actual) {
+        guard actual.map({ ObjectIdentifier($0) }) == frame.priorResponderIdentity else {
+          throw NativeDocumentTransferError.changed
+        }
+        let retired = frame.window.makeFirstResponder(nil)
+        try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+        guard retired else { throw NativeDocumentTransferError.changed }
+      }
+      guard !removed(frame.window.firstResponder) else { throw NativeDocumentTransferError.changed }
+    }
+    try requireTransferFocusFrame(frame, requiringToken: true, layoutComplete: true)
+  }
+  /// Only genuinely completed projected receipts gain this observation; no admission is granted.
+  private func transferPreferredResponderIsCurrent(_ receipt: EditorTransferEndpointReceipt) -> Bool
+  {
+    guard let window, !windowClosed, !preparingToQuit,
+      documents.map(\.id) == receipt.projected.groups[0].documentIDs,
+      selectedID == receipt.projected.groups[0].selectedDocumentID,
+      host.displayedIDs == (current?.panePool.filter(\.isAttached).map(\.id) ?? [])
+    else {
+      return false
+    }
+    guard let selected = current else {
+      let responder = window.firstResponder
+      return !receipt.models.flatMap(\.panePool).contains { pane in
+        if responder === pane.editor || responder === pane.scroll { return true }
+        return (responder as? NSView)?.isDescendant(of: pane.scroll) == true
+      }
+    }
+    guard let view = receipt.views[selected.id], view.model == ObjectIdentifier(selected),
+      selected.preferredPaneID == view.preferredPaneID
+    else { return false }
+    let desiredID = view.preferredPaneID ?? view.panes.first(where: \.attached)?.id
+    guard let preferred = selected.panePool.first(where: { $0.id == desiredID && $0.isAttached })
+    else {
+      return false
+    }
+    return view.panes.contains(where: {
+      $0.id == preferred.id && $0.object == ObjectIdentifier(preferred) && $0.attached
+    }) && preferred.isAttached && preferred.document === selected
+      && preferred.editor.textStorage === selected.storage
+      && preferred.editor.window === window && preferred.scroll.window === window
+      && preferred.scroll.isDescendant(of: host) && window.firstResponder === preferred.editor
+  }
+
   /// Used only by synchronous owner layout/focus installation, never by user mutation sinks.
   private func projectionAllows(
     _ action: DocumentAdmission, document: EditorDocument,
@@ -7446,6 +7766,15 @@ extension EditorWindowController {
       if projectionToken == token { projectionToken = nil }
       if projectionValid { for document in documents { _ = refreshMacroBinding(document) } }
     }
+    if let scope = transferProjection {
+      guard let frame = transferProjectionFocusFrame, frame.receipt === scope.receipt,
+        frame.snapshot.lease == scope.snapshot.lease, frame.expected == expected,
+        frame.revision == revision, frame.token == nil
+      else {
+        throw NativeDocumentTransferError.changed
+      }
+      frame.token = token
+    }
     let next = try registryModels(expected, revision: revision, endpointID: endpointID)
     let oldCurrent = current
     let selection = expected.groups[0].selectedDocumentID
@@ -7495,6 +7824,11 @@ extension EditorWindowController {
         _ = try registryModels(expected, revision: revision, endpointID: endpointID)
       }
     }
+    let transferFocus = transferProjectionFocusFrame
+    if transferProjection != nil {
+      guard let transferFocus else { throw NativeDocumentTransferError.changed }
+      try requireTransferFocusFrame(transferFocus, requiringToken: true, layoutComplete: false)
+    }
     if let selected {
       if transferProjection != nil || oldCurrent !== selected
         || host.displayedIDs != selected.panePool.filter(\.isAttached).map(\.id)
@@ -7510,7 +7844,10 @@ extension EditorWindowController {
           configureSettings(selected)
         }
         let wrap = !preferredPane(in: selected).editor.isHorizontallyResizable
-        try presentPanes(selected, wrap: wrap)
+        try presentPanes(
+          selected, wrap: wrap,
+          focusRestoration: transferFocus == nil ? .automatic : .deferredToController,
+          transferFocusFrame: transferFocus)
         if transferProjection == nil, settledTransferProjection == nil {
           focusProjectedPane(preferredPane(in: selected))
           installPendingPresentationIfPossible(selected)
@@ -7518,8 +7855,14 @@ extension EditorWindowController {
         }
       }
     } else {
-      try host.present(panes: [], axis: .sideBySide)
+      if let transferFocus {
+        try requireTransferFocusFrame(transferFocus, requiringToken: true, layoutComplete: false)
+      }
+      try host.present(
+        panes: [], axis: .sideBySide,
+        focusRestoration: transferFocus == nil ? .automatic : .deferredToController)
     }
+    if let transferFocus { try focusTransferProjection(transferFocus) }
     let verified = try registryModels(expected, revision: revision, endpointID: endpointID)
     guard projectionToken == token, verified.count == documents.count,
       zip(verified, documents).allSatisfy({ $0 === $1 }), selectedID == selection
@@ -7531,6 +7874,12 @@ extension EditorWindowController {
     // AppKit notifications may reenter registry operations during rendering.
     try validateRegistryProjection(
       expected, revision: revision, endpointID: endpointID, allowing: token)
+    if let transferFocus {
+      try requireTransferFocusFrame(transferFocus, requiringToken: true, layoutComplete: true)
+      guard transferPreferredResponderIsCurrent(transferFocus.receipt) else {
+        throw NativeDocumentTransferError.changed
+      }
+    }
     projectionValid = true
   }
   func validateRegistryProjection(
@@ -8009,6 +8358,11 @@ extension EditorWindowController {
           geometry, expectedState: expected, preparation: transferPreparation)
       }
     }
+    if receipt.acceptedState != nil, !receipt.projectionPending,
+      !transferPreferredResponderIsCurrent(receipt)
+    {
+      throw NativeDocumentTransferError.changed
+    }
   }
   private func transferViewWithLiveOrigins(
     _ view: NativeDocumentTransferViewReceipt,
@@ -8062,20 +8416,49 @@ extension EditorWindowController {
     _ snapshot: DocumentTransferSnapshot,
     receipt: EditorTransferEndpointReceipt
   ) throws {
-    guard transferProjection == nil, projectionToken == nil else {
+    guard transferProjection == nil, projectionToken == nil,
+      transferProjectionFocusFrame == nil, let routing = applicationRouting,
+      let capturedWindow = window, capturedWindow.windowController === self
+    else {
       throw NativeDocumentTransferError.busy
     }
+    let capturedExpected: DocumentWindowSnapshot
+    if sessionID == snapshot.source.id {
+      capturedExpected = snapshot.source
+    } else if sessionID == snapshot.target.id {
+      capturedExpected = snapshot.target
+    } else {
+      throw NativeDocumentTransferError.changed
+    }
+    let frame = try TransferProjectionFocusFrame(
+      snapshot: snapshot, receipt: receipt,
+      expected: capturedExpected, revision: routing.registry.workspaceRevision, routing: routing,
+      window: capturedWindow, host: host, policyRevision: settingsPolicyRevision,
+      oldModels: documents)
     try validateTransferEndpoint(snapshot, receipt: receipt)
     let expected = try transferWindow(snapshot)
+    guard expected == frame.expected, self.window === frame.window, host === frame.host,
+      applicationRouting?.registry === frame.registry,
+      applicationRouting?.endpointID == receipt.endpointID,
+      routing.registry.workspaceRevision == frame.revision,
+      settingsPolicyRevision == frame.policyRevision
+    else {
+      throw NativeDocumentTransferError.changed
+    }
     receipt.acceptedState = snapshot.expectedState
     transferProjection = (snapshot, receipt)
-    defer { transferProjection = nil }
+    transferProjectionFocusFrame = frame
+    defer {
+      if transferProjectionFocusFrame === frame { transferProjectionFocusFrame = nil }
+      transferProjection = nil
+    }
     // A refused native layout can be retried without recapturing or approving unrelated geometry.
     receipt.projectionPending = true
     try applyRegistryProjection(
       expected, revision: applicationRouting!.registry.workspaceRevision,
       endpointID: receipt.endpointID)
     try validateTransferEndpoint(snapshot, receipt: receipt, allowLayoutOrigins: true)
+    try requireTransferFocusFrame(frame, requiringToken: false, layoutComplete: true)
     if let selected = current, let view = receipt.views[selected.id] {
       let expectedState =
         selected.id == snapshot.request.documentID ? snapshot.expectedState : view.state
@@ -8093,12 +8476,37 @@ extension EditorWindowController {
         if actual != value.origin {
           // Active-lease layout owns origin restoration; original receipts remain immutable.
           withTransferNativeLayout { clip.setBoundsOrigin(value.origin) }
+          try requireTransferFocusFrame(frame, requiringToken: false, layoutComplete: true)
+          guard transferPreferredResponderIsCurrent(receipt) else {
+            throw NativeDocumentTransferError.changed
+          }
         }
       }
     }
     try validateTransferEndpoint(snapshot, receipt: receipt)
+    try requireTransferFocusFrame(frame, requiringToken: false, layoutComplete: true)
+    // Finish the same strict view checks before publishing pending=false. No owner/native
+    // setter callout may see a completion flag that a later check could still revoke.
+    for model in receipt.models {
+      guard let captured = receipt.states[model.id] else {
+        throw NativeDocumentTransferError.changed
+      }
+      let state = model.id == snapshot.request.documentID ? snapshot.expectedState : captured
+      if let view = receipt.views[model.id] {
+        let geometry =
+          receipt.projected != receipt.original
+          ? constrainedTransferView(view, model: model) : view
+        try model.validateTransferView(
+          geometry, expectedState: state,
+          preparation: transferPreparation)
+      }
+    }
+    guard transferFocusFrameIsCurrent(frame, requiringToken: false, layoutComplete: true),
+      transferPreferredResponderIsCurrent(receipt)
+    else {
+      throw NativeDocumentTransferError.changed
+    }
     receipt.projectionPending = false
-    try validateTransferEndpoint(snapshot, receipt: receipt)
   }
 }
 

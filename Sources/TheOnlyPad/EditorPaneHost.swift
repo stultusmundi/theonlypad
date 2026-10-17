@@ -2,6 +2,7 @@ import AppKit
 
 enum PaneAxis: Equatable { case sideBySide, stacked }
 enum EditorPaneHostError: Error { case paneLimit, duplicatePane }
+enum PaneHostFocusRestoration: Equatable { case automatic, deferredToController }
 
 @MainActor private final class PaneSplitView: NSSplitView {
   var moveDivider: ((CGFloat) -> Void)?
@@ -44,7 +45,10 @@ enum EditorPaneHostError: Error { case paneLimit, duplicatePane }
   }
   required init?(coder: NSCoder) { nil }
 
-  func present(panes: [EditorPane], axis: PaneAxis) throws {
+  func present(
+    panes: [EditorPane], axis: PaneAxis,
+    focusRestoration: PaneHostFocusRestoration = .automatic
+  ) throws {
     guard panes.count <= 2 else { throw EditorPaneHostError.paneLimit }
     guard Set(panes.map(\.id)).count == panes.count,
       Set(panes.map { ObjectIdentifier($0.scroll) }).count == panes.count
@@ -73,9 +77,9 @@ enum EditorPaneHostError: Error { case paneLimit, duplicatePane }
     split.isVertical = axis == .sideBySide
     split.frame = bounds
     arrange()
-    if focusInside, !focusSurvives {
+    if focusRestoration == .automatic, focusInside, !focusSurvives {
       window?.makeFirstResponder(panes.first?.editor)
-    } else if window?.firstResponder === split, panes.count < 2 {
+    } else if focusRestoration == .automatic, window?.firstResponder === split, panes.count < 2 {
       window?.makeFirstResponder(panes.first?.editor)
     }
     needsLayout = true
