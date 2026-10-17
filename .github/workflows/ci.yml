@@ -15,7 +15,7 @@ jobs:
         run: /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/xcrun swift --version
       - name: Unit and temporary-file tests
         id: core
-        run: env NSUnbufferedIO=YES python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/ci-core -- scripts/swift.sh test
+        run: env NSUnbufferedIO=YES SWIFT_BACKTRACE=enable=yes,interactive=no,color=no,sanitize=yes,threads=crashed,registers=none,images=none,limit=32,top=16,format=json,output-to=stderr python3 scripts/run-owned-search-tests.py --timeout 600 --output .local/ci-core -- scripts/swift.sh test
       - name: Bounded core failure diagnostics
         if: ${{ failure() && steps.core.outcome == 'failure' }}
         run: |
@@ -23,6 +23,9 @@ jobs:
       - name: Bounded core error-family detail
         if: ${{ failure() && steps.core.outcome == 'failure' }}
         run: python3 scripts/ci_owned_failure_diagnostics.py --error-detail
+      - name: Bounded core crash-frame detail
+        if: ${{ failure() && steps.core.outcome == 'failure' }}
+        run: python3 -B scripts/ci_owned_failure_diagnostics.py --crash-detail
       - name: Bounded folder preview phase diagnostic
         if: ${{ failure() && steps.core.outcome == 'failure' }}
         run: python3 -B scripts/ci_folder_preview_trace.py

@@ -953,8 +953,329 @@ def collect_error_detail(root):
         return 2, ['ci-core error-detail: unavailable', 'reason: invalid-detail']
 
 
+# Crash observations have their own strict receipt admission; legacy modes stay independent.
+_CRASH_REASONS = frozenset((
+    'missing-evidence', 'unsafe-evidence', 'oversized-evidence', 'invalid-status',
+    'invalid-capture', 'invalid-log-encoding', 'incomplete-evidence', 'no-crash-report',
+    'ambiguous-crash-report', 'invalid-crash-json', 'crash-cap-exceeded',
+    'invalid-crash-record', 'invalid-crash-frame', 'invalid-crash-detail',
+))
+_CRASH_KINDS = dict(programCounter=1, returnAddress=2, asyncResumePoint=3,
+                    omittedFrames=4, truncated=5)
+_CRASH_IMAGES = {
+    'TheOnlyPadPackageTests': 1, 'xctest': 2, 'libswiftCore.dylib': 3,
+    'Foundation': 4, 'libFoundation.dylib': 4, 'CoreFoundation': 5,
+    'libswift_Concurrency.dylib': 6, 'dyld': 7, 'libsystem_c.dylib': 8,
+    'libsystem_platform.dylib': 9, 'libsystem_kernel.dylib': 10, 'swift-frontend': 11,
+}
+_CRASH_SYMBOLS = {
+    'main': 1, '_main': 1, 'start': 2, 'swift_release': 3, '_swift_release': 3,
+    'swift_retain': 4, '_swift_retain': 4, 'swift_getObjectType': 5,
+    '_swift_getObjectType': 5, 'CFURLGetFileSystemRepresentation': 6,
+    '_CFURLGetFileSystemRepresentation': 6, 'swift_reportError': 7,
+    '_swift_reportError': 7, 'swift_runtime_on_report': 8, '_swift_runtime_on_report': 8,
+}
+_CRASH_SOURCES = {
+    'FolderReplacementPreview.swift': 1, 'FolderReplacementPreviewTests.swift': 2,
+    'URL.swift': 3, 'String.swift': 4, 'Array.swift': 5,
+}
+_CRASH_FIELDS = frozenset((
+    'command', 'pid', 'processGroup', 'exitObserved', 'registrationError',
+    'groupSignalAttempted', 'groupSignalError', 'groupCleanup', 'groupQuery',
+    'waitCompleted', 'returnCode', 'waitError', 'timedOut', 'interruptedSignal',
+    'truncated', 'captureComplete', 'failure', 'exit', 'captured', 'seconds',
+))
+
+
+class _CrashProblem(Exception):
+    def __init__(self, reason):
+        self.reason = reason if type(reason) is str and reason in _CRASH_REASONS else 'invalid-crash-detail'
+        super().__init__(self.reason)
+
+
+def _crash_require(value, reason):
+    if not value:
+        raise _CrashProblem(reason)
+
+
+def _crash_status(status):
+    reason = 'invalid-status'
+    _crash_require(type(status) is dict and all(type(key) is str for key in status)
+                   and _CRASH_FIELDS.issubset(status)
+                   and set(status).issubset(_CRASH_FIELDS | {'errorType', 'errorNumber'}), reason)
+    command = status['command']
+    _crash_require(type(command) is list and 1 <= len(command) <= 256, reason)
+    _crash_require(all(type(arg) is str and '\0' not in arg for arg in command), reason)
+    try:
+        _crash_require(sum(len(arg.encode('utf-8', 'strict')) for arg in command) <= 65536, reason)
+        for key in ('waitError', 'failure', 'errorType'):
+            if key not in status:
+                continue
+            value = status[key]
+            if value is None and key != 'errorType':
+                continue
+            _crash_require(type(value) is str and len(value) <= 128, reason)
+            value.encode('utf-8', 'strict')
+    except UnicodeError:
+        raise _CrashProblem(reason)
+    _crash_require(_int(status['pid'], 1, 2147483647)
+                   and _int(status['processGroup'], 1, 2147483647)
+                   and status['pid'] == status['processGroup'], reason)
+    for key in ('exitObserved', 'groupSignalAttempted', 'waitCompleted', 'captureComplete', 'timedOut', 'truncated'):
+        _crash_require(type(status[key]) is bool, reason)
+    for key in ('registrationError', 'groupSignalError', 'errorNumber'):
+        if key in status:
+            _crash_require(status[key] is None or _int(status[key], 0, 65535), reason)
+    _crash_require(status['interruptedSignal'] is None or _int(status['interruptedSignal'], 1, 255), reason)
+    seconds = status['seconds']
+    # Avoid float conversion of unbounded integer seconds; exact ints need no finiteness conversion.
+    _crash_require(type(seconds) in (int, float) and seconds >= 0
+                   and (type(seconds) is int or math.isfinite(seconds)), reason)
+    code = status['returnCode']
+    _crash_require(_int(code, -127, 255) and _int(status['exit'], 0, 255), reason)
+    _crash_require(status['exit'] == (code if code >= 0 else 128 - code), reason)
+    cleanup, query, error = status['groupCleanup'], status['groupQuery'], status['groupSignalError']
+    _crash_require(type(cleanup) is str and cleanup in (
+        'notStarted', 'signaled', 'absent', 'unconfirmed', 'exitedLeaderOnly'), reason)
+    _crash_require(query is None or type(query) is dict, reason)
+    if query is not None:
+        _crash_require(all(type(key) is str for key in query)
+                       and set(query) == {'processGroup', 'errorNumber', 'bufferBytes', 'returnedBytes', 'members'}, reason)
+        _crash_require(_int(query['processGroup'], 1, 2147483647)
+                       and query['processGroup'] == status['pid'] and query['errorNumber'] is None, reason)
+        _crash_require(type(query['bufferBytes']) is int and query['bufferBytes'] == 1024
+                       and type(query['returnedBytes']) is int and query['returnedBytes'] == 4, reason)
+        members = query['members']
+        _crash_require(type(members) is list and len(members) == 1
+                       and type(members[0]) is int and members[0] == status['pid'], reason)
+    if cleanup == 'signaled':
+        _crash_require(error is None and query is None, reason)
+    elif cleanup == 'absent':
+        _crash_require(type(error) is int and error == 3 and query is None, reason)
+    elif cleanup == 'exitedLeaderOnly':
+        _crash_require(type(error) is int and error == 1 and query is not None, reason)
+
+
+def _crash_captures(status, stdout, stderr):
+    captured = status['captured']
+    _crash_require(type(captured) is dict and all(type(key) is str for key in captured)
+                   and set(captured) == {'stdout', 'stderr'}, 'invalid-capture')
+    for name, text in (('stdout', stdout), ('stderr', stderr)):
+        counts = captured[name]
+        _crash_require(type(counts) is dict and all(type(key) is str for key in counts)
+                       and set(counts) == {'stored', 'received', 'discarded'}, 'invalid-capture')
+        _crash_require(_int(counts['stored'], 0, _LOG_LIMIT)
+                       and _int(counts['received'], 0, _CAPTURE_RECEIVED_LIMIT)
+                       and _int(counts['discarded'], 0, _CAPTURE_RECEIVED_LIMIT)
+                       and counts['received'] == counts['stored'] + counts['discarded'], 'invalid-capture')
+        _crash_require(type(text) is str, 'invalid-capture')
+        _crash_require(len(text) <= _LOG_LIMIT, 'oversized-evidence')
+        try:
+            size = len(text.encode('utf-8', 'strict'))
+        except UnicodeError:
+            raise _CrashProblem('invalid-log-encoding')
+        _crash_require(size <= _LOG_LIMIT, 'oversized-evidence')
+        _crash_require(size == counts['stored'], 'invalid-capture')
+
+
+def _crash_complete(status):
+    return (all(status[key] for key in ('exitObserved', 'groupSignalAttempted', 'waitCompleted', 'captureComplete'))
+            and not status['timedOut'] and not status['truncated']
+            and all(status[key] is None for key in ('registrationError', 'waitError', 'failure', 'interruptedSignal'))
+            and 'errorType' not in status and status.get('errorNumber') is None
+            and status['groupCleanup'] in ('signaled', 'absent', 'exitedLeaderOnly')
+            and all(status['captured'][name]['discarded'] == 0 for name in ('stdout', 'stderr')))
+
+
+def _crash_json(text):
+    depth, quoted, escaped = 0, False, False
+    for char in text:
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+        elif char in '[{':
+            depth += 1
+            _crash_require(depth <= 64, 'crash-cap-exceeded')
+        elif char in ']}':
+            depth -= 1
+
+    def integer(token):
+        digits = token[1:] if token.startswith('-') else token
+        _crash_require(len(digits) <= 19, 'crash-cap-exceeded')
+        value = int(token)
+        _crash_require(abs(value) <= 9223372036854775807, 'crash-cap-exceeded')
+        return value
+
+    def floating(token):
+        _crash_require(len(token) <= 64, 'crash-cap-exceeded')
+        value = float(token)
+        _crash_require(math.isfinite(value), 'invalid-crash-json')
+        return value
+
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            _crash_require(key not in value, 'invalid-crash-json')
+            value[key] = item
+        return value
+
+    def constant(_token):
+        raise _CrashProblem('invalid-crash-json')
+
+    try:
+        value = json.loads(text, object_pairs_hook=pairs, parse_int=integer,
+                           parse_float=floating, parse_constant=constant)
+    except (ValueError, RecursionError):
+        raise _CrashProblem('invalid-crash-json')
+    stack, nodes = [value], 0
+    while stack:
+        item = stack.pop()
+        nodes += 1
+        _crash_require(nodes <= 8192, 'crash-cap-exceeded')
+        if type(item) is str:
+            _crash_require(len(item) <= 8192, 'crash-cap-exceeded')
+            try:
+                _crash_require(len(item.encode('utf-8', 'strict')) <= 8192, 'crash-cap-exceeded')
+            except UnicodeError:
+                raise _CrashProblem('invalid-crash-json')
+        elif type(item) is dict:
+            # Container lengths also bound pending traversal memory before extending the stack.
+            _crash_require(len(item) * 2 <= 8192 - nodes, 'crash-cap-exceeded')
+            for key, child in item.items():
+                stack.append(key)
+                stack.append(child)
+        elif type(item) is list:
+            _crash_require(len(item) <= 8192 - nodes, 'crash-cap-exceeded')
+            stack.extend(item)
+    return value
+
+
+def _crash_basename(value, legend):
+    if (len(value.encode('utf-8')) > 1024 or '\\' in value
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)):
+        return 0
+    return legend.get(value.rsplit('/', 1)[-1], 0)
+
+
+def _crash_frames(report):
+    threads = report.get('threads')
+    _crash_require(type(threads) is list and len(threads) > 0, 'invalid-crash-record')
+    _crash_require(len(threads) == 1, 'ambiguous-crash-report')
+    thread = threads[0]
+    _crash_require(type(thread) is dict and thread.get('crashed') is True, 'invalid-crash-record')
+    frames = thread.get('frames')
+    _crash_require(type(frames) is list and 1 <= len(frames) <= 32, 'invalid-crash-record')
+    result = []
+    for index, frame in enumerate(frames, 1):
+        _crash_require(type(frame) is dict and type(frame.get('kind')) is str
+                       and frame['kind'] in _CRASH_KINDS, 'invalid-crash-frame')
+        kind = _CRASH_KINDS[frame['kind']]
+        row = dict(n=index, kind=kind, image=0, symbol=0, source=0, line=0)
+        if kind == 4:
+            _crash_require(_int(frame.get('count'), 1, 2147483647), 'invalid-crash-frame')
+        if kind <= 3:
+            for key in ('image', 'symbol'):
+                _crash_require(key not in frame or type(frame[key]) is str, 'invalid-crash-frame')
+            row['image'] = _crash_basename(frame.get('image', ''), _CRASH_IMAGES)
+            row['symbol'] = _CRASH_SYMBOLS.get(frame.get('symbol', ''), 0)
+            if 'sourceLocation' in frame:
+                location = frame['sourceLocation']
+                _crash_require(type(location) is dict, 'invalid-crash-frame')
+                _crash_require('file' not in location or type(location['file']) is str, 'invalid-crash-frame')
+                _crash_require('line' not in location or type(location['line']) is int, 'invalid-crash-frame')
+                source = _crash_basename(location.get('file', ''), _CRASH_SOURCES)
+                line = location.get('line', 0)
+                if source and 1 <= line <= 10000000:
+                    row.update(source=source, line=line)
+        result.append(row)
+    return dict(reports=1, frames=result)
+
+
+def classify_crash_detail(status, stdout, stderr):
+    """Map bounded captured text to finite observations, without emitter or cause authority."""
+    _crash_status(status)
+    _crash_captures(status, stdout, stderr)
+    _crash_require(_crash_complete(status), 'incomplete-evidence')
+    attempts, recognized = 0, None
+    for text in (stdout, stderr):
+        # Only LF terminates records; EOF is its own final record. No Unicode splitlines repair.
+        start = 0
+        while start < len(text):
+            end = text.find('\n', start)
+            terminated = end != -1
+            if not terminated:
+                end = len(text)
+            record = text[start:end]
+            start = end + 1
+            if terminated and record.endswith('\r'):
+                record = record[:-1]
+            if not (record.lstrip(' \t').startswith(('{', '[')) or 'crashReport' in record):
+                continue
+            attempts += 1
+            _crash_require(attempts <= 32 and len(record.encode('utf-8')) <= 65536, 'crash-cap-exceeded')
+            _crash_require('\r' not in record, 'invalid-crash-json')
+            value = _crash_json(record)
+            if type(value) is dict and type(value.get('kind')) is str and value['kind'] == 'crashReport':
+                _crash_require(recognized is None, 'ambiguous-crash-report')
+                recognized = value
+    _crash_require(recognized is not None, 'no-crash-report')
+    return _crash_frames(recognized)
+
+
+def render_crash_detail(detail):
+    def valid(value, low, high):
+        return type(value) is int and low <= value <= high
+
+    if (type(detail) is not dict or any(type(key) is not str for key in detail)
+            or set(detail) != {'reports', 'frames'}
+            or type(detail['reports']) is not int or detail['reports'] != 1
+            or type(detail['frames']) is not list or not 1 <= len(detail['frames']) <= 32):
+        raise ValueError('invalid crash detail')
+    rows = []
+    for index, frame in enumerate(detail['frames'], 1):
+        if (type(frame) is not dict or any(type(key) is not str for key in frame)
+                or set(frame) != {'n', 'kind', 'image', 'symbol', 'source', 'line'}
+                or not valid(frame['n'], index, index) or not valid(frame['kind'], 1, 5)
+                or not valid(frame['image'], 0, 11) or not valid(frame['symbol'], 0, 8)
+                or not valid(frame['source'], 0, 5) or not valid(frame['line'], 0, 10000000)
+                or ((frame['source'] == 0) != (frame['line'] == 0))
+                or (frame['kind'] in (4, 5) and any(frame[key] != 0 for key in ('image', 'symbol', 'source', 'line')))):
+            raise ValueError('invalid crash detail')
+        rows.append('frame-v1: n={n} kind={kind} image={image} symbol={symbol} source={source} line={line}'.format(**frame))
+    lines = ['crash-v1: reports=1 frames=' + str(len(rows))] + rows
+    if len(('\n'.join(lines) + '\n').encode('ascii')) > 4096:
+        raise ValueError('invalid crash detail')
+    return lines
+
+
+def collect_crash_detail(root):
+    try:
+        status, stdout, stderr = _read_inputs(root)
+        return 0, render_crash_detail(classify_crash_detail(status, stdout, stderr))
+    except _CrashProblem as problem:
+        reason = problem.reason if type(problem.reason) is str and problem.reason in _CRASH_REASONS else 'invalid-crash-detail'
+    except _Problem as problem:
+        reason = problem.reason if type(problem.reason) is str and problem.reason in (
+            'missing-evidence', 'unsafe-evidence', 'oversized-evidence', 'invalid-status',
+            'invalid-capture', 'invalid-log-encoding') else 'invalid-crash-detail'
+    except Exception:
+        reason = 'invalid-crash-detail'
+    return 2, ['ci-core crash-detail: unavailable', 'reason: ' + reason]
+
+
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args == ['--crash-detail']:
+        root = Path(__file__).resolve().parent.parent
+        code, lines = collect_crash_detail(root)
+        print('\n'.join(lines))
+        return code
     if args == ['--error-detail']:
         root = Path(__file__).resolve().parent.parent
         code, lines = collect_error_detail(root)

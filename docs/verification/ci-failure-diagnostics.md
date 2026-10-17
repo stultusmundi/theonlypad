@@ -1,3 +1,22 @@
+# Closed crash-frame detail — 17 October 2026
+
+The diagnostic adds `--crash-detail` and a separate core-failure-conditioned CI step. Only the existing 600-second core-test command receives the bounded Swift backtrace configuration. The original test selection, watchdog, reader, earlier diagnostic modes and failure outcome remain unchanged. No raw captures are uploaded or printed by this mode.
+
+The parser requires a complete, coherent owned-process receipt and exact capture counts before considering independently framed JSON records. It bounds record attempts, bytes, nesting, decoded nodes, strings and numbers, rejects duplicate keys and malformed candidates, and accepts one crashed-thread report with at most 32 ordered frames. The renderer independently validates a closed numeric result and emits at most 33 ASCII lines/4,096 bytes. Raw paths, symbols outside fixed legends, registers, addresses, descriptions and exception text are discarded. Unsupported or incomplete evidence produces a fixed unavailable reason.
+
+All 135 local Python tests pass: the original 100 and 35 new crash contracts. The initial missing-API run had 35 ordinary failures; the first implementation run passed 134 and exposed a Test-helper omission/None collision. A separately reviewed unique default sentinel now forwards the original explicit None negative input correctly; all assertions and producer bytes remain unchanged across that correction. Earlier failed runs remain retained privately.
+
+Applying the final parser to an already retained synthetic local fault capture produces one report with four numeric frame records. That capture records child return -11 and watchdog exit 139; this was not a passing child test or another fault launch. The backtrace configuration alone did not remove raw register fields on the local Swift 6.3 runtime, so privacy relies on the closed projection. The synthetic executable's debug entitlement was confined to that private probe; system tools and application distribution signing were not changed.
+
+```sh
+python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
+python3 -B scripts/ci_owned_failure_diagnostics.py --crash-detail
+```
+
+The second command reads only the fixed owned `.local/ci-core` capture. This is a textual observation, not authentication of a Swift emitter, fault site or cause. Hosted Swift 6.1/macOS 15 compatibility and the existing hosted crash remain unverified; local Swift 6.3/macOS 26 results do not establish a hosted repair. The transfer fix and other application work are separate from this diagnostic.
+
+Earlier evidence follows unchanged.
+
 # Hosted observation at 92ffe0d — 17 October 2026
 
 Run [38993055988](https://github.com/stultusmundi/theonlypad/actions/runs/38993055988) failed in the initial unit-test step. The added error-family step completed successfully and emitted:
