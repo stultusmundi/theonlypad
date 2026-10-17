@@ -70,6 +70,361 @@ private enum EditorSaveFailure: Error {
   case searchBorrow(binding: DocumentSearchNativeBinding, credential: DocumentSearchCredential)
 }
 
+/// Destination custody from one fully retired matching native-false child; never edit permission.
+@MainActor private final class NativeVetoHandoff {
+  weak var window: AnyObject?
+  weak var preparation: NativeEditPreparation?
+  weak var editor: DocumentTextView?
+  weak var controller: EditorWindowController?
+  weak var document: EditorDocument?
+  weak var storage: DocumentCommitTextStorage?
+  let vetoIdentity: ObjectIdentifier
+  let revision: UInt64
+  let ownership: UUID
+  let mutation: UUID
+  let primitive: MacroContextPrimitiveState
+  let recorder: EditorWindowController.ApprovedRouteRecorderFence
+  let adoptedIsCurrent: @MainActor (NativeVetoHandoff) -> Bool
+  init(
+    window: AnyObject, preparation: NativeEditPreparation, editor: DocumentTextView,
+    controller: EditorWindowController, document: EditorDocument,
+    storage: DocumentCommitTextStorage, vetoIdentity: ObjectIdentifier,
+    adoptedIsCurrent: @escaping @MainActor (NativeVetoHandoff) -> Bool
+  ) {
+    self.window = window
+    self.preparation = preparation
+    self.editor = editor
+    self.controller = controller
+    self.document = document
+    self.storage = storage
+    self.vetoIdentity = vetoIdentity
+    self.revision = document.editRevision
+    self.ownership = document.ownershipGeneration
+    self.mutation = document.closeMutationGeneration
+    self.primitive = storage.nativeMacroPrimitiveState
+    self.recorder = controller.nativeMacroApprovedRouteRecorderFence()
+    self.adoptedIsCurrent = adoptedIsCurrent
+  }
+  func facts() -> Bool {
+    guard let preparation, let editor, let controller, let document, let storage,
+      window != nil, preparation.editor === editor,
+      document.storage === storage, editor.textStorage === storage,
+      document.editRevision == revision, document.ownershipGeneration == ownership,
+      document.closeMutationGeneration == mutation,
+      storage.nativeMacroPrimitiveState == primitive,
+      controller.nativeMacroApprovedRouteRecorderFence() == recorder,
+      preparation.vetoHandoffFacts?() == true
+    else { return false }
+    return true
+  }
+}
+
+/// Non-XML approval owns the original through backing and exact operation cleanup.
+@MainActor private final class NativeApprovalTransaction: NSObject, NSTextViewDelegate {
+  private enum Phase { case installing, pending, forwarding, restoring, returned, retired }
+  private static let singular = #selector(
+    NSTextViewDelegate.textView(_:shouldChangeTextIn:replacementString:))
+  private static let plural = #selector(
+    NSTextViewDelegate.textView(_:shouldChangeTextInRanges:replacementStrings:))
+  private weak var editor: NSTextView?
+  private var original: (any NSTextViewDelegate)?
+  private let manager: UndoManager
+  private let groupsByEvent: Bool
+  private let range: NSRange
+  private let replacement: String
+  private var validate: (@MainActor () -> Bool)?
+  private var admit: (@MainActor () -> Bool)?
+  private var takeVetoHandoff: (@MainActor () -> NativeVetoHandoff?)?
+  private var adoptedHandoff: NativeVetoHandoff?
+  private var actualOriginal: Bool?
+  private var matchingOriginal = false
+  private(set) var genuineNativeVeto = false
+  private(set) weak var vetoDelegate: (any NSTextViewDelegate)?
+  var isRetired: Bool {
+    if case .retired = phase { return true }
+    return false
+  }
+  private var phase = Phase.installing
+  private var invalidated = false
+  private var restorationAttempted = false
+  private var restored = false
+  private var observers: [NSObjectProtocol] = []
+  private var opening = false
+  private var closing = false
+  private var openingEvents: [(Int, Int)] = []
+  private var eventCount = 0
+  private var ownedLevel: Int?
+  private var inheritedLevel: Int?
+  private var groupLost = false
+
+  init(
+    editor: NSTextView, manager: UndoManager, original: (any NSTextViewDelegate)?,
+    range: NSRange, replacement: String, validate: @escaping @MainActor () -> Bool,
+    admit: @escaping @MainActor () -> Bool,
+    takeVetoHandoff: (@MainActor () -> NativeVetoHandoff?)? = nil
+  ) {
+    self.editor = editor
+    self.manager = manager
+    self.original = original
+    self.groupsByEvent = manager.groupsByEvent
+    self.range = range
+    self.replacement = replacement
+    self.validate = validate
+    self.admit = admit
+    self.takeVetoHandoff = takeVetoHandoff
+    super.init()
+  }
+  private func facts() -> Bool {
+    if validate?() != true || manager.groupsByEvent != groupsByEvent { invalidated = true }
+    if let adoptedHandoff, !adoptedHandoff.adoptedIsCurrent(adoptedHandoff) {
+      invalidated = true
+    }
+    return !invalidated && !groupLost
+  }
+  private func adoptDestinationIfAvailable() -> Bool {
+    guard !invalidated, !groupLost, adoptedHandoff == nil else { return false }
+    switch phase {
+    case .forwarding, .restoring: break
+    default: return false
+    }
+    guard let editor, let receipt = takeVetoHandoff?(),
+      receipt.editor === editor, let controller = receipt.controller,
+      editor.delegate === controller, receipt.facts(), receipt.adoptedIsCurrent(receipt)
+    else { return false }
+    adoptedHandoff = receipt
+    return facts()
+  }
+  private func installed() -> Bool {
+    guard facts(), let editor else { return false }
+    if let adoptedHandoff {
+      guard editor.delegate === adoptedHandoff.controller else {
+        invalidated = true
+        return false
+      }
+      return facts()
+    }
+    if editor.delegate === self { return facts() }
+    if adoptDestinationIfAvailable() { return facts() }
+    invalidated = true
+    return false
+  }
+  private func restorationCurrent() -> Bool {
+    guard facts(), let editor else { return false }
+    if let adoptedHandoff {
+      guard restorationAttempted, editor.delegate === adoptedHandoff.controller else {
+        return false
+      }
+      return facts()
+    }
+    if restored, editor.delegate === original { return facts() }
+    if restorationAttempted, adoptDestinationIfAvailable() { return facts() }
+    return false
+  }
+  private func originalResponds(to selector: Selector) -> Bool {
+    _ = facts()
+    let answer = original?.responds(to: selector) ?? false
+    _ = facts()
+    return answer
+  }
+  nonisolated override func responds(to selector: Selector!) -> Bool {
+    MainActor.assumeIsolated {
+      if selector == Self.singular { return true }
+      if selector == Self.plural { return originalResponds(to: selector) }
+      return super.responds(to: selector) || originalResponds(to: selector)
+    }
+  }
+  nonisolated override func forwardingTarget(for selector: Selector!) -> Any? {
+    var target: (any NSTextViewDelegate)? = nil
+    MainActor.assumeIsolated {
+      if selector != Self.singular, selector != Self.plural, originalResponds(to: selector) {
+        target = original
+      }
+    }
+    return target
+  }
+  private func observe(_ kind: Int) {
+    let level = manager.groupingLevel
+    if manager.groupsByEvent != groupsByEvent { groupLost = true }
+    if eventCount < 4096 { eventCount += 1 } else { invalidated = true }
+    if opening {
+      if openingEvents.count < 4 { openingEvents.append((kind, level)) } else { groupLost = true }
+      return
+    }
+    guard let ownedLevel else { return }
+    if level < ownedLevel && !closing { groupLost = true }
+    if kind == 3 && level <= ownedLevel && !closing { groupLost = true }
+    if kind == 2 && level <= ownedLevel { groupLost = true }
+  }
+  private func installObservers() {
+    let names: [Notification.Name] = [
+      .NSUndoManagerCheckpoint, .NSUndoManagerDidOpenUndoGroup,
+      .NSUndoManagerWillCloseUndoGroup, .NSUndoManagerDidCloseUndoGroup,
+    ]
+    for (index, name) in names.enumerated() {
+      observers.append(
+        NotificationCenter.default.addObserver(
+          forName: name, object: manager, queue: nil
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.observe(index + 1) } })
+    }
+  }
+  private func openGroup() -> Bool {
+    let start = manager.groupingLevel
+    guard ownedLevel == nil, !groupLost, (0..<64).contains(start),
+      !manager.isUndoing, !manager.isRedoing
+    else { return false }
+    opening = true
+    manager.beginUndoGrouping()
+    opening = false
+    let inherited = start == 0 && groupsByEvent ? 1 : start
+    let owned = inherited + 1
+    let expected =
+      start == 0 && groupsByEvent
+      ? [(2, 1), (1, 1), (2, 2)] : [(1, start), (2, owned)]
+    guard !groupLost, openingEvents.count == expected.count,
+      zip(openingEvents, expected).allSatisfy({ observed, wanted in
+        observed.0 == wanted.0 && observed.1 == wanted.1
+      }),
+      manager.groupingLevel == owned
+    else {
+      groupLost = true
+      return false
+    }
+    inheritedLevel = inherited
+    ownedLevel = owned
+    return true
+  }
+  func perform() -> Bool {
+    guard case .installing = phase, facts(), let editor, editor.delegate === original else {
+      return false
+    }
+    installObservers()
+    guard facts(), editor.delegate === original else { return false }
+    editor.delegate = self
+    guard installed() else { return false }
+    phase = .pending
+    let result = editor.shouldChangeText(in: range, replacementString: replacement)
+    if !result, case .returned = phase, actualOriginal == false, matchingOriginal,
+      adoptedHandoff == nil, ownedLevel == nil, restored, restorationCurrent()
+    {
+      genuineNativeVeto = true
+      vetoDelegate = original
+    }
+    guard case .returned = phase, result, restorationCurrent(), let ownedLevel,
+      manager.groupingLevel == ownedLevel
+    else { return false }
+    return true
+  }
+  private func restore() {
+    guard !restorationAttempted else { return }
+    restorationAttempted = true
+    phase = .restoring
+    _ = facts()
+    if let adoptedHandoff {
+      // The real child handoff already left the known controller installed. No setter.
+      guard let editor, editor.delegate === adoptedHandoff.controller,
+        facts()
+      else {
+        invalidated = true
+        return
+      }
+      return
+    }
+    guard let editor, editor.delegate === self else {
+      invalidated = true
+      return
+    }
+    editor.delegate = original
+    restored = editor.delegate === original
+    if !restored { invalidated = true }
+    _ = facts()
+  }
+  private func approval(_ matches: Bool, originalResponse: () -> Bool) -> Bool {
+    switch phase {
+    case .installing:
+      invalidated = true
+      return originalResponse()
+    case .forwarding, .restoring:
+      return originalResponse()
+    case .returned, .retired:
+      invalidated = true
+      return false
+    case .pending:
+      phase = .forwarding
+      let actual = originalResponse()
+      actualOriginal = actual
+      matchingOriginal = matches
+      // Terminal callbacks run first: ordinary child writes can invalidate a parent
+      // before that parent opens any group or exposes true to AppKit.
+      var ready = actual && matches && installed() && (admit?() == true) && installed()
+      if ready { ready = openGroup() && installed() && (admit?() == true) && installed() }
+      restore()
+      // The native setter/capability callbacks above precede the final real admission.
+      ready = ready && restorationCurrent() && (admit?() == true) && restorationCurrent()
+      phase = .returned
+      return ready
+    }
+  }
+  func textView(
+    _ textView: NSTextView, shouldChangeTextIn affectedRange: NSRange,
+    replacementString: String?
+  ) -> Bool {
+    let matches =
+      textView === editor && affectedRange == range
+      && replacementString.map { $0.utf16.elementsEqual(replacement.utf16) } == true
+    return approval(matches) {
+      original?.textView?(
+        textView, shouldChangeTextIn: affectedRange,
+        replacementString: replacementString) ?? true
+    }
+  }
+  func textView(
+    _ textView: NSTextView, shouldChangeTextInRanges affectedRanges: [NSValue],
+    replacementStrings: [String]?
+  ) -> Bool {
+    let matches =
+      textView === editor && affectedRanges.count == 1
+      && affectedRanges[0].rangeValue == range && replacementStrings?.count == 1
+      && replacementStrings?[0].utf16.elementsEqual(replacement.utf16) == true
+    return approval(matches) {
+      original?.textView?(
+        textView, shouldChangeTextInRanges: affectedRanges,
+        replacementStrings: replacementStrings) ?? true
+    }
+  }
+  /// Called once after backing/refusal and after this caller's proposal/context retire.
+  /// Never end an unknown group or the automatic/inherited parent.
+  func closeOwnedGroup() {
+    guard let ownedLevel else { return }
+    guard !groupLost, manager.groupsByEvent == groupsByEvent,
+      manager.groupingLevel == ownedLevel,
+      !manager.isUndoing, !manager.isRedoing
+    else {
+      groupLost = true
+      return
+    }
+    closing = true
+    manager.endUndoGrouping()
+    closing = false
+    if manager.groupingLevel != inheritedLevel { groupLost = true }
+    self.ownedLevel = nil
+  }
+  /// All arbitrary delegate release and observer removal stays after owned cleanup.
+  func retire() {
+    if !restorationAttempted {
+      invalidated = true
+      restore()
+    }
+    phase = .retired
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    observers.removeAll()
+    validate = nil
+    admit = nil
+    takeVetoHandoff = nil
+    original = nil
+    editor = nil
+  }
+}
+
 /// One synchronous native edit admission owns this proposal. The actual delegate claims
 /// it before calling application code; nested native edits keep their normal bookkeeping.
 @MainActor private final class NativeEditPreparation {
@@ -81,6 +436,7 @@ private enum EditorSaveFailure: Error {
   var delegateClaimed = false
   var controlledStringInsertion = false
   var controlledFactsValid: (@MainActor () -> Bool)?
+  var vetoHandoffFacts: (@MainActor () -> Bool)?
   var macroFactsValid: (@MainActor () -> Bool)?
   var commit: (@MainActor () -> Bool)?
 
@@ -1030,6 +1386,48 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
   private var recoveryFailureShown = false
   private var searchPanel: SearchPanelController?
   private var nativeEditPreparation: NativeEditPreparation?
+  // Lexical precommit custody, never a recording permit or native-history receipt.
+  private final class NestedStringAdmissionWindow {
+    enum Disposition {
+      case fresh, recognized
+      case pending(NativeVetoHandoff)
+      case adopted(NativeVetoHandoff)
+      case burned, retired
+    }
+    let preparation: NativeEditPreparation
+    var active = true
+    var disposition = Disposition.fresh
+    init(_ preparation: NativeEditPreparation) { self.preparation = preparation }
+    func recognizeChild() {
+      guard active else {
+        disposition = .retired
+        return
+      }
+      if case .fresh = disposition { disposition = .recognized } else { disposition = .burned }
+    }
+    func retire() {
+      active = false
+      disposition = .retired
+    }
+  }
+  private final class NestedStringEntry {
+    enum Phase { case reserving, approving, settling, retiring }
+    let editor: DocumentTextView
+    let parent: NestedStringAdmissionWindow
+    let predecessor: NestedStringEntry?
+    weak var preparation: NativeEditPreparation?
+    var phase = Phase.reserving
+    init(
+      editor: DocumentTextView, parent: NestedStringAdmissionWindow,
+      predecessor: NestedStringEntry?
+    ) {
+      self.editor = editor
+      self.parent = parent
+      self.predecessor = predecessor
+    }
+  }
+  private var nestedStringAdmissionWindow: NestedStringAdmissionWindow?
+  private var nestedStringEntry: NestedStringEntry?
   private var encodingPanel: EncodingPanelController?
   private var textUtilities: TextUtilitiesController?
   private var folderSearch: FolderSearchController?
@@ -3517,6 +3915,334 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     for pane in document.panePool { pane.editor.retireControlledStringOwner(self) }
   }
 
+  private func withNestedStringPrecommit(
+    _ preparation: NativeEditPreparation, enabled: Bool = true, _ body: () -> Bool
+  ) -> Bool {
+    guard enabled, nativeEditPreparation === preparation else { return body() }
+    let prior = nestedStringAdmissionWindow
+    let window = NestedStringAdmissionWindow(preparation)
+    nestedStringAdmissionWindow = window
+    defer {
+      window.retire()
+      if nestedStringAdmissionWindow === window { nestedStringAdmissionWindow = prior }
+    }
+    return body()
+  }
+
+  // The receipt explains only the destination handoff of one real retired native veto.
+  private func offerNativeVetoHandoff(
+    _ transaction: NativeApprovalTransaction, parent: NestedStringAdmissionWindow,
+    editor: DocumentTextView
+  ) {
+    guard transaction.isRetired, transaction.genuineNativeVeto,
+      parent.active, nestedStringAdmissionWindow === parent,
+      nativeEditPreparation === parent.preparation, parent.preparation.editor === editor,
+      parent.preparation.vetoHandoffFacts?() == true,
+      let pane = pane(for: editor), pane.isAttached,
+      let storage = pane.document.storage as? DocumentCommitTextStorage,
+      let veto = transaction.vetoDelegate, editor.delegate === veto,
+      case .recognized = parent.disposition
+    else { return }
+    let preparation = parent.preparation
+    let document = pane.document
+    let receipt = NativeVetoHandoff(
+      window: parent, preparation: preparation,
+      editor: editor, controller: self, document: document, storage: storage,
+      vetoIdentity: ObjectIdentifier(veto)
+    ) {
+      [weak self, weak parent, weak preparation, weak editor, weak document, weak storage] receipt
+      in
+      guard let self, let parent, let preparation, let editor, let document, let storage,
+        parent.active, self.nestedStringAdmissionWindow === parent,
+        self.nativeEditPreparation === preparation, parent.preparation === preparation,
+        receipt.window === parent, receipt.preparation === preparation,
+        receipt.editor === editor, receipt.controller === self,
+        receipt.document === document, receipt.storage === storage,
+        case .adopted(let actual) = parent.disposition, actual === receipt
+      else { return false }
+      return receipt.facts()
+    }
+    // Constructor/value capture has no callout, but keep the final publication guard explicit.
+    guard parent.active, nestedStringAdmissionWindow === parent,
+      nativeEditPreparation === preparation, receipt.facts(),
+      editor.delegate === veto, case .recognized = parent.disposition
+    else { return }
+    parent.disposition = .pending(receipt)
+  }
+
+  private func takeNativeVetoHandoff(
+    _ preparation: NativeEditPreparation, editor: NSTextView
+  ) -> NativeVetoHandoff? {
+    guard let parent = nestedStringAdmissionWindow, parent.active,
+      parent.preparation === preparation, nativeEditPreparation === preparation,
+      preparation.editor === editor, editor.delegate === self,
+      case .pending(let receipt) = parent.disposition,
+      receipt.window === parent, receipt.preparation === preparation,
+      receipt.editor === editor, receipt.controller === self, receipt.facts()
+    else { return nil }
+    parent.disposition = .adopted(receipt)
+    return receipt
+  }
+
+  /// Own exactly one tiny concrete-range String edit inside a genuine parent precommit.
+  func controlledExplicitStringReplacement(
+    _ editor: DocumentTextView, replacement: String, range: NSRange
+  ) -> ControlledStringInsertionResult {
+    if let entry = nestedStringEntry, entry.editor === editor, entry.phase != .approving {
+      return .handledRefused
+    }
+    guard let parent = nestedStringAdmissionWindow, parent.active,
+      nativeEditPreparation === parent.preparation, parent.preparation.delegateClaimed,
+      parent.preparation.editor === editor,
+      editor.controlledStringOwner === self,
+      let source = pane(for: editor), source.isAttached, current === source.document,
+      focusedPane === source, recordingDocumentID == source.document.id,
+      recordingIntegrity?.active == true,
+      recordingIntegrity?.documentID == source.document.id,
+      !windowClosed, !preparingToQuit, !macroSaving, replayCancellation == nil,
+      !source.document.saving, source.document.operationID == nil,
+      source.document.composingPaneID == nil, !editor.isComposingText,
+      source.document.panePresentation.installing == nil,
+      projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
+      !replacement.utf16.contains(where: { $0 == 10 || $0 == 13 }),
+      replacement.utf16.count <= 4096,
+      let storage = source.document.storage as? DocumentCommitTextStorage
+    else { return .unhandled }
+    if let predecessor = nestedStringEntry {
+      guard predecessor.phase == .approving,
+        predecessor.preparation === parent.preparation
+      else { return .handledRefused }
+    }
+    parent.recognizeChild()
+    let entry = NestedStringEntry(
+      editor: editor, parent: parent, predecessor: nestedStringEntry)
+    nestedStringEntry = entry
+    var denied: NativeApprovalTransaction?
+    let result = editor.withControlledExplicitStringEntry {
+      let document = source.document
+      var scope: MacroContextScope?
+      var scopeFinished = false
+      var approval: NativeApprovalTransaction?
+      let manager = editor.documentUndo
+      @MainActor func finishScope() {
+        guard !scopeFinished, let scope else { return }
+        scopeFinished = true
+        _ = Self.macroCommitContext?.finish(scope)
+      }
+      defer {
+        entry.phase = .retiring
+        finishScope()
+        if nestedStringEntry === entry {
+          if let child = entry.preparation, nativeEditPreparation === child {
+            if parent.active, nestedStringAdmissionWindow === parent,
+              !windowClosed, !preparingToQuit, editor.controlledStringOwner === self
+            {
+              nativeEditPreparation = parent.preparation
+            } else {
+              nativeEditPreparation = nil
+            }
+          }
+          nestedStringEntry = entry.predecessor
+        }
+        withMacroCallbackBarrier { approval?.closeOwnedGroup() }
+        approval?.retire()
+      }
+      @MainActor func custodyIsCurrent() -> Bool {
+        guard nestedStringEntry === entry, entry.phase != .retiring,
+          parent.active, editor.controlledStringOwner === self,
+          !windowClosed, !preparingToQuit
+        else { return false }
+        if let child = entry.preparation { return nativeEditPreparation === child }
+        return nativeEditPreparation === parent.preparation
+          && nestedStringAdmissionWindow === parent
+      }
+      guard custodyIsCurrent(), storage.length <= 4096 else { return .handledRefused }
+      let expected = storage.string
+      let native = expected as NSString
+      guard range.location >= 0, range.length >= 0, range.location <= native.length,
+        range.length <= native.length - range.location
+      else { return .handledRefused }
+      func scalarBoundary(_ offset: Int) -> Bool {
+        offset == 0 || offset == native.length
+          || !(0xDC00...0xDFFF).contains(native.character(at: offset))
+      }
+      guard scalarBoundary(range.location), scalarBoundary(range.location + range.length)
+      else { return .handledRefused }
+      let selection = editor.selectedRange()
+      let revision = document.editRevision
+      let ownership = document.ownershipGeneration
+      let mutation = document.closeMutationGeneration
+      let endpoint = applicationRouting?.endpointID
+      let assignment = applicationRouting?.assignment
+      let panes = document.panePool.filter(\.isAttached).map(\.id)
+      let actualWindow = editor.window
+      let primitive = storage.nativeMacroPrimitiveState
+      let interaction = document.panePresentation.interaction
+      let recorder = nativeMacroApprovedRouteRecorderFence()
+      // Binding refresh can call owners. A reserving child is already installed above it.
+      let candidateSeed = explicitMacroSeed(
+        document, pane: source, expected: native, range: range, replacement: replacement)
+      let seed = nativeMacroApprovedRouteRecorderFence() == recorder ? candidateSeed : nil
+      let initialLease = macroBindings[ObjectIdentifier(storage)]
+      let hadBinding = initialLease.map { storage.nativeMacroHasBinding(self, lease: $0) } ?? false
+      @MainActor func editingStillValid() -> Bool {
+        guard custodyIsCurrent(), current === document, focusedPane === source,
+          source.editor === editor, source.document === document, source.isAttached,
+          editor.textStorage === storage, document.storage === storage,
+          editor.selectedRange() == selection, editor.selectedRanges.count == 1,
+          !editor.hasMarkedText(), !manager.isUndoing, !manager.isRedoing,
+          editor.window === actualWindow, self.window === actualWindow, actualWindow != nil,
+          document.editRevision == revision, document.ownershipGeneration == ownership,
+          document.closeMutationGeneration == mutation,
+          document.panePresentation.interaction == interaction,
+          document.operationID == nil, replayCancellation == nil, !macroSaving,
+          applicationRouting?.endpointID == endpoint, applicationRouting?.assignment == assignment,
+          document.panePool.filter(\.isAttached).map(\.id) == panes,
+          macroBindings[ObjectIdentifier(storage)] == initialLease,
+          projectionToken == nil, transferProjection == nil, settledTransferProjection == nil,
+          nativeEditContextStillValid(
+            document, source: source, context: nil, requireFocus: true, operationID: nil),
+          storage.nativeMacroPrimitiveState == primitive,
+          storage.string.utf16.elementsEqual(expected.utf16), custodyIsCurrent()
+        else { return false }
+        if hadBinding, let initialLease {
+          return storage.nativeMacroHasBinding(self, lease: initialLease)
+        }
+        return true
+      }
+      @MainActor func nativeAdmission() -> Bool {
+        guard editingStillValid(), editor.configurationAllowsInteraction?() ?? true,
+          editingStillValid(), editor.canMutate?() ?? true, editingStillValid(),
+          editor.configurationAllowsInteraction?() ?? true, editingStillValid(),
+          applicationAllows(.select, document: document), editingStillValid(),
+          applicationAllows(.edit, document: document)
+        else { return false }
+        return editingStillValid()
+      }
+      @MainActor func stillAdmitted() -> Bool {
+        withMacroCallbackBarrier { nativeAdmission() }
+      }
+      guard editingStillValid() else { return .handledRefused }
+      if let seed, let context = Self.macroCommitContext,
+        recordedCommands.count < 10_000, recordedUnits >= 0, recordedUnits <= 10_000_000,
+        seed.contract.replacementUTF16Count <= 10_000_000 - recordedUnits
+      {
+        scope = Self.approvedViewBroker.beginExplicitScope(
+          in: context, identity: seed.identity, primitive: seed.primitive, contract: seed.contract)
+      }
+      guard stillAdmitted() else { return .handledRefused }
+      withMacroCallbackBarrier { editor.breakUndoCoalescing() }
+      guard stillAdmitted(), nativeEditPreparation === parent.preparation else {
+        return .handledRefused
+      }
+      let preparation = NativeEditPreparation(
+        editor: editor, range: range, replacement: replacement,
+        mode: .interactive, validate: editingStillValid)
+      preparation.controlledStringInsertion = true
+      preparation.vetoHandoffFacts = { [weak self, weak preparation] in
+        guard let self, let preparation, self.nativeEditPreparation === preparation,
+          editingStillValid(), preparation.controlledFactsValid?() == true,
+          let seed, let scope, let context = Self.macroCommitContext,
+          self.explicitMacroFactsValid(seed, storage: storage),
+          self.nativeMacroCapture(seed.lease)?.epoch == seed.identity.recordingEpoch,
+          let status = context.status(of: scope), status.phase == .entered,
+          status.firstFailure == nil, !status.finishRequested,
+          !context.overflowBarrierIsActive, !context.frameIssuerIsExhausted,
+          !seed.primitive.exhausted, !seed.primitive.backingReentry,
+          seed.primitive.sequence < UInt64.max
+        else { return false }
+        return true
+      }
+      entry.preparation = preparation
+      nativeEditPreparation = preparation
+      entry.phase = scope == nil ? .reserving : .approving
+      let transaction = NativeApprovalTransaction(
+        editor: editor, manager: manager,
+        original: editor.delegate, range: range, replacement: replacement,
+        validate: editingStillValid,
+        admit: { nativeAdmission() && preparation.controlledFactsValid?() == true },
+        takeVetoHandoff: { [weak self, weak preparation, weak editor] in
+          guard let self, let preparation, let editor else { return nil }
+          return self.takeNativeVetoHandoff(preparation, editor: editor)
+        })
+      approval = transaction
+      let approved = withNestedStringPrecommit(preparation, enabled: scope != nil) {
+        withMacroCallbackBarrier { transaction.perform() }
+      }
+      if transaction.genuineNativeVeto { denied = transaction }
+      entry.phase = .settling
+      guard approved, editingStillValid(), preparation.controlledFactsValid?() == true else {
+        return .handledRefused
+      }
+      let afterText = native.replacingCharacters(in: range, with: replacement)
+      let capture = initialLease.flatMap { nativeMacroCapture($0) }
+      let delivery: MacroExplicitDelivery?
+      if let seed, let scope, let context = Self.macroCommitContext,
+        explicitMacroFactsValid(seed, storage: storage),
+        let capture, capture.lease == seed.lease, capture.epoch == seed.identity.recordingEpoch,
+        context.admitFinalDecision(
+          scope, decision: .admitted(UUID()), identity: seed.identity, primitive: primitive),
+        let permit = context.issueExplicitPermit(
+          scope, identity: seed.identity, primitive: primitive)
+      {
+        delivery = MacroExplicitDelivery(seed: seed, permit: permit, capture: capture)
+      } else {
+        finishScope()
+        delivery = nil
+        if let value = recordingIntegrity, value.active, value.documentID == document.id,
+          recordingDocumentID == document.id
+        {
+          markRecordingGap(value.epoch, reason: .explicitCommitRefused, activeOnly: true)
+        }
+      }
+      // Final stored-value bookkeeping and the existing primitive have no intervening callout.
+      guard preparation.commit?() == true else { return .handledRefused }
+      if let delivery {
+        storage.replaceExplicitCharacters(delivery: delivery)
+      } else {
+        storage.replaceCharacters(in: range, with: replacement)
+      }
+      let postPrimitive = storage.nativeMacroPrimitiveState
+      let postRevision = document.editRevision
+      let postMutation = document.closeMutationGeneration
+      let postSelection = editor.selectedRange()
+      @MainActor func mayInstallCaret() -> Bool {
+        custodyIsCurrent() && current === document && focusedPane === source
+          && source.isAttached && source.document === document && source.editor === editor
+          && editor.textStorage === storage && document.storage === storage
+          && document.ownershipGeneration == ownership && document.editRevision == postRevision
+          && document.closeMutationGeneration == postMutation
+          && document.panePresentation.interaction == interaction
+          && applicationRouting?.endpointID == endpoint
+          && applicationRouting?.assignment == assignment
+          && editor.window === actualWindow && self.window === actualWindow
+          && projectionToken == nil && transferProjection == nil && settledTransferProjection == nil
+          && editor.selectedRange() == postSelection
+          && storage.nativeMacroPrimitiveState == postPrimitive
+          && storage.string.utf16.elementsEqual(afterText.utf16)
+      }
+      // Preserve selection changes made during backing/notification reentry, including ABA.
+      if postSelection == selection, mayInstallCaret() {
+        _ = withMacroCallbackBarrier {
+          try? editor.withSelectionInstallation(authorizedBy: mayInstallCaret) {
+            editor.setSelectedRange(
+              NSRange(location: range.location + replacement.utf16.count, length: 0))
+          }
+        }
+      }
+      withMacroCallbackBarrier { editor.didChangeText() }
+      withMacroCallbackBarrier { manager.setActionName("Typing") }
+      return .handledCommitted
+    }
+    // All child proposal/context/group/delegate releases and the composition wrapper have returned.
+    if case .handledRefused = result, let denied,
+      nestedStringEntry === entry.predecessor, entry.phase == .retiring
+    {
+      offerNativeVetoHandoff(denied, parent: parent, editor: editor)
+    }
+    return result
+  }
+
   func controlledStringInsertion(
     _ editor: DocumentTextView, replacement: String
   ) -> ControlledStringInsertionResult {
@@ -3575,11 +4301,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       }
       return true
     }
+    @MainActor func nativeAdmission() -> Bool {
+      applicationAllows(.select, document: document)
+        && applicationAllows(.edit, document: document) && editingStillValid()
+    }
     @MainActor func stillAdmitted() -> Bool {
-      withMacroCallbackBarrier {
-        applicationAllows(.select, document: document)
-          && applicationAllows(.edit, document: document) && editingStillValid()
-      }
+      withMacroCallbackBarrier { nativeAdmission() }
     }
     let scope: MacroContextScope?
     if let seed, let context = Self.macroCommitContext,
@@ -3600,13 +4327,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     defer { finishScope() }
     guard stillAdmitted() else { return .handledRefused }
-    // Own a lawful native group even when this entry had no caller-supplied group.
-    withMacroCallbackBarrier { editor.documentUndo.beginUndoGrouping() }
-    defer {
-      finishScope()
-      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
-    }
-    guard stillAdmitted() else { return .handledRefused }
     withMacroCallbackBarrier { editor.breakUndoCoalescing() }
     guard stillAdmitted() else { return .handledRefused }
     let preparation = NativeEditPreparation(
@@ -3614,11 +4334,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       replacement: replacement, mode: .interactive, validate: editingStillValid)
     preparation.controlledStringInsertion = true
     nativeEditPreparation = preparation
-    defer { nativeEditPreparation = nil }
-    guard
-      withMacroCallbackBarrier({
-        editor.shouldChangeText(in: selection, replacementString: replacement)
-      }), stillAdmitted(), preparation.controlledFactsValid?() == true
+    let approval = NativeApprovalTransaction(
+      editor: editor, manager: editor.documentUndo,
+      original: editor.delegate, range: selection, replacement: replacement,
+      validate: { [weak self] in
+        self?.nativeEditPreparation === preparation && editingStillValid()
+      }, admit: { nativeAdmission() && preparation.controlledFactsValid?() == true })
+    defer {
+      if nativeEditPreparation === preparation { nativeEditPreparation = nil }
+      finishScope()
+      withMacroCallbackBarrier { approval.closeOwnedGroup() }
+      approval.retire()
+    }
+    guard withMacroCallbackBarrier({ approval.perform() }), editingStillValid(),
+      preparation.controlledFactsValid?() == true
     else { return .handledRefused }
     // Derive representation and authentic current capture before any issue/bookkeeping.
     let prepared = storage.prepareControlledCharacters(in: selection, with: replacement)
@@ -3775,6 +4504,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     let revision = document.editRevision
     let ownership = document.ownershipGeneration
     let mutation = document.closeMutationGeneration
+    var bookmarkFenceArmed = false
+    var beforeBookmarks = document.bookmarks
+    var beforePendingBookmarks = document.pendingBookmarks
+    var beforePendingUndo = document.pendingBookmarksHaveUndo
+    var beforeTypingBookmark = document.typingBookmarkNextLocation
     @MainActor func snapshotStillValid() -> Bool {
       @MainActor func nativeSnapshot() -> Bool {
         self.nativeEditContextStillValid(
@@ -3785,23 +4519,39 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           && document.storage.string.utf16.elementsEqual(expected.utf16)
       }
       guard nativeSnapshot() else { return false }
+      if bookmarkFenceArmed {
+        guard document.bookmarks == beforeBookmarks,
+          document.pendingBookmarks == beforePendingBookmarks,
+          document.pendingBookmarksHaveUndo == beforePendingUndo,
+          document.typingBookmarkNextLocation == beforeTypingBookmark
+        else { return false }
+      }
       switch mode {
       case .interactive:
         return true
       case .searchBorrow(let binding, let credential):
         guard let window = self.window, ObjectIdentifier(window) == binding.windowIdentity,
-          (try? self.inspectDocumentSearchSource(
-            document: document, pane: source, window: window, binding: binding)) == credential
+          self.documentSearchCredentialMatches(
+            credential, document: document,
+            pane: source, window: window, binding: binding)
         else { return false }
-        // Inspection runs real owner callbacks; reread transaction-only facts afterward too.
         return nativeSnapshot()
       }
     }
-    @MainActor func stillAdmitted() -> Bool {
-      withMacroCallbackBarrier {
-        (context == nil || self.applicationAllows(.select, document: document))
-          && self.applicationAllows(.edit, document: document) && snapshotStillValid()
+    @MainActor func nativeAdmission() -> Bool {
+      guard context == nil || self.applicationAllows(.select, document: document),
+        self.applicationAllows(.edit, document: document), snapshotStillValid()
+      else { return false }
+      if case .searchBorrow(let binding, let credential) = mode {
+        guard let window = self.window,
+          (try? self.inspectDocumentSearchSource(
+            document: document, pane: source, window: window, binding: binding)) == credential
+        else { return false }
       }
+      return snapshotStillValid()
+    }
+    @MainActor func stillAdmitted() -> Bool {
+      withMacroCallbackBarrier { nativeAdmission() }
     }
     let customStorage = document.storage as? DocumentCommitTextStorage
     let macroSeed: MacroExplicitSeed?
@@ -3845,22 +4595,67 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     guard stillAdmitted() else { return false }
     withMacroCallbackBarrier { editor.breakUndoCoalescing() }
     guard stillAdmitted() else { return false }
+    // Freeze after the typing-coalescing callout, before original preparation derives undo/bookmarks.
+    beforeBookmarks = document.bookmarks
+    beforePendingBookmarks = document.pendingBookmarks
+    beforePendingUndo = document.pendingBookmarksHaveUndo
+    beforeTypingBookmark = document.typingBookmarkNextLocation
+    bookmarkFenceArmed = true
     let preparation = NativeEditPreparation(
       editor: editor, range: range, replacement: replacement, mode: mode,
       validate: snapshotStillValid)
     self.nativeEditPreparation = preparation
-    defer { self.nativeEditPreparation = nil }
-    guard
-      withMacroCallbackBarrier({
-        editor.shouldChangeText(in: range, replacementString: replacement)
-      }), stillAdmitted()
-    else { return false }
-    withMacroCallbackBarrier { editor.documentUndo.beginUndoGrouping() }
-    guard stillAdmitted(), preparation.macroFactsValid?() ?? !preparation.delegateClaimed else {
-      finishMacroScope()
-      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
-      return false
+    @MainActor func preparedFactsValid(_ proposal: NativeEditPreparation) -> Bool {
+      guard self.nativeEditPreparation === proposal, snapshotStillValid(),
+        proposal.macroFactsValid?() ?? !proposal.delegateClaimed
+      else { return false }
+      if let seed = macroSeed {
+        guard let storage = customStorage, explicitMacroFactsValid(seed, storage: storage),
+          nativeMacroCapture(seed.lease)?.epoch == seed.identity.recordingEpoch,
+          let scope = macroScope, let context = Self.macroCommitContext,
+          let status = context.status(of: scope), status.phase == .entered,
+          status.firstFailure == nil, !status.finishRequested,
+          !context.overflowBarrierIsActive, !context.frameIssuerIsExhausted,
+          !seed.primitive.exhausted, !seed.primitive.backingReentry,
+          seed.primitive.sequence < UInt64.max
+        else { return false }
+      }
+      return true
     }
+    preparation.vetoHandoffFacts = { [weak preparation] in
+      guard let preparation else { return false }
+      return preparedFactsValid(preparation)
+    }
+    let approval = NativeApprovalTransaction(
+      editor: editor, manager: editor.documentUndo,
+      original: editor.delegate, range: range, replacement: replacement,
+      validate: { [weak self] in
+        self?.nativeEditPreparation === preparation && snapshotStillValid()
+      },
+      admit: {
+        nativeAdmission() && preparedFactsValid(preparation)
+      },
+      takeVetoHandoff: { [weak self, weak preparation, weak editor] in
+        guard let self, let preparation, let editor else { return nil }
+        return self.takeNativeVetoHandoff(preparation, editor: editor)
+      })
+    @MainActor func finishOwnedPreparation() {
+      if self.nativeEditPreparation === preparation { self.nativeEditPreparation = nil }
+      finishMacroScope()
+      withMacroCallbackBarrier { approval.closeOwnedGroup() }
+    }
+    defer {
+      finishOwnedPreparation()
+      approval.retire()
+    }
+    guard
+      withNestedStringPrecommit(
+        preparation,
+        {
+          withMacroCallbackBarrier { approval.perform() }
+        }), snapshotStillValid(),
+      preparation.macroFactsValid?() ?? !preparation.delegateClaimed
+    else { return false }
     let delivery: MacroExplicitDelivery?
     if let seed = macroSeed, let scope = macroScope {
       guard let storage = customStorage, explicitMacroFactsValid(seed, storage: storage),
@@ -3873,8 +4668,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
           scope, identity: seed.identity,
           primitive: storage.nativeMacroPrimitiveState)
       else {
-        finishMacroScope()
-        withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
         return false
       }
       delivery = MacroExplicitDelivery(seed: seed, permit: permit, capture: capture)
@@ -3883,8 +4676,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
     }
     // After issuance: pure guarded prederived bookkeeping, then direct backing.
     guard preparation.commit?() ?? !preparation.delegateClaimed else {
-      finishMacroScope()
-      withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
       return false
     }
     if let storage = customStorage, let delivery {
@@ -3893,7 +4684,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSText
       editor.textStorage?.replaceCharacters(in: range, with: replacement)
     }
     withMacroCallbackBarrier { editor.didChangeText() }
-    withMacroCallbackBarrier { editor.documentUndo.endUndoGrouping() }
+    finishOwnedPreparation()
     withMacroCallbackBarrier { editor.documentUndo.setActionName(action) }
     return true
   }
@@ -6011,33 +6802,55 @@ extension EditorWindowController {
       })
   }
 
+  // Stored registry/native/binding facts only; real endpoint admission remains in inspect.
+  private func documentSearchPrimitiveAvailable(
+    document: EditorDocument, pane: EditorPane, window: NSWindow,
+    binding: DocumentSearchNativeBinding
+  ) -> Bool {
+    guard sessionID == binding.windowID, self.window === window,
+      ObjectIdentifier(window) == binding.windowIdentity, !windowClosed, !preparingToQuit,
+      let routing = applicationRouting, routing.endpointID == binding.endpointID,
+      routing.assignment == binding.assignment, routing.assignment.windowID == sessionID,
+      ObjectIdentifier(routing.registry) == binding.registryIdentity,
+      document.id == binding.documentID, pane.id == binding.paneID,
+      document.ownershipGeneration == binding.ownershipGeneration,
+      documents.contains(where: { $0 === document }),
+      routing.registry.handle(id: binding.documentID) === document,
+      routing.registry.assignment(of: binding.documentID) == binding.assignment,
+      document.panePool.contains(where: { $0 === pane }), pane.isAttached,
+      pane.document === document, pane.editor.textStorage === document.storage,
+      pane.layoutManager.textStorage === document.storage,
+      !document.saving, document.operationID == nil, document.composingPaneID == nil,
+      document.nativeConfigurationToken == nil, document.panePresentation.installing == nil,
+      !document.storage.editedMask.contains(.editedCharacters),
+      !pane.editor.isComposingText, !pane.editor.hasMarkedText(),
+      !document.searchRevisionExhausted, transferProjection == nil,
+      projectionToken == nil, projectionValid,
+      routing.registry.allows(.select, documentID: binding.documentID)
+    else { return false }
+    return true
+  }
+
+  private func documentSearchCredentialMatches(
+    _ credential: DocumentSearchCredential, document: EditorDocument,
+    pane: EditorPane, window: NSWindow, binding: DocumentSearchNativeBinding
+  ) -> Bool {
+    documentSearchPrimitiveAvailable(
+      document: document, pane: pane, window: window, binding: binding)
+      && credential.windowID == binding.windowID && credential.endpointID == binding.endpointID
+      && credential.documentID == document.id && credential.paneID == pane.id
+      && credential.ownershipGeneration == document.ownershipGeneration
+      && credential.editRevision == document.editRevision
+      && credential.inputUTF16 == document.storage.length
+  }
+
   private func inspectDocumentSearchSource(
     document: EditorDocument, pane: EditorPane, window: NSWindow,
     binding: DocumentSearchNativeBinding
   ) throws -> DocumentSearchCredential {
     func primitiveAvailable() -> Bool {
-      guard sessionID == binding.windowID, self.window === window,
-        ObjectIdentifier(window) == binding.windowIdentity, !windowClosed, !preparingToQuit,
-        let routing = applicationRouting, routing.endpointID == binding.endpointID,
-        routing.assignment == binding.assignment, routing.assignment.windowID == sessionID,
-        ObjectIdentifier(routing.registry) == binding.registryIdentity,
-        document.id == binding.documentID, pane.id == binding.paneID,
-        document.ownershipGeneration == binding.ownershipGeneration,
-        documents.contains(where: { $0 === document }),
-        routing.registry.handle(id: binding.documentID) === document,
-        routing.registry.assignment(of: binding.documentID) == binding.assignment,
-        document.panePool.contains(where: { $0 === pane }), pane.isAttached,
-        pane.document === document, pane.editor.textStorage === document.storage,
-        pane.layoutManager.textStorage === document.storage,
-        !document.saving, document.operationID == nil, document.composingPaneID == nil,
-        document.nativeConfigurationToken == nil, document.panePresentation.installing == nil,
-        !document.storage.editedMask.contains(.editedCharacters),
-        !pane.editor.isComposingText, !pane.editor.hasMarkedText(),
-        !document.searchRevisionExhausted, transferProjection == nil,
-        projectionToken == nil, projectionValid,
-        routing.registry.allows(.select, documentID: binding.documentID)
-      else { return false }
-      return true
+      documentSearchPrimitiveAvailable(
+        document: document, pane: pane, window: window, binding: binding)
     }
     guard primitiveAvailable() else { throw ApplicationDocumentSearchFailure.sourceUnavailable }
     let revision = document.editRevision

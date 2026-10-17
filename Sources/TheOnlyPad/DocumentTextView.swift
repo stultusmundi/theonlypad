@@ -134,7 +134,32 @@ final class DocumentTextView: NSTextView {
     compositionOperationDepth -= 1
     if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
   }
+  // Called only after the controller has recognized and reserved the actual nested entry.
+  func withControlledExplicitStringEntry(
+    _ body: () -> ControlledStringInsertionResult
+  ) -> ControlledStringInsertionResult {
+    let previousInsertion = isOrdinaryTextInsertion
+    isOrdinaryTextInsertion = false
+    compositionOperationDepth += 1
+    defer {
+      compositionOperationDepth -= 1
+      isOrdinaryTextInsertion = previousInsertion
+      if compositionOperationDepth == 0, !hasMarkedText() { finishComposition() }
+    }
+    return body()
+  }
   override func insertText(_ insertString: Any, replacementRange: NSRange) {
+    // Reserve a genuine nested source entry before callback-bearing mutation admission.
+    if replacementRange.location != NSNotFound, Swift.type(of: insertString) == String.self,
+      let replacement = insertString as? String, let owner = controlledStringOwner
+    {
+      switch owner.controlledExplicitStringReplacement(
+        self, replacement: replacement, range: replacementRange)
+      {
+      case .handledRefused, .handledCommitted: return
+      case .unhandled: break
+      }
+    }
     guard configurationAllowsInteraction?() ?? true else { return }
     guard canMutate?() ?? true, configurationAllowsInteraction?() ?? true else { return }
     let previousInsertion = isOrdinaryTextInsertion

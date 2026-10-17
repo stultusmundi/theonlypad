@@ -90,6 +90,10 @@ jobs:
           scripts/test-native-endpoint-bindings.sh "$build_path"
       - name: Native macro recording regressions
         run: scripts/test-native-macro.sh
+      - name: Native approval ownership regressions
+        run: |
+          python3 -B -m unittest discover -s Tests/NativeApprovalIntegration -p 'test_*.py'
+          scripts/test-native-approval-regressions.sh
       - name: Shortcut ownership and native recording
         run: |
           scripts/test-application-shortcuts.sh

@@ -1,4 +1,9 @@
-# XML markup formatter — native history and public baseline, 17 October 2026
+# XML markup formatter — native editing separation, 17 October 2026
+
+The bounded nonXML native editing correction is separately verified for adoption with a maintained 68-method gate, 35 pure contracts, the actual app/helper build, 1,228 default tests and required native neighbors. See [native editing verification](native-approval-regressions.md). This does not adopt private native XML Source3 or resolve its 17 ordinary history assertions.
+
+The private transfer-focus candidate has four passing methods before intentional endpoint retirement hits a strict fixture custody guard. The aggregate remains incomplete125 with retained State; the wrapper-return horizon does not identify a pre/post-await boundary. Exact retirement custody and exceptional selectability chronology still need verification. No XML, strict lifetime or D-05 completion follows. The earlier evidence below is preserved in its historical scope.
+
 
 ## Current private Source3 history comparison — 2026-10-17
 

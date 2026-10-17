@@ -574,3 +574,15 @@ The private XML approval-fence V2 now passes27 unique native methods (28 executi
 The private manager departure/native-presenter suite now passes66 hidden methods, and one separate actual native sheet test proves attach/detach/hide; the evidence reviews are8cece87 and504ac60. This does not establish full App Quit/recovery, adoption, visible-product acceptance or a package change. Public manager37 and local packagebe6ec6f remain unchanged. Physical input, AX/VoiceOver, IME and performance remain outside acceptance. Feature groups remain76 total:69 partial,7 outstanding,0 accepted; the low-confidence12–24-week planning range is unchanged.
 
 The original App cancellation-refusal method was then isolated against the same verified binary: one method, three ordinary assertions, zero unexpected errors, verified postflight and empty synthetic State (different actual review `a2cadcd8`). This is narrow cancellation RED only; the retained incomplete App7 cohort is unchanged.
+
+
+Native editing approval checkpoint (2026-10-17):
+
+```sh
+python3 -B -m unittest discover -s Tests/NativeApprovalIntegration -p 'test_*.py'
+scripts/test-native-approval-regressions.sh
+```
+
+The final public-layout pure command passes35. The maintained command passes68 unique native methods/69 executions in nine direct-watchdog stages from a clean1,022-file repository-layout candidate snapshot, with0 ordinary/0 unexpected failures, verified postflight and nine empty synthetic State roots. This rerun uses the final two-comment formatting correction; all1,022 input bytes/modes remain exact afterward, and full recursive Swift formatting passes. The matching gate covers nested explicit-range edits, lawful veto and refusal controls, and seeded caret history; it does not grant broader feature acceptance. Do not wrap this coordinator in another watchdog. It needs no Git, private donor inputs or existing build cache.
+
+Matching formatted productive-source evidence includes actual app build/full default tests1,228/0, original Search32/macro19, managed documents73, managed admission4, transfer projection20 and applied settings24. The cold no-argument close-model package failed setup for a missing PadSearchWorkerRuntimeTests directory; the supported source-bound prebuilt invocation passes106 close checks/198 factory checks/one shared control. Preserve that distinction. These hidden results do not establish XML/transfer repair, ARC lifetime, packaging or physical/desktop acceptance. See `docs/verification/native-approval-regressions.md`; the original overall incomplete public baseline and earlier retained failures remain unchanged.

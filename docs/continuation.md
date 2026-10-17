@@ -1,4 +1,18 @@
-# Active implementation checkpoint — 2026-10-17, native feasibility and public baseline
+# Active implementation checkpoint — 2026-10-17, native editing regression gate
+
+This checkpoint adopts the bounded nonXML native editing correction in `EditorWindowController.swift` and `DocumentTextView.swift`, with reproducible coverage under `Tests/NativeApprovalIntegration`. Nested edits record their own real changes and refuse stale parent replacements; an unchanged refused child leaves a lawful parent usable. Caret refusal preserves genuine seeded undo/redo. No Core search or storage API is changed.
+
+The maintained `scripts/test-native-approval-regressions.sh` command passes 68 distinct methods/69 executions, with zero ordinary or unexpected failures, all nine direct owned-process receipts and empty synthetic State. It runs from a complete source layout without Git, private donor packets or a preexisting cache. Its 35 Python contracts and strict recursive Swift formatting pass. See [native editing verification](verification/native-approval-regressions.md) for exact scope and commands.
+
+The same productive source passes the actual application/helper build and all 1,228 default-package tests. Maintained neighbors pass search (32), macro (19), managed documents (73), admission (4), transfer projection (20) and applied settings (24). The supported prebuilt close command passes 106 close checks, 198 factory checks and one shared-pane scenario, bound to that exact actual app build. The cold no-argument close command remains a precompile setup failure because its frozen build omits the worker-test directory; the passing prebuilt run does not repair it.
+
+The separate private transfer-focus candidate now passes four methods, covering all three tiny layouts, false-success rejection, staged refusal and ordinary host behavior. The endpoint-retirement method then encounters a strict fixture custody refusal; its wait wrapper does not return normally, and the final retry method is refused before setup. The aggregate remains incomplete125 with retained State, not full transfer acceptance. Exact-target retirement custody and exceptional selectability chronology remain under development. XML Source3 still has 17 ordinary failed assertions and remains on HOLD. Strict ARC, integrated catalog/quit adoption and all other outstanding BUILD requirements remain separate.
+
+The last inspected hosted run is [38984916122](https://github.com/stultusmundi/theonlypad/actions/runs/38984916122) at predecessor `efdba765`: completed failure with diagnostic 17/4/6/6/9/5 and no established production cause. These local checks do not claim a hosted fix. The local package remains `be6ec6f`; no new packaged desktop, physical input, IME, VoiceOver, older-OS, Intel or performance acceptance follows.
+
+Continue exact retirement-fixture custody/retry and XML native-history correction, then finish the remaining implementation, integration, packaged desktop, accessibility and performance work. The requirements matrix remains 69 partial groups, 7 outstanding and zero fully accepted; the existing 12–24-week low-confidence planning range is unchanged and is not a completion percentage or delivery date.
+
+# Historical checkpoint — 2026-10-17, native feasibility and public baseline
 
 The latest inspected hosted run is [38976442426](https://github.com/stultusmundi/theonlypad/actions/runs/38976442426) at exact published `d4542f2`: completed failure with `boundary=17/parser=4/state=6/incoming=6/collector=9/window=5` and incomplete-evidence125. The production cause remains unknown; no hosted fix or native/XML acceptance follows. The prior inspected run38971770144 remains historical below.
 
