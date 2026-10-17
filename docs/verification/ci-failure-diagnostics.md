@@ -1,3 +1,22 @@
+# Closed error-family detail — 2026-10-17
+
+The diagnostic now has a separate `--error-detail` mode, invoked by its own core-failure-conditioned CI step. It emits two bounded ASCII lines with five validated integer fields; captured messages, paths, arguments and exception text are never emitted. The original reports, reader, capture/status limits, source-location behavior and workflow fallback remain unchanged. No capture is uploaded.
+
+The `kinds` mask observes located error text (1), generic tool error text (2), a failed XCTest terminal (4), a recognized Swift fatal header (8), an explicit unexpected-signal report (16), or exact driver `error: fatalError` text (32). The `isolation` mask distinguishes source error (1), source warning (2) and the fixed executor-assumption fatal phrase (4). These are matched text families, not authenticated emitters or causes. Ambiguous nested diagnostic payloads supply no isolation bit. Unsupported wording remains unknown.
+
+`ownedSignal` comes only from a coherent negative return code for the watched command. `reportedSignalState` and `reportedSignal` separately summarize explicit child-signal text: absent, one distinct valid code, conflicting codes or malformed reports. A positive parent exit of 134 alone supplies no owned signal. Streams are scanned independently; records are bounded at 8,192 UTF-8 bytes and malformed/incomplete evidence refuses through fixed reasons.
+
+Nineteen new synthetic tests first fail ordinarily against the missing API while all 33 original tests pass. The implementation passes those 52 tests. Root also passes all 100 CI diagnostic tests (19 new, 33 original general and 48 original folder checks) in a complete private layout combined with the reviewed cold-runner qualifications, and again against the actual public-source variant using the existing shared helpers. The earlier first producer run with one ordinary ambiguous-payload failure remains retained. No tests or safety checks were disabled.
+
+```sh
+python3 -B -m unittest discover -s Tests/CIDiagnostics -p 'test_*.py'
+python3 scripts/ci_owned_failure_diagnostics.py --error-detail
+```
+
+The second command requires the fixed owned `.local/ci-core` capture and reports a bounded unavailable reason if it is absent or ineligible. The latest inspected hosted run remains [38989381995](https://github.com/stultusmundi/theonlypad/actions/runs/38989381995) at `42f6c4c`: its initial unit-test step failed and later native steps were skipped. Its raw core captures are unavailable here, so its actual error family and cause remain unknown. The new output has not yet been observed on a hosted run; local tests do not establish a hosted fix or an application change.
+
+Earlier checkpoints follow unchanged.
+
 # Bounded collector-refusal diagnostic — 2026-10-17, current hosted result
 
 Published Source `abc00bdf` remains in the public development branch at verified checkpoint `3bc67e9`. The selected-window extension keeps collector domain9 stable and appends only a closed `window=1..5` value for the first matching refusal. The original parser exception, Core grammar, protected transition functions, one collection attempt, existing stripped-path parse, privacy boundary and512-byte output cap remain unchanged. No rejected payload or exception text is emitted.

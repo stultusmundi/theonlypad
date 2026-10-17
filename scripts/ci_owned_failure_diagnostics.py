@@ -782,8 +782,184 @@ def collect(root: Path, *, roster=None) -> tuple[int, list[str]]:
         return 2, ['ci-core diagnostics: unavailable', 'reason: invalid-status']
 
 
+# Opt-in text-family observation. No source identity or causal attribution is granted.
+_DETAIL_FIELDS = ('kinds', 'isolation', 'ownedSignal', 'reportedSignalState', 'reportedSignal')
+_DETAIL_REASONS = frozenset(('missing-evidence', 'unsafe-evidence', 'oversized-evidence',
+    'invalid-status', 'invalid-capture', 'invalid-log-encoding', 'incomplete-evidence',
+    'detail-scan-limit', 'invalid-detail'))
+_DETAIL_ASCII_LOWER = str.maketrans('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')
+_DETAIL_SIGNAL = 'error: Exited with unexpected signal code'
+_DETAIL_EXECUTOR = 'Incorrect actor executor assumption'
+# A nested diagnostic-shaped suffix makes isolation payload attribution ambiguous.
+_DETAIL_NESTED_LOCATION = re.compile(
+    r'\.swift:[1-9][0-9]{0,7}(?::[1-9][0-9]{0,7})?: (?:error|warning|note|Fatal error): ', re.ASCII)
+# Colons cannot be path characters here: a later location in the payload cannot
+# replace the first location/severity boundary. Paths stay internal and opaque.
+_DETAIL_SOURCE = re.compile(
+    r"(?P<path>(?:/[^:\x00-\x1f\x7f\"']*|(?:Sources|Tests)/[^:\x00-\x1f\x7f\"']*|[A-Za-z0-9_.-]+)\.swift)"
+    r":(?P<line>[1-9][0-9]{0,7})(?::(?P<column>[1-9][0-9]{0,7}))?: "
+    r"(?P<severity>error|warning|note|Fatal error): (?P<payload>.*)", re.ASCII)
+
+
+def _detail_complete(status):
+    # The collector has already applied the existing strict _status validator.
+    try:
+        code = status['returnCode']
+        if (any(status[key] is not True for key in ('exitObserved', 'waitCompleted', 'captureComplete'))
+                or any(status[key] is not False for key in ('timedOut', 'truncated'))
+                or any(status[key] is not None for key in
+                       ('waitError', 'failure', 'registrationError', 'interruptedSignal'))
+                or status.get('errorType') is not None or status.get('errorNumber') is not None
+                or status['groupCleanup'] not in ('absent', 'signaled', 'exitedLeaderOnly')
+                or not _int(code, -127, 255)
+                or not _int(status['exit'], 0, 255)
+                or status['exit'] != (code if code >= 0 else 128 - code)):
+            return False
+        captured = status['captured']
+        return (type(captured) is dict and set(captured) == {'stdout', 'stderr'}
+                and all(type(row) is dict and set(row) == {'stored', 'received', 'discarded'}
+                        and _int(row['stored'], 0, _LOG_LIMIT)
+                        and _int(row['received'], 0, _CAPTURE_RECEIVED_LIMIT)
+                        and type(row['discarded']) is int and row['discarded'] == 0
+                        and row['stored'] == row['received'] for row in captured.values()))
+    except (KeyError, TypeError, AttributeError):
+        return False
+
+
+def _detail_records(text):
+    start = 0
+    while start < len(text):
+        lf = text.find('\n', start)
+        end = len(text) if lf < 0 else lf + 1
+        record = text[start:end]
+        if len(record.encode('utf-8')) > 8192:
+            raise _Problem('detail-scan-limit')
+        content = record[:-1] if lf >= 0 else record
+        if lf >= 0 and content.endswith('\r'):
+            content = content[:-1]
+        if any((ord(char) < 32 and char != '\t') or ord(char) == 127 for char in content):
+            raise _Problem('invalid-detail')
+        yield content
+        start = end
+
+
+def _detail_isolation_payload(payload):
+    if _DETAIL_NESTED_LOCATION.search(payload) is not None:
+        return False
+    folded = payload.translate(_DETAIL_ASCII_LOWER)
+    return any(_contains_word_phrase(folded, phrase)
+               for phrase in ('actor-isolated', 'actor isolation'))
+
+
+def _detail_executor_payload(payload):
+    return (payload.startswith(_DETAIL_EXECUTOR)
+            and (len(payload) == len(_DETAIL_EXECUTOR) or payload[len(_DETAIL_EXECUTOR)] == ';'))
+
+
+def classify_error_detail(status, stdout, stderr):
+    """Classify bounded capture text, never its emitter, test identity or cause."""
+    if not _detail_complete(status):
+        raise _Problem('incomplete-evidence')
+    result = dict(kinds=0, isolation=0,
+                  ownedSignal=-status['returnCode'] if status['returnCode'] < 0 else 0,
+                  reportedSignalState=0, reportedSignal=0)
+    reported, conflict, malformed = 0, False, False
+    for name, text in (('stdout', stdout), ('stderr', stderr)):
+        if type(text) is not str:
+            raise _Problem('invalid-detail')
+        if len(text) > _LOG_LIMIT:
+            raise _Problem('oversized-evidence')
+        try:
+            size = len(text.encode('utf-8'))
+        except UnicodeEncodeError:
+            raise _Problem('invalid-log-encoding')
+        if size > _LOG_LIMIT:
+            raise _Problem('oversized-evidence')
+        if size != status['captured'][name]['stored']:
+            raise _Problem('invalid-capture')
+        for record in _detail_records(text):
+            source = _DETAIL_SOURCE.fullmatch(record)
+            if source is not None:
+                if (int(source['line']) > 10_000_000
+                        or (source['column'] is not None and int(source['column']) > 10_000_000)):
+                    continue
+                severity, payload = source['severity'], source['payload']
+                if severity == 'error':
+                    result['kinds'] |= 1
+                    if _detail_isolation_payload(payload):
+                        result['isolation'] |= 1
+                elif severity == 'warning':
+                    if _detail_isolation_payload(payload):
+                        result['isolation'] |= 2
+                elif severity == 'Fatal error' and source['column'] is None:
+                    result['kinds'] |= 8
+                    if _detail_executor_payload(payload):
+                        result['isolation'] |= 4
+                continue
+            if record == _DETAIL_SIGNAL or record.startswith(_DETAIL_SIGNAL + ' '):
+                number = record[len(_DETAIL_SIGNAL):]
+                if re.fullmatch(r' [1-9][0-9]{0,2}', number, re.ASCII) and int(number) <= 127:
+                    value = int(number)
+                    result['kinds'] |= 16
+                    if reported == 0:
+                        reported = value
+                    elif reported != value:
+                        conflict = True
+                else:
+                    malformed = True
+            elif record == 'error: fatalError':
+                result['kinds'] |= 32
+            elif record.startswith('error: '):
+                result['kinds'] |= 2
+            elif record.startswith('Fatal error: '):
+                result['kinds'] |= 8
+                if _detail_executor_payload(record[len('Fatal error: '):]):
+                    result['isolation'] |= 4
+            else:
+                terminal = _EVENT_RECORD.fullmatch(record + '\n')
+                if terminal is not None and terminal['terminal'] == 'failed':
+                    result['kinds'] |= 4
+    state = 3 if malformed else 2 if conflict else 1 if reported else 0
+    result['reportedSignalState'] = state
+    result['reportedSignal'] = reported if state == 1 else 0
+    return result
+
+
+def render_error_detail(detail):
+    if (type(detail) is not dict or set(detail) != set(_DETAIL_FIELDS)
+            or any(type(detail[key]) is not int for key in _DETAIL_FIELDS)
+            or not 0 <= detail['kinds'] <= 63 or not 0 <= detail['isolation'] <= 7
+            or not 0 <= detail['ownedSignal'] <= 127
+            or not 0 <= detail['reportedSignalState'] <= 3
+            or not 0 <= detail['reportedSignal'] <= 127
+            or ((detail['reportedSignalState'] == 1) != (detail['reportedSignal'] != 0))):
+        raise ValueError('invalid closed error detail')
+    lines = ['ci-core error-detail: observed',
+        'detail-v1: kinds={kinds} isolation={isolation} ownedSignal={ownedSignal} '
+        'reportedSignalState={reportedSignalState} reportedSignal={reportedSignal}'.format(**detail)]
+    if len(('\n'.join(lines) + '\n').encode('ascii')) > 256:
+        raise ValueError('invalid closed error detail')
+    return lines
+
+
+def collect_error_detail(root):
+    try:
+        status, stdout, stderr = _read_inputs(root)
+        return 0, render_error_detail(classify_error_detail(status, stdout, stderr))
+    except _Problem as problem:
+        reason = problem.reason if type(problem.reason) is str and problem.reason in _DETAIL_REASONS else 'invalid-detail'
+        return 2, ['ci-core error-detail: unavailable', 'reason: ' + reason]
+    except Exception:
+        return 2, ['ci-core error-detail: unavailable', 'reason: invalid-detail']
+
+
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if args == ['--error-detail']:
+        root = Path(__file__).resolve().parent.parent
+        code, lines = collect_error_detail(root)
+        print('\n'.join(lines))
+        return code
     if args not in ([], ['--summary-only']):
         print('ci-core diagnostics: usage')
         return 2
